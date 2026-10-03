@@ -1,0 +1,11 @@
+{
+  "version": "0.1.0",
+  "status": "canonical-web-baseline",
+  "entry": "web.css",
+  "sources": [
+    "platforms/web-interaction.css",
+    "themes/quiet-light.css",
+    "starter/components.css"
+  ],
+  "note": "Generated consumer artifact. Pin the UI-system revision in consuming repositories."
+}

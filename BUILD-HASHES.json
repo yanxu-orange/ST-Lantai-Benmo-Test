@@ -1,0 +1,234 @@
+[
+  {
+    "path": "dist/index.js",
+    "sha256": "B51D82C645F5F8093E6E4D57CBD607988EFCCD141AB9D1D16C57EE26B8A0D266"
+  },
+  {
+    "path": "dist/app/api-settings-session.js",
+    "sha256": "A02B3B68C3054E15E67BF0DDA4D2A664084C37960A45F21F25FD87C1A16FF34D"
+  },
+  {
+    "path": "dist/app/api-settings-view.js",
+    "sha256": "33EF7DE51F4B4F5B3ECC5EBA82C6828130CA7A4F7CB4A24824ADD4D9EDD4D4FF"
+  },
+  {
+    "path": "dist/app/api-settings.css",
+    "sha256": "18CB7FB5CB085CCE0EF3F14934FA491627815D91EA1235ECE94C49CCD3DECCC8"
+  },
+  {
+    "path": "dist/app/lantai-theme.css",
+    "sha256": "5AE7811D48399F0BC2A72E28D9F8BD641496C506C798055D06E2AE88CDC062F9"
+  },
+  {
+    "path": "dist/app/management-controller.js",
+    "sha256": "C6E46A916742655A5532D85941627F90E3D20943A34A2920FF5F96CC4D60541D"
+  },
+  {
+    "path": "dist/app/management-view.js",
+    "sha256": "FF06FC746FFA9F644D4D03C3B9620B38D2318FC4176A573E4A078B7450AA49C9"
+  },
+  {
+    "path": "dist/app/memory-app.js",
+    "sha256": "E9DDE6BEFB764017A2A6C7A3463DF59016AEBC7C519ED0CBA53CC4309F6FCD93"
+  },
+  {
+    "path": "dist/app/memory-session.js",
+    "sha256": "6D412B1F33699267503E38766CB3F99F5EB76C5392C890A0CBCD90F744CA0BC8"
+  },
+  {
+    "path": "dist/app/memory.css",
+    "sha256": "D6B49D67BE38F2AC25EFC1F79CCED1E52837E47AE7C20C65B165E46EAC1B3430"
+  },
+  {
+    "path": "dist/app/tag-palette.css",
+    "sha256": "CBF7509B43B6143B1E55B450267AE3A28D71DF6288E7B4F2BBFD3D3023B9E457"
+  },
+  {
+    "path": "dist/app/icons/add.svg",
+    "sha256": "3CA5244B066D095052C438E483EB162F7907DFCBDFF6CFECA6D967AE852F861B"
+  },
+  {
+    "path": "dist/app/icons/back.svg",
+    "sha256": "4FD304E2F349464229EEC714AFEBDD55C15BB30906665E1B4A7546CAC81D7C0C"
+  },
+  {
+    "path": "dist/app/icons/close.svg",
+    "sha256": "56048D813DC574259BEA6068A66BE296B29D71F4D22DEC915BE3A061005F7D3C"
+  },
+  {
+    "path": "dist/app/icons/filter.svg",
+    "sha256": "78AAC09F4D4B92F8760B78BEC8ECAB5E9A4958CF89F5EF53486E2093A2A9D205"
+  },
+  {
+    "path": "dist/app/icons/multi.svg",
+    "sha256": "6698FF8B29AE139B6AEB8B713291F46318984087B3BC1CA4D4D0821EAC59CA43"
+  },
+  {
+    "path": "dist/app/icons/search.svg",
+    "sha256": "B6D9AF70A8F7B8D17E2871C0B7BE856556964714C59A31684D9CE9D1AD3FB013"
+  },
+  {
+    "path": "dist/dev/harness.css",
+    "sha256": "697B64A66CBE037E7C0DB018743D759A3D8B7233954DC870136D0490A32A24AF"
+  },
+  {
+    "path": "dist/dev/index.html",
+    "sha256": "5F5084C591D7D5182B871C652E9D6377A21CAE1F55CFE80A151FB97968D472E5"
+  },
+  {
+    "path": "dist/dev/main.js",
+    "sha256": "9AE4C613705CE8BE1D71215D5E17982B97A900250AFD8A04053353818400BFBD"
+  },
+  {
+    "path": "dist/dev/api-settings-candidate/index.html",
+    "sha256": "161859703E8FF20543427BBB8858F7DE658DDFDDD43DDC009DDD46BB5EE0C754"
+  },
+  {
+    "path": "dist/dev/api-settings-candidate/main.js",
+    "sha256": "1FBC2EC7E226069648BD9F2FD5EFF8708876A36A036FDC34C57D656E9E276C57"
+  },
+  {
+    "path": "dist/domain/memory/management-prompt-defaults.js",
+    "sha256": "5E2A76F53135BEA96310A17EAC500931F64BEDF3C45DD3BE73A5270BCC9E06DF"
+  },
+  {
+    "path": "dist/domain/memory/management-prompts.js",
+    "sha256": "9E37DF6A9CAA22C689CBAD0470103D3857901C9975C063E77713D9752E3C978E"
+  },
+  {
+    "path": "dist/domain/memory/management-service.js",
+    "sha256": "0555940AF0CC0D4E90EB792F9187C68C423DD2E02AD2E94DAF999A5235F3F9BC"
+  },
+  {
+    "path": "dist/domain/memory/management-validation.js",
+    "sha256": "CDC7CF3B94DCD37866F045F886F451A65BCB3F2095F9D3F145745ABCB3292090"
+  },
+  {
+    "path": "dist/domain/memory/model.js",
+    "sha256": "06DC540086AE3B54E73C66DB3B966F1F010A205E5C20A5191C7960B2C4767CA4"
+  },
+  {
+    "path": "dist/domain/memory/query.js",
+    "sha256": "F85B98FD64158BD4523D39D1406DF59335CD1C43E79783F11CBCCEAADB5CAAB4"
+  },
+  {
+    "path": "dist/domain/memory/repository.js",
+    "sha256": "BA49E185C9DBF592F8A4CF3EEFF867A41FACB0F85A72A5D2AD86E0FB8CCD8F71"
+  },
+  {
+    "path": "dist/domain/memory/timeline.js",
+    "sha256": "557F0D72BA679F1103C79CB552B0EBF1048642606CDBCED1BD178A9E751369DC"
+  },
+  {
+    "path": "dist/platform/fake/management-fixture.js",
+    "sha256": "6CC4893A4648A6B289C3D4EB8B427FFB2A457C14DE75E17062032303D29B6983"
+  },
+  {
+    "path": "dist/platform/fake/memory-adapter.js",
+    "sha256": "A761E1384D81BC5FCE8C6ED80085A5AF7273354E3C7E794D09579D6CE4090833"
+  },
+  {
+    "path": "dist/platform/fake/settings-adapter.js",
+    "sha256": "ED9B3998ACE6CBA6D691EDC103C35EC7161A7C0F97C8B65A5A8100937815B34A"
+  },
+  {
+    "path": "dist/platform/sillytavern/ai-provider.js",
+    "sha256": "81D2F1901902E3E57F096F9E84F710326BFE63CAAB4DB6B51A4A79078F86A906"
+  },
+  {
+    "path": "dist/platform/sillytavern/api-settings-operations.js",
+    "sha256": "9E1B14D49FE8638286777545F470E48044A259E2FF8AE01EE88311F5CCFC15E8"
+  },
+  {
+    "path": "dist/platform/sillytavern/context.js",
+    "sha256": "382648DA42D319020295E8313AB1C0FA7839A972E1A2F4486F80BB50E38C25B8"
+  },
+  {
+    "path": "dist/platform/sillytavern/events.js",
+    "sha256": "C2218C73BE968F015F209B683DB8CA64AB73075BDE40002F214A2D30A11D89C7"
+  },
+  {
+    "path": "dist/platform/sillytavern/main-api-identity.js",
+    "sha256": "33732E2C35080C7B484BCF0F93115C7560D47E3DDBE94D9A6D46AC367279B76A"
+  },
+  {
+    "path": "dist/platform/sillytavern/management-notifications.js",
+    "sha256": "DC280918DEB0AFF7B63FEF3B1E7B6E920B1A50FA2C85763804C9D91D9823DA3B"
+  },
+  {
+    "path": "dist/platform/sillytavern/management-runtime.js",
+    "sha256": "09E499981D76D8841F6859528FA4C767335F8868EC6143904FEB9ADF6C355740"
+  },
+  {
+    "path": "dist/platform/sillytavern/memory-adapter.js",
+    "sha256": "DDECB0EEC0C3379B45E034DEEC7273F9A1F0BB65FAA5110EEB9FC8B80EE3CB47"
+  },
+  {
+    "path": "dist/platform/sillytavern/memory-host.css",
+    "sha256": "4CEFE70B0525AA84546B1C92F2D8ADED721C592D6A11A75A91D724A08A69077D"
+  },
+  {
+    "path": "dist/platform/sillytavern/memory-host.js",
+    "sha256": "D4465598E8C87055EF4EF26756B1E86092A6D2E18BFDC861768A4949EF85AC51"
+  },
+  {
+    "path": "dist/platform/sillytavern/prompt.js",
+    "sha256": "D8405C88FAB31518834D823D977EC2209EAF4A4366C5EEFE80C0F9D65BD2F1DB"
+  },
+  {
+    "path": "dist/platform/sillytavern/secret-references.js",
+    "sha256": "4CAEE1C4D82F859651584259E845FDF629E926D3512CAC69D9A8A4F36FCCA6F5"
+  },
+  {
+    "path": "dist/platform/sillytavern/settings-adapter.js",
+    "sha256": "29DB5F43383F1F1A10476FB1C4887C5B2E44B2DD8D973A104D6A675EEE057B86"
+  },
+  {
+    "path": "dist/platform/sillytavern/storage.js",
+    "sha256": "E2575AEF4199E6CEC7D8AE52A88EFB6CE588B4FF4135D39826C6FFE4000E136A"
+  },
+  {
+    "path": "dist/probe/runtime-probe.js",
+    "sha256": "07ABFCFF968920B06C3FEEA368D01C47CC58FAAFC2B83305A564362C1E72CE6D"
+  },
+  {
+    "path": "dist/shared/ai/provider.js",
+    "sha256": "0C2A2667593E5829C7A076BDFBE59480C66D63890DAD6D0BB0FFDED3F9B66A81"
+  },
+  {
+    "path": "dist/shared/runtime/background-tasks.js",
+    "sha256": "11642137A8A493E55EF213ED347A8DF9A0EDDEA9A3B71A61A1E15BEC68BA2EC6"
+  },
+  {
+    "path": "dist/shared/runtime/identity.js",
+    "sha256": "2F87B34C885D71BEE8298A3656A62F3D477F5861916E80BA5F72820B74C8E1D3"
+  },
+  {
+    "path": "dist/shared/runtime/task.js",
+    "sha256": "B11B2D198DD7745BAF16B0D8F03B9E78509A136F03CA8D62CCEBD0D286F6D8CC"
+  },
+  {
+    "path": "dist/shared/settings/default-event-words.js",
+    "sha256": "172717F9A2D0C9B6C29D29754C149E5D789FCADDF110C974EE55322328726D09"
+  },
+  {
+    "path": "dist/shared/settings/model.js",
+    "sha256": "95848227732909A6E81A91FE8C0E4280814E2C0DD3728D3DC22BBC63F5E8BE2B"
+  },
+  {
+    "path": "dist/shared/settings/repository.js",
+    "sha256": "27FA0FEFFC349EDFC835915F53B1945B37B93D7C37B147331D92FCAE1F09A330"
+  },
+  {
+    "path": "dist/vendor/plugin-ui-system/manifest.json",
+    "sha256": "D24889B152CE6928069460BC3118A54C2E13008BED6539E9F8905D4BC11EB41E"
+  },
+  {
+    "path": "dist/vendor/plugin-ui-system/REVISION",
+    "sha256": "9541273E554C8AACCFEB9385723D4E810E744BB9C5B77296F073396E742F213F"
+  },
+  {
+    "path": "dist/vendor/plugin-ui-system/web.css",
+    "sha256": "C278B7C112E8508CE3EDC2C0F1412214AF32CA9E4FFBA4C3B4EDE87900E80FAE"
+  }
+]

@@ -1,0 +1,23 @@
+/* Lantai clear-white adaptation authorized by TASK-009 Amendment 9.
+   Override existing semantic roles after the pinned Quiet Light vendor,
+   plus one explicitly approved product neutral Tag surface.
+   Product mapping, not an upstream Theme Contract promotion. */
+:root {
+  --ui-color-canvas: #eaf0ed;
+  --ui-color-workspace: #ffffff;
+  --ui-color-surface-base: #ffffff;
+  --ui-color-surface-raised: #ffffff;
+  --ui-color-field-background: #ffffff;
+  --ui-color-surface-subtle: #f5f8f6;
+  --ui-color-action-secondary-background: #eef3f0;
+  --ui-color-border-subtle: #dde3df;
+  --ui-color-border-default: #cfd5d5;
+  --ui-color-field-border: #8f9696;
+  --ui-color-text-secondary: #596060;
+  --ui-color-text-meta: #697070;
+  --ui-color-selected-background: #eff5f1;
+  --ui-color-selected-border: #8fa69a;
+  --ui-color-selected-text: #26332f;
+  /* Product neutral Tag mapping; the vendor has no separate Tag surface role. */
+  --lt-tag-neutral-background: #f3f5f5;
+}

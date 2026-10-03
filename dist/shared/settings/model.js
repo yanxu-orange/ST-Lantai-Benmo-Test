@@ -1,0 +1,110 @@
+import { createDefaultEventWords } from './default-event-words.js';
+
+export const SETTINGS_KEY = 'lantai_benmo';
+export const PROMPT_KEYS = Object.freeze(['qualityKeywordsIdentity', 'qualityIndexOrder', 'qualityEventRules', 'qualityDetailRules', 'qualityAliasRules', 'mergeIdentity', 'merge']);
+const messages = Object.freeze({
+  INVALID_SETTINGS: '兰台设置格式无效，请检查设置内容。',
+  SETTINGS_CONFLICT: '设置已发生变化，请重新读取后保存。',
+  SETTINGS_COMMIT_UNCONFIRMED: '设置保存结果尚未确认，可能已经保存；请恢复连接后重新读取，不要重复提交。',
+  SETTINGS_UNAVAILABLE: '当前宿主无法安全读取或确认设置。',
+});
+export class SettingsError extends Error {
+  constructor(code = 'INVALID_SETTINGS') {
+    const safe = Object.hasOwn(messages, code) ? code : 'INVALID_SETTINGS';
+    super(messages[safe]); this.name = 'SettingsError'; this.code = safe;
+  }
+}
+const invalid = () => { throw new SettingsError(); };
+function exact(value, keys) {
+  if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).length !== keys.length
+    || keys.some(key => !Object.hasOwn(value, key)) || Object.keys(value).some(key => !keys.includes(key))) invalid();
+}
+const text = (value, empty = false) => typeof value === 'string' && value.trim() === value && (empty || !!value);
+function ai(value) {
+  exact(value, ['source', 'activePresetId', 'presets']);
+  if (![null, 'sillytavern', 'plugin'].includes(value.source) || !Array.isArray(value.presets)
+    || !(value.activePresetId === null || text(value.activePresetId))) invalid();
+  const ids = new Set(), names = new Set();
+  for (const preset of value.presets) {
+    exact(preset, ['id', 'name', 'endpoint', 'model', 'secretId']);
+    if (!text(preset.id) || !text(preset.name) || ids.has(preset.id) || names.has(preset.name)
+      || !text(preset.endpoint, true) || !text(preset.model, true) || !text(preset.secretId, true)) invalid();
+    ids.add(preset.id); names.add(preset.name);
+    if (preset.secretId && !/^[a-zA-Z0-9_.:-]{1,128}$/.test(preset.secretId)) invalid();
+    if (preset.endpoint) {
+      let url;
+      try { url = new URL(preset.endpoint); } catch { invalid(); }
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) invalid();
+    }
+  }
+  if (value.activePresetId !== null && !ids.has(value.activePresetId)) invalid();
+  return value;
+}
+function generation(value) {
+  exact(value, ['eventWords', 'promptOverrides']);
+  if (!Array.isArray(value.eventWords)) invalid();
+  const ids = new Set(), names = new Set();
+  for (const word of value.eventWords) {
+    exact(word, ['id', 'name', 'definition', 'enabled']);
+    if (!text(word.id) || !text(word.name) || typeof word.definition !== 'string' || typeof word.enabled !== 'boolean'
+      || ids.has(word.id) || names.has(word.name)) invalid();
+    ids.add(word.id); names.add(word.name);
+  }
+  const overrides = value.promptOverrides;
+  if (!overrides || Object.getPrototypeOf(overrides) !== Object.prototype
+    || Object.entries(overrides).some(([key, value]) => !PROMPT_KEYS.includes(key) || typeof value !== 'string')) invalid();
+  return value;
+}
+export function frozenSettingsCopy(value) {
+  try {
+    const copy = structuredClone(value);
+    const freeze = item => { if (item && typeof item === 'object') { Object.values(item).forEach(freeze); Object.freeze(item); } };
+    freeze(copy); return copy;
+  } catch { throw new SettingsError(); }
+}
+export function settingsFingerprint(value) {
+  if (value === undefined) return 'absent';
+  const ordered = item => Array.isArray(item) ? item.map(ordered) : item && typeof item === 'object'
+    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, ordered(item[key])])) : item;
+  return JSON.stringify(ordered(value));
+}
+export const equalSettings = (a, b) => settingsFingerprint(a) === settingsFingerprint(b);
+export function emptySettings() {
+  return { schema: 2, revision: 0, domainRevisions: { ai: 0, eventGeneration: 0 }, credentials: [], ai: { source: null, activePresetId: null, presets: [] },
+    eventGeneration: { eventWords: createDefaultEventWords(), promptOverrides: {} } };
+}
+export function assertSettings(value) {
+  try {
+    const legacy = value?.schema === 1;
+    exact(value, ['schema', 'revision', 'domainRevisions', 'ai', 'eventGeneration', ...(legacy ? [] : ['credentials'])]);
+    if (![1, 2].includes(value.schema) || !Number.isSafeInteger(value.revision) || value.revision < 0) invalid();
+    exact(value.domainRevisions, ['ai', 'eventGeneration']);
+    if (Object.values(value.domainRevisions).some(version => !Number.isSafeInteger(version) || version < 0)
+      || value.domainRevisions.ai + value.domainRevisions.eventGeneration !== value.revision) invalid();
+    ai(value.ai); generation(value.eventGeneration);
+    const migrated = legacy ? { ...value, schema: 2, credentials: [] } : value;
+    if (!Array.isArray(migrated.credentials)) invalid();
+    const ids = new Set();
+    for (const credential of migrated.credentials) {
+      exact(credential, ['presetId', 'value']);
+      if (!migrated.ai.presets.some(preset => preset.id === credential.presetId) || ids.has(credential.presetId)) invalid();
+      assertCredential(credential.value); ids.add(credential.presetId);
+    }
+    return frozenSettingsCopy(migrated);
+  } catch { throw new SettingsError(); }
+}
+export function assertAiSettings(value) { try { return frozenSettingsCopy(ai(value)); } catch { throw new SettingsError(); } }
+export function assertEventGeneration(value) { try { return frozenSettingsCopy(generation(value)); } catch { throw new SettingsError(); } }
+export function assertCredential(value) {
+  if (typeof value !== 'string' || !value.trim() || value.length > 8192 || /[\u0000-\u001f\u007f-\u009f]/.test(value)) invalid();
+  return value;
+}
+export function publicSettings(root) {
+  return frozenSettingsCopy({ ...root, credentials: root.credentials.map(({ presetId }) => ({ presetId })) });
+}
+export function aiConfig(root, epoch) {
+  if (root.ai.source === 'sillytavern') return Object.freeze({ source: 'sillytavern' });
+  const preset = root.ai.presets.find(item => item.id === root.ai.activePresetId);
+  if (root.ai.source !== 'plugin' || !preset?.endpoint || !preset.model || !root.credentials.some(item => item.presetId === preset.id)) return Object.freeze({ source: null });
+  return Object.freeze({ source: 'plugin', endpoint: preset.endpoint, model: preset.model, credentialId: preset.id, credentialEpoch: epoch });
+}

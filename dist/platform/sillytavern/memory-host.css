@@ -1,0 +1,10 @@
+/* Host placement only; visual roles remain the pinned UI recipe. */
+:host { position:fixed; inset:0; width:100%; height:100dvh; min-height:0; min-width:0; z-index:10000; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); place-items:center; box-sizing:border-box; padding:max(var(--ui-space-group),env(safe-area-inset-top)) max(var(--ui-space-control),env(safe-area-inset-right)) max(var(--ui-space-group),env(safe-area-inset-bottom)) max(var(--ui-space-control),env(safe-area-inset-left)); background:var(--ui-color-canvas); }
+#lt-host-content { width:100%; height:100%; min-height:0; min-width:0; display:grid; place-items:center; }
+.lt-host-page { width:100%; height:100%; min-height:0; min-width:0; display:grid; place-items:center; }
+.lt-host-page[hidden] { display:none; }
+.lantai { margin:0; border-radius:var(--ui-shape-overlay-radius); overflow:hidden; }
+
+@supports ((backdrop-filter:blur(5px)) or (-webkit-backdrop-filter:blur(5px))) {
+  :host { background:transparent; backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); }
+}

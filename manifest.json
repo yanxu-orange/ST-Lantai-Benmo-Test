@@ -1,0 +1,15 @@
+{
+  "display_name": "兰台本末",
+  "loading_order": 100,
+  "requires": [],
+  "optional": [],
+  "js": "dist/index.js",
+  "author": "Lantai Benmo",
+  "version": "0.1.0-test.20261003.1",
+  "homePage": "https://github.com/yanxu-orange/ST-Lantai-Benmo-Test",
+  "hooks": {
+    "disable": "onDisable",
+    "delete": "onDelete",
+    "enable": "onEnable"
+  }
+}

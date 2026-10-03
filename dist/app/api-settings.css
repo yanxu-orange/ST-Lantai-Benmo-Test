@@ -1,0 +1,8 @@
+/* Shared field and action semantics come from memory.css and the UI System. */
+.lt-api-settings .lt-api-presets { display:flex; align-items:end; flex-wrap:wrap; gap:var(--ui-space-control); min-width:0; }
+.lt-api-settings .lt-api-presets > label { flex:1; min-width:0; }
+.lt-api-settings .ui-input { width:100%; min-width:0; }
+.lt-api-settings .ui-field, .lt-api-settings .lt-status { overflow-wrap:anywhere; }
+/* Both platforms currently use the approved work surface. Future device-only
+   arrangement belongs here, without changing the shared field semantics. */
+.lt-api-settings .lt-api-presets > label { flex-basis:100%; }
