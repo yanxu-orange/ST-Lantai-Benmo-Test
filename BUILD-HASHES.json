@@ -1,9 +1,5 @@
 [
   {
-    "path": "dist/index.js",
-    "sha256": "509749BA64EC3D38ADA45C748AE697F98F07D7840516CCEEB58BF403EF61FCFA"
-  },
-  {
     "path": "dist/app/api-settings-session.js",
     "sha256": "A02B3B68C3054E15E67BF0DDA4D2A664084C37960A45F21F25FD87C1A16FF34D"
   },
@@ -18,6 +14,30 @@
   {
     "path": "dist/app/event-editor-sections.js",
     "sha256": "DE0F0ABA5BC6C7CA93FA1A4B4F4AECA0FF612605A45753FB3AF7D2973614AEED"
+  },
+  {
+    "path": "dist/app/icons/add.svg",
+    "sha256": "3CA5244B066D095052C438E483EB162F7907DFCBDFF6CFECA6D967AE852F861B"
+  },
+  {
+    "path": "dist/app/icons/back.svg",
+    "sha256": "4FD304E2F349464229EEC714AFEBDD55C15BB30906665E1B4A7546CAC81D7C0C"
+  },
+  {
+    "path": "dist/app/icons/close.svg",
+    "sha256": "56048D813DC574259BEA6068A66BE296B29D71F4D22DEC915BE3A061005F7D3C"
+  },
+  {
+    "path": "dist/app/icons/filter.svg",
+    "sha256": "78AAC09F4D4B92F8760B78BEC8ECAB5E9A4958CF89F5EF53486E2093A2A9D205"
+  },
+  {
+    "path": "dist/app/icons/multi.svg",
+    "sha256": "6698FF8B29AE139B6AEB8B713291F46318984087B3BC1CA4D4D0821EAC59CA43"
+  },
+  {
+    "path": "dist/app/icons/search.svg",
+    "sha256": "B6D9AF70A8F7B8D17E2871C0B7BE856556964714C59A31684D9CE9D1AD3FB013"
   },
   {
     "path": "dist/app/lantai-theme.css",
@@ -53,47 +73,31 @@
   },
   {
     "path": "dist/app/summary-settings-view.js",
-    "sha256": "BE688CFD5D8B93B20F85BCCFA1DCB525F34A21620ADD88F5B93303B34093900B"
+    "sha256": "7315671B2D1CFC7B63EB4E99853814086319CC6E7A83C95AC58A90792B41E903"
   },
   {
     "path": "dist/app/summary-settings.css",
-    "sha256": "79C7CA16BEFC5F43682BC6CC81BDF81AFA5A96C6F7B0B9E1DC6E95098BAD12E6"
+    "sha256": "0CA812028D2B8A187912EFAB9213B873BDA8917BDB8B45ED1D834F5A20AD3953"
   },
   {
     "path": "dist/app/summary-view.css",
-    "sha256": "D366959D7ACD4CC66BE59E7B2FCF6F2D5AC50F5AFD39DCA6261AD8488D6323B1"
+    "sha256": "C9417E6BD9B2FAB59AC3A99DB314E6A618DCF5F4EDACB11623C0BD67FC34CDA0"
   },
   {
     "path": "dist/app/summary-view.js",
-    "sha256": "7493B9C30D48FDB1BE6D74ED4A42C633417AB2652549DA29AF5D3D42747B5C53"
+    "sha256": "857A93EAE2A2F89937CB746E4F4B5824B76A721D5B1F97B82859E7FD27F2CC07"
   },
   {
     "path": "dist/app/tag-palette.css",
     "sha256": "CBF7509B43B6143B1E55B450267AE3A28D71DF6288E7B4F2BBFD3D3023B9E457"
   },
   {
-    "path": "dist/app/icons/add.svg",
-    "sha256": "3CA5244B066D095052C438E483EB162F7907DFCBDFF6CFECA6D967AE852F861B"
+    "path": "dist/dev/api-settings-candidate/index.html",
+    "sha256": "161859703E8FF20543427BBB8858F7DE658DDFDDD43DDC009DDD46BB5EE0C754"
   },
   {
-    "path": "dist/app/icons/back.svg",
-    "sha256": "4FD304E2F349464229EEC714AFEBDD55C15BB30906665E1B4A7546CAC81D7C0C"
-  },
-  {
-    "path": "dist/app/icons/close.svg",
-    "sha256": "56048D813DC574259BEA6068A66BE296B29D71F4D22DEC915BE3A061005F7D3C"
-  },
-  {
-    "path": "dist/app/icons/filter.svg",
-    "sha256": "78AAC09F4D4B92F8760B78BEC8ECAB5E9A4958CF89F5EF53486E2093A2A9D205"
-  },
-  {
-    "path": "dist/app/icons/multi.svg",
-    "sha256": "6698FF8B29AE139B6AEB8B713291F46318984087B3BC1CA4D4D0821EAC59CA43"
-  },
-  {
-    "path": "dist/app/icons/search.svg",
-    "sha256": "B6D9AF70A8F7B8D17E2871C0B7BE856556964714C59A31684D9CE9D1AD3FB013"
+    "path": "dist/dev/api-settings-candidate/main.js",
+    "sha256": "1FBC2EC7E226069648BD9F2FD5EFF8708876A36A036FDC34C57D656E9E276C57"
   },
   {
     "path": "dist/dev/harness.css",
@@ -106,14 +110,6 @@
   {
     "path": "dist/dev/main.js",
     "sha256": "9AE4C613705CE8BE1D71215D5E17982B97A900250AFD8A04053353818400BFBD"
-  },
-  {
-    "path": "dist/dev/api-settings-candidate/index.html",
-    "sha256": "161859703E8FF20543427BBB8858F7DE658DDFDDD43DDC009DDD46BB5EE0C754"
-  },
-  {
-    "path": "dist/dev/api-settings-candidate/main.js",
-    "sha256": "1FBC2EC7E226069648BD9F2FD5EFF8708876A36A036FDC34C57D656E9E276C57"
   },
   {
     "path": "dist/domain/memory/management-prompt-defaults.js",
@@ -174,6 +170,10 @@
   {
     "path": "dist/domain/summary/source.js",
     "sha256": "811303B240EE68D066FC45B535E13D0E647EC9F392A8744419D7721975A56FAF"
+  },
+  {
+    "path": "dist/index.js",
+    "sha256": "509749BA64EC3D38ADA45C748AE697F98F07D7840516CCEEB58BF403EF61FCFA"
   },
   {
     "path": "dist/platform/fake/management-fixture.js",
@@ -298,9 +298,5 @@
   {
     "path": "dist/vendor/plugin-ui-system/web.css",
     "sha256": "C278B7C112E8508CE3EDC2C0F1412214AF32CA9E4FFBA4C3B4EDE87900E80FAE"
-  },
-  {
-    "path": "manifest.json",
-    "sha256": "6F3632FAB861B4714AF744666DEDFF922B4F4624F0D2A4FC34D1EAF94A079008"
   }
 ]

@@ -8,12 +8,30 @@ const icon = (name, label, action, extra = '') => `<button type="button" class="
 const switchControl = (checked, action, label, extra = '') => `<button type="button" class="ui-switch" role="switch" aria-checked="${checked}" aria-label="${escape(label)}" data-ss-action="${action}" ${extra}><span class="ui-switch__track" aria-hidden="true"><span class="ui-switch__knob"></span></span></button>`;
 const labels = { exclude: '排除', extract: '提取', replace: '替换' };
 const routeLink = (label, action) => `<button type="button" class="ui-button ui-button--tertiary ui-row lt-summary-link" data-ss-action="${action}"><span>${label}</span><span aria-hidden="true">›</span></button>`;
+const promptTitle = (name, readonly = false) => `<summary><span class="lt-summary-label"><span class="lt-summary-label-text">${escape(name)}</span>${readonly ? '<span class="lt-summary-readonly-tag">只读</span>' : ''}</span><svg class="lt-summary-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>`;
 const field = (label, attr, value, textarea = false) => `<label class="ui-field lt-stack"><span class="ui-field__label">${label}</span>${textarea ? `<textarea class="lt-textarea" ${attr} rows="7" aria-label="${label}">${escape(value)}</textarea>` : `<input class="ui-input" ${attr} value="${escape(value)}" aria-label="${label}">`}</label>`;
 
 export function mountSummarySettingsView(container, controller, { readonlyContent } = {}) {
   if (container?.container) { ({ container, controller, readonlyContent } = container); }
   let disposed = false, editingText = false, composing = false, pendingRender = false, renderedRoute = null, dragging = null;
   const state = () => controller.inspect();
+  // The shared work-surface toast is ephemeral. An old receipt is not replayed
+  // when this DOM is mounted again over the long-lived controller.
+  let previousStatus = state().status, savedUntil = 0, savedTimer = null;
+  function clearSaved() {
+    if (savedTimer !== null) clearTimeout(savedTimer);
+    savedTimer = null; savedUntil = 0;
+    const notice = container.querySelector('[data-ss-saved]');
+    if (notice) { notice.hidden = true; notice.textContent = ''; }
+  }
+  function observeSaved(s) {
+    if (s.error || s.status === 'saving' || s.status === 'loading') clearSaved();
+    if (previousStatus === 'saving' && s.status === 'ready' && !s.error && s.message) {
+      clearSaved(); savedUntil = Date.now() + 2000;
+      savedTimer = setTimeout(clearSaved, 2000);
+    }
+    previousStatus = s.status;
+  }
   function remember(details = true) {
     const main = container.querySelector('.lt-main');
     if (main && renderedRoute) controller.setScroll(renderedRoute, main.scrollTop);
@@ -26,17 +44,17 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
       if (item.kind === 'words') text = JSON.stringify(s.draft.eventWords.filter(word => word.enabled).map(({ name, definition }) => ({ name, definition })), null, 2);
       else if (typeof readonlyContent === 'function') text = readonlyContent(item, { mode: s.draft.generationMode, stage, settings: s.draft });
       else if (item.kind === 'drafts') text = '尚待生成。';
-      return `<details class="lt-summary-prompt" data-ss-open="${item.key}"${opened}><summary>${escape(item.name)}<span class="lt-meta">只读</span></summary><pre class="lt-summary-readonly" tabindex="0">${escape(text)}</pre></details>`;
+      return `<details class="lt-summary-prompt" data-ss-open="${item.key}"${opened}>${promptTitle(item.name, true)}<pre class="lt-summary-readonly" tabindex="0">${escape(text)}</pre></details>`;
     }
     const dirty = Object.hasOwn(s.promptDrafts, item.key), text = dirty ? s.promptDrafts[item.key] : s.draft.promptOverrides[item.key] ?? summaryPromptDefault(item.key);
-    return `<details class="lt-summary-prompt" data-ss-open="${item.key}"${opened}><summary>${escape(item.name)}</summary><form data-ss-form="prompt" data-key="${item.key}" class="lt-summary-prompt-body"><textarea class="lt-textarea" data-ss-field="prompt" data-key="${item.key}" aria-label="${escape(item.name)}" rows="8">${escape(text)}</textarea><p class="lt-status" data-ss-dirty="${item.key}">${dirty ? '尚未保存' : ''}</p><div class="lt-summary-editor-actions">${button('恢复默认', 'restore-prompt', `data-key="${item.key}"`)}${button('取消', 'cancel-prompt', `data-key="${item.key}"`)}<button type="submit" class="ui-button ui-button--secondary" ${dirty ? '' : 'disabled'}>保存</button></div></form></details>`;
+    return `<details class="lt-summary-prompt" data-ss-open="${item.key}"${opened}>${promptTitle(item.name)}<form data-ss-form="prompt" data-key="${item.key}" class="lt-summary-prompt-body"><textarea class="lt-textarea" data-ss-field="prompt" data-key="${item.key}" aria-label="${escape(item.name)}" rows="8">${escape(text)}</textarea><p class="lt-status" data-ss-dirty="${item.key}">${dirty ? '尚未保存' : ''}</p><div class="lt-summary-editor-actions">${button('恢复默认', 'restore-prompt', `data-key="${item.key}"`)}${button('取消', 'cancel-prompt', `data-key="${item.key}"`)}<button type="submit" class="ui-button ui-button--secondary" ${dirty ? '' : 'disabled'}>保存</button></div></form></details>`;
   }
   function custom(s) {
     const list = [...s.draft.customPrompts];
     for (const item of Object.values(s.customDrafts)) if (!list.some(saved => saved.id === item.id)) list.push(item);
     return list.length ? list.map(saved => {
       const item = s.customDrafts[saved.id] ?? saved, id = escape(item.id);
-      return `<details class="lt-summary-prompt" data-ss-open="custom:${id}" ${s.opened[`custom:${item.id}`] ? 'open' : ''}><summary>${escape(saved.name || '新建自定义提示词')}</summary><form data-ss-form="custom" data-id="${id}" class="lt-summary-prompt-body">${field('名称', `data-ss-field="custom" data-id="${id}" data-field="name"`, item.name)}<label class="ui-field lt-stack"><span class="ui-field__label">插入位置</span><select class="ui-input" data-ss-field="custom" data-id="${id}" data-field="position"><option value="before" ${item.position === 'before' ? 'selected' : ''}>AI 任务之前</option><option value="after" ${item.position === 'after' ? 'selected' : ''}>AI 任务之后</option></select></label>${field('提示词内容', `data-ss-field="custom" data-id="${id}" data-field="content"`, item.content, true)}<div class="lt-summary-editor-actions">${button('删除', 'delete-custom', `data-id="${id}"`)}${button('取消', 'cancel-custom', `data-id="${id}"`)}<button class="ui-button ui-button--secondary" type="submit">保存</button></div></form></details>`;
+      return `<details class="lt-summary-prompt" data-ss-open="custom:${id}" ${s.opened[`custom:${item.id}`] ? 'open' : ''}>${promptTitle(saved.name || '新建自定义提示词')}<form data-ss-form="custom" data-id="${id}" class="lt-summary-prompt-body">${field('名称', `data-ss-field="custom" data-id="${id}" data-field="name"`, item.name)}<label class="ui-field lt-stack"><span class="ui-field__label">插入位置</span><select class="ui-input" data-ss-field="custom" data-id="${id}" data-field="position"><option value="before" ${item.position === 'before' ? 'selected' : ''}>AI 任务之前</option><option value="after" ${item.position === 'after' ? 'selected' : ''}>AI 任务之后</option></select></label>${field('提示词内容', `data-ss-field="custom" data-id="${id}" data-field="content"`, item.content, true)}<div class="lt-summary-editor-actions">${button('删除', 'delete-custom', `data-id="${id}"`)}${button('取消', 'cancel-custom', `data-id="${id}"`)}<button class="ui-button ui-button--secondary" type="submit">保存</button></div></form></details>`;
     }).join('') : '<p class="lt-status">暂无自定义提示词</p>';
   }
   function settings(s) {
@@ -58,7 +76,9 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
   }
   function patchStatus(s) {
     const slot = container.querySelector('[data-ss-message]');
-    if (slot) { slot.textContent = s.message; slot.hidden = !s.message; slot.className = s.error ? 'lt-error' : 'lt-status'; slot.setAttribute('role', s.error ? 'alert' : 'status'); }
+    if (slot) { slot.textContent = s.error ? s.message : ''; slot.hidden = !s.error || !s.message; slot.className = 'lt-error'; slot.setAttribute('role', 'alert'); }
+    const notice = container.querySelector('[data-ss-saved]');
+    if (notice) { notice.hidden = savedUntil <= Date.now(); notice.textContent = notice.hidden ? '' : '已保存'; }
     for (const form of container.querySelectorAll('[data-ss-form=prompt]')) {
       const dirty = Object.hasOwn(s.promptDrafts, form.dataset.key);
       const p = form.querySelector('[data-ss-dirty]'); if (p) p.textContent = dirty ? '尚未保存' : '';
@@ -67,9 +87,10 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
   }
   function render() {
     if (disposed) return;
+    const s = state(); observeSaved(s);
     if (composing) { pendingRender = true; return; }
     remember(false);
-    const s = state(), previousRoute = renderedRoute;
+    const previousRoute = renderedRoute;
     if (editingText) { patchStatus(s); return; }
     const active = container.ownerDocument?.activeElement ?? container.getRootNode()?.activeElement;
     const focused = container.getRootNode()?.activeElement ?? active;
@@ -77,8 +98,10 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     const selection = focused?.selectionStart != null ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
     const title = s.route === 'settings' ? '事件总结设置' : s.route === 'library' ? '事件词库' : s.route === 'cleaning' ? '总结文本清洗' : s.ruleId ? '编辑清洗规则' : '新建清洗规则';
     const locked = s.status !== 'ready', content = !s.draft ? '<p class="lt-status">正在读取设置…</p>' : s.route === 'settings' ? settings(s) : s.route === 'library' ? library(s) : s.route === 'cleaning' ? cleaning(s) : s.ruleDraft ? rule(s) : '';
-    container.innerHTML = `<section class="lantai lt-summary-settings" aria-label="${title}"><header class="lt-header">${icon('back', '返回', 'back')}<h1 class="ui-page-title">${title}</h1>${icon('close', '关闭兰台本末', 'close')}</header><main class="lt-main" tabindex="-1">${content}<p data-ss-message role="${s.error ? 'alert' : 'status'}" class="${s.error ? 'lt-error' : 'lt-status'}" ${s.message ? '' : 'hidden'}>${escape(s.message)}</p>${s.status === 'error' || s.status === 'unconfirmed' ? button('重新读取已保存设置', 'read', '', true) : ''}</main><footer class="lt-footer" ${s.route === 'library' || s.route === 'rule' ? '' : 'hidden'}>${s.route === 'library' ? '<button type="button" class="ui-button ui-button--primary" data-ss-action="save-library">保存</button>' : s.route === 'rule' ? `<div class="lt-summary-editor-actions">${button('取消', 'cancel-rule')}<button type="button" class="ui-button ui-button--primary" data-ss-action="save-rule">保存</button></div>` : ''}</footer></section>`;
+    container.innerHTML = `<section class="lantai lt-summary-settings" aria-label="${title}"><header class="lt-header">${icon('back', '返回', 'back')}<h1 class="ui-page-title">${title}</h1>${icon('close', '关闭兰台本末', 'close')}</header><main class="lt-main" tabindex="-1">${content}<p data-ss-message role="${s.error ? 'alert' : 'status'}" class="${s.error ? 'lt-error' : 'lt-status'}" ${s.error && s.message ? '' : 'hidden'}>${s.error ? escape(s.message) : ''}</p>${s.status === 'error' || s.status === 'unconfirmed' ? button('重新读取已保存设置', 'read', '', true) : ''}</main><footer class="lt-footer" ${s.route === 'library' || s.route === 'rule' ? '' : 'hidden'}>${s.route === 'library' ? '<button type="button" class="ui-button ui-button--primary" data-ss-action="save-library">保存</button>' : s.route === 'rule' ? `<div class="lt-summary-editor-actions">${button('取消', 'cancel-rule')}<button type="button" class="ui-button ui-button--primary" data-ss-action="save-rule">保存</button></div>` : ''}</footer></section>`;
     if (locked) for (const control of container.querySelectorAll('main input,main textarea,main select,main button,footer button')) control.disabled = true;
+    const saved = container.ownerDocument.createElement('p'); saved.className = 'lt-saved lt-status'; saved.dataset.ssSaved = ''; saved.setAttribute('role', 'status'); saved.hidden = true;
+    container.querySelector('.lt-main').after(saved); patchStatus(s);
     const reload = container.querySelector('[data-ss-action=read]'); if (reload) reload.disabled = ['saving', 'loading'].includes(s.status);
     renderedRoute = s.route; container.querySelector('.lt-main').scrollTop = s.scroll[s.route] ?? 0;
     if (focusData && s.route === previousRoute) {
@@ -128,5 +151,5 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
   const events = { input, change, submit, click, toggle, pointerdown: pointerDown, pointermove: pointerMove, pointerup: pointerUp, pointercancel: pointerCancel, keydown, compositionstart: startComposition, compositionend: endComposition };
   for (const [name, handler] of Object.entries(events)) container.addEventListener(name, handler, name === 'toggle');
   const off = controller.subscribe(render); render();
-  return Object.freeze({ dispose() { if (disposed) return; remember(); disposed = true; off(); for (const [name, handler] of Object.entries(events)) container.removeEventListener(name, handler, name === 'toggle'); } });
+  return Object.freeze({ dispose() { if (disposed) return; remember(); disposed = true; clearSaved(); off(); for (const [name, handler] of Object.entries(events)) container.removeEventListener(name, handler, name === 'toggle'); } });
 }

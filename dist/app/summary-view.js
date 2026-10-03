@@ -3,19 +3,22 @@ import { eventEditorSections } from './event-editor-sections.js';
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const icon=(name,label,action)=>`<button type="button" class="ui-icon-button ui-button--tertiary" data-summary-action="${action}" aria-label="${label}"><img class="lt-icon" src="${new URL(`./icons/${name}.svg`,import.meta.url)}" alt=""></button>`;
 const button=(text,action,disabled=false)=>`<button type="button" class="ui-button ui-button--tertiary" data-summary-action="${action}" ${disabled?'disabled':''}>${text}</button>`;
-const choice=(key,label,value)=>`<label class="ui-choice"><input type="checkbox" data-summary-param="${key}" ${value?'checked':''}><span>${label}</span></label>`;
+const choice=(key,label,value)=>`<label class="ui-choice ui-choice--control-only"><input type="checkbox" data-summary-param="${key}" ${value?'checked':''}><span>${label}</span></label>`;
 const number=(key,label,value)=>`<label class="ui-field"><span>${label}</span><input class="ui-input" type="number" min="0" step="1" inputmode="numeric" data-summary-param="${key}" value="${esc(value)}"></label>`;
+const histories=new WeakMap();
+const savedNotices=new WeakMap();
+const previewDetails=new WeakMap();
 function preview(state) {
   const value=state.preview;if(!state.previewOpen||!value)return '';
-  const tabs=`<nav class="lt-summary-switches" aria-label="预览视图">${['source','prompt'].map(view=>`<button type="button" class="ui-segment" data-summary-preview-view="${view}" aria-pressed="${state.previewView===view}">${view==='source'?'上下文预览':'提示词预览'}</button>`).join('')}</nav>`;
-  const content=state.previewView==='source'?value.source.sentFloors.map(item=>`<details class="lt-summary-source"><summary>第 ${item.floor} 楼 · ${item.role==='user'?'用户':'AI'}</summary><p>${esc(item.text)}</p></details>`).join(''):value.stages.map(stage=>{
-    const parts=stage.pending?'<p class="lt-meta">尚待生成</p>':stage.previewParts.map(part=>`<details class="lt-summary-prompt"><summary>${esc(part.name)} <span class="lt-meta">${part.role.toUpperCase()}</span></summary><pre>${esc(part.content)}</pre></details>`).join('');
-    return value.stages.length===1?parts:`<details class="lt-summary-stage"><summary>${stage.title}</summary>${parts}</details>`;
+  const tabs=`<nav class="lt-summary-switches" aria-label="预览视图">${['source','prompt'].map(view=>`<button type="button" class="ui-button ui-button--tertiary ui-segment" data-summary-preview-view="${view}" aria-pressed="${state.previewView===view}">${view==='source'?'上下文预览':'提示词预览'}</button>`).join('')}</nav>`;
+  const content=state.previewView==='source'?value.source.sentFloors.map(item=>`<details class="lt-summary-source"><summary><span>第 ${item.floor} 楼 · ${item.role==='user'?'用户':'AI'}</span></summary><p>${esc(item.text)}</p></details>`).join(''):value.stages.map(stage=>{
+    const parts=stage.pending?'<p class="lt-meta">尚待生成</p>':stage.previewParts.map(part=>`<details class="lt-summary-prompt"><summary><span class="lt-summary-prompt-label"><span>${esc(part.name)}</span><small class="lt-meta">${part.role.toUpperCase()}</small></span></summary><pre>${esc(part.content)}</pre></details>`).join('');
+    return value.stages.length===1?parts:`<details class="lt-summary-stage"><summary><span>${stage.title}</span></summary>${parts}</details>`;
   }).join('');
   return `<section class="lt-summary-preview">${tabs}${content}</section>`;
 }
 function history(state) {
-  return `<details class="lt-summary-history" open><summary>总结记录与重新生成</summary>${(state.summary?.batches??[]).map(batch=>`<div class="lt-summary-history-row"><span>${batch.actualRange.start}—${batch.actualRange.end} 楼</span>${batch.eventIds?.length&&!batch.eventIds.some(id=>state.formalIds?.includes(id))?'<span class="lt-meta">记忆已删除</span>':''}<button type="button" class="ui-button ui-button--tertiary" data-summary-regenerate="${esc(batch.id)}">重新生成</button></div>`).join('')||'<p class="lt-meta">暂无总结记录</p>'}</details>`;
+  return `<details class="lt-summary-history" ${state.historyOpen?'open':''}><summary>总结记录与重新生成</summary>${(state.summary?.batches??[]).map(batch=>`<div class="lt-summary-history-row"><span>${batch.actualRange.start}—${batch.actualRange.end} 楼</span>${batch.eventIds?.length&&!batch.eventIds.some(id=>state.formalIds?.includes(id))?'<span class="lt-meta">记忆已删除</span>':''}<button type="button" class="ui-button ui-button--tertiary" data-summary-regenerate="${esc(batch.id)}">重新生成</button></div>`).join('')||'<p class="lt-meta">暂无总结记录</p>'}</details>`;
 }
 function review(state) {
   return (state.drafts??[]).map((event,index)=>{
@@ -28,25 +31,39 @@ function review(state) {
   }).join('');
 }
 export function mountSummaryView({container,controller,onBack=()=>{},onClose=()=>{},openSettings=()=>{}}={}) {
-  let disposed=false,composing=false,pending=false;
+  let disposed=false,composing=false,pending=false,renderedScope=null,renderedPreviewScope=null,savedUntil=0,savedTimer=null;
+  const historyStates=histories.get(controller)??new Map();histories.set(controller,historyStates);
+  const seenSaved=savedNotices.get(controller)??new Set();savedNotices.set(controller,seenSaved);
+  const previewStates=previewDetails.get(controller)??new Map();previewDetails.set(controller,previewStates);
   const $=selector=>container.querySelector(selector);
+  function rememberPreview(){const details=[...container.querySelectorAll('.lt-summary-preview details')];if(renderedPreviewScope&&details.length)previewStates.set(renderedPreviewScope,details.map(detail=>detail.open));}
   function render() {
     if(disposed)return;if(composing){pending=true;return;}
-    const state=controller.inspect(),root=container.getRootNode(),active=root.activeElement,inside=container.contains(active),scroll=$('.lt-main')?.scrollTop??state.scroll;
+    const state={...controller.inspect()},root=container.getRootNode(),active=root.activeElement,inside=container.contains(active),scroll=$('.lt-main')?.scrollTop??state.scroll;
+    rememberPreview();
+    const scope=JSON.stringify([state.target?.rootId,state.target?.epoch,state.origin]);
+    if(scope===renderedScope&&$('.lt-summary-history'))historyStates.set(scope,$('.lt-summary-history').open);
+    state.historyOpen=historyStates.get(scope)??false;renderedScope=scope;
+    renderedPreviewScope=JSON.stringify([scope,state.previewView,state.preview?.source?.fingerprint,state.preview?.stages?.map(stage=>stage.stage)]);
+    if(state.task?.status==='succeeded'&&state.task.snapshot.params.reviewBeforeCommit&&!seenSaved.has(state.task.taskId)){
+      seenSaved.add(state.task.taskId);savedUntil=Date.now()+2000;clearTimeout(savedTimer);savedTimer=setTimeout(()=>{savedUntil=0;$('.lt-saved')?.setAttribute('hidden','');},2000);
+    }
+    const statusMessage=state.message==='已保存本批记忆'?'':state.message;
     const eventIndex=active?.closest('[data-summary-event]')?.dataset.summaryEvent,term=active?.closest('[data-summary-term]')?.dataset.summaryTerm,field=active?.dataset.summaryField,termField=active?.dataset.summaryTermField,param=active?.dataset.summaryParam,action=active?.dataset.summaryAction,entry=active?.dataset.summaryEntry,start=active?.selectionStart,end=active?.selectionEnd;
     const entries=Object.entries(state.entries??{}).map(([identity,value])=>{const [id,key]=identity.split(':');return {index:state.drafts?.findIndex(event=>event.id===id),key,value};});
     const details=[...container.querySelectorAll('[data-summary-event] details')].map(element=>({index:element.closest('[data-summary-event]').dataset.summaryEvent,label:element.querySelector(':scope>summary').textContent,open:element.open}));
     const isReview=state.route==='review',title=isReview?'检查总结结果':state.origin==='auto'?'自动总结':'手动总结',params=state.params??{},auto=state.automatic;
     const running=['starting','running','committing'].includes(state.task?.status)||auto.status==='running',awaiting=state.task?.status==='awaiting-user';
-    const body=isReview?review(state):`<section class="lt-summary-section">${state.origin==='auto'?choice('enabled','启用自动总结',params.enabled):''}<h2>${state.origin==='auto'?'总结范围':'楼层范围'}</h2>${state.origin==='auto'?number('batchSize','每隔多少楼总结',params.batchSize)+number('recentFloors','最近多少楼不参与总结',params.recentFloors):`<div class="lt-summary-range">${number('startFloor','开始楼',params.startFloor)}${number('endFloor','结束楼',params.endFloor)}</div>`}</section><section class="lt-summary-section"><h2>生成选项</h2>${choice('includeUser','包含用户消息',params.includeUser)}${choice('reviewBeforeCommit','入库前检查',params.reviewBeforeCommit)}${choice('hideOriginal','成功入库后隐藏来源楼层',params.hideOriginal)}</section>${history(state)}<div class="lt-summary-connection"><div class="lt-summary-access"><div data-selected="${state.previewOpen}"><span>发送内容</span>${button(state.previewOpen?'收起':'预览','preview',state.busy)}</div><div><span>总结进度</span><span>第${state.summary?.progress.lastProcessedFloor??'—'}楼</span></div><div><span>总结设置</span>${button('打开','settings',state.busy)}</div></div>${preview(state)}</div>`;
+    const body=isReview?review(state):`<section class="lt-summary-section">${state.origin==='auto'?choice('enabled','启用自动总结',params.enabled):''}<h2>${state.origin==='auto'?'总结范围':'楼层范围'}</h2>${state.origin==='auto'?number('batchSize','每隔多少楼总结',params.batchSize)+number('recentFloors','最近多少楼不参与总结',params.recentFloors):`<div class="lt-summary-range">${number('startFloor','开始楼',params.startFloor)}${number('endFloor','结束楼',params.endFloor)}</div>`}</section><section class="lt-summary-section"><h2>生成选项</h2>${choice('includeUser','包含用户消息',params.includeUser)}${choice('reviewBeforeCommit','入库前检查',params.reviewBeforeCommit)}${choice('hideOriginal','成功入库后隐藏来源楼层',params.hideOriginal)}</section>${history(state)}<div class="lt-summary-connection" data-preview-open="${state.previewOpen}"><div class="lt-summary-access"><div data-selected="${state.previewOpen}"><span>发送内容</span>${button(state.previewOpen?'收起':'预览','preview',state.busy)}</div><div><span>总结进度</span><span>第${state.summary?.progress.lastProcessedFloor??'—'}楼</span></div><div><span>总结设置</span>${button('打开','settings',state.busy)}</div></div>${preview(state)}</div>`;
     const actionMarkup=isReview?`${state.origin==='auto'&&auto.status==='awaiting-user'&&!auto.stopRequested?button('本批次完成后停止总结','stop'):''}<button type="button" class="ui-button ui-button--primary" data-summary-action="confirm" ${state.busy||state.task?.outcome==='unconfirmed'?'disabled':''}>${state.busy?'保存中…':'统一保存'}</button>`:state.origin==='auto'&&['running','waiting','awaiting-user'].includes(auto.status)?button('本批次完成后停止总结','stop'):awaiting&&state.task?.snapshot.params.reviewBeforeCommit?button('检查总结结果','review'): `<button type="button" class="ui-button ui-button--primary" data-summary-action="start" ${state.busy||running||state.parametersUnconfirmed?'disabled':''}>${running?'正在生成…':auto.status==='stopped'?'继续总结':auto.status==='failed'||state.task?.status==='failed'?'重试本批':state.origin==='auto'?'开始自动总结':'开始总结'}</button>`;
-    container.innerHTML=`<section class="lantai"><header class="lt-header">${icon('back',isReview?'放弃本批审核':'返回事件记忆','back')}<h1 class="ui-page-title">${title}</h1>${icon('close','关闭兰台本末','close')}</header><main class="lt-main lt-summary-main" tabindex="-1"><p class="lt-error" role="alert" ${state.error?'':'hidden'}>${esc(state.error)}</p><p class="lt-status" role="status" ${state.message?'':'hidden'}>${esc(state.message)}</p>${body}${state.task?.outcome==='unconfirmed'||state.parametersUnconfirmed?button('重新读取','read'):''}</main><footer class="lt-footer">${actionMarkup}</footer></section>`;
+    container.innerHTML=`<section class="lantai lt-summary-workspace"><header class="lt-header">${icon('back',isReview?'放弃本批审核':'返回事件记忆','back')}<h1 class="ui-page-title">${title}</h1>${icon('close','关闭兰台本末','close')}</header><main class="lt-main lt-summary-main" tabindex="-1"><p class="lt-error" role="alert" ${state.error?'':'hidden'}>${esc(state.error)}</p><p class="lt-status" role="status" ${statusMessage?'':'hidden'}>${esc(statusMessage)}</p>${body}${state.task?.outcome==='unconfirmed'||state.parametersUnconfirmed?button('重新读取','read'):''}</main><p class="lt-saved lt-status" role="status" ${savedUntil>Date.now()?'':'hidden'}>本批总结已保存</p><footer class="lt-footer">${actionMarkup}</footer></section>`;
     $('.lt-main').scrollTop=scroll;
     for(const saved of entries){const input=$(`[data-summary-event="${saved.index}"] [data-summary-entry="${saved.key}"]`);if(input){input.value=saved.value;input.parentElement.querySelector('button').hidden=!saved.value.trim();}}
     for(const saved of details){const group=[...container.querySelectorAll(`[data-summary-event="${saved.index}"] details`)].find(element=>element.querySelector(':scope>summary').textContent===saved.label);if(group)group.open=saved.open;}
+    const previewOpened=previewStates.get(renderedPreviewScope);if(previewOpened)[...container.querySelectorAll('.lt-summary-preview details')].forEach((detail,index)=>detail.open=previewOpened[index]===true);
     if(running||state.busy)for(const input of container.querySelectorAll('[data-summary-param]'))input.disabled=true;
     const prefix=eventIndex!==undefined?`[data-summary-event="${eventIndex}"] `:'';
-    const restored=field?$(`${prefix}[data-summary-field="${field}"]${field==='mode'?`[value="${active.value}"]`:''}`):termField?$(`${prefix}[data-summary-term="${term}"] [data-summary-term-field="${termField}"]`):param?$(`[data-summary-param="${param}"]`):entry?$(`${prefix}[data-summary-entry="${entry}"]`):action?$(`[data-summary-action="${action}"]`):null;
+    const restored=field?$(`${prefix}[data-summary-field="${field}"]${field==='mode'?`[value="${active.value}"]`:''}`):termField?$(`${prefix}[data-summary-term="${term}"] [data-summary-term-field="${termField}"]`):param?$(`[data-summary-param="${param}"]`):entry?$(`${prefix}[data-summary-entry="${entry}"]`):action?$(`[data-summary-action="${action}"]`):active?.matches('.lt-summary-history>summary')?$('.lt-summary-history>summary'):null;
     if(inside){(restored&&!restored.disabled?restored:$('.lt-main'))?.focus({preventScroll:true});if(restored&&typeof start==='number')restored.setSelectionRange?.(start,end);}
   }
   function input(event) {
@@ -78,5 +95,5 @@ export function mountSummaryView({container,controller,onBack=()=>{},onClose=()=
   container.addEventListener('keydown',keydown);
   container.addEventListener('input',input);container.addEventListener('change',input);container.addEventListener('click',click);container.addEventListener('compositionstart',startComposition);container.addEventListener('compositionend',endComposition);
   const release=controller.subscribe(render);controller.setVisible(true);render();
-  return {dispose(){disposed=true;controller.setScroll($('.lt-main')?.scrollTop??0);controller.setVisible(false);release();container.removeEventListener('keydown',keydown);container.removeEventListener('input',input);container.removeEventListener('change',input);container.removeEventListener('click',click);container.removeEventListener('compositionstart',startComposition);container.removeEventListener('compositionend',endComposition);}};
+  return {dispose(){rememberPreview();clearTimeout(savedTimer);if(renderedScope&&$('.lt-summary-history'))historyStates.set(renderedScope,$('.lt-summary-history').open);disposed=true;controller.setScroll($('.lt-main')?.scrollTop??0);controller.setVisible(false);release();container.removeEventListener('keydown',keydown);container.removeEventListener('input',input);container.removeEventListener('change',input);container.removeEventListener('click',click);container.removeEventListener('compositionstart',startComposition);container.removeEventListener('compositionend',endComposition);}};
 }
