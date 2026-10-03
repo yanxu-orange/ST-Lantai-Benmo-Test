@@ -48,6 +48,10 @@ export function createSettingsRepository(adapter) {
     read: async () => publicSettings(await adapter.read()),
     saveAi: (value, options) => update('ai', value, options),
     saveEventGeneration: (value, options) => update('eventGeneration', value, options),
+    captureEventGeneration() {
+      const root = adapter.peek();
+      return frozenSettingsCopy({ generation: root.eventGeneration, epoch: adapter.epochs().eventGeneration });
+    },
     captureAi() {
       const root = adapter.peek();
       return frozenSettingsCopy({ ai: root.ai, credentialPresetIds: root.credentials.map(item => item.presetId), epoch: adapter.epochs().ai });
@@ -75,7 +79,7 @@ export function createSettingsRepository(adapter) {
     },
     getGenerationSettings() {
       const root = adapter.peek(), { epoch } = adapter.epochs();
-      return frozenSettingsCopy({ epoch, ...root.eventGeneration });
+      return frozenSettingsCopy({ epoch, generationEpoch: adapter.epochs().eventGeneration, ...root.eventGeneration });
     },
     getEpoch: () => { adapter.peek(); return adapter.epochs().epoch; },
     subscribe: listener => adapter.subscribe(listener),

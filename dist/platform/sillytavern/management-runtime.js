@@ -8,20 +8,23 @@ import { createManagementController } from '../../app/management-controller.js';
 import { sameTarget } from '../../domain/memory/repository.js';
 import { createMainApiIdentity } from './main-api-identity.js';
 import { createApiSettingsOperations } from './api-settings-operations.js';
+import { createEventSummaryService } from '../../domain/summary/service.js';
+import { createSummaryController } from '../../app/summary-controller.js';
 
 const MAIN_EVENTS = ['MAIN_API_CHANGED', 'CHATCOMPLETION_MODEL_CHANGED', 'CHATCOMPLETION_SOURCE_CHANGED', 'OAI_PRESET_CHANGED_AFTER', 'PRESET_CHANGED'];
 
 // One owner survives mounted pages. All network and host exports are injectable.
 export async function createManagementRuntime({ repository, getContext, document: doc,
-  fetchImpl = globalThis.fetch, settingsOptions = {}, mainIdentityOptions = {}, jquery = globalThis.jQuery, signal } = {}) {
+  fetchImpl = globalThis.fetch, settingsOptions = {}, mainIdentityOptions = {}, jquery = globalThis.jQuery, signal, captureSummarySource } = {}) {
   const manager = createBackgroundTaskManager(), releases = [];
-  let settings = null, controller = null, disposed = false, effective = null, epoch = 0, mainEpoch = 0, lastMain = null, jqueryCapable = false;
+  let settings = null, controller = null, summaryService=null, summaryController=null, disposed = false, effective = null, epoch = 0, mainEpoch = 0, lastMain = null, jqueryCapable = false;
   const reported = new Map();
   const abort = () => {
     disposed = true; settings?.dispose();
     for (const release of releases.splice(0)) release();
     for (const task of manager.list()) manager.cancel(task.taskId);
     controller?.dispose();
+    summaryController?.dispose();summaryService?.dispose();
   };
   if (signal?.aborted) throw new AiProviderError('unavailable');
   signal?.addEventListener('abort', abort, { once: true });
@@ -153,6 +156,19 @@ export async function createManagementRuntime({ repository, getContext, document
   const service = createMemoryManagementService({ repository, manager, provider, getGenerationSettings, getOriginalSnapshot });
   controller = createManagementController({ service, repository, originalAvailable, getOriginalSnapshot,
     getSettingsEpoch: () => getGenerationSettings().epoch });
-  return Object.freeze({ settings, manager, provider, apiOperations, service, controller, getGenerationSettings, getOriginalSnapshot, originalAvailable,
+  if(typeof captureSummarySource==='function') {
+    summaryService=createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource:captureSummarySource});
+    summaryController=createSummaryController({repository,service:summaryService,captureSource:captureSummarySource});
+    let completedReply=null,lastReplyFloor=(ctx?.chat?.length??0)-1;
+    const on=(name,listener)=>{const type=ctx?.eventTypes?.[name];if(!type||typeof source?.on!=='function')return;source.on(type,listener);releases.push(()=>(source.off??source.removeListener)?.call(source,type,listener));};
+    // MESSAGE_RECEIVED is emitted for a completed real chat reply. Quiet raw
+    // tasks do not create one, and their nested lifecycle cannot erase it.
+    on('MESSAGE_RECEIVED',(floor,type)=>{try{const chat=getContext()?.chat,message=chat?.[floor];if(type==='normal'&&Number.isSafeInteger(floor)&&floor>lastReplyFloor&&message&&!message.is_user&&!message.is_system){lastReplyFloor=floor;completedReply={target:repository.captureTarget(),floor,message};}}catch{/* no active chat */}});
+    // STOPPED has no operation identity in ST. It cannot revoke a receipt
+    // already emitted for a complete normal reply (it may belong to quiet).
+    on('CHAT_CHANGED',()=>{completedReply=null;lastReplyFloor=(getContext()?.chat?.length??0)-1;});
+    on('GENERATION_ENDED',()=>{const reply=completedReply;completedReply=null;try{if(reply&&sameTarget(reply.target,repository.captureTarget())&&getContext()?.chat?.[reply.floor]===reply.message)summaryController.wake();}catch{/* target closed */}});
+  }
+  return Object.freeze({ settings, manager, provider, apiOperations, service, controller, summaryService, summaryController, getGenerationSettings, getOriginalSnapshot, originalAvailable,
     dispose() { if (disposed) return; abort(); signal?.removeEventListener('abort', abort); } });
 }

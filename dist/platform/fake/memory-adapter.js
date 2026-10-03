@@ -1,4 +1,4 @@
-import { emptyRoot, inheritEvents, assertRoot } from '../../domain/memory/model.js';
+import { emptyRoot, inheritMemoryRoot, assertRoot } from '../../domain/memory/model.js';
 import { sameTarget } from '../../domain/memory/repository.js';
 export function createFakeAdapter({ persistence, key = 'lantai-task009-fiction-only', seed = {}, wait = async () => {}, clock = () => crypto.randomUUID() } = {}) {
   let roots;
@@ -28,7 +28,7 @@ export function createFakeAdapter({ persistence, key = 'lantai-task009-fiction-o
     branch(parentId, childId, floor) {
       if (!roots[parentId] || roots[childId] || !childId || childId === parentId) throw new Error('无法确认独立分支');
       const parent = assertRoot(roots[parentId], {rootId: roots[parentId].rootId});
-      const child = { ...emptyRoot(clock()), events: inheritEvents(parent.events, floor) };
+      const child = inheritMemoryRoot(parent,clock(),floor);
       persist({ ...roots, [childId]: child }); return structuredClone(child);
     },
     snapshot: () => structuredClone(roots)

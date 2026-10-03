@@ -1,5 +1,5 @@
 import { getSillyTavernContext } from './context.js';
-import { emptyRoot, assertRoot, inheritEvents } from '../../domain/memory/model.js';
+import { emptyRoot, assertRoot, inheritMemoryRoot } from '../../domain/memory/model.js';
 import { sameTarget } from '../../domain/memory/repository.js';
 
 export const MEMORY_KEY = 'lantai_benmo_memory';
@@ -19,6 +19,18 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
   const branchPoints = new Map();
   const uncertain = new Map();
   let activeSnapshot = null;
+  let sourceEpoch=0,sourceSerial=0;
+  const messageIds=new WeakMap(),sourceVersions=new Map();
+  function messageIdentity(message,floor){
+    if(!messageIds.has(message))messageIds.set(message,`message-${++sourceSerial}`);
+    return messageIds.get(message);
+  }
+  function sourceChanged(payload){
+    const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;
+    if(Number.isSafeInteger(floor)&&floor>=0)sourceVersions.set(floor,(sourceVersions.get(floor)??0)+1);
+    else sourceEpoch++;
+    snapshotMessages();
+  }
   function binding(context = getContext()) {
     const name = context?.getCurrentChatId?.() ?? context?.chatId;
     if (typeof name !== 'string' || !name || !context?.chatMetadata || !Array.isArray(context.chat)) throw new Error('请先打开角色或群组聊天');
@@ -204,7 +216,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
             const points = live?.parent === parentName && live.rootId === raw.rootId ? [live.floor]
               : rows.slice(1).flatMap((message, floor) => Array.isArray(message.extra?.branches) && message.extra.branches.includes(current.name) ? [floor] : []);
             if (points.length !== 1 || rows[0].chat_metadata[MEMORY_KEY]?.rootId !== raw.rootId) throw new Error('无法确认准确分支楼层，未猜测继承记忆');
-            prepared = { ...emptyRoot(uuid()), binding: current, events: inheritEvents(raw.events, points[0]) };
+            prepared = { ...inheritMemoryRoot(raw,uuid(),points[0]), binding: current };
           }
           await persist(targetFor(prepared, current), prepared);
         }
@@ -259,7 +271,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       const current = binding(), raw = getContext().chatMetadata[MEMORY_KEY];
       unchanged = !!prepared && observed === identity(current) && (equal(raw, prepared) || (raw === undefined && prepared.revision === 0 && prepared.events.length === 0));
     } catch { /* A missing/new identity is a real target change. */ }
-    captureBranchPoint(); epoch++;
+    captureBranchPoint(); epoch++;sourceEpoch++;sourceVersions.clear();
     if (unchanged) observed = identity(binding());
     else { observed = null; prepared = null; }
     snapshotMessages(); notify(unchanged ? 'reload' : 'changed');
@@ -276,11 +288,23 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     });
   });
   for (const name of ['MESSAGE_SENT', 'MESSAGE_RECEIVED', 'MESSAGE_DELETED', 'MESSAGE_EDITED', 'MESSAGE_UPDATED', 'MESSAGE_SWIPED', 'USER_MESSAGE_RENDERED', 'CHARACTER_MESSAGE_RENDERED']) {
-    if (context.eventTypes[name]) on(name, snapshotMessages);
+    if (context.eventTypes[name]) on(name, ['MESSAGE_DELETED','MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED'].includes(name)?sourceChanged:snapshotMessages);
   }
   snapshotMessages();
   return {
     prepare, captureTarget,
+    captureSummarySource(target) {
+      const current=check(target);requireConfirmed(current);
+      if(['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED'].some(name=>!context.eventTypes[name]))throw new Error('酒馆缺少总结来源变化监听能力');
+      const messages=getContext().chat.map((message,floor)=>{
+        if(!message||typeof message.mes!=='string')throw new Error('总结原始消息不可用');
+        const role=message.is_system!==true&&typeof message.is_user==='boolean'&&!message.extra?.type&&!message.extra?.tool_invocations?(message.is_user?'user':'assistant'):'system';
+        const date=message.send_date==null?null:String(message.send_date);
+        const identity=JSON.stringify([floor,typeof message.id==='string'||Number.isSafeInteger(message.id)?message.id:null,date]);
+        return {floor,identity,objectTicket:messageIdentity(message,floor),revision:sourceVersions.get(floor)??0,role,system:message.is_system===true,text:message.mes,date,swipeId:Number.isSafeInteger(message.swipe_id)&&message.swipe_id>=0?message.swipe_id:null};
+      });
+      check(target);return copy({epoch:sourceEpoch,messages});
+    },
     peekConfirmed(target) {
       const current = check(target); requireConfirmed(current);
       const root = getContext().chatMetadata[MEMORY_KEY] ?? prepared;

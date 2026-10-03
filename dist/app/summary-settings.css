@@ -1,0 +1,33 @@
+/* Layout adapters for the approved complete settings page. Shared typography,
+   fields, switches, colors and frame geometry remain in the pinned UI System. */
+.lt-summary-settings h2,.lt-summary-settings h3 { margin:0; font-family:var(--ui-type-ui-family); font-size:var(--ui-type-ui-section-title-size); font-weight:var(--ui-type-ui-section-title-weight); line-height:var(--ui-type-ui-section-title-line); }
+.lt-summary-settings .ui-input { min-width:0; width:100%; }
+.lt-summary-settings .lt-entry>input { flex:1; }
+.lt-summary-section { display:grid; gap:var(--ui-space-row); min-width:0; }
+.lt-summary-heading,.lt-summary-editor-actions { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--ui-space-control); min-width:0; }
+.lt-summary-editor-actions { justify-content:flex-end; }
+.lt-summary-editor-actions>.ui-button:first-child { margin-inline-end:auto; }
+.lt-summary-divider { border-top:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle); padding-top:var(--ui-space-row); }
+.lt-summary-link { display:flex; align-items:center; justify-content:space-between; gap:var(--ui-space-control); width:100%; min-width:0; }
+.lt-summary-modes { min-width:0; border:0; padding:0; margin:0; display:grid; gap:var(--ui-space-control); }
+.lt-summary-modes>div { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--ui-space-control); }
+.lt-summary-modes label { white-space:nowrap; font-size:var(--ui-type-ui-meta-size); }
+.lt-summary-prompt-group,.lt-summary-word,.lt-summary-rule { min-width:0; border:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle); border-radius:var(--ui-shape-selection-radius); overflow:hidden; }
+.lt-summary-prompt-group>h3 { padding:var(--ui-space-row); background:var(--ui-color-surface-subtle); }
+.lt-summary-prompt summary { cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:var(--ui-space-control); min-block-size:var(--ui-interaction-target-min); padding:var(--ui-space-row); border-bottom:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle); list-style:none; }
+.lt-summary-prompt summary::after { content:'›'; color:var(--ui-color-text-secondary); }
+.lt-summary-prompt[open]>summary::after { transform:rotate(90deg); }
+.lt-summary-prompt summary::-webkit-details-marker { display:none; }
+.lt-summary-prompt-body { padding:var(--ui-space-row); display:grid; gap:var(--ui-space-control); min-width:0; }
+.lt-summary-readonly { margin:0; padding:var(--ui-space-row); white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; }
+.lt-summary-floor { gap:var(--ui-space-inline); }
+.lt-summary-floor .ui-icon-button { min-width:var(--ui-interaction-target-min); }
+.lt-summary-word-heading,.lt-summary-rule-heading { display:flex; align-items:center; gap:var(--ui-space-control); padding:var(--ui-space-control); min-width:0; }
+.lt-summary-word-heading>button:first-of-type,.lt-summary-rule-heading>span { flex:1; min-width:0; text-align:start; overflow-wrap:anywhere; white-space:normal; }
+.lt-summary-word-description { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; padding:0 var(--ui-space-row) var(--ui-space-row); }
+.lt-summary-word-editor { padding:var(--ui-space-row); }
+.lt-summary-rule-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+.lt-summary-rule-actions>.ui-button { font:inherit; border-radius:0; }
+.lt-summary-drag { touch-action:none; }
+.lt-summary-rule.is-dragging { outline:var(--ui-focus-ring-width) solid var(--ui-color-focus-ring); }
+.lt-summary-settings .lt-footer .lt-summary-editor-actions>.ui-button { flex:1; }

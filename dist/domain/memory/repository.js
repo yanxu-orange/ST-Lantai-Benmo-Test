@@ -1,4 +1,5 @@
 import { assertRoot, validateEvent, validateEventForSave, activeEvents } from './model.js';
+import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence} from '../summary/data.js';
 export function sameTarget(a, b) { return !!a && !!b && !!a.chatId && !!a.rootId && Number.isSafeInteger(a.epoch) && a.chatId === b.chatId && a.rootId === b.rootId && a.epoch === b.epoch; }
 const copy = value => structuredClone(value);
 const equal = (a, b) => {
@@ -54,9 +55,61 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     matchSnapshot(current, target, snapshot, hidden);
     return true;
   };
+  const matchSummary=(root,target,snapshot)=>{
+    if(!snapshot||!sameTarget(target,snapshot.target)||!equal(summaryOf(root),snapshot.summary))throw new Error('总结参数或批历史已变化');
+    if(snapshot.batch){const batch=summaryOf(root).batches.find(item=>item.id===snapshot.batch.id);if(!equal(batch,snapshot.batch)||!equal(root.events.filter(event=>batch.eventIds.includes(event.id)),snapshot.events))throw new Error('所属批成员已变化');}
+  };
+  const summaryGuard=(target,snapshot,options)=>current=>{if(typeof options.isCurrent!=='function'||options.isCurrent()!==true)throw new Error('总结来源或配置已失效');matchSummary(current,target,snapshot);return true;};
+  const batchEvents=(root,events,id,actualRange)=>{
+    if(!Array.isArray(events)||!events.length)throw new Error('至少保留一条事件切片');
+    const ids=new Set(),timestamp=now();
+    return events.map(candidate=>{if(ids.has(candidate?.id)||root.events.some(event=>event.id===candidate?.id)||root.deletedMergeIds?.includes(candidate?.id)||candidate?.mergedFrom!=null||candidate?.supersededBy!=null)throw new Error('生成切片身份或关系无效');ids.add(candidate.id);return validateEventForSave({...copy(candidate),createdAt:timestamp,updatedAt:timestamp,sources:[copy(actualRange)],batch:{id,sources:[copy(actualRange)]}});});
+  };
   return {
     captureTarget: () => { const target = adapter.captureTarget(); requireTarget(target); return copy(target); },
     read,
+    async captureSummary(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,revision:root.revision,summary:summaryOf(root)});},
+    async captureBatch(target,id){const frozen=copy(target),root=await read(frozen),summary=summaryOf(root),batch=summary.batches.find(item=>item.id===id);if(!batch)throw new Error('没有可确认的独立批记录');return freeze({target:frozen,revision:root.revision,summary,batch:copy(batch),events:copy(root.events.filter(event=>batch.eventIds.includes(event.id)))});},
+    matchesSummary(target,snapshot){try{requireTarget(target);matchSummary(assertRoot(adapter.peekConfirmed(target),target),target,snapshot);requireTarget(target);return true;}catch{return false;}},
+    updateSummaryPreferences(target,patch,{expectedSummaryRevision,isCurrent=()=>true}={}) {
+      const frozen=copy(target),draft=copy(patch);
+      return enqueue(async()=>{const root=await read(frozen),summary=summaryOf(root),revision=summary.revision;
+        if(expectedSummaryRevision!==undefined&&revision!==expectedSummaryRevision)throw new Error('总结设置已变化');
+        const preferences=assertSummaryPreferences({...summary.preferences,...Object.fromEntries(Object.entries(draft).map(([key,value])=>[key,{...summary.preferences[key],...value}]))});
+        const nextSummary={...summary,revision:revision+1,preferences};
+        const guard=current=>{if(isCurrent()!==true||summaryOf(current).revision!==revision)throw new Error('总结设置已变化');return true;};
+        return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,summary:nextSummary},guard)};
+      });
+    },
+    setSummaryExcludedFloors(target,records,{expectedSummaryRevision,isCurrent=()=>true}={}) {
+      const frozen=copy(target),excludedFloors=assertExcludedFloors(records);
+      return enqueue(async()=>{const root=await read(frozen),summary=summaryOf(root),revision=summary.revision;if(expectedSummaryRevision!==undefined&&revision!==expectedSummaryRevision)throw new Error('排除策略已变化');
+        const guard=current=>{if(isCurrent()!==true||summaryOf(current).revision!==revision)throw new Error('排除策略已变化');return true;};
+        return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,summary:{...summary,revision:revision+1,excludedFloors}},guard)};
+      });
+    },
+    appendBatch(target,selection,events,batch,options={}) {
+      const frozen=copy(target),snapshot=copy(selection),draft=copy(batch),candidates=copy(events);
+      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot);const summary=summaryOf(root);
+        if(summary.batches.some(item=>item.id===draft.id||item.taskId===draft.taskId))throw new Error('该总结任务已入库，不得重复提交');
+        const timestamp=now(),created=batchEvents(root,candidates,draft.id,draft.actualRange);
+        const record=assertBatch({...draft,ordinal:summary.progress.nextBatchOrdinal,eventIds:created.map(event=>event.id),createdAt:timestamp,completedAt:timestamp,generatedCandidates:assertGeneratedEvidence(draft.generatedCandidates)});
+        if(record.sourceType==='auto'&&record.actualRange.start!==(summary.progress.lastProcessedFloor===null?summary.preferences.auto.startFloor:summary.progress.lastProcessedFloor+1))throw new Error('自动批次不从当前未完成处开始');
+        const nextSummary={...summary,revision:summary.revision+1,batches:[...summary.batches,record],progress:{...summary.progress,lastProcessedFloor:Math.max(summary.progress.lastProcessedFloor??-1,record.actualRange.end),nextBatchOrdinal:record.ordinal+1}};
+        return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,events:[...root.events,...created],summary:nextSummary},summaryGuard(frozen,snapshot,options)),batch:copy(record),events:copy(created)};
+      });
+    },
+    replaceBatch(target,selection,events,batch,options={}) {
+      const frozen=copy(target),snapshot=copy(selection),draft=copy(batch),candidates=copy(events);
+      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot);const previous=snapshot.batch;if(!previous)throw new Error('替换缺少原始批快照');
+        const members=root.events.filter(event=>previous.eventIds.includes(event.id));if(members.some(event=>event.supersededBy||event.mergedFrom))throw new Error('批成员参与合并，不能破坏撤销关系');
+        if(!equal(draft.requestedRange,previous.requestedRange)||!equal(draft.actualRange,previous.actualRange))throw new Error('不能改变所属批原始范围');
+        const created=batchEvents(root,candidates,previous.id,previous.actualRange),summary=summaryOf(root);
+        const record=assertBatch({...draft,id:previous.id,ordinal:previous.ordinal,sourceType:previous.sourceType,eventIds:created.map(event=>event.id),createdAt:previous.createdAt,completedAt:now(),generatedCandidates:assertGeneratedEvidence(draft.generatedCandidates)});
+        const nextSummary={...summary,revision:summary.revision+1,batches:summary.batches.map(item=>item.id===previous.id?record:item)};
+        return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,events:[...root.events.filter(event=>!previous.eventIds.includes(event.id)),...created],summary:nextSummary},summaryGuard(frozen,snapshot,options)),batch:copy(record),events:copy(created)};
+      });
+    },
     matchesSelection(target, snapshot, { hidden = false } = {}) {
       try { requireTarget(target); matchSnapshot(assertRoot(adapter.peekConfirmed(target), target), target, snapshot, hidden); requireTarget(target); return true; }
       catch { return false; }

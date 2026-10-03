@@ -1,7 +1,7 @@
 [
   {
     "path": "dist/index.js",
-    "sha256": "B51D82C645F5F8093E6E4D57CBD607988EFCCD141AB9D1D16C57EE26B8A0D266"
+    "sha256": "509749BA64EC3D38ADA45C748AE697F98F07D7840516CCEEB58BF403EF61FCFA"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -14,6 +14,10 @@
   {
     "path": "dist/app/api-settings.css",
     "sha256": "18CB7FB5CB085CCE0EF3F14934FA491627815D91EA1235ECE94C49CCD3DECCC8"
+  },
+  {
+    "path": "dist/app/event-editor-sections.js",
+    "sha256": "DE0F0ABA5BC6C7CA93FA1A4B4F4AECA0FF612605A45753FB3AF7D2973614AEED"
   },
   {
     "path": "dist/app/lantai-theme.css",
@@ -29,7 +33,7 @@
   },
   {
     "path": "dist/app/memory-app.js",
-    "sha256": "E9DDE6BEFB764017A2A6C7A3463DF59016AEBC7C519ED0CBA53CC4309F6FCD93"
+    "sha256": "410696175B3AE5BB627ABD4F1D5C11863ADEE856BF7D7244A080FDCA4EEFB14B"
   },
   {
     "path": "dist/app/memory-session.js",
@@ -38,6 +42,30 @@
   {
     "path": "dist/app/memory.css",
     "sha256": "D6B49D67BE38F2AC25EFC1F79CCED1E52837E47AE7C20C65B165E46EAC1B3430"
+  },
+  {
+    "path": "dist/app/summary-controller.js",
+    "sha256": "8C3034441DA837559B8B667E5FBB7A1D8DDCB37247D477D355312B06460D1C5E"
+  },
+  {
+    "path": "dist/app/summary-settings-controller.js",
+    "sha256": "5977338B747B0C222B7ACFFE5DBA24701BA99C8A46764838014BBAFBEC0B4940"
+  },
+  {
+    "path": "dist/app/summary-settings-view.js",
+    "sha256": "BE688CFD5D8B93B20F85BCCFA1DCB525F34A21620ADD88F5B93303B34093900B"
+  },
+  {
+    "path": "dist/app/summary-settings.css",
+    "sha256": "79C7CA16BEFC5F43682BC6CC81BDF81AFA5A96C6F7B0B9E1DC6E95098BAD12E6"
+  },
+  {
+    "path": "dist/app/summary-view.css",
+    "sha256": "D366959D7ACD4CC66BE59E7B2FCF6F2D5AC50F5AFD39DCA6261AD8488D6323B1"
+  },
+  {
+    "path": "dist/app/summary-view.js",
+    "sha256": "7493B9C30D48FDB1BE6D74ED4A42C633417AB2652549DA29AF5D3D42747B5C53"
   },
   {
     "path": "dist/app/tag-palette.css",
@@ -93,7 +121,7 @@
   },
   {
     "path": "dist/domain/memory/management-prompts.js",
-    "sha256": "9E37DF6A9CAA22C689CBAD0470103D3857901C9975C063E77713D9752E3C978E"
+    "sha256": "20DA9B8F93D32F858868186B2F0C63EBE937CF3DEA5D07C1AC8F4E5AA59E4FB0"
   },
   {
     "path": "dist/domain/memory/management-service.js",
@@ -105,7 +133,7 @@
   },
   {
     "path": "dist/domain/memory/model.js",
-    "sha256": "06DC540086AE3B54E73C66DB3B966F1F010A205E5C20A5191C7960B2C4767CA4"
+    "sha256": "F5D5329FE79A1EB0325F366F142A9927388D2182C70F5FCE06D864E779D0C3B2"
   },
   {
     "path": "dist/domain/memory/query.js",
@@ -113,11 +141,39 @@
   },
   {
     "path": "dist/domain/memory/repository.js",
-    "sha256": "BA49E185C9DBF592F8A4CF3EEFF867A41FACB0F85A72A5D2AD86E0FB8CCD8F71"
+    "sha256": "3ADC9DEBD97D6C27CD81A8014707152A10511A7A70B38CE64AF2EFDAF5C599BE"
   },
   {
     "path": "dist/domain/memory/timeline.js",
     "sha256": "557F0D72BA679F1103C79CB552B0EBF1048642606CDBCED1BD178A9E751369DC"
+  },
+  {
+    "path": "dist/domain/summary/auto-runner.js",
+    "sha256": "1C0C1F6A96206E7B02F4D178D7A4094AB17FA2785E43408FF5C488D792BA7867"
+  },
+  {
+    "path": "dist/domain/summary/candidates.js",
+    "sha256": "ACA79C5A679E53C2F5C6F286C1EB9DB9AEED346F535CC39A033A67F7721CB468"
+  },
+  {
+    "path": "dist/domain/summary/cleaning.js",
+    "sha256": "A9127DAB69BFE813884CD72744F7D10882F1A19F9EDA17AFD6F48047CA60D932"
+  },
+  {
+    "path": "dist/domain/summary/data.js",
+    "sha256": "531594D0C127B90222771E3D4189DA69A73F7F0474C964453D1253D3DA0D33C7"
+  },
+  {
+    "path": "dist/domain/summary/requests.js",
+    "sha256": "06F1FF3C8BE166EBE9720063C314169D61DD0386706BA6AD31E02F50AEB34695"
+  },
+  {
+    "path": "dist/domain/summary/service.js",
+    "sha256": "4AA937195CC6360BB60F2CE2258E9FA43B37844C06CABA83854F77D77F1B2299"
+  },
+  {
+    "path": "dist/domain/summary/source.js",
+    "sha256": "811303B240EE68D066FC45B535E13D0E647EC9F392A8744419D7721975A56FAF"
   },
   {
     "path": "dist/platform/fake/management-fixture.js",
@@ -125,7 +181,7 @@
   },
   {
     "path": "dist/platform/fake/memory-adapter.js",
-    "sha256": "A761E1384D81BC5FCE8C6ED80085A5AF7273354E3C7E794D09579D6CE4090833"
+    "sha256": "11B06738BA5D8FF0887CE6DD21F8CEE6D9947904BE926B1E7138816E1AB5162D"
   },
   {
     "path": "dist/platform/fake/settings-adapter.js",
@@ -153,15 +209,15 @@
   },
   {
     "path": "dist/platform/sillytavern/management-notifications.js",
-    "sha256": "DC280918DEB0AFF7B63FEF3B1E7B6E920B1A50FA2C85763804C9D91D9823DA3B"
+    "sha256": "011FD18AEA81A90A4FBCA97C71CAC1A7275DA0A1E5B4B7213D22CE9FAF470A87"
   },
   {
     "path": "dist/platform/sillytavern/management-runtime.js",
-    "sha256": "09E499981D76D8841F6859528FA4C767335F8868EC6143904FEB9ADF6C355740"
+    "sha256": "F01FEE49FE8627B4B0C1461F34C01255D5D5CC4C72E3E4104AE04A558A1DD0C9"
   },
   {
     "path": "dist/platform/sillytavern/memory-adapter.js",
-    "sha256": "DDECB0EEC0C3379B45E034DEEC7273F9A1F0BB65FAA5110EEB9FC8B80EE3CB47"
+    "sha256": "B19C11FD7AC94C65C3401170B13075A82FE10A3F5FB71487FC6E1434595E2C7A"
   },
   {
     "path": "dist/platform/sillytavern/memory-host.css",
@@ -169,7 +225,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "D4465598E8C87055EF4EF26756B1E86092A6D2E18BFDC861768A4949EF85AC51"
+    "sha256": "D6433D4D1039C227C9F342DDDB2CD4B51524C0F34AA668EB1BC7CD4AC5492157"
   },
   {
     "path": "dist/platform/sillytavern/prompt.js",
@@ -186,6 +242,14 @@
   {
     "path": "dist/platform/sillytavern/storage.js",
     "sha256": "E2575AEF4199E6CEC7D8AE52A88EFB6CE588B4FF4135D39826C6FFE4000E136A"
+  },
+  {
+    "path": "dist/platform/sillytavern/summary-history.js",
+    "sha256": "FE9629DAC9DA86DE23F36BB9ACE270912BE27711945586649FFF5C76D6C7E61C"
+  },
+  {
+    "path": "dist/platform/sillytavern/summary-notifications.js",
+    "sha256": "1E2685D26C64B2D0D6CDC1ECBB9EAD9B1C3233695EDD95DD420B0590364EBA94"
   },
   {
     "path": "dist/probe/runtime-probe.js",
@@ -213,11 +277,15 @@
   },
   {
     "path": "dist/shared/settings/model.js",
-    "sha256": "95848227732909A6E81A91FE8C0E4280814E2C0DD3728D3DC22BBC63F5E8BE2B"
+    "sha256": "FCF1E45DD5D64601B0BA11B3ED3FB7FCA2E53AF3EF716FBADAAD35A4663EE167"
   },
   {
     "path": "dist/shared/settings/repository.js",
-    "sha256": "27FA0FEFFC349EDFC835915F53B1945B37B93D7C37B147331D92FCAE1F09A330"
+    "sha256": "155B789ED5443E90CE0E8ECFC1D9B7485C0133FEB090FF3074CADBB16AAACF10"
+  },
+  {
+    "path": "dist/shared/settings/summary-prompts.js",
+    "sha256": "44A5833333D64178CCD4A21B5E141D8BC661A6561E87AEC6682513E56310E2C3"
   },
   {
     "path": "dist/vendor/plugin-ui-system/manifest.json",
@@ -230,5 +298,9 @@
   {
     "path": "dist/vendor/plugin-ui-system/web.css",
     "sha256": "C278B7C112E8508CE3EDC2C0F1412214AF32CA9E4FFBA4C3B4EDE87900E80FAE"
+  },
+  {
+    "path": "manifest.json",
+    "sha256": "6F3632FAB861B4714AF744666DEDFF922B4F4624F0D2A4FC34D1EAF94A079008"
   }
 ]

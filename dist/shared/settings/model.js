@@ -1,7 +1,9 @@
 import { createDefaultEventWords } from './default-event-words.js';
+import { SUMMARY_PROMPT_KEYS } from './summary-prompts.js';
+import { createDefaultCleaningRules, normalizeCleaningRule } from '../../domain/summary/cleaning.js';
 
 export const SETTINGS_KEY = 'lantai_benmo';
-export const PROMPT_KEYS = Object.freeze(['qualityKeywordsIdentity', 'qualityIndexOrder', 'qualityEventRules', 'qualityDetailRules', 'qualityAliasRules', 'mergeIdentity', 'merge']);
+export const PROMPT_KEYS = SUMMARY_PROMPT_KEYS;
 const messages = Object.freeze({
   INVALID_SETTINGS: '兰台设置格式无效，请检查设置内容。',
   SETTINGS_CONFLICT: '设置已发生变化，请重新读取后保存。',
@@ -41,7 +43,8 @@ function ai(value) {
   return value;
 }
 function generation(value) {
-  exact(value, ['eventWords', 'promptOverrides']);
+  const legacy = value && Object.keys(value).length === 2;
+  exact(value, legacy ? ['eventWords', 'promptOverrides'] : ['eventWords', 'promptOverrides', 'generationMode', 'customPrompts', 'summaryCleaning']);
   if (!Array.isArray(value.eventWords)) invalid();
   const ids = new Set(), names = new Set();
   for (const word of value.eventWords) {
@@ -53,6 +56,24 @@ function generation(value) {
   const overrides = value.promptOverrides;
   if (!overrides || Object.getPrototypeOf(overrides) !== Object.prototype
     || Object.entries(overrides).some(([key, value]) => !PROMPT_KEYS.includes(key) || typeof value !== 'string')) invalid();
+  if (legacy) return { ...value, generationMode: 'quality', customPrompts: [], summaryCleaning: { rules: createDefaultCleaningRules() } };
+  if (!['fast', 'quality', 'enhanced'].includes(value.generationMode) || !Array.isArray(value.customPrompts)) invalid();
+  const customIds = new Set();
+  for (const prompt of value.customPrompts) {
+    exact(prompt, ['id', 'name', 'content', 'position']);
+    if (!text(prompt.id) || !text(prompt.name) || typeof prompt.content !== 'string' || !prompt.content.trim()
+      || !['before', 'after'].includes(prompt.position) || customIds.has(prompt.id)) invalid();
+    customIds.add(prompt.id);
+  }
+  exact(value.summaryCleaning, ['rules']);
+  if (!Array.isArray(value.summaryCleaning.rules)) invalid();
+  const ruleIds = new Set();
+  for (const rule of value.summaryCleaning.rules) {
+    exact(rule, ['id', 'name', 'enabled', 'action', 'pattern', 'captureGroup', 'replacement']);
+    normalizeCleaningRule(rule);
+    if (!text(rule.id) || !text(rule.name) || ruleIds.has(rule.id)) invalid();
+    ruleIds.add(rule.id);
+  }
   return value;
 }
 export function frozenSettingsCopy(value) {
@@ -71,7 +92,7 @@ export function settingsFingerprint(value) {
 export const equalSettings = (a, b) => settingsFingerprint(a) === settingsFingerprint(b);
 export function emptySettings() {
   return { schema: 2, revision: 0, domainRevisions: { ai: 0, eventGeneration: 0 }, credentials: [], ai: { source: null, activePresetId: null, presets: [] },
-    eventGeneration: { eventWords: createDefaultEventWords(), promptOverrides: {} } };
+    eventGeneration: { eventWords: createDefaultEventWords(), promptOverrides: {}, generationMode: 'quality', customPrompts: [], summaryCleaning: { rules: createDefaultCleaningRules() } } };
 }
 export function assertSettings(value) {
   try {
@@ -81,8 +102,8 @@ export function assertSettings(value) {
     exact(value.domainRevisions, ['ai', 'eventGeneration']);
     if (Object.values(value.domainRevisions).some(version => !Number.isSafeInteger(version) || version < 0)
       || value.domainRevisions.ai + value.domainRevisions.eventGeneration !== value.revision) invalid();
-    ai(value.ai); generation(value.eventGeneration);
-    const migrated = legacy ? { ...value, schema: 2, credentials: [] } : value;
+    ai(value.ai); const eventGeneration = generation(value.eventGeneration);
+    const migrated = { ...value, schema: 2, credentials: legacy ? [] : value.credentials, eventGeneration };
     if (!Array.isArray(migrated.credentials)) invalid();
     const ids = new Set();
     for (const credential of migrated.credentials) {

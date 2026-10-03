@@ -1,6 +1,7 @@
+import {emptySummary,assertSummary,summaryOf} from '../summary/data.js';
 const clone = value => structuredClone(value);
 export const SCHEMA = 1;
-export function emptyRoot(rootId) { return { schema: SCHEMA, rootId, revision: 0, events: [] }; }
+export function emptyRoot(rootId) { return { schema: SCHEMA, rootId, revision: 0, events: [], summary:emptySummary() }; }
 export function blankEvent(id = crypto.randomUUID()) {
   return { id, createdAt: null, updatedAt: null, mode: 'trigger', title: '', body: '', startTime: '', endTime: '', sources: [], people: [], places: [], eventWords: [], detailWords: [], batch: null };
 }
@@ -62,6 +63,7 @@ export function assertRoot(root, target) {
   const ids = new Set();
   for (const event of root.events) { validateEvent(event); if(ids.has(event.id)) throw new Error('重复记忆身份'); ids.add(event.id); }
   assertMergeRelations(root.events, Object.hasOwn(root, 'deletedMergeIds') ? root.deletedMergeIds : []);
+  if(Object.hasOwn(root,'summary'))assertSummary(root.summary,root.events);
   return clone(root);
 }
 export function inheritEvents(events, floor) {
@@ -87,4 +89,25 @@ export function inheritEvents(events, floor) {
     for (const group of closureGroups) if (group.some(id => !selected.has(id))) for (const id of group) if (selected.delete(id)) changed = true;
   } while (changed);
   return clone(events.filter(event => selected.has(event.id)));
+}
+export function inheritMemoryRoot(root,rootId,floor) {
+  const summary=summaryOf(root), known=new Set(summary.batches.map(batch=>batch.id));
+  let selected=inheritEvents(root.events,floor), previous;
+  summary.batches=summary.batches.filter(batch=>batch.requestedRange.end<floor&&batch.actualRange.end<floor);
+  // A ledger's requested tail can cross the branch even when its event range
+  // does not. Removing that batch must also remove overlapping merge groups.
+  do {
+    previous=JSON.stringify([selected.map(event=>event.id),summary.batches.map(batch=>batch.id)]);
+    const inherited=new Set(selected.map(event=>event.id));
+    summary.batches=summary.batches.filter(batch=>root.events.filter(event=>batch.eventIds.includes(event.id)).every(event=>inherited.has(event.id)));
+    const allowed=new Set(summary.batches.map(batch=>batch.id));
+    selected=inheritEvents(selected.filter(event=>!known.has(event.batch?.id)||allowed.has(event.batch.id)),floor);
+  } while(previous!==JSON.stringify([selected.map(event=>event.id),summary.batches.map(batch=>batch.id)]));
+  summary.excludedFloors=summary.excludedFloors.filter(item=>item.floor<floor);
+  summary.revision=0;
+  summary.progress={startFloor:Math.min(summary.progress.startFloor,floor),lastProcessedFloor:summary.batches.length?Math.max(...summary.batches.map(batch=>batch.actualRange.end)):null,nextBatchOrdinal:summary.batches.length?Math.max(...summary.batches.map(batch=>batch.ordinal))+1:1};
+  summary.preferences.manual.startFloor=Math.min(summary.preferences.manual.startFloor,floor);
+  summary.preferences.manual.endFloor=null;
+  summary.preferences.auto.startFloor=Math.min(summary.preferences.auto.startFloor,floor);
+  return {...emptyRoot(rootId),events:selected,summary};
 }

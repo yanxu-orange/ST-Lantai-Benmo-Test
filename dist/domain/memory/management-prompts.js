@@ -1,10 +1,11 @@
 import { INDEX_FIELDS,MERGE_FIELDS,INDEX_SCHEMA } from './management-prompt-defaults.js';
+import { SUMMARY_PROMPT_KEYS } from '../../shared/settings/summary-prompts.js';
 export const MERGE_SCHEMA={name:'merged_memory_text',value:{type:'object',additionalProperties:false,required:['title','body','coherenceWarning'],properties:{title:{type:'string'},body:{type:'string',minLength:1},coherenceWarning:{type:'string'}}}};
 export function generationSettings(value) {
  if(!value||!Number.isSafeInteger(value.epoch)||value.epoch<0||!Array.isArray(value.eventWords))throw new Error('生成设置或版本无效');
  const words=value.eventWords.filter(word=>word?.enabled!==false);
  if(words.some(word=>typeof word?.name!=='string'||!word.name.trim()||word.name.trim()!==word.name||typeof word.definition!=='string')||new Set(words.map(word=>word.name)).size!==words.length)throw new Error('事件词库无效');
- const promptOverrides=value.promptOverrides??{},keys=new Set([...INDEX_FIELDS,...MERGE_FIELDS].map(field=>field.key));
+ const promptOverrides=value.promptOverrides??{},keys=new Set(SUMMARY_PROMPT_KEYS);
  if(!promptOverrides||typeof promptOverrides!=='object'||Array.isArray(promptOverrides)||Object.entries(promptOverrides).some(([key,text])=>!keys.has(key)||typeof text!=='string'))throw new Error('提示词设置无效');
  return {epoch:value.epoch,eventWords:words.map(({name,definition})=>({name,definition})),promptOverrides:structuredClone(promptOverrides)};
 }
