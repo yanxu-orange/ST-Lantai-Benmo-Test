@@ -37,6 +37,16 @@ function reasonsOf(evaluation,aliases,id){
   for(const path of evaluation?.qualificationPaths??[])reasons.push({code:path.reason?.code??path.channel,sourceKind:path.sourceKind,distanceFromCurrent:path.distanceFromCurrent});
   return [...new Map(reasons.map(reason=>[JSON.stringify(reason),reason])).values()];
 }
+function rankingFacts(entry,rank){
+  const evidence=entry.structuredEvidence;
+  return {rank,score:entry.structuredRelevance??0,
+    contributions:(evidence?.parentContributions??[]).map(parent=>({term:parent.selectedWitness?.storedValue,
+      field:parent.selectedWitness?.field,sourceKind:parent.selectedWitness?.sourceKind,distanceFromCurrent:parent.selectedWitness?.distanceFromCurrent,
+      value:parent.consumedValue,sourceReliability:parent.sourceReliability,frequencyAdjustment:parent.frequencyAdjustment,
+      specificityAdjustment:parent.specificityAdjustment,matchReliability:parent.matchReliability,saturationFactor:parent.saturationFactor??1,
+      suppressionReasons:parent.suppressionReasons})),
+    combinations:(evidence?.bundleContributions??[]).filter(bundle=>bundle.consumedValue>0).map(bundle=>({roles:bundle.roles,value:bundle.consumedValue}))};
+}
 export function memoryPrompt(events){if(!events.length)return '';return ['<lantai_event_memory>','以下内容是过去已经发生的记忆，可能与最近的讨论有关。请将其作为事实与经历参考，自然保持连续性；不要机械复述，也不要声称看见了记忆条目。',...events.map(event=>`【${event.startTime&&event.endTime?`${event.startTime} — ${event.endTime}`:event.startTime||event.endTime}｜${event.title}】\n${event.body}`),'</lantai_event_memory>'].join('\n\n');}
 
 export async function buildRecall({events,batches=[],input='',recentHistory=[],settings=defaultRecallSettings(),countTokens=null}={}){
@@ -53,7 +63,7 @@ export async function buildRecall({events,batches=[],input='',recentHistory=[],s
   const residentBase=residentEvidence?.base??residentEvidence;
   const aliasRanks=new Map((aliases?.rankedReference??[]).map((item,index)=>[item.memoryId,index]));
   const ranked=base.evaluated.filter(item=>item.ordinaryQualified).sort((a,b)=>(b.structuredRelevance??0)-(a.structuredRelevance??0)||(aliasRanks.has(a.memoryId)&&aliasRanks.has(b.memoryId)?aliasRanks.get(a.memoryId)-aliasRanks.get(b.memoryId):0)||a.libraryIndex-b.libraryIndex);
-  const asItem=(id,pool,entry)=>({id,event:copy(memoryById.get(id)),pool,qualified:pool==='resident'||entry?.ordinaryQualified===true,rank:pool==='trigger'?ranked.findIndex(item=>item.memoryId===id)+1:null,reasons:[...(pool==='resident'?[{code:'resident'}]:[]),...reasonsOf(entry,pool==='resident'?residentEvidence?.aliasResult:aliases,id).map(reason=>({...reason,...(reason.term&&memoryById.get(id).detailWords.find(term=>term.word===reason.term)?{termId:memoryById.get(id).detailWords.find(term=>term.word===reason.term).id}:{})}))],tokens:null,estimated:false});
+  const asItem=(id,pool,entry)=>({id,event:copy(memoryById.get(id)),pool,qualified:pool==='resident'||entry?.ordinaryQualified===true,rank:pool==='trigger'&&entry?.ordinaryQualified===true?ranked.findIndex(item=>item.memoryId===id)+1:null,reasons:[...(pool==='resident'?[{code:'resident'}]:[]),...reasonsOf(entry,pool==='resident'?residentEvidence?.aliasResult:aliases,id).map(reason=>({...reason,...(reason.term&&memoryById.get(id).detailWords.find(term=>term.word===reason.term)?{termId:memoryById.get(id).detailWords.find(term=>term.word===reason.term).id}:{})}))],tokens:null,estimated:false});
   const selected=residents.map(memory=>asItem(memory.id,'resident',residentBase?.evaluated.find(item=>item.memoryId===memory.id))),unselected=[];
   let totalTokens=0,estimated=false,tokenStopped=false;
   for(const entry of ranked){const item=asItem(entry.memoryId,'trigger',entry);if(item.rank>settings.maxCount){unselected.push({...item,excludedReason:'count-limit'});continue;}if(tokenStopped){unselected.push({...item,excludedReason:'token-limit'});continue;}
@@ -61,6 +71,14 @@ export async function buildRecall({events,batches=[],input='',recentHistory=[],s
     selected.push(item);
   }
   for(const entry of base.evaluated.filter(item=>!item.ordinaryQualified))unselected.push({...asItem(entry.memoryId,'trigger',entry),excludedReason:'insufficient-evidence'});
+  // Explanation only: capture the exact competition keys before narrative reordering.
+  const competitionRanks=new Map(ranked.map((entry,index)=>[entry.memoryId,index+1]));
+  const factsById=new Map(base.evaluated.map(entry=>[entry.memoryId,rankingFacts(entry,competitionRanks.get(entry.memoryId)??null)]));
+  for(const item of [...selected,...unselected]){
+    if(item.pool==='resident'){item.ranking={pool:'resident',rank:null};continue;}
+    const facts=factsById.get(item.id);
+    item.ranking={pool:'trigger',...facts,maxCount:settings.maxCount};
+  }
   const memoryMap=new Map(memories.map(memory=>[memory.id,memory])),ordering=orderMemoriesForNarrative({items:selected.map(item=>({memory:memoryMap.get(item.id),memoryId:item.id,libraryIndex:memories.findIndex(memory=>memory.id===item.id)}))});
   const byId=new Map(selected.map(item=>[item.id,item])),ordered=ordering.orderedIds.map(id=>byId.get(id));
   return frozenSettingsCopy({version:'event-recall-v1',matching:{input:current,history},selected:ordered,unselected,prompt:memoryPrompt(ordered.map(item=>item.event)),selectedIds:ordering.orderedIds,

@@ -68,12 +68,16 @@
     "sha256": "15E4CE536B288604DCBA8937185E62D891C2D40CAF04017AB3E14B4EC259DAD1"
   },
   {
+    "path": "dist/app/recall-ranking-reasons.js",
+    "sha256": "21665D47D2C63D2EA13163ED954BD8BF5757AF631F502BED76AD7B1A74E19E2A"
+  },
+  {
     "path": "dist/app/recall-view.css",
     "sha256": "757C3377C0FDF307F8648E715EDAC3132F7F3CD2438DD647A9FFA9C364F0F68D"
   },
   {
     "path": "dist/app/recall-view.js",
-    "sha256": "3D6B08999DE8F7E708C2262D1D934A8D00B82AA4FA692B9884A670949EA3782F"
+    "sha256": "26DCA2AFF861E0AD90653DD186F7D6A5CF73F4A973FC408AA2E53E5E80D19565"
   },
   {
     "path": "dist/app/summary-controller.js",
@@ -85,7 +89,7 @@
   },
   {
     "path": "dist/app/summary-settings-view.js",
-    "sha256": "19626354CD9E97B36548EAD9BA67E232250580B30F420D7BF10A0D4163F523C1"
+    "sha256": "25CEA477D7E7A82AD09CA2EA4A77C1C8490B93EEDFC95D424D61C4B1D08E5EF6"
   },
   {
     "path": "dist/app/summary-settings.css",
@@ -161,7 +165,7 @@
   },
   {
     "path": "dist/domain/recall/build.js",
-    "sha256": "AAA8B2158425BC8E24E8A4269BBEBB89CC60577BC2CC677D0ABCF596520E026D"
+    "sha256": "EDE44E596E3B3143D7C1C367A356D8AF5825058E2C3050F9A43EB53E8F9458FA"
   },
   {
     "path": "dist/domain/recall/detail-alias-candidates.js",
