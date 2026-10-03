@@ -63,7 +63,7 @@ export function assertRoot(root, target) {
   const ids = new Set();
   for (const event of root.events) { validateEvent(event); if(ids.has(event.id)) throw new Error('重复记忆身份'); ids.add(event.id); }
   assertMergeRelations(root.events, Object.hasOwn(root, 'deletedMergeIds') ? root.deletedMergeIds : []);
-  if(Object.hasOwn(root,'summary'))assertSummary(root.summary,root.events);
+  if(Object.hasOwn(root,'summary')){assertSummary(root.summary,root.events);if(root.summary.pending?.events.some(event=>root.deletedMergeIds?.includes(event.id)))throw new Error('待审核身份占用合并删除证明');}
   return clone(root);
 }
 export function inheritEvents(events, floor) {
@@ -92,6 +92,7 @@ export function inheritEvents(events, floor) {
 }
 export function inheritMemoryRoot(root,rootId,floor) {
   const summary=summaryOf(root), known=new Set(summary.batches.map(batch=>batch.id));
+  delete summary.pending;
   let selected=inheritEvents(root.events,floor), previous;
   summary.batches=summary.batches.filter(batch=>batch.requestedRange.end<floor&&batch.actualRange.end<floor);
   // A ledger's requested tail can cross the branch even when its event range

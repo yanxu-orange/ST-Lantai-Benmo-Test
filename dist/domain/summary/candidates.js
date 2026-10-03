@@ -4,6 +4,31 @@ import { exactKeys, strings, validateIndexes } from '../memory/management-valida
 const draftKeys = ['title','storyTime','body','people','locations','classificationTags','specialDateCandidates'];
 const textArray = { type:'array',items:{type:'string'} };
 const properties = {title:{type:'string'},body:{type:'string'},storyTime:{type:'object',additionalProperties:false,required:['start','end'],properties:{start:{type:'string'},end:{type:'string'}}},people:textArray,locations:textArray,classificationTags:textArray,specialDateCandidates:{type:'array',items:{type:'object',additionalProperties:false,required:['name','storyDate','reason'],properties:{name:{type:'string'},storyDate:{type:'string'},reason:{type:'string'}}}}};
+// Only invalid alias text is disposable. Structure and ownership stay strict.
+export function normalizeSummaryAliases(data,{stage,events=[]}={}) {
+  const copy=structuredClone(data),diagnostics=[];
+  const rows=stage==='fast'?copy?.memories:copy?.indexes;
+  if(!Array.isArray(rows))return {data:copy,diagnostics};
+  for(const [rowIndex,row] of rows.entries()) {
+    if(!row||!Array.isArray(row.detailAliases))continue;
+    const details=stage==='aliases'?events.find(event=>event.id===row.draftId)?.detailWords.map(term=>term.word):row.detailKeywords;
+    if(!Array.isArray(details)){if(stage==='aliases')throw new Error('简称草稿身份无效');continue;}
+    const parents=new Set(),filtered=[];
+    for(const [relationIndex,relation] of row.detailAliases.entries()) {
+      if(!exactKeys(relation,['parentDetail','aliases'])||!details.includes(relation.parentDetail)||parents.has(relation.parentDetail)||!Array.isArray(relation.aliases)||relation.aliases.some(alias=>typeof alias!=='string'))throw new Error('简称结构或父词绑定无效');
+      parents.add(relation.parentDetail);
+      const seen=new Set(),aliases=[];
+      for(const [aliasIndex,alias] of relation.aliases.entries()) {
+        if(!/^[\p{Script=Han}0-9]+$/u.test(alias)||alias===relation.parentDetail||!relation.parentDetail.includes(alias)||seen.has(alias))diagnostics.push({rowIndex,relationIndex,aliasIndex,code:'invalid-alias-discarded'});
+        else {seen.add(alias);aliases.push(alias);}
+      }
+      if(aliases.length)filtered.push({...relation,aliases});
+      else diagnostics.push({rowIndex,relationIndex,code:'empty-alias-group-discarded'});
+    }
+    row.detailAliases=filtered;
+  }
+  return {data:copy,diagnostics};
+}
 export function summarySchema(complete=false) {
   const fields=complete?{...properties,eventKeywords:textArray,detailKeywords:textArray,detailAliases:{type:'array',items:{type:'object',additionalProperties:false,required:['parentDetail','aliases'],properties:{parentDetail:{type:'string'},aliases:textArray}}}}:properties;
   return {name:complete?'event_summary':'event_summary_drafts',value:{type:'object',additionalProperties:false,required:['memories'],properties:{memories:{type:'array',minItems:1,items:{type:'object',additionalProperties:false,required:Object.keys(fields),properties:fields}}}}};

@@ -34,6 +34,11 @@ export function createAutomaticSummaryRunner({service,repository,captureSource}=
     start(){const target=repository.captureTarget();if(disposed)return false;if(run&&!sameTarget(run.target,target)){if(run.taskId)service.cancel(run.taskId);run=null;}if(run&&['running','awaiting-user'].includes(run.status))return false;run={target,status:'running',taskId:null,stopRequested:false,error:'',pumping:false};notify();void pump(run);return true;},
     stop(){if(!run||!['running','waiting','awaiting-user'].includes(run.status))return false;run.stopRequested=true;if(!run.pumping&&run.status!=='awaiting-user')run.status='stopped';notify();return true;},
     afterReview(){if(!run||run.status!=='awaiting-user')return;run.status=run.stopRequested?'stopped':'running';notify();void pump(run);},
+    transferTask(taskId){
+      const task=service.inspect(taskId),active=run;if(!active||!task||!sameTarget(active.target,task.target)||!sameTarget(task.target,repository.captureTarget()))return false;
+      active.taskId=taskId;active.status='running';active.error='';active.pumping=true;notify();
+      void service.completed(taskId).then(outcome=>{if(disposed||run!==active||active.taskId!==taskId)return;active.status=outcome?.status==='awaiting-user'?'awaiting-user':'failed';if(active.status==='failed')active.error='本批未完成，请明确重试';}).catch(()=>{if(run===active&&active.taskId===taskId){active.status='failed';active.error='本批未完成，请明确重试';}}).finally(()=>{if(run===active&&active.taskId===taskId){active.pumping=false;notify();}});return true;
+    },
     discard(){if(run){run.status='failed';run.error='已放弃本批，请明确重试';notify();}},
     wake(){if(run?.status==='waiting'&&!run.stopRequested){if(!sameTarget(run.target,repository.captureTarget())){run.status='stopped';notify();return;}run.status='running';void pump(run);}},
     subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},

@@ -62,12 +62,110 @@ function requestCopy({ task, messages, jsonSchema }) {
   return result;
 }
 
+function nextNonWhitespaceIndex(text, start) {
+    for (let index = start; index < text.length; index += 1) {
+        if (!/\s/u.test(text[index])) return index;
+    }
+    return -1;
+}
+
+function isJsonValueStart(character) {
+    return character === '"' || character === '{' || character === '[' || character === '-'
+        || character === 't' || character === 'f' || character === 'n' || /\d/u.test(character ?? '');
+}
+
+// Some OpenAI-compatible relays advertise strict json_schema support but still
+// return otherwise complete JSON with dialogue quotes left unescaped. Repair
+// only quote boundaries that can be decided from the surrounding JSON grammar;
+// schema and business validation still run after this syntax-only pass.
+function repairStrictJsonSyntax(text) {
+    const output = [];
+    const stack = [];
+    let inString = false;
+    let stringRole = 'value';
+
+    const completeValue = () => {
+        const parent = stack.at(-1);
+        if (parent) parent.expect = 'commaOrEnd';
+    };
+    const quoteCanClose = index => {
+        const nextIndex = nextNonWhitespaceIndex(text, index + 1);
+        const next = nextIndex === -1 ? null : text[nextIndex];
+        if (stringRole === 'key') return next === ':';
+        const parent = stack.at(-1);
+        if (!parent) return next === null;
+        if (parent.type === 'object') {
+            if (next === '}') return true;
+            if (next !== ',') return false;
+            const afterComma = nextNonWhitespaceIndex(text, nextIndex + 1);
+            return afterComma !== -1 && text[afterComma] === '"';
+        }
+        if (next === ']') return true;
+        if (next !== ',') return false;
+        const afterComma = nextNonWhitespaceIndex(text, nextIndex + 1);
+        return afterComma !== -1 && isJsonValueStart(text[afterComma]);
+    };
+
+    for (let index = 0; index < text.length; index += 1) {
+        const character = text[index];
+        if (inString) {
+            if (character === '\\') {
+                output.push(character);
+                if (index + 1 < text.length) output.push(text[index += 1]);
+                continue;
+            }
+            if (character === '"') {
+                if (!quoteCanClose(index)) {
+                    output.push('\\"');
+                    continue;
+                }
+                inString = false;
+                const parent = stack.at(-1);
+                if (stringRole === 'key') {
+                    if (parent) parent.expect = 'colon';
+                } else completeValue();
+            }
+            output.push(character);
+            continue;
+        }
+
+        if (character === '"') {
+            const parent = stack.at(-1);
+            stringRole = parent?.type === 'object' && parent.expect === 'keyOrEnd' ? 'key' : 'value';
+            inString = true;
+            output.push(character);
+            continue;
+        }
+        if (character === '{') stack.push({ type: 'object', expect: 'keyOrEnd' });
+        else if (character === '[') stack.push({ type: 'array', expect: 'valueOrEnd' });
+        else if (character === ':' && stack.at(-1)?.type === 'object') stack.at(-1).expect = 'value';
+        else if (character === ',') {
+            const parent = stack.at(-1);
+            const nextIndex = nextNonWhitespaceIndex(text, index + 1);
+            if (parent && nextIndex !== -1 && ((parent.type === 'object' && text[nextIndex] === '}') || (parent.type === 'array' && text[nextIndex] === ']'))) {
+                continue;
+            }
+            if (parent) parent.expect = parent.type === 'object' ? 'keyOrEnd' : 'valueOrEnd';
+        } else if (character === '}' || character === ']') {
+            stack.pop();
+            completeValue();
+        }
+        output.push(character);
+    }
+    return output.join('');
+}
+
+
 export function parseStrictJson(text) {
   if (typeof text !== 'string' || !text.trim()) throw new AiProviderError('empty_output');
-  const normalized = text.trim();
+  const normalized = text.trim().replace(/^\uFEFF/, '').trim();
   const fence = /^```(?:json)?[\t ]*\r?\n([\s\S]*?)\r?\n```[\t ]*$/i.exec(normalized);
-  try { return JSON.parse(fence ? fence[1] : normalized); }
-  catch { throw new AiProviderError('invalid_json'); }
+  const json = fence ? fence[1] : normalized;
+  try { return JSON.parse(json); }
+  catch {
+    try { return JSON.parse(repairStrictJsonSyntax(json)); }
+    catch { throw new AiProviderError('invalid_json'); }
+  }
 }
 
 // Settings owns getConfig; this gateway neither discovers nor stores settings.

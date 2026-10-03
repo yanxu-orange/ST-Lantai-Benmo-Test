@@ -180,7 +180,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       shadow.addEventListener('compositionend', () => { composing = false; });
       panel.addEventListener('keydown', event => {
         if (event.defaultPrevented || event.isComposing || composing || shadow.querySelector('[data-composing=true]')) return;
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!settingsContent.hidden) returnFromSettings('back'); else if(!summaryContent.hidden){if(summarySettingsView)summarySettingsController.back();else if(runtime.summaryController.back())void returnFromSummary();}else close(); return; }
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!settingsContent.hidden) returnFromSettings('back'); else if(!summaryContent.hidden){if(summarySettingsView)summarySettingsController.back();else void runtime.summaryController.back().then(back=>{if(back)void returnFromSummary();});}else close(); return; }
         if (event.key !== 'Tab') return;
         const items = [...shadow.querySelectorAll('button,a,input,textarea,select,summary,[tabindex]')]
           .filter(node => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length);

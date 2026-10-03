@@ -1,5 +1,6 @@
 import { assertRoot, validateEvent, validateEventForSave, activeEvents } from './model.js';
-import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence} from '../summary/data.js';
+import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence} from '../summary/data.js';
+import {matchesStoredSummarySource} from '../summary/source.js';
 export function sameTarget(a, b) { return !!a && !!b && !!a.chatId && !!a.rootId && Number.isSafeInteger(a.epoch) && a.chatId === b.chatId && a.rootId === b.rootId && a.epoch === b.epoch; }
 const copy = value => structuredClone(value);
 const equal = (a, b) => {
@@ -60,6 +61,12 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     if(snapshot.batch){const batch=summaryOf(root).batches.find(item=>item.id===snapshot.batch.id);if(!equal(batch,snapshot.batch)||!equal(root.events.filter(event=>batch.eventIds.includes(event.id)),snapshot.events))throw new Error('所属批成员已变化');}
   };
   const summaryGuard=(target,snapshot,options)=>current=>{if(typeof options.isCurrent!=='function'||options.isCurrent()!==true)throw new Error('总结来源或配置已失效');matchSummary(current,target,snapshot);return true;};
+  const consumePending=(summary,options,draft,candidates)=>{
+    if(summary.pending){const pending=summary.pending;
+      if(options.pendingId!==pending.id||draft.id!==pending.batchId||draft.sourceType!==pending.origin||draft.generationMode!==pending.generationMode||draft.hideOriginal!==pending.params.hideOriginal||!equal(draft.generatedCandidates,pending.generatedCandidates)||!equal(publicSummarySettingsEvidence(draft.settingsEvidence),pending.settingsEvidence)||!equal(draft.requestedRange,pending.sourceSnapshot.requestedRange)||!equal(draft.actualRange,pending.sourceSnapshot.actualRange)||draft.sourceSnapshot?.includeUser!==pending.sourceSnapshot.includeUser||!equal(draft.sourceSnapshot?.excludedFloors,pending.sourceSnapshot.excludedFloors)||!matchesStoredSummarySource(pending.sourceSnapshot,{epoch:draft.sourceSnapshot?.epoch,messages:draft.sourceSnapshot?.rawMessages})||candidates.some(event=>!pending.events.some(previous=>previous.id===event.id)))throw new Error('待审核草稿身份或证据不符，不得覆盖');}
+    else if(options.pendingId!==undefined)throw new Error('待审核草稿已变化');
+    const result={...summary};delete result.pending;return result;
+  };
   const batchEvents=(root,events,id,actualRange)=>{
     if(!Array.isArray(events)||!events.length)throw new Error('至少保留一条事件切片');
     const ids=new Set(),timestamp=now();
@@ -71,6 +78,24 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     async captureSummary(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,revision:root.revision,summary:summaryOf(root)});},
     async captureBatch(target,id){const frozen=copy(target),root=await read(frozen),summary=summaryOf(root),batch=summary.batches.find(item=>item.id===id);if(!batch)throw new Error('没有可确认的独立批记录');return freeze({target:frozen,revision:root.revision,summary,batch:copy(batch),events:copy(root.events.filter(event=>batch.eventIds.includes(event.id)))});},
     matchesSummary(target,snapshot){try{requireTarget(target);matchSummary(assertRoot(adapter.peekConfirmed(target),target),target,snapshot);requireTarget(target);return true;}catch{return false;}},
+    saveSummaryPending(target,selection,pending,options={}) {
+      const frozen=copy(target),snapshot=copy(selection),draft=assertSummaryPending(pending);
+      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot);const summary=summaryOf(root);
+        if(summary.pending){const previous=summary.pending;if(previous.id!==draft.id||previous.batchId!==draft.batchId||previous.createdAt!==draft.createdAt||previous.origin!==draft.origin||previous.generationMode!==draft.generationMode||!equal(previous.params,draft.params)||!equal(previous.generatedCandidates,draft.generatedCandidates)||!equal(previous.sourceSnapshot.excludedFloors,draft.sourceSnapshot.excludedFloors)||!equal(previous.settingsEvidence,draft.settingsEvidence)||!equal(previous.sourceSnapshot.requestedRange,draft.sourceSnapshot.requestedRange)||!equal(previous.sourceSnapshot.actualRange,draft.sourceSnapshot.actualRange)||!matchesStoredSummarySource(previous.sourceSnapshot,{epoch:draft.sourceSnapshot.epoch,messages:draft.sourceSnapshot.rawMessages})||previous.completedStages.length>draft.completedStages.length||draft.events.some(event=>!previous.events.some(item=>item.id===event.id)))throw new Error('已有其他、变化或更新阶段待审核草稿');}
+        const nextSummary={...summary,revision:summary.revision+1,pending:draft};
+        const committed=await commit(frozen,root,{...root,revision:root.revision+1,summary:nextSummary},summaryGuard(frozen,snapshot,options));
+        return {status:'committed',root:committed,selection:freeze({target:copy(frozen),revision:committed.revision,summary:summaryOf(committed)})};
+      });
+    },
+    clearSummaryPending(target,selection,options={}) {
+      const frozen=copy(target),snapshot=copy(selection);
+      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot);const summary=summaryOf(root);
+        summaryGuard(frozen,snapshot,options)(root);
+        if(!summary.pending)return {status:'unchanged',root};
+        const nextSummary={...summary,revision:summary.revision+1};delete nextSummary.pending;
+        return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,summary:nextSummary},summaryGuard(frozen,snapshot,options))};
+      });
+    },
     updateSummaryPreferences(target,patch,{expectedSummaryRevision,isCurrent=()=>true}={}) {
       const frozen=copy(target),draft=copy(patch);
       return enqueue(async()=>{const root=await read(frozen),summary=summaryOf(root),revision=summary.revision;
@@ -95,7 +120,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         const timestamp=now(),created=batchEvents(root,candidates,draft.id,draft.actualRange);
         const record=assertBatch({...draft,ordinal:summary.progress.nextBatchOrdinal,eventIds:created.map(event=>event.id),createdAt:timestamp,completedAt:timestamp,generatedCandidates:assertGeneratedEvidence(draft.generatedCandidates)});
         if(record.sourceType==='auto'&&record.actualRange.start!==(summary.progress.lastProcessedFloor===null?summary.preferences.auto.startFloor:summary.progress.lastProcessedFloor+1))throw new Error('自动批次不从当前未完成处开始');
-        const nextSummary={...summary,revision:summary.revision+1,batches:[...summary.batches,record],progress:{...summary.progress,lastProcessedFloor:Math.max(summary.progress.lastProcessedFloor??-1,record.actualRange.end),nextBatchOrdinal:record.ordinal+1}};
+        const nextSummary={...consumePending(summary,options,draft,candidates),revision:summary.revision+1,batches:[...summary.batches,record],progress:{...summary.progress,lastProcessedFloor:Math.max(summary.progress.lastProcessedFloor??-1,record.actualRange.end),nextBatchOrdinal:record.ordinal+1}};
         return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,events:[...root.events,...created],summary:nextSummary},summaryGuard(frozen,snapshot,options)),batch:copy(record),events:copy(created)};
       });
     },
@@ -106,7 +131,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         if(!equal(draft.requestedRange,previous.requestedRange)||!equal(draft.actualRange,previous.actualRange))throw new Error('不能改变所属批原始范围');
         const created=batchEvents(root,candidates,previous.id,previous.actualRange),summary=summaryOf(root);
         const record=assertBatch({...draft,id:previous.id,ordinal:previous.ordinal,sourceType:previous.sourceType,eventIds:created.map(event=>event.id),createdAt:previous.createdAt,completedAt:now(),generatedCandidates:assertGeneratedEvidence(draft.generatedCandidates)});
-        const nextSummary={...summary,revision:summary.revision+1,batches:summary.batches.map(item=>item.id===previous.id?record:item)};
+        const nextSummary={...consumePending(summary,options,draft,candidates),revision:summary.revision+1,batches:summary.batches.map(item=>item.id===previous.id?record:item)};
         return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,events:[...root.events.filter(event=>!previous.eventIds.includes(event.id)),...created],summary:nextSummary},summaryGuard(frozen,snapshot,options)),batch:copy(record),events:copy(created)};
       });
     },
