@@ -65,7 +65,7 @@
   },
   {
     "path": "dist/app/recall-controller.js",
-    "sha256": "15E4CE536B288604DCBA8937185E62D891C2D40CAF04017AB3E14B4EC259DAD1"
+    "sha256": "977811F794AEDC322A406A9CEC69B2EBBB61D09313DAEE3F0149DA420F31F911"
   },
   {
     "path": "dist/app/recall-ranking-reasons.js",
@@ -77,7 +77,7 @@
   },
   {
     "path": "dist/app/recall-view.js",
-    "sha256": "26DCA2AFF861E0AD90653DD186F7D6A5CF73F4A973FC408AA2E53E5E80D19565"
+    "sha256": "E47F9488E593C4D1CF51E3B2316604E22E5461453581B7433812602C257FA87D"
   },
   {
     "path": "dist/app/summary-controller.js",
@@ -285,7 +285,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "43AF1931ECA4CC09A126B5FE5E17D53C7E513E6F8FF4AE2E0F0C9703DDB1F31C"
+    "sha256": "E5978A33AB4FDFDFA266E95D69F3D74BEB7CFFA054AF144FE21661F1650F3CA3"
   },
   {
     "path": "dist/platform/sillytavern/prompt.js",
@@ -301,7 +301,7 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-runtime.js",
-    "sha256": "15E0560D48F8E4122EF9F9FBCFAD7736EF2BF9B7956590CC9C2621454FF201D3"
+    "sha256": "BFCF5BE166EA8B9B0462ACA20C581D13A386EC128E4C03176C796975A099369A"
   },
   {
     "path": "dist/platform/sillytavern/secret-references.js",

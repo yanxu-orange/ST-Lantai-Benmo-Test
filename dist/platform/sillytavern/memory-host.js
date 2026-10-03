@@ -23,7 +23,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   let adapter, repository, app, panel, content, memoryContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, stylePromise,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryHistory,summaryReturnFocus,memoryEditFocus,
-    recallRuntime,recallController,recallView,recallTarget,pageRequest=0;
+    recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0;
   const entryId = 'lantai-benmo-open';
   const lifetime = new AbortController();
   function ensureAdapter() {
@@ -55,7 +55,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       .then(value => { if (disposed) { value.dispose(); return null; } runtime = value;
         notices=createManagementNotifications({document:doc,controller:runtime.controller,styles,openTask});
         summaryNotices=createSummaryNotifications({document:doc,service:runtime.summaryService,styles,openTask:openSummaryTask});
-        recallRuntime=createRecallRuntime({repository,settings:runtime.settings,getContext,captureSource:target=>adapter.captureSummarySource(target),readInput:()=>doc.querySelector('#send_textarea')?.value??''});
+        recallRuntime=createRecallRuntime({repository,settings:runtime.settings,getContext,captureSource:target=>adapter.captureSummarySource(target)});
         return value; });
     return runtimePromise;
   }
@@ -136,11 +136,11 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();summarySettingsView=null;recallView?.dispose();
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;
     recallController.resume();
-    if(recallController.viewPosition().route==='monitor')recallController.invalidatePreview();
+      recallController.route('monitor');recallController.tab('actual');
     recallView=mountRecallView({container:summaryContent,controller:recallController});
     const controller=recallController,state=controller.viewPosition();
-    if(initial||!state.hasDraft||state.route==='monitor'&&state.tab==='preview')afterPageFrame(()=>{
-      if(panel&&serial===ticket&&request===pageRequest&&recallController===controller&&sameTarget(target,repository.captureTarget()))void (initial||!state.hasDraft?controller.read():controller.preview());
+    if(initial||!state.hasDraft)afterPageFrame(()=>{
+      if(panel&&serial===ticket&&request===pageRequest&&recallController===controller&&sameTarget(target,repository.captureTarget()))void controller.read();
     });return true;
   }
   function returnFromSettings(reason) {
@@ -280,12 +280,14 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     open, close, openSettings, openTask,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,
     async interceptPrompt(...args){
       if(disposed)return;
+      const request=++recallEntryRequest;let entryTarget;
       try{
-        ensureAdapter();const target=await adapter.prepare();
+        ensureAdapter();try{entryTarget=repository.captureTarget();}catch{/* Cold entry has no confirmed target yet. */}
+        const target=await adapter.prepare();
         if(disposed)return;await ensureRuntime();
         if(disposed||!sameTarget(target,repository.captureTarget()))return;
         await recallRuntime?.intercept(...args);await summaryHistory.intercept(...args);
-      }catch{recallRuntime?.clear('stopped');/* Keep the host prompt copy on unavailable authority. */}
+      }catch{if(!disposed&&request===recallEntryRequest)recallRuntime?.preparationFailed(entryTarget,args[0],args[3]);/* Keep the host prompt copy on unavailable authority. */}
     },
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>summaryHistory?.inspect()??{status:'retained',reason:'not-initialized',removed:0},

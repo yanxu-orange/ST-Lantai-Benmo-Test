@@ -19,8 +19,8 @@ export function recallInputs(messages,recentFloorCount,original=null) {
   for(let i=index-1;i>=0&&recentHistory.length<recentFloorCount;i--)if(eligible(usable[i])&&text(usable[i]).trim())recentHistory.push({floor:mapping?.[i]??i,text:text(usable[i]),distanceFromCurrent:mapping?mapping[index]-mapping[i]:index-i});
   return {input:index<0?'':text(usable[index]),recentHistory};
 }
-export function createRecallRuntime({repository,settings,getContext,captureSource,readInput=()=>'',build=buildRecall,previewBuild}={}) {
-  let disposed=false,ticket=0,proof=null,flight=null,previewAbort=null;
+export function createRecallRuntime({repository,settings,getContext,captureSource,build=buildRecall,previewBuild}={}) {
+  let disposed=false,ticket=0,proof=null,flight=null,previewAbort=null,recordSequence=0;
   const buildPreview=previewBuild??(build===buildRecall?createRecallPreviewBuilder():build);
   const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;};
   const records=new Map(),listeners=new Set(),releases=[];
@@ -28,7 +28,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   const notify=()=>{for(const fn of [...listeners])try{fn();}catch{/* observers cannot break host generation */}};
   const current=(target,serial,config,source)=>!disposed&&serial===ticket&&sameTarget(target,repository.captureTarget())
     &&settings.captureRecall().epoch===config.epoch&&(!captureSource||JSON.stringify(captureSource(target))===source);
-  function clear(reason='cancelled') {
+  function clear(reason='cancelled',expectedTarget=null) {
     cancelPreview();
     const previous=flight,oldProof=proof;ticket++;proof=null;flight=null;
     if(previous)record(previous.target,{status:'failed',type:previous.type,message:'本轮召回已取消，未注入记忆。'});
@@ -38,11 +38,19 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
       context.setExtensionPrompt(RECALL_PROMPT_KEY,'',1,0,false,0);return true;
     }catch {
       let target;try{target=repository.captureTarget();}catch{target=previous?.target??oldProof?.target;}
-      if(target)record(target,{status:'unconfirmed',type:'cleanup',message:'记忆槽清理尚未确认，可能仍保留旧内容；本轮不隐藏原文。'});
+      if(target&&(!expectedTarget||sameTarget(target,expectedTarget)))record(target,{status:'unconfirmed',type:'cleanup',message:'记忆槽清理尚未确认，可能仍保留旧内容；本轮不隐藏原文。'});
       return false;
     }
   }
-  function record(target,value){records.set(key(target),copy(value));notify();}
+  function record(target,value){records.set(key(target),copy({...value,sequence:++recordSequence}));notify();}
+  function preparationFailed(target,messages,type='normal') {
+    if(disposed)return;
+    try{if(!target||!sameTarget(target,repository.captureTarget()))return;}catch{return;}
+    const cleared=clear('cancelled',target);
+    if(!cleared||disposed||!supported.has(type)||messages?.some(message=>text(message).includes('[LANTAI_BACKGROUND_TASK:')))return;
+    // Clearing can synchronously reenter the host and change the chat.
+    try{if(sameTarget(target,repository.captureTarget()))record(target,{status:'failed',type,message:'本轮召回准备失败，未注入记忆；原上下文已保留。'});}catch{/* Unavailable target cannot receive a guessed record. */}
+  }
   async function compute(messages,target,serial,previewInput=null,signal=null) {
     const config=settings.captureRecall(),source=captureSource?JSON.stringify(captureSource(target)):null;
     const root=await repository.read(target);
@@ -57,12 +65,13 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     if(!current(target,serial,config,source)||JSON.stringify(authority)!==JSON.stringify(root))throw new Error('stale');
     return {result,target,config,source,serial,revision:root.revision};
   }
-  async function preview(messages) {
+  async function preview(input='',messages) {
+    if(typeof input!=='string')throw new TypeError('召回测试输入无效');
     cancelPreview();const abort=new AbortController();previewAbort=abort;
-    const target=repository.captureTarget(),serial=ticket,input=String(readInput()??'');
+    const target=repository.captureTarget(),serial=ticket;
     try{
       const value=await compute(messages??getContext()?.chat,target,serial,input,abort.signal);
-      if(abort.signal.aborted||input!==String(readInput()??''))throw new Error('stale');
+      if(abort.signal.aborted)throw new Error('stale');
       // compute owns this isolated result; preview never installs it in the
       // runtime's actual/proof cache. A second full clone has no shared owner.
       return value.result;
@@ -77,6 +86,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     try {
       target=repository.captureTarget();
       flight={target,type};
+      record(target,{status:'preparing',type,message:'正在构造本轮召回，尚未注入记忆。'});
       const value=await compute(messages,target,serial);
       if(!current(target,serial,value.config,value.source))return;
       const context=getContext();
@@ -98,9 +108,12 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     const listener=()=>{clear(name==='GENERATION_STOPPED'?'stopped':name);notify();};
     source.on(event,listener);releases.push(()=>(source.off??source.removeListener)?.call(source,event,listener));
   }
-  return Object.freeze({preview,intercept,clear,cancelPreview,
+  function inspect(limit=null){try{const value=records.get(key(repository.captureTarget()))??{status:'empty'};
+    return copy(limit===null||!value.result?value:{...value,result:{...value.result,unselected:value.result.unselected.slice(0,limit),unselectedCount:value.result.unselected.length}});
+  }catch{return {status:'empty'};}}
+  return Object.freeze({preview,intercept,clear,preparationFailed,cancelPreview,
     getReplacementProof(){try{return proof&&current(proof.target,proof.serial,proof.config,proof.source)?proof:null;}catch{return null;}},
-    inspect(){try{return copy(records.get(key(repository.captureTarget()))??{status:'empty'});}catch{return {status:'empty'};}},
+    inspect,inspectView:({more=false}={})=>inspect(more?null:2),
     subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn);},
     dispose(){if(disposed)return;clear();disposed=true;releases.forEach(fn=>fn());listeners.clear();records.clear();}
   });
