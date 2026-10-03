@@ -90,20 +90,35 @@ export function settingsFingerprint(value) {
   return JSON.stringify(ordered(value));
 }
 export const equalSettings = (a, b) => settingsFingerprint(a) === settingsFingerprint(b);
+export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:5,maxTokens:null,memoryDepth:9999,excludedTerms:[],recallCleaning:{rules:[]} }; }
+export function assertRecallSettings(value) {
+  try {
+    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning']);
+    if(!Number.isSafeInteger(value.recentFloorCount)||value.recentFloorCount<0||!Number.isSafeInteger(value.maxCount)||value.maxCount<1
+      ||!(value.maxTokens===null||Number.isSafeInteger(value.maxTokens)&&value.maxTokens>0)||!Number.isSafeInteger(value.memoryDepth)||value.memoryDepth<0||value.memoryDepth>10000)invalid();
+    if(!Array.isArray(value.excludedTerms)||value.excludedTerms.some(term=>!text(term))||new Set(value.excludedTerms).size!==value.excludedTerms.length)invalid();
+    exact(value.recallCleaning,['rules']);if(!Array.isArray(value.recallCleaning.rules))invalid();
+    const ids=new Set();for(const rule of value.recallCleaning.rules){exact(rule,['id','name','enabled','action','pattern','captureGroup','replacement']);normalizeCleaningRule(rule);if(!text(rule.id)||!text(rule.name)||ids.has(rule.id))invalid();ids.add(rule.id);}
+    return frozenSettingsCopy(value);
+  }catch{throw new SettingsError();}
+}
 export function emptySettings() {
-  return { schema: 2, revision: 0, domainRevisions: { ai: 0, eventGeneration: 0 }, credentials: [], ai: { source: null, activePresetId: null, presets: [] },
+  return { schema: 2, revision: 0, domainRevisions: { ai: 0, eventGeneration: 0,recall:0 },recall:defaultRecallSettings(), credentials: [], ai: { source: null, activePresetId: null, presets: [] },
     eventGeneration: { eventWords: createDefaultEventWords(), promptOverrides: {}, generationMode: 'quality', customPrompts: [], summaryCleaning: { rules: createDefaultCleaningRules() } } };
 }
 export function assertSettings(value) {
   try {
     const legacy = value?.schema === 1;
-    exact(value, ['schema', 'revision', 'domainRevisions', 'ai', 'eventGeneration', ...(legacy ? [] : ['credentials'])]);
+    const hasRecall=Object.hasOwn(value??{},'recall'),hasRecallRevision=Object.hasOwn(value?.domainRevisions??{},'recall');
+    if(hasRecall!==hasRecallRevision)invalid();
+    exact(value, ['schema', 'revision', 'domainRevisions', 'ai', 'eventGeneration', ...(legacy ? [] : ['credentials']),...(hasRecall?['recall']:[])]);
     if (![1, 2].includes(value.schema) || !Number.isSafeInteger(value.revision) || value.revision < 0) invalid();
-    exact(value.domainRevisions, ['ai', 'eventGeneration']);
+    exact(value.domainRevisions, ['ai', 'eventGeneration',...(hasRecallRevision?['recall']:[])]);
     if (Object.values(value.domainRevisions).some(version => !Number.isSafeInteger(version) || version < 0)
-      || value.domainRevisions.ai + value.domainRevisions.eventGeneration !== value.revision) invalid();
+      || value.domainRevisions.ai + value.domainRevisions.eventGeneration +(value.domainRevisions.recall??0)!== value.revision) invalid();
     ai(value.ai); const eventGeneration = generation(value.eventGeneration);
-    const migrated = { ...value, schema: 2, credentials: legacy ? [] : value.credentials, eventGeneration };
+    if(!hasRecall&&(value.domainRevisions.recall??0)!==0)invalid();
+    const migrated = { ...value, schema: 2, credentials: legacy ? [] : value.credentials, eventGeneration,domainRevisions:{...value.domainRevisions,recall:value.domainRevisions.recall??0},recall:hasRecall?assertRecallSettings(value.recall):defaultRecallSettings() };
     if (!Array.isArray(migrated.credentials)) invalid();
     const ids = new Set();
     for (const credential of migrated.credentials) {

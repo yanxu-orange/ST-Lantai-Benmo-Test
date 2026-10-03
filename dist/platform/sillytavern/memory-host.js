@@ -12,6 +12,9 @@ import { mountSummarySettingsView } from '../../app/summary-settings-view.js';
 import { summaryReadonlyContent } from '../../domain/summary/requests.js';
 import {createSummaryNotifications} from './summary-notifications.js';
 import {createSummaryHistoryHook} from './summary-history.js';
+import {createRecallRuntime} from './recall-runtime.js';
+import {createRecallController} from '../../app/recall-controller.js';
+import {mountRecallView} from '../../app/recall-view.js';
 
 // Only this platform module touches the host document. Shadow DOM prevents
 // host skins from changing the approved UI and prevents our UI CSS leakage.
@@ -19,14 +22,17 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   runtimeOptions = {}, MutationObserver: Observer = globalThis.MutationObserver } = {}) {
   let adapter, repository, app, panel, content, memoryContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, stylePromise,
-    summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryHistory,summaryReturnFocus,memoryEditFocus;
+    summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryHistory,summaryReturnFocus,memoryEditFocus,
+    recallRuntime,recallController,recallView,recallTarget;
   const entryId = 'lantai-benmo-open';
   const lifetime = new AbortController();
   function ensureAdapter() {
     if (adapter) return;
     adapter = createSillyTavernMemoryAdapter({ getContext, fetch: request });
     repository = createRepository(adapter);
-    summaryHistory=createSummaryHistoryHook({repository,captureSource:target=>adapter.captureSummarySource(target),getContext});
+    // The proof is this round's guarded IN_CHAT system-slot write receipt.
+    // ST remains responsible for its subsequent preset/budget assembly.
+    summaryHistory=createSummaryHistoryHook({repository,captureSource:target=>adapter.captureSummarySource(target),getContext,getReplacementProof:()=>recallRuntime?.getReplacementProof()});
     unsubscribe = adapter.subscribe(kind => {
       if (!panel) return;
       if (kind === 'reload' && app) {
@@ -40,6 +46,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     closing = true;
     ticket++; apiView?.dispose(); apiView = null; const current = apiSession; apiSession = null; current?.exit('close');
     summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();summarySettingsView=null;
+    recallView?.dispose();recallView=null;
     app?.dispose(); app = null; panel?.remove(); panel = null; content = memoryContent = settingsContent = summaryContent = null;
     entry?.focus(); closing = false;
   }
@@ -48,6 +55,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       .then(value => { if (disposed) { value.dispose(); return null; } runtime = value;
         notices=createManagementNotifications({document:doc,controller:runtime.controller,styles,openTask});
         summaryNotices=createSummaryNotifications({document:doc,service:runtime.summaryService,styles,openTask:openSummaryTask});
+        recallRuntime=createRecallRuntime({repository,settings:runtime.settings,getContext,captureSource:target=>adapter.captureSummarySource(target),readInput:()=>doc.querySelector('#send_textarea')?.value??''});
         return value; });
     return runtimePromise;
   }
@@ -67,6 +75,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summaryView=mountSummaryView({container:summaryContent,controller:runtime.summaryController,onBack:()=>void returnFromSummary(),onClose:close,openSettings:()=>void openSummarySettings(false)});return true;
   }
   async function returnFromSummary() {
+    recallView?.dispose();recallView=null;
     summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();summarySettingsView=null;
     if(!panel)return;summaryContent.replaceChildren();summaryContent.hidden=true;memoryContent.hidden=false;memoryContent.inert=false;
     await app?.rebind();if(!panel)return;
@@ -81,6 +90,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const ready=await runtime.summaryController.open(origin);
     if(!ready||!panel||serial!==ticket||!sameTarget(target,repository.captureTarget()))return false;
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;
+    recallView?.dispose();recallView=null;
     summarySettingsView?.dispose();summarySettingsView=null;summaryView?.dispose();
     summaryView=mountSummaryView({container:summaryContent,controller:runtime.summaryController,onBack:()=>void returnFromSummary(),onClose:close,openSettings:()=>void openSummarySettings(false)});
     if(batchId)await runtime.summaryController.regenerate(batchId);
@@ -100,8 +110,23 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     }
     if(!panel||serial!==ticket||!sameTarget(target,repository.captureTarget()))return;
     summarySettingsFromMemory=fromMemory;summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();
+    recallView?.dispose();recallView=null;
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;
     summarySettingsView=mountSummarySettingsView(summaryContent,summarySettingsController,{readonlyContent:summaryReadonlyContent});
+  }
+  async function openRecall() {
+    if(!panel||apiSession||!recallRuntime)return false;
+    const target=repository.captureTarget(),serial=ticket;
+    if(summaryContent.hidden)summaryReturnFocus=panel.shadowRoot.activeElement;
+    if(!recallController||!sameTarget(target,recallTarget)) {
+      recallController?.dispose();recallTarget=target;
+      recallController=createRecallController({repository,settings:runtime.settings,runtime:recallRuntime,onBack:()=>void returnFromSummary(),onClose:close});
+      await recallController.read();
+    }else await recallController.preview();
+    if(!panel||serial!==ticket||!sameTarget(target,repository.captureTarget()))return false;
+    summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();summarySettingsView=null;recallView?.dispose();
+    memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;
+    recallView=mountRecallView({container:summaryContent,controller:recallController});return true;
   }
   function returnFromSettings(reason) {
     if(replacingPage)return;
@@ -148,6 +173,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       new URL('../../app/api-settings.css', import.meta.url),
       new URL('../../app/summary-view.css', import.meta.url),
       new URL('../../app/summary-settings.css', import.meta.url),
+      new URL('../../app/recall-view.css', import.meta.url),
       new URL('./memory-host.css', import.meta.url),
     ].map(async url => {
       const response = await request(url);
@@ -170,6 +196,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const currentTicket = ++ticket;
     app?.dispose(); app = null;
     summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();summarySettingsView=null;
+    recallView?.dispose();recallView=null;
     if(panel){summaryContent.replaceChildren();summaryContent.hidden=true;memoryContent.hidden=false;memoryContent.inert=false;apiView?.dispose();apiView=null;const previous=apiSession;apiSession=null;replacingPage=true;try{previous?.exit('back');}finally{replacingPage=false;}settingsContent.replaceChildren();settingsContent.hidden=true;}
     if (!panel) {
       panel = doc.createElement('lantai-benmo-host'); panel.id = 'lantai-benmo-panel';
@@ -180,7 +207,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       shadow.addEventListener('compositionend', () => { composing = false; });
       panel.addEventListener('keydown', event => {
         if (event.defaultPrevented || event.isComposing || composing || shadow.querySelector('[data-composing=true]')) return;
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!settingsContent.hidden) returnFromSettings('back'); else if(!summaryContent.hidden){if(summarySettingsView)summarySettingsController.back();else void runtime.summaryController.back().then(back=>{if(back)void returnFromSummary();});}else close(); return; }
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!settingsContent.hidden) returnFromSettings('back'); else if(!summaryContent.hidden){if(recallView)recallController.back();else if(summarySettingsView)summarySettingsController.back();else void runtime.summaryController.back().then(back=>{if(back)void returnFromSummary();});}else close(); return; }
         if (event.key !== 'Tab') return;
         const items = [...shadow.querySelectorAll('button,a,input,textarea,select,summary,[tabindex]')]
           .filter(node => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length);
@@ -210,7 +237,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         managementService: runtime?.service, managementController: runtime?.controller,
         getSettingsEpoch: () => runtime.getGenerationSettings().epoch,
         getOriginalSnapshot: runtime?.getOriginalSnapshot, originalAvailable: runtime?.originalAvailable, openSettings,
-        openSummary:origin=>void showSummary(origin),openSummarySettings:()=>void openSummarySettings(true),regenerateBatch:id=>void showSummary('manual',id) });
+        openSummary:origin=>void showSummary(origin),openSummarySettings:()=>void openSummarySettings(true),openRecall:()=>void openRecall(),regenerateBatch:id=>void showSummary('manual',id) });
       await app.ready;
     } catch (error) { if (!disposed && currentTicket === ticket && panel) errorView(error); }
   }
@@ -235,11 +262,20 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   const observer = new Observer(installEntry);
   observer.observe(doc.documentElement, { childList: true, subtree: true });
   return {
-    open, close, openSettings, openTask,openSummary:showSummary,openSummarySettings,openSummaryTask,
-    async interceptPrompt(...args){if(disposed)return;ensureAdapter();await summaryHistory.intercept(...args);},
+    open, close, openSettings, openTask,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,
+    async interceptPrompt(...args){
+      if(disposed)return;
+      try{
+        ensureAdapter();const target=await adapter.prepare();
+        if(disposed)return;await ensureRuntime();
+        if(disposed||!sameTarget(target,repository.captureTarget()))return;
+        await recallRuntime?.intercept(...args);await summaryHistory.intercept(...args);
+      }catch{recallRuntime?.clear('stopped');/* Keep the host prompt copy on unavailable authority. */}
+    },
+    recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>summaryHistory?.inspect()??{status:'retained',reason:'not-initialized',removed:0},
     dispose() {
-      disposed = true; close(); notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();summaryHistory?.dispose(); runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      disposed = true; close(); notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();summaryHistory?.dispose();recallController?.dispose();recallRuntime?.dispose(); runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;
     },

@@ -1,4 +1,4 @@
-import { assertAiSettings, assertEventGeneration, assertCredential, aiConfig, equalSettings, frozenSettingsCopy, publicSettings, SettingsError } from './model.js';
+import { assertAiSettings, assertEventGeneration, assertRecallSettings, assertCredential, aiConfig, equalSettings, frozenSettingsCopy, publicSettings, SettingsError } from './model.js';
 
 export function createSettingsRepository(adapter) {
   let queue = Promise.resolve();
@@ -9,7 +9,7 @@ export function createSettingsRepository(adapter) {
       if (isCurrent === undefined) return true;
       try { return isCurrent() === true; } catch { return false; }
     };
-    const draft = field === 'ai' ? assertAiSettings(value) : assertEventGeneration(value);
+    const draft = field === 'ai' ? assertAiSettings(value) : field==='recall'?assertRecallSettings(value):assertEventGeneration(value);
     if (!Array.isArray(credentials) || field !== 'ai' && credentials.length) throw new SettingsError();
     let replacements;
     try { replacements = credentials.map(item => {
@@ -48,6 +48,9 @@ export function createSettingsRepository(adapter) {
     read: async () => publicSettings(await adapter.read()),
     saveAi: (value, options) => update('ai', value, options),
     saveEventGeneration: (value, options) => update('eventGeneration', value, options),
+    saveRecall: (value,options)=>update('recall',value,options),
+    captureRecall(){const root=adapter.peek();return frozenSettingsCopy({recall:root.recall,epoch:adapter.epochs().recall});},
+    matchesRecall(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().recall&&equalSettings(snapshot.recall,root.recall);}catch{return false;}},
     captureEventGeneration() {
       const root = adapter.peek();
       return frozenSettingsCopy({ generation: root.eventGeneration, epoch: adapter.epochs().eventGeneration });

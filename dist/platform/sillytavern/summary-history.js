@@ -41,7 +41,7 @@ export function createSummaryHistoryHook({repository,captureSource,getContext,ge
       try {
         const target=repository.captureTarget();if(!sameTarget(target,proof.target))return;
         const root=await repository.read(target),raw=captureSource(target),context=getContext();
-        if(disposed||!sameTarget(target,repository.captureTarget()))return;
+        if(disposed||!sameTarget(target,repository.captureTarget())||getReplacementProof()!==proof||proof.revision!==undefined&&root.revision!==proof.revision)return;
         const result=filterSummaryPromptCopy({prompt,original:context.chat,root,raw,replacementEventIds:proof.eventIds,type});
         if(result.status==='filtered')prompt.splice(0,prompt.length,...result.prompt);
         snapshot={status:result.status,reason:result.reason,removed:result.removed};

@@ -5,8 +5,8 @@ import { SETTINGS_KEY, SettingsError, emptySettings, assertSettings, equalSettin
 // never expose/log its surrounding payload. Saving uses ST's own exported API.
 export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernContext,
   fetchImpl = globalThis.fetch, saveHost, loadHostModule = () => import('/script.js'), readServerNamespace } = {}) {
-  let disposed = false, confirmed = null, marker = null, epoch = 0, aiEpoch = 0, generationEpoch = 0;
-  let observed = null, lastAi = null, lastGeneration = null, notificationActive = false;
+  let disposed = false, confirmed = null, marker = null, epoch = 0, aiEpoch = 0, generationEpoch = 0,recallEpoch=0;
+  let observed = null, lastAi = null, lastGeneration = null,lastRecall=null, notificationActive = false;
   const listeners = new Set(), events = [], notificationQueue = [];
   function context() {
     if (disposed) throw new SettingsError('SETTINGS_UNAVAILABLE');
@@ -36,7 +36,7 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
     let snapshot;
     try { snapshot = local(); }
     catch (error) {
-      if (observed !== 'invalid') { observed = 'invalid'; epoch++; aiEpoch++; generationEpoch++; confirmed = null; announce(); }
+      if (observed !== 'invalid') { observed = 'invalid'; epoch++; aiEpoch++; generationEpoch++;recallEpoch++; confirmed = null; announce(); }
       throw error instanceof SettingsError ? error : new SettingsError();
     }
     const fingerprint = snapshot.absent ? 'absent' : settingsFingerprint(snapshot.root);
@@ -46,6 +46,8 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
       observed = fingerprint; epoch++; ticketEpoch = epoch;
       if (nextAi !== lastAi) { aiEpoch++; lastAi = nextAi; }
       if (nextGeneration !== lastGeneration) { generationEpoch++; lastGeneration = nextGeneration; }
+      const nextRecall=settingsFingerprint({revision:snapshot.root.domainRevisions.recall,value:snapshot.root.recall});
+      if(nextRecall!==lastRecall){recallEpoch++;lastRecall=nextRecall;}
       confirmed = null;
       announce();
     }
@@ -127,7 +129,7 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
       if (!confirmed || marker) throw new SettingsError('SETTINGS_COMMIT_UNCONFIRMED');
       return confirmed;
     },
-    epochs() { observe(); return Object.freeze({ epoch, ai: aiEpoch, eventGeneration: generationEpoch }); },
+    epochs() { observe(); return Object.freeze({ epoch, ai: aiEpoch, eventGeneration: generationEpoch,recall:recallEpoch }); },
     async commit(value, expectedRevision, expectedEpoch, { isCurrent } = {}) {
       if (isCurrent !== undefined && typeof isCurrent !== 'function') throw new SettingsError();
       const guard = () => {
@@ -140,8 +142,10 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
       if (confirmed.revision !== expectedRevision || ticket.epoch !== expectedEpoch || next.revision !== expectedRevision + 1) throw new SettingsError('SETTINGS_CONFLICT');
       const aiDelta = next.domainRevisions.ai - confirmed.domainRevisions.ai;
       const generationDelta = next.domainRevisions.eventGeneration - confirmed.domainRevisions.eventGeneration;
-      if (!((aiDelta === 1 && generationDelta === 0 && equalSettings(next.eventGeneration, confirmed.eventGeneration))
-        || (generationDelta === 1 && aiDelta === 0 && equalSettings(next.ai, confirmed.ai) && equalSettings(next.credentials, confirmed.credentials)))) throw new SettingsError('SETTINGS_CONFLICT');
+      const recallDelta=next.domainRevisions.recall-confirmed.domainRevisions.recall;
+      if (!((aiDelta === 1 && generationDelta === 0 && recallDelta===0 && equalSettings(next.eventGeneration, confirmed.eventGeneration)&&equalSettings(next.recall,confirmed.recall))
+        || (generationDelta === 1 && aiDelta === 0 && recallDelta===0 && equalSettings(next.ai, confirmed.ai) && equalSettings(next.credentials, confirmed.credentials)&&equalSettings(next.recall,confirmed.recall))
+        ||(recallDelta===1&&aiDelta===0&&generationDelta===0&&equalSettings(next.ai,confirmed.ai)&&equalSettings(next.credentials,confirmed.credentials)&&equalSettings(next.eventGeneration,confirmed.eventGeneration)))) throw new SettingsError('SETTINGS_CONFLICT');
       const save = await saver();
       capabilities(); unchanged(ticket);
       if (!guard()) throw new SettingsError('SETTINGS_CONFLICT');
