@@ -31,11 +31,23 @@ function review(state) {
   }).join('');
 }
 export function mountSummaryView({container,controller,onBack=()=>{},onClose=()=>{},openSettings=()=>{}}={}) {
-  let disposed=false,composing=false,pending=false,renderedScope=null,renderedPreviewScope=null,savedUntil=0,savedTimer=null;
+  let disposed=false,composing=false,pending=false,renderedScope=null,renderedPreviewScope=null,savedUntil=0,savedTimer=null,stopIntent=false;
   const historyStates=histories.get(controller)??new Map();histories.set(controller,historyStates);
   const seenSaved=savedNotices.get(controller)??new Set();savedNotices.set(controller,seenSaved);
   const previewStates=previewDetails.get(controller)??new Map();previewDetails.set(controller,previewStates);
   const $=selector=>container.querySelector(selector);
+  function footer(state){
+    const auto=state.automatic,isReview=state.route==='review',running=['starting','running','committing'].includes(state.task?.status)||auto.status==='running',awaiting=state.task?.status==='awaiting-user';
+    const canStop=state.origin==='auto'&&['running','waiting','awaiting-user'].includes(auto.status);
+    if(stopIntent&&canStop&&!auto.stopRequested)return `<div class="lt-editor-actions">${button('取消','cancel-stop')}<button type="button" class="ui-button ui-button--secondary" data-summary-action="confirm-stop">确认停止</button></div>`;
+    stopIntent=false;
+    const stop=canStop?button(auto.stopRequested?'已请求停止，等待本批完成':'本批次完成后停止总结','stop',auto.stopRequested):'';
+    if(isReview)return `${state.task?.candidate?.incomplete?button('重试后续阶段','retry',state.busy):''}${stop}<button type="button" class="ui-button ui-button--primary" data-summary-action="confirm" ${state.busy||state.task?.outcome==='unconfirmed'?'disabled':''}>${state.busy?'保存中…':'统一保存'}</button>`;
+    if(canStop)return stop;
+    if(awaiting&&state.task?.snapshot.params.reviewBeforeCommit)return button('检查总结结果','review');
+    return `<button type="button" class="ui-button ui-button--primary" data-summary-action="start" ${state.busy||running||state.parametersUnconfirmed?'disabled':''}>${running?'正在生成…':auto.status==='stopped'?'继续总结':auto.status==='failed'||state.task?.status==='failed'?'重试本批':state.origin==='auto'?'开始自动总结':'开始总结'}</button>`;
+  }
+  function renderFooter(focus){const node=$('.lt-footer');if(!node)return;node.innerHTML=footer(controller.inspect());if(focus)$(`[data-summary-action="${focus}"]`)?.focus({preventScroll:true});}
   function rememberPreview(){const details=[...container.querySelectorAll('.lt-summary-preview details')];if(renderedPreviewScope&&details.length)previewStates.set(renderedPreviewScope,details.map(detail=>detail.open));}
   function render() {
     if(disposed)return;if(composing){pending=true;return;}
@@ -55,7 +67,7 @@ export function mountSummaryView({container,controller,onBack=()=>{},onClose=()=
     const isReview=state.route==='review',title=isReview?'检查总结结果':state.origin==='auto'?'自动总结':'手动总结',params=state.params??{},auto=state.automatic;
     const running=['starting','running','committing'].includes(state.task?.status)||auto.status==='running',awaiting=state.task?.status==='awaiting-user';
     const body=isReview?review(state):`<section class="lt-summary-section">${state.origin==='auto'?choice('enabled','启用自动总结',params.enabled):''}<h2>${state.origin==='auto'?'总结范围':'楼层范围'}</h2>${state.origin==='auto'?number('batchSize','每隔多少楼总结',params.batchSize)+number('recentFloors','最近多少楼不参与总结',params.recentFloors):`<div class="lt-summary-range">${number('startFloor','开始楼',params.startFloor)}${number('endFloor','结束楼',params.endFloor)}</div>`}</section><section class="lt-summary-section"><h2>生成选项</h2>${choice('includeUser','包含用户消息',params.includeUser)}${choice('reviewBeforeCommit','入库前检查',params.reviewBeforeCommit)}${choice('hideOriginal','成功入库后隐藏来源楼层',params.hideOriginal)}</section>${history(state)}<div class="lt-summary-connection" data-preview-open="${state.previewOpen}"><div class="lt-summary-access"><div data-selected="${state.previewOpen}"><span>发送内容</span>${button(state.previewOpen?'收起':'预览','preview',state.busy)}</div><div><span>总结进度</span><span>第${state.summary?.progress.lastProcessedFloor??'—'}楼</span></div><div><span>总结设置</span>${button('打开','settings',state.busy)}</div></div>${preview(state)}</div>`;
-    const actionMarkup=isReview?`${state.task?.candidate?.incomplete?button('重试后续阶段','retry',state.busy):''}${state.origin==='auto'&&auto.status==='awaiting-user'&&!auto.stopRequested?button('本批次完成后停止总结','stop'):''}<button type="button" class="ui-button ui-button--primary" data-summary-action="confirm" ${state.busy||state.task?.outcome==='unconfirmed'?'disabled':''}>${state.busy?'保存中…':'统一保存'}</button>`:state.origin==='auto'&&['running','waiting','awaiting-user'].includes(auto.status)?button('本批次完成后停止总结','stop'):awaiting&&state.task?.snapshot.params.reviewBeforeCommit?button('检查总结结果','review'): `<button type="button" class="ui-button ui-button--primary" data-summary-action="start" ${state.busy||running||state.parametersUnconfirmed?'disabled':''}>${running?'正在生成…':auto.status==='stopped'?'继续总结':auto.status==='failed'||state.task?.status==='failed'?'重试本批':state.origin==='auto'?'开始自动总结':'开始总结'}</button>`;
+    const actionMarkup=footer(state);
     container.innerHTML=`<section class="lantai lt-summary-workspace"><header class="lt-header">${icon('back',isReview?'放弃本批审核':'返回事件记忆','back')}<h1 class="ui-page-title">${title}</h1>${icon('close','关闭兰台本末','close')}</header><main class="lt-main lt-summary-main" tabindex="-1"><p class="lt-error" role="alert" ${state.error?'':'hidden'}>${esc(state.error)}</p><p class="lt-status" role="status" ${statusMessage?'':'hidden'}>${esc(statusMessage)}</p>${body}${state.summary?.pending&&!state.taskId?button('放弃保留草稿','discard-pending',state.busy):''}${state.task?.outcome==='unconfirmed'||state.parametersUnconfirmed?button('重新读取','read'):''}</main><p class="lt-saved lt-status" role="status" ${savedUntil>Date.now()?'':'hidden'}>本批总结已保存</p><footer class="lt-footer">${actionMarkup}</footer></section>`;
     $('.lt-main').scrollTop=scroll;
     for(const saved of entries){const input=$(`[data-summary-event="${saved.index}"] [data-summary-entry="${saved.key}"]`);if(input){input.value=saved.value;input.parentElement.querySelector('button').hidden=!saved.value.trim();}}
@@ -84,9 +96,12 @@ export function mountSummaryView({container,controller,onBack=()=>{},onClose=()=
     if(target.dataset.summaryAdd){const key=target.dataset.summaryAdd,input=target.parentElement.querySelector('input');if(input.dataset.composing==='true'||composing)return;const values=splitWords(input.value);controller.changeDrafts(items=>{const event=items[eventIndex];if(key==='detailWords'){for(const word of values)if(!event.detailWords.some(term=>term.word===word))event.detailWords.push({id:crypto.randomUUID(),word,aliases:[]});}else event[key]=[...new Set([...event[key],...values])];});controller.setEntry(eventIndex,key,'');render();return;}
     if(target.dataset.summaryPreviewView){controller.previewView(target.dataset.summaryPreviewView);return;}
     const action=target.dataset.summaryAction;if(!action)return;
+    if(action==='stop'){stopIntent=true;renderFooter('cancel-stop');return;}
+    if(action==='cancel-stop'){stopIntent=false;renderFooter('stop');return;}
+    if(action==='confirm-stop'){stopIntent=false;controller.stop();renderFooter();return;}
     if(action.startsWith('term-')){const [kind,index,termIndex]=action.split(':');controller.changeDrafts(items=>kind==='term-add'?items[Number(index)].detailWords.push({id:crypto.randomUUID(),word:'',aliases:[]}):items[Number(index)].detailWords.splice(Number(termIndex),1));render();return;}
     if(action==='back'){if(await controller.back())onBack();}
-    if(action==='close')onClose();if(action==='settings')openSettings();if(action==='start')await controller.start();if(action==='retry')await controller.retry();if(action==='discard-pending')await controller.discardPending();if(action==='confirm')await controller.confirm();if(action==='stop')controller.stop();if(action==='read')await controller.read();
+    if(action==='close')onClose();if(action==='settings')openSettings();if(action==='start')await controller.start();if(action==='retry')await controller.retry();if(action==='discard-pending')await controller.discardPending();if(action==='confirm')await controller.confirm();if(action==='read')await controller.read();
     if(action==='preview'){if(controller.inspect().preview)controller.togglePreview();else await controller.preview();}
     if(action==='review')controller.showTask(controller.inspect().taskId);
   }
