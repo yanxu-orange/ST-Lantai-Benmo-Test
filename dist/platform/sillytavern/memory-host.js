@@ -23,7 +23,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   let adapter, repository, app, panel, content, memoryContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, stylePromise,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryHistory,summaryReturnFocus,memoryEditFocus,
-    recallRuntime,recallController,recallView,recallTarget;
+    recallRuntime,recallController,recallView,recallTarget,pageRequest=0;
   const entryId = 'lantai-benmo-open';
   const lifetime = new AbortController();
   function ensureAdapter() {
@@ -44,9 +44,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function close() {
     if (closing) return;
     closing = true;
-    ticket++; apiView?.dispose(); apiView = null; const current = apiSession; apiSession = null; current?.exit('close');
+    ticket++;pageRequest++; apiView?.dispose(); apiView = null; const current = apiSession; apiSession = null; current?.exit('close');
     summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();summarySettingsView=null;
-    recallView?.dispose();recallView=null;
+    recallView?.dispose();recallView=null;recallController?.suspend();
     app?.dispose(); app = null; panel?.remove(); panel = null; content = memoryContent = settingsContent = summaryContent = null;
     entry?.focus(); closing = false;
   }
@@ -75,7 +75,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summaryView=mountSummaryView({container:summaryContent,controller:runtime.summaryController,onBack:()=>void returnFromSummary(),onClose:close,openSettings:()=>void openSummarySettings(false)});return true;
   }
   async function returnFromSummary() {
-    recallView?.dispose();recallView=null;
+    pageRequest++;
+    recallView?.dispose();recallView=null;recallController?.suspend();
     summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();summarySettingsView=null;
     if(!panel)return;summaryContent.replaceChildren();summaryContent.hidden=true;memoryContent.hidden=false;memoryContent.inert=false;
     await app?.rebind();if(!panel)return;
@@ -86,11 +87,11 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   async function showSummary(origin='manual',batchId=null) {
     if(!runtime?.summaryController||!panel||apiSession)return false;
     if(summaryContent.hidden)summaryReturnFocus=batchId&&memoryEditFocus?.isConnected&&memoryContent.contains(memoryEditFocus)?memoryEditFocus:panel.shadowRoot.activeElement;
-    const target=repository.captureTarget(),serial=ticket;
+    const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
     const ready=await runtime.summaryController.open(origin);
-    if(!ready||!panel||serial!==ticket||!sameTarget(target,repository.captureTarget()))return false;
+    if(!ready||!panel||serial!==ticket||request!==pageRequest||!sameTarget(target,repository.captureTarget()))return false;
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;
-    recallView?.dispose();recallView=null;
+    recallView?.dispose();recallView=null;recallController?.suspend();
     summarySettingsView?.dispose();summarySettingsView=null;summaryView?.dispose();
     summaryView=mountSummaryView({container:summaryContent,controller:runtime.summaryController,onBack:()=>void returnFromSummary(),onClose:close,openSettings:()=>void openSummarySettings(false)});
     if(batchId)await runtime.summaryController.regenerate(batchId);
@@ -99,34 +100,48 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   async function openSummarySettings(fromMemory=true) {
     if(!runtime?.settings||!panel||apiSession)return;
     if(summaryContent.hidden)summaryReturnFocus=panel.shadowRoot.activeElement;
-    const target=repository.captureTarget(),serial=ticket;
+    const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
+    let initial=false;
     if(!summarySettingsController||!sameTarget(target,summarySettingsTarget)) {
       summarySettingsController?.dispose();summarySettingsTarget=target;
       const current=()=>sameTarget(target,repository.captureTarget());
       const read=async()=>{const capture=await repository.captureSummary(target);return capture.summary.excludedFloors;};
       const change=async(floor,remove)=>{const capture=await repository.captureSummary(target),records=structuredClone(capture.summary.excludedFloors);if(remove){const index=records.findIndex(item=>item.floor===Number(floor));if(index>=0)records.splice(index,1);}else{const message=adapter.captureSummarySource(target).messages.find(item=>item.floor===Number(floor));if(!message)throw new Error('楼层不存在');if(!records.some(item=>item.floor===message.floor))records.push({floor:message.floor,identity:message.identity});}await repository.setSummaryExcludedFloors(target,records,{expectedSummaryRevision:capture.summary.revision,isCurrent:current});};
       summarySettingsController=createSummarySettingsController({settings:runtime.settings,exclusions:{read,add:floor=>change(floor,false),remove:floor=>change(floor,true)},isCurrent:current,onBack:()=>{if(summarySettingsFromMemory)void returnFromSummary();else void showSummary(runtime.summaryController.inspect().origin);},onClose:close});
-      await summarySettingsController.init();
+      initial=true;
     }
     if(!panel||serial!==ticket||!sameTarget(target,repository.captureTarget()))return;
     summarySettingsFromMemory=fromMemory;summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();
-    recallView?.dispose();recallView=null;
+    recallView?.dispose();recallView=null;recallController?.suspend();
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;
     summarySettingsView=mountSummarySettingsView(summaryContent,summarySettingsController,{readonlyContent:summaryReadonlyContent});
+    const controller=summarySettingsController;
+    if(initial||!controller.inspect().draft)afterPageFrame(()=>{
+      if(panel&&serial===ticket&&request===pageRequest&&summarySettingsController===controller&&sameTarget(target,repository.captureTarget()))void controller.init();
+    });
   }
+  // Paint the existing locked loading surface before starting reads/computation.
+  function afterPageFrame(work){const frame=doc.defaultView?.requestAnimationFrame;if(frame)frame.call(doc.defaultView,()=>setTimeout(work,0));else setTimeout(work,0);}
   async function openRecall() {
     if(!panel||apiSession||!recallRuntime)return false;
-    const target=repository.captureTarget(),serial=ticket;
+    const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
+    let initial=false;
     if(summaryContent.hidden)summaryReturnFocus=panel.shadowRoot.activeElement;
     if(!recallController||!sameTarget(target,recallTarget)) {
       recallController?.dispose();recallTarget=target;
       recallController=createRecallController({repository,settings:runtime.settings,runtime:recallRuntime,onBack:()=>void returnFromSummary(),onClose:close});
-      await recallController.read();
-    }else await recallController.preview();
+      initial=true;
+    }
     if(!panel||serial!==ticket||!sameTarget(target,repository.captureTarget()))return false;
     summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();summarySettingsView=null;recallView?.dispose();
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;
-    recallView=mountRecallView({container:summaryContent,controller:recallController});return true;
+    recallController.resume();
+    if(recallController.viewPosition().route==='monitor')recallController.invalidatePreview();
+    recallView=mountRecallView({container:summaryContent,controller:recallController});
+    const controller=recallController,state=controller.viewPosition();
+    if(initial||!state.hasDraft||state.route==='monitor'&&state.tab==='preview')afterPageFrame(()=>{
+      if(panel&&serial===ticket&&request===pageRequest&&recallController===controller&&sameTarget(target,repository.captureTarget()))void (initial||!state.hasDraft?controller.read():controller.preview());
+    });return true;
   }
   function returnFromSettings(reason) {
     if(replacingPage)return;
@@ -196,7 +211,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const currentTicket = ++ticket;
     app?.dispose(); app = null;
     summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();summarySettingsView=null;
-    recallView?.dispose();recallView=null;
+    recallView?.dispose();recallView=null;recallController?.suspend();
     if(panel){summaryContent.replaceChildren();summaryContent.hidden=true;memoryContent.hidden=false;memoryContent.inert=false;apiView?.dispose();apiView=null;const previous=apiSession;apiSession=null;replacingPage=true;try{previous?.exit('back');}finally{replacingPage=false;}settingsContent.replaceChildren();settingsContent.hidden=true;}
     if (!panel) {
       panel = doc.createElement('lantai-benmo-host'); panel.id = 'lantai-benmo-panel';

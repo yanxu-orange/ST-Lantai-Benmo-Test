@@ -18,7 +18,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
     libraryDraft: null, libraryOpen: null, librarySelection: [], libraryMulti: false, ruleDraft: null, ruleId: null,
     quickOpen: false, opened: {}, scroll: {}, message: '', error: null };
   const inspect = () => frozenSettingsCopy(state);
-  const notify = () => { for (const listener of [...listeners]) { try { listener(inspect()); } catch { /* Isolated views. */ } } };
+  const notify = () => { if(!listeners.size)return;const snapshot=inspect();for (const listener of [...listeners]) { try { listener(snapshot); } catch { /* Isolated views. */ } } };
   const current = () => { if (disposed) return false; try { return isCurrent() === true && !disposed; } catch { return false; } };
   const editable = () => !disposed && !busy && !!baseline && state.status === 'ready' && current();
   const fail = error => { state.status = error?.code === 'SETTINGS_COMMIT_UNCONFIRMED' ? 'unconfirmed' : 'error'; state.error = error?.code ?? 'INVALID_SETTINGS'; state.message = message(error); };
@@ -172,7 +172,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
     back() {
       if (state.route === 'rule') return this.cancelRule();
       if (state.route !== 'settings') return this.navigate('settings');
-      if (busy) return false;
+      if (busy && state.status !== 'loading') return false;
       state.promptDrafts = {}; state.customDrafts = {}; onBack(); return true;
     },
     close() { if (!disposed) { onClose(); return true; } return false; },

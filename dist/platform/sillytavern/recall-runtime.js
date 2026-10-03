@@ -1,6 +1,7 @@
 import {sameTarget} from '../../domain/memory/repository.js';
 import {buildRecall,extractRecallInputs} from '../../domain/recall/build.js';
 import {mapSummaryPromptFloors} from './summary-history.js';
+import {createRecallPreviewBuilder} from './recall-preview.js';
 
 export const RECALL_PROMPT_KEY='lantai_benmo_memory_context';
 const supported=new Set(['normal','regenerate','swipe','continue']);
@@ -18,14 +19,17 @@ export function recallInputs(messages,recentFloorCount,original=null) {
   for(let i=index-1;i>=0&&recentHistory.length<recentFloorCount;i--)if(eligible(usable[i])&&text(usable[i]).trim())recentHistory.push({floor:mapping?.[i]??i,text:text(usable[i]),distanceFromCurrent:mapping?mapping[index]-mapping[i]:index-i});
   return {input:index<0?'':text(usable[index]),recentHistory};
 }
-export function createRecallRuntime({repository,settings,getContext,captureSource,readInput=()=>'',build=buildRecall}={}) {
-  let disposed=false,ticket=0,proof=null,flight=null;
+export function createRecallRuntime({repository,settings,getContext,captureSource,readInput=()=>'',build=buildRecall,previewBuild}={}) {
+  let disposed=false,ticket=0,proof=null,flight=null,previewAbort=null;
+  const buildPreview=previewBuild??(build===buildRecall?createRecallPreviewBuilder():build);
+  const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;};
   const records=new Map(),listeners=new Set(),releases=[];
   const key=target=>JSON.stringify([target.chatId,target.rootId]);
   const notify=()=>{for(const fn of [...listeners])try{fn();}catch{/* observers cannot break host generation */}};
   const current=(target,serial,config,source)=>!disposed&&serial===ticket&&sameTarget(target,repository.captureTarget())
     &&settings.captureRecall().epoch===config.epoch&&(!captureSource||JSON.stringify(captureSource(target))===source);
   function clear(reason='cancelled') {
+    cancelPreview();
     const previous=flight,oldProof=proof;ticket++;proof=null;flight=null;
     if(previous)record(previous.target,{status:'failed',type:previous.type,message:'本轮召回已取消，未注入记忆。'});
     else if(reason==='stopped'&&oldProof)record(oldProof.target,{status:'failed',type:'cancelled',message:'本轮生成已取消，未继续注入记忆。'});
@@ -39,24 +43,30 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     }
   }
   function record(target,value){records.set(key(target),copy(value));notify();}
-  async function compute(messages,target,serial,previewInput=null) {
+  async function compute(messages,target,serial,previewInput=null,signal=null) {
     const config=settings.captureRecall(),source=captureSource?JSON.stringify(captureSource(target)):null;
     const root=await repository.read(target);
     if(!current(target,serial,config,source))throw new Error('stale');
     const context=getContext(),inputs=previewInput===null?recallInputs(messages,config.recall.recentFloorCount,context?.chat)
       :extractRecallInputs(messages,{recentFloorCount:config.recall.recentFloorCount,input:previewInput,currentIndex:messages.length});
-    const result=await build({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,
-      countTokens:typeof context?.getTokenCountAsync==='function'?body=>context.getTokenCountAsync(body):null});
+    const result=await (previewInput===null?build:buildPreview)({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,
+      countTokens:typeof context?.getTokenCountAsync==='function'?body=>context.getTokenCountAsync(body):null},
+      {signal,isCurrent:()=>current(target,serial,config,source)});
     if(!current(target,serial,config,source))throw new Error('stale');
     const authority=await repository.read(target);
     if(!current(target,serial,config,source)||JSON.stringify(authority)!==JSON.stringify(root))throw new Error('stale');
     return {result,target,config,source,serial,revision:root.revision};
   }
   async function preview(messages) {
+    cancelPreview();const abort=new AbortController();previewAbort=abort;
     const target=repository.captureTarget(),serial=ticket,input=String(readInput()??'');
-    const value=await compute(messages??getContext()?.chat,target,serial,input);
-    if(input!==String(readInput()??''))throw new Error('stale');
-    return copy(value.result);
+    try{
+      const value=await compute(messages??getContext()?.chat,target,serial,input,abort.signal);
+      if(abort.signal.aborted||input!==String(readInput()??''))throw new Error('stale');
+      // compute owns this isolated result; preview never installs it in the
+      // runtime's actual/proof cache. A second full clone has no shared owner.
+      return value.result;
+    }finally{if(previewAbort===abort)previewAbort=null;}
   }
   async function intercept(messages,_size,_abort,type='normal') {
     if(disposed)return;
@@ -88,7 +98,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     const listener=()=>{clear(name==='GENERATION_STOPPED'?'stopped':name);notify();};
     source.on(event,listener);releases.push(()=>(source.off??source.removeListener)?.call(source,event,listener));
   }
-  return Object.freeze({preview,intercept,clear,
+  return Object.freeze({preview,intercept,clear,cancelPreview,
     getReplacementProof(){try{return proof&&current(proof.target,proof.serial,proof.config,proof.source)?proof:null;}catch{return null;}},
     inspect(){try{return copy(records.get(key(repository.captureTarget()))??{status:'empty'});}catch{return {status:'empty'};}},
     subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn);},

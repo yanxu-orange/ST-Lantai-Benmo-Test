@@ -14,7 +14,8 @@ const field = (label, attr, value, textarea = false) => `<label class="ui-field 
 export function mountSummarySettingsView(container, controller, { readonlyContent } = {}) {
   if (container?.container) { ({ container, controller, readonlyContent } = container); }
   let disposed = false, editingText = false, composing = false, pendingRender = false, renderedRoute = null, dragging = null;
-  const state = () => controller.inspect();
+  let latest=controller.inspect();
+  const state = () => latest;
   // The shared work-surface toast is ephemeral. An old receipt is not replayed
   // when this DOM is mounted again over the long-lived controller.
   let previousStatus = state().status, savedUntil = 0, savedTimer = null;
@@ -85,9 +86,9 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
       const save = form.querySelector('[type=submit]'); if (save) save.disabled = !dirty;
     }
   }
-  function render() {
+  function render(snapshot=controller.inspect()) {
     if (disposed) return;
-    const s = state(); observeSaved(s);
+    const s = latest=snapshot; observeSaved(s);
     if (composing) { pendingRender = true; return; }
     remember(false);
     const previousRoute = renderedRoute;
@@ -97,7 +98,7 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     const focusData = focused && container.contains(focused) ? { field: focused.dataset.ssField, key: focused.dataset.key, id: focused.dataset.id, subfield: focused.dataset.field, action: focused.dataset.ssAction } : null;
     const selection = focused?.selectionStart != null ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
     const title = s.route === 'settings' ? '事件总结设置' : s.route === 'library' ? '事件词库' : s.route === 'cleaning' ? '总结文本清洗' : s.ruleId ? '编辑清洗规则' : '新建清洗规则';
-    const locked = s.status !== 'ready', content = !s.draft ? '<p class="lt-status">正在读取设置…</p>' : s.route === 'settings' ? settings(s) : s.route === 'library' ? library(s) : s.route === 'cleaning' ? cleaning(s) : s.ruleDraft ? rule(s) : '';
+    const locked = s.status !== 'ready', content = !s.draft ? (s.status==='loading'?'<p class="lt-status">正在读取设置…</p>':'<p class="lt-status">设置暂不可用。</p>') : s.route === 'settings' ? settings(s) : s.route === 'library' ? library(s) : s.route === 'cleaning' ? cleaning(s) : s.ruleDraft ? rule(s) : '';
     container.innerHTML = `<section class="lantai lt-summary-settings" aria-label="${title}"><header class="lt-header">${icon('back', '返回', 'back')}<h1 class="ui-page-title">${title}</h1>${icon('close', '关闭兰台本末', 'close')}</header><main class="lt-main" tabindex="-1">${content}<p data-ss-message role="${s.error ? 'alert' : 'status'}" class="${s.error ? 'lt-error' : 'lt-status'}" ${s.error && s.message ? '' : 'hidden'}>${s.error ? escape(s.message) : ''}</p>${s.status === 'error' || s.status === 'unconfirmed' ? button('重新读取已保存设置', 'read', '', true) : ''}</main><footer class="lt-footer" ${s.route === 'library' || s.route === 'rule' ? '' : 'hidden'}>${s.route === 'library' ? '<button type="button" class="ui-button ui-button--primary" data-ss-action="save-library">保存</button>' : s.route === 'rule' ? `<div class="lt-summary-editor-actions">${button('取消', 'cancel-rule')}<button type="button" class="ui-button ui-button--primary" data-ss-action="save-rule">保存</button></div>` : ''}</footer></section>`;
     if (locked) for (const control of container.querySelectorAll('main input,main textarea,main select,main button,footer button')) control.disabled = true;
     const saved = container.ownerDocument.createElement('p'); saved.className = 'lt-saved lt-status'; saved.dataset.ssSaved = ''; saved.setAttribute('role', 'status'); saved.hidden = true;
