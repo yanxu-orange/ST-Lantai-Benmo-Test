@@ -1,0 +1,1 @@
+@media (min-width:800px) { .lantai .lt-management-compare { grid-template-columns:repeat(2,minmax(0,1fr)); } }

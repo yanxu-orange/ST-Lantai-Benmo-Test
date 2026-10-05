@@ -1,0 +1,35 @@
+{
+  "theme": "snow-ermine",
+  "ownership": "consumer",
+  "reference": {
+    "version": 3,
+    "handoffDate": "2026-10-04"
+  },
+  "stylesheet": "theme.css",
+  "assets": [
+    {
+      "file": "assets/snow-ermine-header.png",
+      "source": "assets/snow-ermine-header.png",
+      "role": "Root memory header only; exact original bytes",
+      "sha256": "674ff57c3841bb1ab22f786c00a2f9ac86adedb93f5149512923a77868460fb8"
+    },
+    {
+      "file": "assets/panoramic-snow-header.png",
+      "source": "assets/panoramic-snow-header.png",
+      "role": "Subpage headers only; exact original bytes",
+      "sha256": "b6960e15e58b6029848daba2d32f1ca7ff612831f9c26a933ad999eb9cecd098"
+    },
+    {
+      "file": "assets/close-snow.svg",
+      "source": "src/app/icons/close.svg",
+      "role": "Consumer-only header glyph derivative; same path, white stroke with a thin dark outline",
+      "sha256": "dd2134624d963a57de0a3b702c0747a1df3c2dfd200e7d215cb3d0e2bc8b3318"
+    }
+  ],
+  "notes": [
+    "Consumes the existing complete pinned Memphis candidate bundle for shared component, touch and forced-color safety; its Memphis visual selectors remain scoped and are not promoted or extracted.",
+    "Only the root and subpage headers use scenic images; the body is an opaque cool-white/light-ice workspace. The panoramic lake backdrop is not included.",
+    "No font is embedded or downloaded. SimSun/Songti is a regular-400 reading fallback; actual availability depends on the user device.",
+    "Theme CSS does not own business data, routing, timestamps or phone/PC page structure."
+  ]
+}

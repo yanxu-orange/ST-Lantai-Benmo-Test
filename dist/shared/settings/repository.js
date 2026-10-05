@@ -1,4 +1,4 @@
-import { assertAiSettings, assertEventGeneration, assertRecallSettings, assertCredential, aiConfig, equalSettings, frozenSettingsCopy, publicSettings, SettingsError } from './model.js';
+import { assertAiSettings, assertEventGeneration, assertRecallSettings, assertCumulativeGeneration, assertCredential, aiConfig, equalSettings, frozenSettingsCopy, publicSettings, SettingsError } from './model.js';
 
 export function createSettingsRepository(adapter) {
   let queue = Promise.resolve();
@@ -9,7 +9,7 @@ export function createSettingsRepository(adapter) {
       if (isCurrent === undefined) return true;
       try { return isCurrent() === true; } catch { return false; }
     };
-    const draft = field === 'ai' ? assertAiSettings(value) : field==='recall'?assertRecallSettings(value):assertEventGeneration(value);
+    const draft = field === 'ai' ? assertAiSettings(value) : field==='recall'?assertRecallSettings(value):field==='cumulativeGeneration'?assertCumulativeGeneration(value):assertEventGeneration(value);
     if (!Array.isArray(credentials) || field !== 'ai' && credentials.length) throw new SettingsError();
     let replacements;
     try { replacements = credentials.map(item => {
@@ -37,7 +37,7 @@ export function createSettingsRepository(adapter) {
       }) : root.credentials;
       if (equalSettings(root[field], draft) && equalSettings(root.credentials, nextCredentials)) return { status: 'committed', root: publicSettings(root), changed: false };
       const next = { ...root, revision: root.revision + 1,
-        domainRevisions: { ...root.domainRevisions, [field]: root.domainRevisions[field] + 1 }, [field]: draft, credentials: nextCredentials };
+        domainRevisions: { ...root.domainRevisions, [field]: (root.domainRevisions[field]??0) + 1 }, [field]: draft, credentials: nextCredentials };
       const result = await adapter.commit(next, root.revision, epochs.epoch, { isCurrent: guard });
       return { ...result, root: publicSettings(result.root), changed: true };
     });
@@ -49,11 +49,18 @@ export function createSettingsRepository(adapter) {
     saveAi: (value, options) => update('ai', value, options),
     saveEventGeneration: (value, options) => update('eventGeneration', value, options),
     saveRecall: (value,options)=>update('recall',value,options),
+    saveCumulativeGeneration:(value,options)=>update('cumulativeGeneration',value,options),
+    captureCumulativeGeneration(){const root=adapter.peek();return frozenSettingsCopy({generation:root.cumulativeGeneration??{},epoch:adapter.epochs().cumulativeGeneration});},
+    matchesCumulativeGeneration(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().cumulativeGeneration&&equalSettings(snapshot.generation,root.cumulativeGeneration??{});}catch{return false;}},
     captureRecall(){const root=adapter.peek();return frozenSettingsCopy({recall:root.recall,epoch:adapter.epochs().recall});},
     matchesRecall(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().recall&&equalSettings(snapshot.recall,root.recall);}catch{return false;}},
     captureEventGeneration() {
       const root = adapter.peek();
       return frozenSettingsCopy({ generation: root.eventGeneration, epoch: adapter.epochs().eventGeneration });
+    },
+    matchesEventGeneration(snapshot) {
+      try { const root=adapter.peek();return snapshot?.epoch===adapter.epochs().eventGeneration&&equalSettings(snapshot.generation,root.eventGeneration); }
+      catch { return false; }
     },
     captureAi() {
       const root = adapter.peek();

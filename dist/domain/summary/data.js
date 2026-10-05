@@ -8,15 +8,15 @@ const text=value=>typeof value==='string'&&!!value.trim();
 export function emptySummary() {
   return {schema:1,revision:0,preferences:{
     manual:{startFloor:0,endFloor:null,includeUser:true,reviewBeforeCommit:true,hideOriginal:true},
-    auto:{enabled:false,startFloor:0,batchSize:15,recentFloors:6,includeUser:true,reviewBeforeCommit:false,hideOriginal:true},
+    auto:{startFloor:0,batchSize:15,recentFloors:6,includeUser:true,reviewBeforeCommit:false,hideOriginal:true},
   },excludedFloors:[],batches:[],progress:{startFloor:0,lastProcessedFloor:null,nextBatchOrdinal:1}};
 }
 export function assertSummaryPreferences(value) {
   exact(value,['manual','auto']);
   exact(value.manual,['startFloor','endFloor','includeUser','reviewBeforeCommit','hideOriginal']);
-  exact(value.auto,['enabled','startFloor','batchSize','recentFloors','includeUser','reviewBeforeCommit','hideOriginal']);
+  exact(value.auto,['startFloor','batchSize','recentFloors','includeUser','reviewBeforeCommit','hideOriginal']);
   for(const item of [value.manual,value.auto])if(!integer(item.startFloor)||['includeUser','reviewBeforeCommit','hideOriginal'].some(key=>typeof item[key]!=='boolean'))throw new Error('总结参数无效');
-  if(!(value.manual.endFloor===null||integer(value.manual.endFloor)&&value.manual.endFloor>=value.manual.startFloor)||typeof value.auto.enabled!=='boolean'||!integer(value.auto.batchSize,1)||!integer(value.auto.recentFloors))throw new Error('总结范围参数无效');
+  if(!(value.manual.endFloor===null||integer(value.manual.endFloor)&&value.manual.endFloor>=value.manual.startFloor)||!integer(value.auto.batchSize,1)||!integer(value.auto.recentFloors))throw new Error('总结范围参数无效');
   return copy(value);
 }
 export function assertExcludedFloors(value) {
@@ -77,14 +77,14 @@ export function assertBatch(batch) {
 export function assertSummary(summary,events=[]) {
   exact(summary,['schema','revision','preferences','excludedFloors','batches','progress',...(Object.hasOwn(summary,'pending')?['pending']:[])]);
   if(summary.schema!==1||!integer(summary.revision)||!Array.isArray(summary.batches))throw new Error('总结版本无效');
-  assertSummaryPreferences(summary.preferences);assertExcludedFloors(summary.excludedFloors);
+  const preferences=assertSummaryPreferences(summary.preferences);assertExcludedFloors(summary.excludedFloors);
   exact(summary.progress,['startFloor','lastProcessedFloor','nextBatchOrdinal']);
   if(!integer(summary.progress.startFloor)||!(summary.progress.lastProcessedFloor===null||integer(summary.progress.lastProcessedFloor))||!integer(summary.progress.nextBatchOrdinal,1))throw new Error('总结进度无效');
   const ids=new Set(),tasks=new Set(),ordinals=new Set(),members=new Set();
   for(const batch of summary.batches){assertBatch(batch);if(ids.has(batch.id)||tasks.has(batch.taskId)||ordinals.has(batch.ordinal)||batch.ordinal>=summary.progress.nextBatchOrdinal)throw new Error('批历史身份重复或游标无效');ids.add(batch.id);tasks.add(batch.taskId);ordinals.add(batch.ordinal);for(const id of batch.eventIds){if(members.has(id))throw new Error('批成员归属重复');members.add(id);const event=events.find(item=>item.id===id);if(event&&(event.batch?.id!==batch.id||JSON.stringify(event.batch.sources)!==JSON.stringify([batch.actualRange])))throw new Error('切片与独立批归属不符');}}
   for(const event of events){if(ids.has(event.batch?.id)&&!summary.batches.find(batch=>batch.id===event.batch.id).eventIds.includes(event.id))throw new Error('批成员不在正式历史中');}
   if(Object.hasOwn(summary,'pending')&&summary.pending!==null){const pending=assertSummaryPending(summary.pending);if(ids.has(pending.batchId)||tasks.has(pending.id)||pending.events.some(candidate=>events.some(event=>event.id===candidate.id)))throw new Error('待审核与正式身份冲突');}
-  return copy(summary);
+  return {...copy(summary),preferences};
 }
 export function summaryOf(root) { return root.summary===undefined?emptySummary():assertSummary(root.summary,root.events); }
 export function projectSummaryBatches(root) {

@@ -6,3 +6,9 @@
 /* Both platforms currently use the approved work surface. Future device-only
    arrangement belongs here, without changing the shared field semantics. */
 .lt-api-settings .lt-api-presets > label { flex-basis:100%; }
+
+/* The existing Settings entry keeps one work surface with distinct concerns. */
+.lantai .lt-settings-section-title { margin:0; font-size:var(--ui-type-ui-object-title-size); font-weight:var(--ui-type-ui-object-title-weight); }
+.lantai .lt-appearance-settings { padding-block-end:var(--ui-space-group); margin-block-end:var(--ui-space-group); border-bottom:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle); }
+.lantai .lt-appearance-settings .ui-input { min-height:44px; }
+.lantai .lt-settings-section-title + .lt-editor { margin-block-start:var(--ui-space-row); }

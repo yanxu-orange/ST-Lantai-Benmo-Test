@@ -1,0 +1,625 @@
+/* Consumer-owned Snow Ermine mapping. The shared app owns structure, data,
+   responsive arrangement and behavior. Reference: solid preview v3 (2026-10-04).
+   Load after the shared component bundle and app sheets. No supplier edits. */
+[data-ui-theme="snow-ermine"],
+:host([data-ui-theme="snow-ermine"]) {
+  color-scheme: light;
+
+  --ui-color-canvas: #f8fbfe;
+  --ui-color-workspace: #f4f8fb;
+  --ui-color-surface-base: #fff;
+  --ui-color-surface-raised: #fff;
+  --ui-color-surface-subtle: #f7fafc;
+  --ui-color-text-primary: #2a333b;
+  --ui-color-text-secondary: #5f6b74;
+  --ui-color-text-meta: #697580;
+  --ui-color-text-disabled: #8a959e;
+  --ui-color-border-subtle: #e2eaf0;
+  --ui-color-border-default: #d7e2ea;
+  --ui-color-border-strong: #b3c8d7;
+  --ui-color-field-background: #fff;
+  --ui-color-field-border: #c5d4df;
+  --ui-color-field-placeholder: #697580;
+  --ui-color-field-focus: #2c638d;
+  --ui-color-field-invalid-border: #aa4945;
+  --ui-color-feedback-error-text: #aa4945;
+
+  /* Actions are separate from selection: opening manual summary is ordinary. */
+  --ui-color-action-primary-background: #e2edf5;
+  --ui-color-action-primary-text: #2a333b;
+  --ui-color-action-secondary-background: #fff;
+  --ui-color-action-secondary-text: #2a333b;
+  --ui-color-action-tertiary-text: #5f6b74;
+  --ui-color-selected-background: #287DA8;
+  --ui-color-selected-text: #fff;
+  --ui-color-selected-border: #287DA8;
+  --ui-color-active-background: var(--ui-color-selected-background);
+  --ui-color-active-text: var(--ui-color-selected-text);
+
+  --ui-color-danger-text: #aa4945;
+  --ui-color-danger-background: #fbeeed;
+  --ui-color-warning-text: #866125;
+  --ui-color-warning-background: #fcf5e7;
+  --ui-color-success-text: #4d7064;
+  --ui-color-success-background: #edf5f1;
+  --ui-color-info-text: #2c638d;
+  --ui-color-info-background: #edf5fb;
+  --ui-color-disabled-background: #eef2f5;
+  --ui-color-pressed-overlay: rgb(42 51 59 / 8%);
+  --ui-color-focus-ring: #2c638d;
+  --ui-color-scrim: rgb(28 47 64 / 30%);
+  --ui-color-glass-background: #f8fbfe;
+  --ui-color-glass-border: #d7e2ea;
+
+  --ui-type-ui-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+  --ui-type-reading-family: "SimSun", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+  --ui-type-ui-page-title-size: 1.125rem;
+  --ui-type-ui-page-title-weight: 650;
+  --ui-type-ui-page-title-line: 1.35;
+  --ui-type-ui-section-title-weight: 650;
+  --ui-type-ui-object-title-weight: 400;
+  --ui-type-ui-control-weight: 400;
+  --ui-type-reading-body-size: .9375rem;
+  --ui-type-reading-body-weight: 400;
+  --ui-type-reading-body-line: 1.68;
+
+  --ui-shape-surface-radius: 5px;
+  --ui-shape-control-radius: 4px;
+  --ui-shape-overlay-radius: 5px;
+  --ui-shape-selection-radius: 4px;
+  --ui-shape-badge-radius: 4px;
+  --ui-border-subtle-width: 1px;
+  --ui-border-default-width: 1px;
+  --ui-border-strong-width: 2px;
+  --ui-elevation-none-shadow: none;
+  --ui-elevation-low-shadow: 0 1px 3px rgb(42 70 91 / 6%);
+  --ui-elevation-medium-shadow: 0 8px 24px rgb(42 70 91 / 10%);
+  --ui-elevation-high-shadow: 0 12px 40px rgb(42 70 91 / 13%);
+  --ui-material-solid-background: var(--ui-color-surface-base);
+  --ui-material-glass-background: var(--ui-color-glass-background);
+  --ui-material-glass-border: var(--ui-color-glass-border);
+
+  /* These are visual product roles, deliberately independent of selection. */
+  --lt-snow-page-pad: 16px;
+  --lt-snow-header-ink: #fff;
+  --lt-snow-header-fallback: #356990;
+  --lt-snow-header-nav-text: #405d72;
+  --lt-snow-header-nav-current-text: #244d70;
+  --lt-snow-header-nav-current-line: #669fc3;
+  --lt-snow-header-nav-background: rgb(243 249 254 / 90%);
+  --lt-snow-card-shadow: 0 1px 3px rgb(42 70 91 / 9%);
+  --lt-snow-card-hover-shadow: 0 2px 6px rgb(42 70 91 / 11%);
+  --lt-snow-hover-background: #edf5fb;
+  --lt-snow-choice-unchecked-border: #718594;
+  --lt-tag-neutral-background: #f7fafc;
+  --lt-tag-event-bg: transparent;
+  --lt-tag-event-ink: #697580;
+  --lt-tag-event-border: transparent;
+  --lt-tag-detail-bg: transparent;
+  --lt-tag-detail-ink: #697580;
+  --lt-tag-detail-border: transparent;
+}
+
+.lantai[data-ui-theme="snow-ermine"] {
+  background: var(--ui-color-workspace);
+  border: var(--ui-border-subtle-width) solid var(--ui-color-border-subtle);
+  border-radius: var(--ui-shape-overlay-radius);
+  box-shadow: var(--ui-elevation-high-shadow);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-main {
+  background: var(--ui-color-workspace);
+  background-image: none;
+  padding-inline: var(--lt-snow-page-pad);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-footer {
+  background: var(--ui-color-canvas);
+  border-top-color: var(--ui-color-border-subtle);
+  padding-inline: var(--lt-snow-page-pad);
+}
+
+/* Keep native owners at least 44px; do not lower shared touch/focus tokens or
+   steal neighboring targets with decorative layers. The markup is unchanged. */
+.lantai[data-ui-theme="snow-ermine"] :is(.ui-button,.ui-icon-button,.ui-segment,.ui-nav-item,.ui-choice,.ui-switch,.lt-mode) {
+  min-block-size: max(44px, var(--ui-interaction-target-min));
+  min-inline-size: 44px;
+}
+.lantai[data-ui-theme="snow-ermine"] :is(.ui-input:not([type="checkbox"]):not([type="radio"]),.lt-textarea,summary) {
+  min-block-size: max(44px, var(--ui-interaction-target-min));
+}
+.lantai[data-ui-theme="snow-ermine"] .ui-icon-button {
+  min-inline-size: max(44px, var(--ui-interaction-target-min));
+}
+.lantai[data-ui-theme="snow-ermine"] .ui-button--primary {
+  border-color: var(--ui-color-border-strong);
+  font-weight: 600;
+}
+.lantai[data-ui-theme="snow-ermine"] :is(.ui-button,.ui-icon-button,.ui-segment):hover:enabled:not(:where([aria-pressed="true"],[aria-current="page"],[data-selected="true"])) {
+  background: var(--lt-snow-hover-background);
+}
+.lantai[data-ui-theme="snow-ermine"] .ui-button--danger:hover:enabled {
+  background: var(--ui-color-danger-background);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-icon {
+  /* External SVG images do not inherit the owner's currentColor. */
+  filter: brightness(0) saturate(100%) invert(42%) sepia(8%) saturate(629%) hue-rotate(165deg) brightness(94%) contrast(87%);
+}
+
+/* Root image spans only the title + type navigation. The content remains solid. */
+.lantai[data-ui-theme="snow-ermine"] .lt-header {
+  position: relative;
+  isolation: isolate;
+  min-height: 52px;
+  padding: 4px var(--lt-snow-page-pad);
+  gap: var(--ui-space-control);
+  border-bottom-color: var(--ui-color-border-subtle);
+  background: var(--lt-snow-header-fallback);
+  overflow: hidden;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header:not(.lt-header--root) {
+  grid-template-columns: 44px minmax(0,1fr) 44px;
+  box-shadow: 0 3px 6px rgb(32 54 69 / 8%);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header:not(.lt-header--root)::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -15%;
+  width: 160%;
+  background: url("./assets/panoramic-snow-header.png") center 30% / cover no-repeat;
+  z-index: 0;
+  pointer-events: none;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header:not(.lt-header--root)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgb(20 42 64 / 21%), rgb(20 42 64 / 12%) 64%, rgb(20 42 64 / 4%));
+  z-index: 1;
+  pointer-events: none;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header:not(.lt-header--root) > * {
+  position: relative;
+  z-index: 2;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1.125rem;
+  line-height: 1.35;
+  font-weight: 650;
+  color: var(--lt-snow-header-ink);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header .ui-icon-button,
+.lantai[data-ui-theme="snow-ermine"] .lt-header .ui-icon-button:hover:enabled {
+  width: 44px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  color: var(--lt-snow-header-ink);
+  box-shadow: none;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header .ui-icon-button:focus-visible {
+  outline-color: var(--lt-snow-header-ink);
+  outline-offset: -2px;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header .lt-icon {
+  filter: brightness(0) invert(1) drop-shadow(0 1px 1px rgb(18 35 49 / 74%));
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header .lt-icon[src$="/close.svg"] {
+  content: url("./assets/close-snow.svg");
+  filter: none;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header--root {
+  padding: 0;
+  gap: 0;
+  background: var(--lt-snow-header-fallback) url("./assets/snow-ermine-header.png") 68% 100% / cover no-repeat;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-root-top {
+  padding: 4px var(--lt-snow-page-pad);
+  min-height: 52px;
+  background: linear-gradient(90deg, rgb(19 54 96 / 89%), rgb(24 68 112 / 62%) 51%, rgb(23 69 113 / 6%) 90%);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header--root .ui-tablist {
+  gap: 0;
+  padding-inline: var(--lt-snow-page-pad);
+  background: var(--lt-snow-header-nav-background);
+  box-shadow: 0 2px 5px rgb(45 80 110 / 6%);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header--root .lt-type {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding-inline: 2px;
+  background: transparent;
+  color: var(--lt-snow-header-nav-text);
+  font-size: var(--ui-type-ui-control-size);
+  font-weight: 400;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header--root .lt-type[aria-current="page"] {
+  color: var(--lt-snow-header-nav-current-text);
+  border-bottom-color: var(--lt-snow-header-nav-current-line);
+  background: transparent;
+  font-weight: 650;
+}
+
+/* Existing single-line toolbar, four native 44px icon owners at phone widths. */
+.lantai[data-ui-theme="snow-ermine"] .lt-work-actions > .ui-button {
+  padding-inline: 4px;
+  border-color: transparent;
+  background: var(--ui-color-surface-base);
+  color: var(--ui-color-action-tertiary-text);
+  font-size: var(--ui-type-ui-meta-size);
+  font-weight: 400;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-controls.ui-toolbar {
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: var(--ui-space-control);
+  border-bottom: var(--ui-border-subtle-width) solid var(--ui-color-border-subtle);
+  background: var(--ui-color-surface-base);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-view-switch.ui-segment-group {
+  flex: none;
+  gap: 0;
+  border: 0;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-view-switch > .ui-button {
+  padding-inline: 6px;
+  white-space: nowrap;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ui-color-text-secondary);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-list-icons.ui-tool-group {
+  flex: none;
+  margin-inline-start: 0;
+  gap: max(var(--ui-space-control), var(--ui-interaction-separation-min));
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-list-icons .ui-icon-button {
+  width: 44px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-list-icons .lt-icon {
+  width: 20px;
+  height: 20px;
+}
+.lantai[data-ui-theme="snow-ermine"] #lt-filter-panel {
+  padding: var(--ui-space-row);
+  border: var(--ui-border-subtle-width) solid transparent;
+  border-radius: var(--ui-shape-surface-radius);
+  background: var(--ui-color-surface-base);
+  box-shadow: var(--ui-elevation-low-shadow);
+}
+
+/* A single state mapping for real selected controls. Header navigation above
+   owns its separate thin underline role, so changing selection cannot recolor it. */
+.lantai[data-ui-theme="snow-ermine"] :is(.ui-segment,.lt-view-switch > .ui-button,.lt-list-icons > .ui-button,.lt-summary-switches > .ui-button,.lt-recall-domains > .ui-button,.lt-recall-segment > .ui-button)[aria-pressed="true"]:not(:disabled),
+.lantai[data-ui-theme="snow-ermine"] :is(.ui-nav-item[aria-current="page"],.ui-nav-item[data-selected="true"],.ui-tag--selected),
+.lantai[data-ui-theme="snow-ermine"] :is(.lt-mode,.lt-filter-options label):has(:checked):not(:has(:disabled)) {
+  background: var(--ui-color-selected-background);
+  background-image: none;
+  color: var(--ui-color-selected-text);
+  border-color: var(--ui-color-selected-border);
+  box-shadow: none;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-list-icons > .ui-button[aria-pressed="true"] .lt-icon {
+  filter: brightness(0) invert(1);
+}
+.lantai[data-ui-theme="snow-ermine"] :is(.lt-mode input,.lt-selection-row input,.lt-summary-word-heading input) {
+  accent-color: var(--ui-color-selected-background);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-mode:has(:checked) input,
+.lantai[data-ui-theme="snow-ermine"] .lt-selection-row[data-selected="true"] input {
+  accent-color: var(--ui-color-selected-text);
+}
+.lantai[data-ui-theme="snow-ermine"] :is(.ui-button,.ui-icon-button,.ui-segment):disabled,
+.lantai[data-ui-theme="snow-ermine"] .lt-mode:has(:disabled) {
+  background: var(--ui-color-disabled-background);
+  color: var(--ui-color-text-disabled);
+  border-color: var(--ui-color-border-subtle);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* Memory surfaces and metadata keep their existing fields, timestamps and
+   truncation behavior. Nothing in this skin rewrites or abbreviates values. */
+.lantai[data-ui-theme="snow-ermine"] .lt-row {
+  display: grid;
+  position: relative;
+  padding: var(--ui-space-row);
+  border: var(--ui-border-subtle-width) solid transparent;
+  border-radius: var(--ui-shape-surface-radius);
+  background: var(--ui-color-surface-base);
+  box-shadow: var(--lt-snow-card-shadow);
+  color: var(--ui-color-text-primary);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-row:not(.lt-selection-row) {
+  grid-template-columns: minmax(0,1fr);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-row:is(button,label):hover {
+  border-color: var(--ui-color-border-default);
+  box-shadow: var(--lt-snow-card-hover-shadow);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-row + .lt-row { margin-top: 0; }
+.lantai[data-ui-theme="snow-ermine"] .lt-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--ui-space-control);
+  min-width: 0;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-card-head .lt-event-meta { flex: 0 0 auto; }
+.lantai[data-ui-theme="snow-ermine"] .lt-card-head .ui-meta-time {
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
+  text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-main--root .lt-row .ui-tag {
+  min-block-size: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-color-text-meta);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-row .lt-tags:not(.lt-event-meta) { gap: 0; }
+.lantai[data-ui-theme="snow-ermine"] .lt-row .lt-tags:not(.lt-event-meta) .ui-tag + .ui-tag::before {
+  content: "·";
+  margin-inline: 7px;
+  color: inherit;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-row[data-selected="true"],
+.lantai[data-ui-theme="snow-ermine"] .lt-row[data-selected="true"]:hover {
+  background: var(--ui-color-selected-background);
+  color: var(--ui-color-selected-text);
+  border-color: var(--ui-color-selected-border);
+  box-shadow: none;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-row[data-selected="true"] :is(.lt-meta,.ui-reading,.ui-tag,.lt-title) {
+  color: var(--ui-color-selected-text);
+}
+.lantai[data-ui-theme="snow-ermine"] :is(.lt-row .lt-title,.ui-reading,.lt-summary-prompt-body textarea,.lt-summary-readonly,.lt-summary-preview pre,.lt-summary-preview p) {
+  font-family: var(--ui-type-reading-family);
+  font-weight: 400;
+  font-synthesis: none;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-row .lt-title {
+  font-size: var(--ui-type-ui-object-title-size);
+  line-height: var(--ui-type-ui-object-title-line);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-row .lt-copy {
+  font-size: var(--ui-type-reading-body-size);
+  line-height: var(--ui-type-reading-body-line);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-textarea { font-synthesis: none; }
+
+/* Settings headings and field labels are UI roles, even when the semantic
+   markup uses h3 for a field. Prompt content keeps the reading rules above. */
+.lantai[data-ui-theme="snow-ermine"].lt-summary-settings h2,
+.lantai[data-ui-theme="snow-ermine"].lt-summary-settings .lt-summary-modes > legend {
+  font-family: var(--ui-type-ui-family);
+  font-size: var(--ui-type-ui-section-title-size);
+  font-weight: var(--ui-type-ui-section-title-weight);
+  line-height: var(--ui-type-ui-section-title-line);
+}
+.lantai[data-ui-theme="snow-ermine"].lt-summary-settings .ui-field__label {
+  font-family: var(--ui-type-ui-family);
+  font-size: var(--ui-type-ui-control-size);
+  font-weight: var(--ui-type-ui-control-weight);
+  line-height: var(--ui-type-ui-control-line);
+}
+
+/* The same quiet frames carry settings, libraries, cleaning, recall and review. */
+.lantai[data-ui-theme="snow-ermine"] :is(.lt-summary-panel,.lt-summary-prompt-group,.lt-summary-word,.lt-summary-rule,.lt-recall-input,.lt-recall-surface) {
+  border: var(--ui-border-subtle-width) solid transparent;
+  border-radius: var(--ui-shape-surface-radius);
+  background: var(--ui-color-surface-base);
+  box-shadow: var(--ui-elevation-low-shadow);
+}
+.lantai[data-ui-theme="snow-ermine"] :is(.lt-summary-prompt + .lt-summary-prompt,.lt-summary-word-editor,.lt-summary-rule-actions) {
+  border-top: var(--ui-border-subtle-width) solid var(--ui-color-border-subtle);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-prompt-group > h3 {
+  color: var(--ui-color-text-secondary);
+  background: transparent;
+}
+.lantai[data-ui-theme="snow-ermine"].lt-summary-settings .lt-summary-prompt[open] > summary {
+  font-weight: 400;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-modes label {
+  position: relative;
+  border-color: transparent;
+  background: var(--ui-color-surface-base);
+  color: var(--ui-color-text-secondary);
+  justify-content: center;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-modes label input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-readonly,
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-word-description {
+  background: var(--ui-color-surface-subtle);
+  color: var(--ui-color-text-primary);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-readonly {
+  border: var(--ui-border-subtle-width) solid var(--ui-color-border-subtle);
+  border-radius: var(--ui-shape-control-radius);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-link {
+  box-shadow: none;
+  border-radius: 0;
+  color: var(--ui-color-text-primary);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-library-link {
+  background: var(--ui-color-surface-base);
+  border: var(--ui-border-subtle-width) solid var(--ui-color-border-subtle);
+  border-radius: var(--ui-shape-surface-radius);
+}
+.lantai[data-ui-theme="snow-ermine"] :is([data-add],[data-ss-action="add-floor"],[data-ss-action="shortcut"],[data-cu-action="add-floor"]) {
+  font-weight: 400;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-choices.ui-choice-group { display: grid; }
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-choices .ui-choice { padding-inline: 0; }
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-choices .ui-choice input:is([type="checkbox"],[type="radio"]) {
+  min-block-size: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+/* Checkboxes also match :read-only. The complete candidate's later generic
+   input rule must not replace a checked checkbox's selected fill with a read
+   surface. Keep selection on the control only, with explicit Snow state roles. */
+.lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only {
+  background: transparent;
+  color: var(--ui-color-text-primary);
+}
+.lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only input[type="checkbox"] {
+  background: var(--ui-color-field-background);
+  color: var(--ui-color-text-primary);
+  border-color: var(--lt-snow-choice-unchecked-border);
+}
+.lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only input[type="checkbox"]:is(:checked,:indeterminate) {
+  background: var(--ui-color-selected-background);
+  color: var(--ui-color-selected-text);
+  border-color: var(--ui-color-selected-border);
+}
+.lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only:has(input:disabled) {
+  color: var(--ui-color-text-disabled);
+}
+.lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only input[type="checkbox"]:disabled {
+  background: var(--ui-color-disabled-background);
+  color: var(--ui-color-text-disabled);
+  border-color: var(--ui-color-text-disabled);
+}
+.lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only:focus-within {
+  outline: max(var(--ui-focus-ring-width), var(--ui-interaction-focus-width-min)) solid var(--ui-color-focus-ring);
+  outline-offset: var(--ui-focus-ring-offset);
+}
+
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-history > summary {
+  cursor: pointer;
+  align-content: center;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-main--root > .ui-section > h2 {
+  margin: 0;
+  font-family: var(--ui-type-ui-family);
+  font-size: var(--ui-type-ui-section-title-size);
+  line-height: var(--ui-type-ui-section-title-line);
+  font-weight: var(--ui-type-ui-section-title-weight);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-main--root .lt-summary-history {
+  border: var(--ui-border-subtle-width) solid var(--ui-color-border-subtle);
+  border-radius: var(--ui-shape-surface-radius);
+  background: var(--ui-color-surface-base);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-main--root .lt-summary-history > summary {
+  padding: var(--ui-space-control) var(--ui-space-row);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-history .lt-row {
+  border: 0;
+  box-shadow: none;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-connection {
+  background: var(--ui-color-surface-base);
+  overflow: hidden;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-summary-history .ui-disclosure-body {
+  padding-block: var(--ui-space-control);
+}
+.lantai[data-ui-theme="snow-ermine"].lt-recall :is(.lt-recall-domains,.lt-recall-segment) > .ui-button {
+  border-bottom-width: var(--ui-border-subtle-width);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-recall-domains {
+  background: var(--ui-color-surface-base);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-recall-scroll {
+  background: var(--ui-color-surface-base);
+  border-color: var(--ui-color-border-subtle);
+}
+
+@media (max-width: 390px) {
+  [data-ui-theme="snow-ermine"], :host([data-ui-theme="snow-ermine"]) { --lt-snow-page-pad: 13px; }
+}
+
+/* High-contrast mode keeps native control painting, visible selected boundaries,
+   and readable header glyphs; image washes must never obscure system colors. */
+@media (forced-colors: active) {
+  [data-ui-theme="snow-ermine"], :host([data-ui-theme="snow-ermine"]) {
+    --ui-color-canvas: Canvas;
+    --ui-color-workspace: Canvas;
+    --ui-color-surface-base: Canvas;
+    --ui-color-surface-raised: Canvas;
+    --ui-color-surface-subtle: Canvas;
+    --ui-color-text-primary: CanvasText;
+    --ui-color-text-secondary: CanvasText;
+    --ui-color-text-meta: CanvasText;
+    --ui-color-text-disabled: GrayText;
+    --ui-color-border-subtle: ButtonText;
+    --ui-color-border-default: ButtonText;
+    --ui-color-border-strong: ButtonText;
+    --ui-color-field-background: Field;
+    --ui-color-field-border: FieldText;
+    --ui-color-field-focus: Highlight;
+    --ui-color-action-primary-background: ButtonFace;
+    --ui-color-action-primary-text: ButtonText;
+    --ui-color-action-secondary-background: ButtonFace;
+    --ui-color-action-secondary-text: ButtonText;
+    --ui-color-action-tertiary-text: ButtonText;
+    --ui-color-selected-background: Highlight;
+    --ui-color-selected-text: HighlightText;
+    --ui-color-selected-border: Highlight;
+    --ui-color-focus-ring: Highlight;
+    --ui-color-disabled-background: Canvas;
+    --lt-snow-header-ink: CanvasText;
+    --lt-snow-header-fallback: Canvas;
+    --lt-snow-header-nav-text: CanvasText;
+    --lt-snow-header-nav-current-text: CanvasText;
+    --lt-snow-header-nav-current-line: Highlight;
+    --lt-snow-header-nav-background: Canvas;
+    --lt-snow-hover-background: ButtonFace;
+  }
+  .lantai[data-ui-theme="snow-ermine"] .lt-header--root,
+  .lantai[data-ui-theme="snow-ermine"] .lt-root-top { background: Canvas; }
+  .lantai[data-ui-theme="snow-ermine"] .lt-header:not(.lt-header--root)::before,
+  .lantai[data-ui-theme="snow-ermine"] .lt-header:not(.lt-header--root)::after { content: none; }
+  .lantai[data-ui-theme="snow-ermine"] .lt-icon,
+  .lantai[data-ui-theme="snow-ermine"] .lt-header .lt-icon,
+  .lantai[data-ui-theme="snow-ermine"] .lt-list-icons > .ui-button[aria-pressed="true"] .lt-icon {
+    filter: none;
+    forced-color-adjust: auto;
+  }
+  .lantai[data-ui-theme="snow-ermine"] .lt-header .lt-icon[src$="/close.svg"] { content: normal; }
+  .lantai[data-ui-theme="snow-ermine"] :is(.lt-row,.lt-summary-panel,.lt-summary-prompt-group,.lt-summary-word,.lt-summary-rule,.lt-recall-input,.lt-recall-surface) {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .lantai[data-ui-theme="snow-ermine"] :is(.lt-mode,.lt-selection-row,.lt-summary-word-heading) input { accent-color: auto; }
+  .lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only input[type="checkbox"]:is(:enabled,:disabled) {
+    appearance: auto;
+    background: revert;
+    color: revert;
+    border: revert;
+    border-radius: revert;
+    outline: revert;
+    accent-color: auto;
+    box-shadow: none;
+  }
+  .lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only input[type="checkbox"]::before,
+  .lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only input[type="checkbox"]::after { content: none; }
+  .lantai[data-ui-theme="snow-ermine"] .lt-summary-modes label input {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+  }
+}

@@ -75,7 +75,7 @@ details.lt-section:not([open]) { display:block; }
 .lt-error { font-family:var(--ui-type-ui-family); font-size:var(--ui-type-ui-support-size); font-weight:var(--ui-type-ui-support-weight); line-height:var(--ui-type-ui-support-line); }
 
 
-/* TASK-009 Amendment 4: one product size exception; retain the page-title role and Theme family/weight/line. */
+
 .lantai .ui-page-title { font-size:1.125rem; }
 
 /* Shared work-surface feedback; root density does not alter editor spacing. */
@@ -84,8 +84,7 @@ details.lt-section:not([open]) { display:block; }
 .lt-event-meta { align-items:center; }
 .lantai .lt-saved { position:absolute; z-index:1; inset-block-start:var(--ui-space-control); inset-inline:var(--ui-space-group); width:max-content; max-width:calc(100% - 2 * var(--ui-space-group)); margin-inline:auto; padding:var(--ui-space-control) var(--ui-space-group); border:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle); border-radius:var(--ui-shape-control-radius); color:var(--ui-color-text-primary); background:var(--ui-color-surface-base); pointer-events:none; }
 
-/* TASK-009 Amendment 9: clear-white surfaces and reserved selection boundary.
-   Shared selected boundary also serves native multi-selection. */
+
 .lt-header { background:var(--ui-color-action-secondary-background); }
 .lt-footer:has(nav) { background:var(--ui-color-action-secondary-background); }
 .lt-row { background:var(--ui-color-surface-subtle); border:var(--ui-border-subtle-width) solid transparent; border-bottom-color:var(--ui-color-border-subtle); padding-block-start:calc(var(--ui-space-row) - var(--ui-border-subtle-width)); }
@@ -122,7 +121,7 @@ details.lt-section:not([open]) { display:block; }
 .lt-filter-group { min-width:0; margin:0; padding:0; border:0; }
 .lt-filter-group legend { margin-bottom:var(--ui-space-control); padding:0; }
 .lt-filter-options { display:flex; gap:var(--ui-space-control); }
-.lt-filter-options label { position:relative; flex:1; min-width:0; white-space:nowrap; padding-inline:var(--ui-space-control); }
+.lt-filter-options label { position:relative; display:flex; align-items:center; flex:1; min-width:0; white-space:nowrap; padding-inline:var(--ui-space-control); }
 .lt-filter-options input { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 .lt-filter-options label:has(:checked) { color:var(--ui-color-selected-text); background:var(--ui-color-selected-background); border-color:var(--ui-color-selected-border); }
 .lt-filter-options label:has(:focus-visible) { outline:max(var(--ui-focus-ring-width),var(--ui-interaction-focus-width-min)) solid var(--ui-color-focus-ring); outline-offset:var(--ui-focus-ring-offset); }
@@ -155,4 +154,3 @@ details.lt-section:not([open]) { display:block; }
 .lantai .lt-management-compare { display:grid; gap:var(--ui-space-group); min-width:0; }
 .lantai .lt-management-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(0,1fr)); gap:var(--ui-space-control); }
 .lantai .lt-management-actions button { min-width:0; white-space:normal; }
-@media (min-width:800px) { .lantai .lt-management-compare { grid-template-columns:repeat(2,minmax(0,1fr)); } }

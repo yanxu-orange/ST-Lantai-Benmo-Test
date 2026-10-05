@@ -1,7 +1,6 @@
 import {sameTarget} from '../memory/repository.js';
 export function automaticSummaryPlan(summary,raw) {
   const config=summary.preferences.auto;
-  if(!config.enabled)return {status:'disabled'};
   const start=Math.max(config.startFloor,(summary.progress.lastProcessedFloor??(config.startFloor-1))+1),nominalEnd=start+config.batchSize-1;
   const last=raw.messages.at(-1)?.floor??-1,safeEnd=last-config.recentFloors;
   const endpoint=raw.messages.find(message=>message.floor>=nominalEnd&&message.floor<=safeEnd&&message.role==='assistant'&&!message.system);

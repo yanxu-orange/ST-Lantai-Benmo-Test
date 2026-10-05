@@ -1,0 +1,67 @@
+{
+  "version": "0.2.0-candidate.1+memphis",
+  "status": "opt-in-candidate-not-promoted",
+  "theme": "memphis",
+  "themeContractVariables": 108,
+  "systemContractVariables": 3,
+  "sourceEntry": "starter/memphis-candidate.css",
+  "themeCss": "memphis-candidate.web.css",
+  "defaultEntryUnchanged": true,
+  "normalReferenceSHA256": "8c21944b1c10f5e22950726a3f93ae826300844779582a0f7cdd43963ae4b963",
+  "sources": [
+    {
+      "path": "platforms/web-interaction.css",
+      "normalizedSHA256": "05ff2bc185fb4c11fa315d1eb6625a3b1c128d72923c5eec63205347b321f426"
+    },
+    {
+      "path": "themes/quiet-light.css",
+      "normalizedSHA256": "fcc955934d1820c19a9b2df82b09cb94f82a5cf8b29ad5361ed06b8730e218ad"
+    },
+    {
+      "path": "themes/soft-bloom-candidate.css",
+      "normalizedSHA256": "a857a51fb422c6213da9acb991735aed88729b39a3005d4345e363267cdb0fda"
+    },
+    {
+      "path": "starter/components.css",
+      "normalizedSHA256": "b22076a9533f7ef61d4a68cb455789d7f9fbb9ebe7e9a851e66d53f56b5702ec"
+    },
+    {
+      "path": "themes/memphis-candidate.css",
+      "normalizedSHA256": "cba8dfd5fbdbf258b3ed0cc6c7980202eab2b18d5581d53cbd210beb598134a0"
+    },
+    {
+      "path": "themes/memphis-candidate.recipe.css",
+      "normalizedSHA256": "9ceedf529743afb26082a25c6940e455cca4d1518e85a8949f2c4ca59732fdd6"
+    },
+    {
+      "path": "themes/memphis-candidate.states.css",
+      "normalizedSHA256": "91c6a567b6fc9c2e0262893b950f9e65d453c8b4e2cd8d9350355254ee445290"
+    },
+    {
+      "path": "starter/graphic-interaction.css",
+      "normalizedSHA256": "796bd0c550d11fce60a644cf5f61b34b10aa90b797d887515b7b991a395a19e4"
+    },
+    {
+      "path": "platforms/web-compact-group-candidate.css",
+      "normalizedSHA256": "891d0fa856bddd17b6c14beb6bd2608927648d55f2271916a32aee08417d392a"
+    }
+  ],
+  "outputSHA256": "b55af44e890b9b1775b11dfda8c0580a739baf28039e093d54d5bb24800bfbd9",
+  "calibratedScope": [
+    "Lantai memory root list/timeline",
+    "Lantai manual summary"
+  ],
+  "interactionProfile": "compact-group-candidate: explicit opt-in, not promoted",
+  "interactionHelper": "compact-group-candidate.js",
+  "interactionHelperSHA256": "e0291da8097707fcc3fe7cf38258b38374c53da5331f863c33e8ec2d5ebc4e17",
+  "excluded": [
+    "settings/cleaning",
+    "business data/API/persistence",
+    "host/device acceptance",
+    "promotion"
+  ],
+  "distribution": {
+    "change": "Internal development comments removed; CSS rules unchanged; upstream outputSHA256 retained for provenance",
+    "outputSHA256": "279602b0da97d280e90ab1c4b94fced524fa0a91dd161cc932aa9602a651bbec"
+  }
+}

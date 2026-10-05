@@ -1,4 +1,5 @@
 import {emptySummary,assertSummary,summaryOf} from '../summary/data.js';
+import {assertCumulative,inheritCumulative} from '../cumulative/data.js';
 const clone = value => structuredClone(value);
 export const SCHEMA = 1;
 export function emptyRoot(rootId) { return { schema: SCHEMA, rootId, revision: 0, events: [], summary:emptySummary() }; }
@@ -64,6 +65,7 @@ export function assertRoot(root, target) {
   for (const event of root.events) { validateEvent(event); if(ids.has(event.id)) throw new Error('重复记忆身份'); ids.add(event.id); }
   assertMergeRelations(root.events, Object.hasOwn(root, 'deletedMergeIds') ? root.deletedMergeIds : []);
   if(Object.hasOwn(root,'summary')){assertSummary(root.summary,root.events);if(root.summary.pending?.events.some(event=>root.deletedMergeIds?.includes(event.id)))throw new Error('待审核身份占用合并删除证明');}
+  if(Object.hasOwn(root,'cumulative'))assertCumulative(root.cumulative);
   return clone(root);
 }
 export function inheritEvents(events, floor) {
@@ -110,5 +112,5 @@ export function inheritMemoryRoot(root,rootId,floor) {
   summary.preferences.manual.startFloor=Math.min(summary.preferences.manual.startFloor,floor);
   summary.preferences.manual.endFloor=null;
   summary.preferences.auto.startFloor=Math.min(summary.preferences.auto.startFloor,floor);
-  return {...emptyRoot(rootId),events:selected,summary};
+  return {...emptyRoot(rootId),events:selected,summary,...(Object.hasOwn(root,'cumulative')?{cumulative:inheritCumulative(root.cumulative,floor)}:{})};
 }

@@ -10,6 +10,9 @@ import { createMainApiIdentity } from './main-api-identity.js';
 import { createApiSettingsOperations } from './api-settings-operations.js';
 import { createEventSummaryService } from '../../domain/summary/service.js';
 import { createSummaryController } from '../../app/summary-controller.js';
+import { createCumulativeSummaryService } from '../../domain/cumulative/service.js';
+import { createAutomaticCumulativeRunner } from '../../domain/cumulative/auto-runner.js';
+import { createCumulativeController } from '../../app/cumulative-controller.js';
 
 const MAIN_EVENTS = ['MAIN_API_CHANGED', 'CHATCOMPLETION_MODEL_CHANGED', 'CHATCOMPLETION_SOURCE_CHANGED', 'OAI_PRESET_CHANGED_AFTER', 'PRESET_CHANGED'];
 
@@ -19,12 +22,14 @@ export async function createManagementRuntime({ repository, getContext, document
   const manager = createBackgroundTaskManager(), releases = [];
   let settings = null, controller = null, summaryService=null, summaryController=null, disposed = false, effective = null, epoch = 0, mainEpoch = 0, lastMain = null, jqueryCapable = false;
   const reported = new Map();
+  let cumulativeService=null,cumulativeRunner=null,cumulativeController=null,cumulativeAiEpoch=0,lastCumulativeAi=null;
   const abort = () => {
     disposed = true; settings?.dispose();
     for (const release of releases.splice(0)) release();
     for (const task of manager.list()) manager.cancel(task.taskId);
     controller?.dispose();
     summaryController?.dispose();summaryService?.dispose();
+    cumulativeController?.dispose();cumulativeRunner?.dispose();cumulativeService?.dispose();
   };
   if (signal?.aborted) throw new AiProviderError('unavailable');
   signal?.addEventListener('abort', abort, { once: true });
@@ -124,6 +129,16 @@ export async function createManagementRuntime({ repository, getContext, document
     if (effective !== next) { effective = next; epoch++; }
     return { ...value, epoch };
   }
+  function getCumulativeGenerationSettings() {
+    if(disposed||!settings)throw new AiProviderError('configuration');
+    const cumulative=settings.captureCumulativeGeneration(),shared=settings.captureEventGeneration(),ai=settings.captureAi();
+    const config=settings.getAiConfig();let identity=null;
+    if(config.source==='sillytavern'){mainIdentity();observeMain();identity=JSON.stringify(['sillytavern',mainEpoch]);}
+    else if(config.source==='plugin')identity=JSON.stringify(['plugin',ai.ai.activePresetId]);
+    const ticket=JSON.stringify([ai.epoch,identity]);
+    if(ticket!==lastCumulativeAi){lastCumulativeAi=ticket;cumulativeAiEpoch++;}
+    return {generation:cumulative.generation,cumulativeEpoch:cumulative.epoch,summaryCleaning:shared.generation.summaryCleaning,cleaningEpoch:shared.epoch,aiIdentity:identity,aiEpoch:cumulativeAiEpoch};
+  }
   function projectOriginal(target, ranges) {
     if (disposed || !Array.isArray(ranges) || !ranges.length || !sameTarget(target, repository.captureTarget())) throw new Error('原文来源不可用');
     const chat = getContext()?.chat;
@@ -159,6 +174,9 @@ export async function createManagementRuntime({ repository, getContext, document
   if(typeof captureSummarySource==='function') {
     summaryService=createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource:captureSummarySource});
     summaryController=createSummaryController({repository,service:summaryService,captureSource:captureSummarySource});
+    cumulativeService=createCumulativeSummaryService({repository,manager,provider,getGenerationSettings:getCumulativeGenerationSettings,captureSource:captureSummarySource});
+    cumulativeRunner=createAutomaticCumulativeRunner({repository,service:cumulativeService,captureSource:captureSummarySource});
+    cumulativeController=createCumulativeController({repository,service:cumulativeService,runner:cumulativeRunner,captureSource:captureSummarySource});
     let completedReply=null,lastReplyFloor=(ctx?.chat?.length??0)-1;
     const on=(name,listener)=>{const type=ctx?.eventTypes?.[name];if(!type||typeof source?.on!=='function')return;source.on(type,listener);releases.push(()=>(source.off??source.removeListener)?.call(source,type,listener));};
     // MESSAGE_RECEIVED is emitted for a completed real chat reply. Quiet raw
@@ -167,8 +185,8 @@ export async function createManagementRuntime({ repository, getContext, document
     // STOPPED has no operation identity in ST. It cannot revoke a receipt
     // already emitted for a complete normal reply (it may belong to quiet).
     on('CHAT_CHANGED',()=>{completedReply=null;lastReplyFloor=(getContext()?.chat?.length??0)-1;});
-    on('GENERATION_ENDED',()=>{const reply=completedReply;completedReply=null;try{if(reply&&sameTarget(reply.target,repository.captureTarget())&&getContext()?.chat?.[reply.floor]===reply.message)summaryController.wake();}catch{/* target closed */}});
+    on('GENERATION_ENDED',()=>{const reply=completedReply;completedReply=null;try{if(reply&&sameTarget(reply.target,repository.captureTarget())&&getContext()?.chat?.[reply.floor]===reply.message){summaryController.wake();cumulativeController.wake();}}catch{/* target closed */}});
   }
-  return Object.freeze({ settings, manager, provider, apiOperations, service, controller, summaryService, summaryController, getGenerationSettings, getOriginalSnapshot, originalAvailable,
+  return Object.freeze({ settings, manager, provider, apiOperations, service, controller, summaryService, summaryController, cumulativeService,cumulativeRunner,cumulativeController,getCumulativeGenerationSettings,getGenerationSettings, getOriginalSnapshot, originalAvailable,
     dispose() { if (disposed) return; abort(); signal?.removeEventListener('abort', abort); } });
 }

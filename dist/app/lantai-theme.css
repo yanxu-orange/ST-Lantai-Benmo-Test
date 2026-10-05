@@ -1,7 +1,4 @@
-/* Lantai clear-white adaptation authorized by TASK-009 Amendment 9.
-   Override existing semantic roles after the pinned Quiet Light vendor,
-   plus one explicitly approved product neutral Tag surface.
-   Product mapping, not an upstream Theme Contract promotion. */
+
 :root {
   --ui-color-canvas: #eaf0ed;
   --ui-color-workspace: #ffffff;

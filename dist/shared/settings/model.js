@@ -106,19 +106,33 @@ export function emptySettings() {
   return { schema: 2, revision: 0, domainRevisions: { ai: 0, eventGeneration: 0,recall:0 },recall:defaultRecallSettings(), credentials: [], ai: { source: null, activePresetId: null, presets: [] },
     eventGeneration: { eventWords: createDefaultEventWords(), promptOverrides: {}, generationMode: 'quality', customPrompts: [], summaryCleaning: { rules: createDefaultCleaningRules() } } };
 }
+export function assertCumulativeGeneration(value) {
+  try {
+    if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).some(key=>!['promptOverrides','injectionPosition'].includes(key)))invalid();
+    if(Object.hasOwn(value,'promptOverrides')) {
+      const prompts=value.promptOverrides;
+      if(!prompts||Object.getPrototypeOf(prompts)!==Object.prototype||Object.entries(prompts).some(([key,item])=>!['identity','rules','outputFormat'].includes(key)||typeof item!=='string'))invalid();
+    }
+    if(Object.hasOwn(value,'injectionPosition')&&(!Number.isSafeInteger(value.injectionPosition)||value.injectionPosition<0||value.injectionPosition>10000))invalid();
+    return frozenSettingsCopy(value);
+  }catch{throw new SettingsError();}
+}
 export function assertSettings(value) {
   try {
     const legacy = value?.schema === 1;
     const hasRecall=Object.hasOwn(value??{},'recall'),hasRecallRevision=Object.hasOwn(value?.domainRevisions??{},'recall');
+    const hasCumulative=Object.hasOwn(value??{},'cumulativeGeneration'),hasCumulativeRevision=Object.hasOwn(value?.domainRevisions??{},'cumulativeGeneration');
+    if(hasCumulative!==hasCumulativeRevision)invalid();
     if(hasRecall!==hasRecallRevision)invalid();
-    exact(value, ['schema', 'revision', 'domainRevisions', 'ai', 'eventGeneration', ...(legacy ? [] : ['credentials']),...(hasRecall?['recall']:[])]);
+    exact(value, ['schema', 'revision', 'domainRevisions', 'ai', 'eventGeneration', ...(legacy ? [] : ['credentials']),...(hasRecall?['recall']:[]),...(hasCumulative?['cumulativeGeneration']:[])]);
     if (![1, 2].includes(value.schema) || !Number.isSafeInteger(value.revision) || value.revision < 0) invalid();
-    exact(value.domainRevisions, ['ai', 'eventGeneration',...(hasRecallRevision?['recall']:[])]);
+    exact(value.domainRevisions, ['ai', 'eventGeneration',...(hasRecallRevision?['recall']:[]),...(hasCumulativeRevision?['cumulativeGeneration']:[])]);
     if (Object.values(value.domainRevisions).some(version => !Number.isSafeInteger(version) || version < 0)
-      || value.domainRevisions.ai + value.domainRevisions.eventGeneration +(value.domainRevisions.recall??0)!== value.revision) invalid();
+      || value.domainRevisions.ai + value.domainRevisions.eventGeneration +(value.domainRevisions.recall??0)+(value.domainRevisions.cumulativeGeneration??0)!== value.revision) invalid();
     ai(value.ai); const eventGeneration = generation(value.eventGeneration);
     if(!hasRecall&&(value.domainRevisions.recall??0)!==0)invalid();
     const migrated = { ...value, schema: 2, credentials: legacy ? [] : value.credentials, eventGeneration,domainRevisions:{...value.domainRevisions,recall:value.domainRevisions.recall??0},recall:hasRecall?assertRecallSettings(value.recall):defaultRecallSettings() };
+    if(hasCumulative)migrated.cumulativeGeneration=assertCumulativeGeneration(value.cumulativeGeneration);
     if (!Array.isArray(migrated.credentials)) invalid();
     const ids = new Set();
     for (const credential of migrated.credentials) {

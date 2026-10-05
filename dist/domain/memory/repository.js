@@ -1,6 +1,7 @@
 import { assertRoot, validateEvent, validateEventForSave, activeEvents } from './model.js';
 import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence} from '../summary/data.js';
 import {matchesStoredSummarySource} from '../summary/source.js';
+import {cumulativeOf,assertCumulativePreferences,assertCumulativeExclusions,assertCumulativePending,assertCumulativeVersion,baseSnapshotOf,cumulativeCoverage} from '../cumulative/data.js';
 export function sameTarget(a, b) { return !!a && !!b && !!a.chatId && !!a.rootId && Number.isSafeInteger(a.epoch) && a.chatId === b.chatId && a.rootId === b.rootId && a.epoch === b.epoch; }
 const copy = value => structuredClone(value);
 const equal = (a, b) => {
@@ -72,9 +73,93 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     const ids=new Set(),timestamp=now();
     return events.map(candidate=>{if(ids.has(candidate?.id)||root.events.some(event=>event.id===candidate?.id)||root.deletedMergeIds?.includes(candidate?.id)||candidate?.mergedFrom!=null||candidate?.supersededBy!=null)throw new Error('生成切片身份或关系无效');ids.add(candidate.id);return validateEventForSave({...copy(candidate),createdAt:timestamp,updatedAt:timestamp,sources:[copy(actualRange)],batch:{id,sources:[copy(actualRange)]}});});
   };
+  const captureCumulativeRoot=(target,root)=>freeze({target:copy(target),cumulative:cumulativeOf(root)});
+  const matchCumulative=(root,target,snapshot)=>{
+    if(!snapshot||!sameTarget(target,snapshot.target)||!equal(cumulativeOf(root),snapshot.cumulative))throw new Error('古法基版、配置或进度已变化');
+  };
+  const cumulativeGuard=(target,snapshot,options,required=false)=>current=>{
+    if(required&&typeof options.isCurrent!=='function'||(options.isCurrent??(()=>true))()!==true)throw new Error('古法来源或配置已失效');
+    matchCumulative(current,target,snapshot);return true;
+  };
+  const cumulativeMutation=(target,selection,options,change,required=false)=>{
+    const frozen=copy(target),snapshot=copy(selection);
+    return enqueue(async()=>{const root=await read(frozen);matchCumulative(root,frozen,snapshot);const domain=cumulativeOf(root),guard=cumulativeGuard(frozen,snapshot,options,required);guard(root);
+      const changed=change(domain);if(!changed)return {status:'unchanged',root,selection:captureCumulativeRoot(frozen,root)};
+      const next={...root,revision:root.revision+1,cumulative:{...changed,revision:domain.revision+1}};
+      const committed=await commit(frozen,root,next,guard);
+      return {status:'committed',root:committed,selection:captureCumulativeRoot(frozen,committed)};
+    });
+  };
+  const consumeCumulativePending=(domain,draft,operation,options)=>{
+    if(domain.pending){const pending=domain.pending,original=pending.version;
+      if(options.pendingId!==pending.id||pending.operation!==operation||draft.id!==original.id||draft.taskId!==original.taskId||!equal(draft.baseSnapshot,original.baseSnapshot)||!equal(draft.sourceSnapshot,original.sourceSnapshot)||!equal(draft.coverageRanges,original.coverageRanges)||!equal(draft.settingsEvidence,original.settingsEvidence))throw new Error('古法待审核身份或来源已变化');
+    }else if(options.pendingId!==undefined)throw new Error('古法待审核已变化');
+    const next={...domain};delete next.pending;return next;
+  };
   return {
     captureTarget: () => { const target = adapter.captureTarget(); requireTarget(target); return copy(target); },
     read,
+    async captureCumulative(target){const frozen=copy(target);return captureCumulativeRoot(frozen,await read(frozen));},
+    matchesCumulative(target,snapshot){try{requireTarget(target);matchCumulative(assertRoot(adapter.peekConfirmed(target),target),target,snapshot);requireTarget(target);return true;}catch{return false;}},
+    updateCumulativePreferences(target,selection,patch,options={}) {
+      const draft=copy(patch);
+      if(!draft||Object.getPrototypeOf(draft)!==Object.prototype||Object.keys(draft).some(key=>!['manual','auto'].includes(key))||Object.values(draft).some(item=>!item||Object.getPrototypeOf(item)!==Object.prototype))throw new Error('古法参数按模式保存');
+      return cumulativeMutation(target,selection,options,domain=>({...domain,preferences:assertCumulativePreferences({...domain.preferences,...Object.fromEntries(Object.entries(draft).map(([mode,item])=>[mode,{...domain.preferences[mode],...item}]))})}));
+    },
+    setCumulativeExcludedFloors(target,selection,records,options={}) {
+      const excludedFloors=assertCumulativeExclusions(records);return cumulativeMutation(target,selection,options,domain=>({...domain,excludedFloors}));
+    },
+    saveCumulativePending(target,selection,pending,options={}) {
+      const draft=assertCumulativePending(pending);return cumulativeMutation(target,selection,options,domain=>{
+        if(domain.pending&&!equal(domain.pending,draft))throw new Error('已有其他或变化的古法待审核版本');
+        return {...domain,pending:draft};
+      },true);
+    },
+    clearCumulativePending(target,selection,options={}) {
+      return cumulativeMutation(target,selection,options,domain=>{if(!domain.pending)return null;const next={...domain};delete next.pending;return next;});
+    },
+    removeCumulativeHiddenSegments(target,selection,ids,options={}) {
+      const selected=selectedIds(ids,true);
+      return cumulativeMutation(target,selection,options,domain=>{
+        const segments=domain.hiddenSegments??[];if([...selected].some(id=>!segments.some(segment=>segment.id===id)))throw new Error('古法隐藏段已变化');
+        return {...domain,hiddenSegments:segments.filter(segment=>!selected.has(segment.id))};
+      });
+    },
+    appendCumulative(target,selection,version,options={}) {
+      const draft=assertCumulativeVersion(version);return cumulativeMutation(target,selection,options,domain=>{
+        const previous=domain.versions.at(-1);
+        if(domain.versions.some(item=>item.id===draft.id||item.taskId===draft.taskId)||!equal(draft.baseSnapshot,baseSnapshotOf(previous))||!equal(draft.coverageRanges,cumulativeCoverage([...(previous?.coverageRanges??[]),draft.sourceSnapshot.requestedRange])))throw new Error('古法完整基版或累计来源已变化');
+        const record={...draft,createdAt:now(),updatedAt:now()};
+        const next={...consumeCumulativePending(domain,draft,'append',options),versions:[...domain.versions,record],currentVersionId:record.id,progress:{lastProcessedFloor:Math.max(...record.coverageRanges.map(range=>range.end))}};
+        if(draft.settingsEvidence.hideSource===true){
+          if(domain.hiddenSegments?.some(segment=>segment.id===draft.taskId))throw new Error('古法隐藏任务已采用，不得重复提交');
+          next.hiddenSegments=[...(domain.hiddenSegments??[]),{id:draft.taskId,messages:draft.sourceSnapshot.sentFloors.map(({floor,identity,role,date})=>({floor,identity,role,date}))}];
+        }
+        return next;
+      },true);
+    },
+    replaceCumulative(target,selection,version,options={}) {
+      const draft=assertCumulativeVersion(version);return cumulativeMutation(target,selection,options,domain=>{
+        const previous=domain.versions.at(-1);
+        if(!previous||draft.id!==previous.id||domain.versions.slice(0,-1).some(item=>item.taskId===draft.taskId)||!equal(draft.baseSnapshot,previous.baseSnapshot)||!equal(draft.sourceSnapshot,previous.sourceSnapshot)||!equal(draft.coverageRanges,previous.coverageRanges))throw new Error('古法再生成必须保留冻结基版和原始来源');
+        if(!domain.pending||domain.pending.operation!=='replace')throw new Error('古法再生成须明确审核采用');
+        const record={...draft,createdAt:previous.createdAt,updatedAt:now()};
+        return {...consumeCumulativePending(domain,draft,'replace',options),versions:[...domain.versions.slice(0,-1),record]};
+      },true);
+    },
+    editCurrentCumulative(target,selection,patch,options={}) {
+      const draft=copy(patch);if(!draft||Object.keys(draft).some(key=>!['body','startTime','endTime'].includes(key)))throw new Error('古法仅允许编辑正文及起止时间');
+      return cumulativeMutation(target,selection,options,domain=>{
+        const previous=domain.versions.at(-1);if(!previous)throw new Error('没有已确认古法版本');
+        const record=assertCumulativeVersion({...previous,...draft,updatedAt:now()}),next={...domain,versions:[...domain.versions.slice(0,-1),record]};delete next.pending;return next;
+      });
+    },
+    restoreCumulative(target,selection,id,options={}) {
+      return cumulativeMutation(target,selection,options,domain=>{
+        const index=domain.versions.findIndex(item=>item.id===id);if(index<0)throw new Error('没有可恢复的古法祖先');
+        const versions=domain.versions.slice(0,index+1),version=versions.at(-1),next={...domain,versions,currentVersionId:id,progress:{lastProcessedFloor:Math.max(...version.coverageRanges.map(range=>range.end))}};delete next.pending;return next;
+      });
+    },
     async captureSummary(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,revision:root.revision,summary:summaryOf(root)});},
     async captureBatch(target,id){const frozen=copy(target),root=await read(frozen),summary=summaryOf(root),batch=summary.batches.find(item=>item.id===id);if(!batch)throw new Error('没有可确认的独立批记录');return freeze({target:frozen,revision:root.revision,summary,batch:copy(batch),events:copy(root.events.filter(event=>batch.eventIds.includes(event.id)))});},
     matchesSummary(target,snapshot){try{requireTarget(target);matchSummary(assertRoot(adapter.peekConfirmed(target),target),target,snapshot);requireTarget(target);return true;}catch{return false;}},

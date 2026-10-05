@@ -13,22 +13,44 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
   onBack = () => {}, onClose = () => {}, uuid = () => globalThis.crypto.randomUUID() } = {}) {
   if (!settings?.captureEventGeneration || !settings?.saveEventGeneration) throw new TypeError('总结设置接口不可用');
   const listeners = new Set();
-  let disposed = false, busy = false, baseline = null;
+  let disposed = false, busy = false, baseline = null, checking = false, externalPending = false;
   let state = { status: 'loading', route: 'settings', draft: null, excludedFloors: [], promptDrafts: {}, customDrafts: {},
     libraryDraft: null, libraryOpen: null, librarySelection: [], libraryMulti: false, ruleDraft: null, ruleId: null,
     quickOpen: false, opened: {}, scroll: {}, message: '', error: null };
   const inspect = () => frozenSettingsCopy(state);
   const notify = () => { if(!listeners.size)return;const snapshot=inspect();for (const listener of [...listeners]) { try { listener(snapshot); } catch { /* Isolated views. */ } } };
   const current = () => { if (disposed) return false; try { return isCurrent() === true && !disposed; } catch { return false; } };
-  const editable = () => !disposed && !busy && !!baseline && state.status === 'ready' && current();
+  const editable = () => !disposed && !busy && !!baseline && state.status === 'ready' && current() && validateBaseline();
   const fail = error => { state.status = error?.code === 'SETTINGS_COMMIT_UNCONFIRMED' ? 'unconfirmed' : 'error'; state.error = error?.code ?? 'INVALID_SETTINGS'; state.message = message(error); };
+  function validateBaseline() {
+    if(checking)return false;
+    checking=true;
+    try {
+      const valid=settings.matchesEventGeneration?settings.matchesEventGeneration(baseline):settings.captureEventGeneration().epoch===baseline.epoch;
+      if(!valid)throw new SettingsError('SETTINGS_CONFLICT');
+      return true;
+    }catch { fail(new SettingsError('SETTINGS_CONFLICT'));notify();return false; }
+    finally { checking=false; }
+  }
+  const unsubscribeSettings=settings.subscribe?.(authority=>{
+    if(disposed||busy||!baseline)return;
+    if(!current()){externalPending=false;fail(new SettingsError('SETTINGS_CONFLICT'));notify();return;}
+    if(authority?.confirmed===false&&state.status==='ready'){
+      externalPending=true;fail(new SettingsError('SETTINGS_CONFLICT'));notify();
+    }else if(authority?.confirmed===true&&externalPending){
+      externalPending=false;
+      // An unrelated domain save can temporarily remove global confirmation.
+      // Re-enable this unchanged draft only after server-confirmed authority returns.
+      if(validateBaseline()){state.status='ready';state.error=null;state.message='';notify();}
+    }else if(state.status==='ready')validateBaseline();
+  });
   function afterAwait() {
     if (disposed) return false;
     if (current()) return true;
     if (disposed) return false;
     // A target may become available again after this operation has finished.
     // Keep the old draft, but require an explicit read before further edits.
-    fail(new SettingsError('SETTINGS_CONFLICT'));
+    externalPending=false;fail(new SettingsError('SETTINGS_CONFLICT'));
     return false;
   }
   function edit(work) { if (!editable()) return false; work(); state.message = ''; state.error = null; notify(); return true; }
@@ -55,22 +77,36 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
     }
     finally { busy = false; if (!disposed) notify(); }
   }
-  async function read() {
+  async function load(useConfirmed=false) {
     if (disposed || busy) return false;
     busy = true; state.status = state.status === 'unconfirmed' ? 'unconfirmed' : 'loading'; notify();
     try {
-      await settings.read();
+      let captured=null;
+      if(useConfirmed){try{captured=settings.captureEventGeneration();}catch{/* No reliable snapshot: read server authority. */}}
+      if(!captured)await settings.read();
       if (!afterAwait()) return false;
       const floors = exclusions?.read ? await exclusions.read() : [];
       if (!afterAwait()) return false;
       if (!Array.isArray(floors)) throw new SettingsError();
-      const captured = settings.captureEventGeneration();
-      baseline = captured; state = { ...state, status: 'ready', draft: copy(captured.generation), excludedFloors: copy(floors),
+      if(captured&&settings.matchesEventGeneration&&!settings.matchesEventGeneration(captured))throw new SettingsError('SETTINGS_CONFLICT');
+      captured??=settings.captureEventGeneration();
+      externalPending=false;baseline = captured; state = { ...state, status: 'ready', draft: copy(captured.generation), excludedFloors: copy(floors),
         promptDrafts: {}, customDrafts: {}, libraryDraft: state.route === 'library' ? copy(captured.generation.eventWords) : null,
         librarySelection: [], libraryOpen: null, ruleDraft: null, ruleId: null, route: state.route === 'rule' ? 'cleaning' : state.route, error: null, message: '' };
       return true;
     } catch (error) { if (!disposed) fail(error); return false; }
     finally { busy = false; if (!disposed) notify(); }
+  }
+  // Explicit recovery always reads persisted authority; normal opens only reuse confirmed domains.
+  const read=()=>load(false);
+  async function init() {
+    if(disposed||busy)return false;
+    if(baseline){
+      if(state.status!=='ready')return false;
+      if(!afterAwait()){notify();return false;}
+      return validateBaseline();
+    }
+    return load(true);
   }
   async function floor(action, value) {
     if (!editable() || typeof exclusions?.[action] !== 'function') return false;
@@ -83,6 +119,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       const floors = await exclusions.read();
       if (!afterAwait()) return false;
       if (!Array.isArray(floors)) throw new SettingsError();
+      if (!validateBaseline()) return false;
       state.excludedFloors = copy(floors); state.status = 'ready'; state.message = '已保存。'; state.error = null; return true;
     } catch (error) { if (!disposed) fail(error); return false; }
     finally { busy = false; if (!disposed) notify(); }
@@ -90,7 +127,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
   function custom(id) { return state.customDrafts[id] ?? state.draft?.customPrompts.find(item => item.id === id); }
   function rule(id) { return baseline?.generation.summaryCleaning.rules.find(item => item.id === id); }
   return Object.freeze({
-    inspect, read, init: read,
+    inspect, read, init,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     setScroll(route, value) { if (!disposed && Number.isFinite(value) && value >= 0) state.scroll[route] = value; },
     setOpen(key, value) { if (!disposed) state.opened[key] = !!value; },
@@ -176,6 +213,6 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       state.promptDrafts = {}; state.customDrafts = {}; onBack(); return true;
     },
     close() { if (!disposed) { onClose(); return true; } return false; },
-    dispose() { if (disposed) return; disposed = true; state.status = 'disposed'; state.error = null; state.message = ''; listeners.clear(); },
+    dispose() { if (disposed) return; disposed = true; unsubscribeSettings?.(); state.status = 'disposed'; state.error = null; state.message = ''; listeners.clear(); },
   });
 }

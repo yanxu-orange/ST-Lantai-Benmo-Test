@@ -52,7 +52,7 @@ export function createSummaryController({repository,service,captureSource,onComm
     async saveParams(){await queueParameters();if(state.parametersUnconfirmed)throw new Error('保存结果尚未确认，请重新读取');if(parameterFailure?.serial===ticket)throw parameterFailure.error;},
     async start() {
       if(state.busy)return;const origin=state.origin,params=structuredClone(state.params);state.message='';state.drafts=null;
-      await action(async current=>{await this.saveParams();if(!current())return;if(origin==='auto'){if(!params.enabled)throw new Error('请先启用自动总结');runner.start();}else {const id=await service.start('manual',params);if(current()){state.taskId=id;taskChanged(service.inspect(id));}}});
+      await action(async current=>{await this.saveParams();if(!current())return;if(origin==='auto'){runner.start();}else {const id=await service.start('manual',params);if(current()){state.taskId=id;taskChanged(service.inspect(id));}}});
     },
     async retry(){if(state.busy||!state.taskId)return;const taskId=state.taskId,drafts=structuredClone(state.drafts);await action(async current=>{const id=await service.retry(taskId,drafts);if(!current())return;if(!id)throw new Error('草稿来源或配置已变化，不能重试');state.taskId=id;state.drafts=null;state.error='';if(service.inspect(id)?.origin==='auto')runner.transferTask(id);taskChanged(service.inspect(id));});},
     async regenerate(batchId){if(state.busy)return;state.drafts=null;await action(async current=>{const id=await service.start('regeneration',{batchId});if(current()){state.taskId=id;taskChanged(service.inspect(id));}});},

@@ -1,4 +1,4 @@
-// Pure compatibility evidence: old fixed 01e50d63, adapted to TASK-016 boundaries.
+// Compatibility source revision: 01e50d63.
 export const DETAIL_QUERY_SURFACE_VERSION = 'detail-query-surface-v1';
 
 // Retrieval-only normalization. Preserve compatibility numbers/symbols (notably
