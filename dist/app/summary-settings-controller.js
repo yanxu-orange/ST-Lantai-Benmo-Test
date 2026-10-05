@@ -13,7 +13,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
   onBack = () => {}, onClose = () => {}, uuid = () => globalThis.crypto.randomUUID() } = {}) {
   if (!settings?.captureEventGeneration || !settings?.saveEventGeneration) throw new TypeError('总结设置接口不可用');
   const listeners = new Set();
-  let disposed = false, busy = false, baseline = null, checking = false, externalPending = false;
+  let disposed = false, busy = false, baseline = null, checking = false, externalPending = false, modeSaving = false, requestedMode = null, modePromise = null;
   let state = { status: 'loading', route: 'settings', draft: null, excludedFloors: [], promptDrafts: {}, customDrafts: {},
     libraryDraft: null, libraryOpen: null, librarySelection: [], libraryMulti: false, ruleDraft: null, ruleId: null,
     quickOpen: false, pendingShortcut: null, cleaningPreview: null, previewMode: null, opened: {}, scroll: {}, message: '', error: null };
@@ -54,9 +54,9 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
     return false;
   }
   function edit(work) { if (!editable()) return false; work(); state.message = ''; state.error = null; notify(); return true; }
-  async function commit(work, adopted = () => {}, previewCleaning = false) {
+  async function commit(work, adopted = () => {}, previewCleaning = false, modeChange = false) {
     if (!editable()) return false;
-    const draft = copy(baseline.generation), epoch = baseline.epoch;
+    let draft = copy(baseline.generation), epoch = baseline.epoch;
     try { work(draft); } catch { state.message = '请检查填写内容。'; state.error = 'INVALID_SETTINGS'; notify(); return false; }
     if (previewCleaning) state.cleaningPreview = copy(draft.summaryCleaning.rules);
     busy = true; state.status = 'saving'; state.message = ''; state.error = null; notify();
@@ -64,9 +64,16 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       // The repository reads fresh authority inside its write queue, merges
       // unrelated domains and rejects event epoch changes (including A-B-A).
       // Keep that pre-save read and final readback; do not add an outer read.
-      await settings.saveEventGeneration(draft, { expectedEpoch: epoch, isCurrent: current });
-      if (!afterAwait()) return false;
-      baseline = settings.captureEventGeneration(); state.draft = copy(baseline.generation);
+      while (true) {
+        await settings.saveEventGeneration(draft, { expectedEpoch: epoch, isCurrent: current });
+        if (!afterAwait()) return false;
+        baseline = settings.captureEventGeneration(); state.draft = copy(baseline.generation);
+        // A rapid mode change replaces only the queued choice. Each write still
+        // starts from confirmed authority and preserves unrelated settings.
+        if (!modeChange || requestedMode === baseline.generation.generationMode) break;
+        draft = copy(baseline.generation); epoch = baseline.epoch;
+        draft.generationMode = requestedMode;
+      }
       adopted(); state.pendingShortcut = null; state.cleaningPreview = null; state.previewMode = null; state.status = 'ready'; state.message = '已保存。'; return true;
     } catch (error) {
       if (!disposed) {
@@ -132,7 +139,18 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     setScroll(route, value) { if (!disposed && Number.isFinite(value) && value >= 0) state.scroll[route] = value; },
     setOpen(key, value) { if (!disposed) state.opened[key] = !!value; },
-    setMode(mode) { if (!['fast', 'quality', 'enhanced'].includes(mode) || !editable()) return Promise.resolve(false); state.previewMode = mode; return commit(draft => { draft.generationMode = mode; }); },
+    setMode(mode) {
+      if (!['fast', 'quality', 'enhanced'].includes(mode)) return Promise.resolve(false);
+      if (modeSaving && busy && current()) {
+        requestedMode = mode; state.previewMode = mode; notify(); return modePromise;
+      }
+      if (!editable()) return Promise.resolve(false);
+      if (mode === baseline.generation.generationMode) return Promise.resolve(true);
+      requestedMode = mode; state.previewMode = mode; modeSaving = true;
+      modePromise = commit(draft => { draft.generationMode = mode; }, () => {}, false, true)
+        .finally(() => { modeSaving = false; requestedMode = null; modePromise = null; });
+      return modePromise;
+    },
     editPrompt(key, text) { if (!SUMMARY_PROMPT_KEYS.includes(key) || typeof text !== 'string') return false; return edit(() => { state.promptDrafts[key] = text; }); },
     restorePrompt(key) { return this.editPrompt(key, summaryPromptDefault(key)); },
     cancelPrompt(key) { return edit(() => { delete state.promptDrafts[key]; state.opened[key] = false; }); },

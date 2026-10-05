@@ -340,8 +340,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     let active = false;
     for (const page of [memoryContent,summaryContent,settingsContent]) {
       const themed = !!page?.querySelector('.lantai');
-      if (themed) { if (page.getAttribute('data-ui-theme') !== theme) page.setAttribute('data-ui-theme', theme); if (!page.hidden) active = true; }
-      else page?.removeAttribute('data-ui-theme');
+      // Empty page containers also own the theme before their first child is
+      // inserted. Ancestor-scoped supplier rules must match on the first layout.
+      if (page && page.getAttribute('data-ui-theme') !== theme) page.setAttribute('data-ui-theme', theme);
+      if (themed && !page.hidden) active = true;
     }
     // The complete fixed candidate contains shared choice/hit-area semantics.
     // Its Memphis visuals are scoped; both themes retain that shared layer.

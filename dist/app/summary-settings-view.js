@@ -92,6 +92,7 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     if (disposed) return;
     const s = latest=snapshot; observeSaved(s);
     if (composing) { pendingRender = true; return; }
+    const currentScroll = container.querySelector('.lt-main')?.scrollTop;
     remember(false);
     const previousRoute = renderedRoute;
     if (editingText) { patchStatus(s); return; }
@@ -102,11 +103,11 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     const title = s.route === 'settings' ? '事件总结设置' : s.route === 'library' ? '事件词库' : s.route === 'cleaning' ? '总结文本清洗' : s.ruleId ? '编辑清洗规则' : '新建清洗规则';
     const locked = s.status !== 'ready', content = !s.draft ? (s.status==='loading'?'<p class="lt-status">正在读取设置…</p>':'<p class="lt-status">设置暂不可用。</p>') : s.route === 'settings' ? settings(s) : s.route === 'library' ? library(s) : s.route === 'cleaning' ? cleaning(s) : s.ruleDraft ? rule(s) : '';
     container.innerHTML = `<section class="lantai lt-summary-settings ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(container)}" aria-label="${title}"><header class="lt-header ui-header ui-header--centered">${icon('back', '返回', 'back')}<h1 class="ui-page-title">${title}</h1>${icon('close', '关闭兰台本末', 'close')}</header><main class="lt-main ui-main" tabindex="-1">${content}<p data-ss-message role="${s.error ? 'alert' : 'status'}" class="${s.error ? 'lt-error' : 'lt-status'}" ${s.error && s.message ? '' : 'hidden'}>${s.error ? escape(s.message) : ''}</p>${s.status === 'error' || s.status === 'unconfirmed' ? button('重新读取已保存设置', 'read', '', true) : ''}</main><footer class="lt-footer ui-action-footer" ${s.route === 'library' || s.route === 'rule' ? '' : 'hidden'}>${s.route === 'library' ? '<button type="button" class="ui-button ui-button--primary" data-ss-action="save-library">保存</button>' : s.route === 'rule' ? `<div class="lt-summary-editor-actions">${button('取消', 'cancel-rule')}<button type="button" class="ui-button ui-button--primary" data-ss-action="save-rule">保存</button></div>` : ''}</footer></section>`;
-    if (locked) for (const control of container.querySelectorAll('main input,main textarea,main select,main button,footer button')) control.disabled = true;
+    if (locked) for (const control of container.querySelectorAll('main input,main textarea,main select,main button,footer button')) control.disabled = !(s.status === 'saving' && s.previewMode && control.name === 'summary-mode');
     const saved = container.ownerDocument.createElement('p'); saved.className = 'lt-saved lt-status'; saved.dataset.ssSaved = ''; saved.setAttribute('role', 'status'); saved.hidden = true;
     container.querySelector('.lt-main').after(saved); patchStatus(s);
     const reload = container.querySelector('[data-ss-action=read]'); if (reload) reload.disabled = ['saving', 'loading'].includes(s.status);
-    renderedRoute = s.route; container.querySelector('.lt-main').scrollTop = s.scroll[s.route] ?? 0;
+    renderedRoute = s.route; container.querySelector('.lt-main').scrollTop = s.route === previousRoute && currentScroll != null ? currentScroll : s.scroll[s.route] ?? 0;
     if (focusData && s.route === previousRoute) {
       const controls = [...container.querySelectorAll('input,textarea,select,button')];
       const next = controls.find(node => focusData.field ? node.dataset.ssField === focusData.field && node.dataset.key === focusData.key && node.dataset.id === focusData.id && node.dataset.field === focusData.subfield : focusData.action && node.dataset.ssAction === focusData.action && node.dataset.id === focusData.id && node.dataset.key === focusData.key);
