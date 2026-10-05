@@ -135,9 +135,18 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
           if (/[\u0000-\u001f\u007f-\u009f]/.test(value)) assertCredential(value);
           return value.trim() ? [{ presetId, value: assertCredential(value) }] : copies.has(presetId) ? [{ presetId, value: copies.get(presetId) }] : [];
         });
-        // Confirm external changes before comparing this long-lived draft's AI
-        // epoch; do not replace the draft or quietly rebase its baseline.
-        await repository.read();
+        let current;
+        try { current = repository.captureAi(); }
+        catch (error) {
+          if (error?.code !== 'SETTINGS_COMMIT_UNCONFIRMED') throw error;
+          // A local host update can invalidate authority before saveAi enters
+          // its queue. Reconcile only that case, keeping this draft's epoch.
+          await repository.read();
+          current = repository.captureAi();
+        }
+        if (current.epoch !== baseline.epoch) throw { code: 'SETTINGS_CONFLICT' };
+        // Confirmed authority needs only the repository's queued fresh read
+        // and its final server confirmation, with no outer network read.
         const result = await repository.saveAi(draft, { expectedEpoch: baseline.epoch, credentials });
         if (result?.status !== 'committed') throw { code: 'SETTINGS_COMMIT_UNCONFIRMED' };
         if (closed) return true;

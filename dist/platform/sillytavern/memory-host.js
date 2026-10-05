@@ -399,6 +399,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if (disposed || currentTicket !== ticket || !panel) return;
       if (!panel.shadowRoot.querySelector('style')) { const style = doc.createElement('style'); style.textContent = css; panel.shadowRoot.prepend(style); }
       if(!memphisStyle){memphisStyle=doc.createElement('style');memphisStyle.media='not all';memphisStyle.textContent=memphisCss;panel.shadowRoot.append(memphisStyle);}
+      // Seed the presentation owner before any view creates its first root.
+      syncMemphis();
       if(!memphisObserver&&Observer){memphisObserver=new Observer(syncMemphis);memphisObserver.observe(content,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});}
       ensureAdapter();
       await adapter.prepare();

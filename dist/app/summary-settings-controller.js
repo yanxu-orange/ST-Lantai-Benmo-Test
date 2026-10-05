@@ -60,10 +60,9 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
     try { work(draft); } catch { state.message = '请检查填写内容。'; state.error = 'INVALID_SETTINGS'; notify(); return false; }
     busy = true; state.status = 'saving'; state.message = ''; state.error = null; notify();
     try {
-      // Confirm unrelated AI changes without replacing this event draft. The
-      // domain epoch below still rejects event changes, including A-B-A.
-      await settings.read();
-      if (!afterAwait()) return false;
+      // The repository reads fresh authority inside its write queue, merges
+      // unrelated domains and rejects event epoch changes (including A-B-A).
+      // Keep that pre-save read and final readback; do not add an outer read.
       await settings.saveEventGeneration(draft, { expectedEpoch: epoch, isCurrent: current });
       if (!afterAwait()) return false;
       baseline = settings.captureEventGeneration(); state.draft = copy(baseline.generation);

@@ -23,3 +23,16 @@ export function applyTheme(root, theme) {
   }
   return next;
 }
+
+// Resolve before replacing a surface, so layout/focus restoration never observes
+// the default theme while waiting for the host MutationObserver. The container
+// (or its shadow host) is authoritative when changing or mounting a page.
+export function surfaceTheme(container) {
+  const ancestor = container.closest?.('[data-ui-theme]');
+  const host = container.getRootNode?.()?.host;
+  for (const owner of [ancestor, host, container.querySelector?.('.lantai')]) {
+    const theme = owner?.getAttribute?.('data-ui-theme');
+    if (isTheme(theme)) return theme;
+  }
+  return DEFAULT_THEME;
+}

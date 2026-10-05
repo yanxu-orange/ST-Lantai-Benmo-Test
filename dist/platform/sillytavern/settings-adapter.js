@@ -4,10 +4,18 @@ import { SETTINGS_KEY, SettingsError, emptySettings, assertSettings, equalSettin
 // The settings endpoint contains host data. Project only this namespace and
 // never expose/log its surrounding payload. Saving uses ST's own exported API.
 export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernContext,
-  fetchImpl = globalThis.fetch, saveHost, loadHostModule = () => import('/script.js'), readServerNamespace } = {}) {
+  fetchImpl = globalThis.fetch, saveHost, loadHostModule = () => import('/script.js'), readServerNamespace, onTiming } = {}) {
   let disposed = false, confirmed = null, marker = null, epoch = 0, aiEpoch = 0, generationEpoch = 0,recallEpoch=0,cumulativeEpoch=0;
   let observed = null, lastAi = null, lastGeneration = null,lastRecall=null,lastCumulative=null, notificationActive = false;
   const listeners = new Set(), events = [], notificationQueue = [];
+  // Opt-in diagnostics only. Never include settings, URLs, headers or errors.
+  // Content-Length is optional server-reported bytes, not decoded payload size.
+  const timingStart = () => typeof onTiming === 'function' ? performance.now() : null;
+  function timingEnd(phase, start, ok, responseBytes = null) {
+    if (start === null) return;
+    try { onTiming(Object.freeze({ phase, durationMs: Math.max(0, performance.now() - start), count: 1, ok, responseBytes })); }
+    catch { /* Diagnostics cannot fail a read or save. */ }
+  }
   function context() {
     if (disposed) throw new SettingsError('SETTINGS_UNAVAILABLE');
     let ctx;
@@ -63,19 +71,27 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
     return ctx;
   }
   async function server() {
+    const start = timingStart(); let ok = false, responseBytes = null;
     try {
-      if (readServerNamespace) return await readServerNamespace();
+      if (readServerNamespace) { const raw = await readServerNamespace(); ok = true; return raw; }
       const ctx = capabilities();
       const response = await fetchImpl('/api/settings/get', { method: 'POST', headers: ctx.getRequestHeaders(),
         cache: 'no-store', body: '{}' });
       if (!response?.ok) throw new Error();
+      if (start !== null) {
+        // Missing/unusable size stays unknown; do not copy or stringify payloads.
+        try { const length = response.headers?.get?.('content-length');
+          if (typeof length === 'string' && /^\d+$/.test(length) && Number.isSafeInteger(Number(length))) responseBytes = Number(length);
+        } catch { /* Optional header metadata is not an authority. */ }
+      }
       const data = await response.json();
       if (typeof data?.settings !== 'string') throw new Error();
       const settings = JSON.parse(data.settings);
       if (!settings || typeof settings !== 'object' || Array.isArray(settings)
         || (settings.extension_settings !== undefined && (!settings.extension_settings || typeof settings.extension_settings !== 'object' || Array.isArray(settings.extension_settings)))) throw new Error();
-      return settings.extension_settings?.[SETTINGS_KEY];
+      ok = true; return settings.extension_settings?.[SETTINGS_KEY];
     } catch { throw new SettingsError('SETTINGS_COMMIT_UNCONFIRMED'); }
+    finally { timingEnd('settings-read', start, ok, responseBytes); }
   }
   async function saver() {
     if (saveHost !== undefined) {
@@ -161,7 +177,9 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
         if (!guard() || marker !== record) throw new SettingsError('SETTINGS_COMMIT_UNCONFIRMED');
         unchanged(ticket);
         if (marker !== record || confirmed) throw new SettingsError('SETTINGS_COMMIT_UNCONFIRMED');
-        try { await save(); } catch { /* Only server confirmation proves success. */ }
+        const saveStart = timingStart(); let saveOk = false;
+        try { await save(); saveOk = true; } catch { /* Only server confirmation proves success. */ }
+        finally { timingEnd('host-save', saveStart, saveOk); }
         unchanged(ticket);
         const raw = await server();
         const actual = raw === undefined ? assertSettings(emptySettings()) : assertSettings(raw);
