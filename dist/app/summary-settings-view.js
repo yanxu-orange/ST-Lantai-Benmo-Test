@@ -15,7 +15,7 @@ const field = (label, attr, value, textarea = false) => `<label class="ui-field 
 export function mountSummarySettingsView(container, controller, { readonlyContent } = {}) {
   if (container?.container) { ({ container, controller, readonlyContent } = container); }
   let disposed = false, editingText = false, composing = false, pendingRender = false, renderedRoute = null, dragging = null;
-  let latest=controller.inspect();
+  let latest=controller.inspect(), renderedSnapshot=null;
   const state = () => latest;
   // The shared work-surface toast is ephemeral. An old receipt is not replayed
   // when this DOM is mounted again over the long-lived controller.
@@ -44,7 +44,7 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     if (item.readonly) {
       let text = item.defaultText;
       if (item.kind === 'words') text = JSON.stringify(s.draft.eventWords.filter(word => word.enabled).map(({ name, definition }) => ({ name, definition })), null, 2);
-      else if (typeof readonlyContent === 'function') text = readonlyContent(item, { mode: (s.previewMode ?? s.draft.generationMode), stage, settings: s.draft });
+      else if (typeof readonlyContent === 'function') text = readonlyContent(item, { mode: s.draft.generationMode, stage, settings: s.draft });
       else if (item.kind === 'drafts') text = '尚待生成。';
       return `<details class="lt-summary-prompt" data-ss-open="${item.key}"${opened}>${promptTitle(item.name, true)}<pre class="lt-summary-readonly" tabindex="0">${escape(text)}</pre></details>`;
     }
@@ -60,7 +60,7 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     }).join('') : '<p class="lt-status lt-summary-custom-empty">暂无自定义提示词</p>';
   }
   function settings(s) {
-    return `<section class="lt-summary-section"><h2>总结内容</h2><div class="lt-summary-panel lt-summary-content-panel"><div class="lt-stack"><h3 class="ui-field__label">不参与总结的楼层</h3><div class="lt-entry"><input class="ui-input" data-ss-floor type="number" min="0" step="1" aria-label="输入要排除的楼层" placeholder="输入楼层">${button('添加', 'add-floor', '', true)}</div><div class="lt-tags">${s.excludedFloors.map(value => typeof value === 'number' ? value : value.floor).sort((a, b) => a - b).map(n => `<span class="ui-tag lt-summary-floor"><span>${n}</span>${icon('close', `移除第 ${n} 楼`, 'remove-floor', `data-floor="${n}"`)}</span>`).join('')}</div></div><div class="lt-summary-divider">${routeLink('总结文本清洗', 'cleaning')}</div></div></section><section class="lt-summary-section"><fieldset class="lt-summary-modes"><legend>生成次数</legend>${s.previewMode ? '<p class="lt-status" role="status" data-ss-mode-pending>保存中…</p>' : ''}<div>${[['fast', '一次生成'], ['quality', '两次生成'], ['enhanced', '三次生成']].map(([mode, name]) => `<label class="lt-mode" data-pending-selection="${s.previewMode === mode}"><input type="radio" name="summary-mode" value="${mode}" ${(s.previewMode ?? s.draft.generationMode) === mode ? 'checked' : ''}>${name}</label>`).join('')}</div><p class="lt-meta">${SUMMARY_MODE_DESCRIPTIONS[(s.previewMode ?? s.draft.generationMode)]}</p></fieldset></section><section class="lt-summary-section"><h2>总结记忆提示词</h2>${SUMMARY_PROMPT_GROUPS[(s.previewMode ?? s.draft.generationMode)].map(group => `<section class="lt-summary-prompt-group"><h3>${group.title}</h3>${group.items.map(item => prompt(item, s, group.stage)).join('')}</section>`).join('')}</section><section class="lt-summary-section"><h2>合并记忆提示词</h2><div class="lt-summary-prompt-group"><h3>记忆合并</h3>${MERGE_PROMPT_FIELDS.map(item => prompt(item, s)).join('')}</div></section><section class="lt-summary-section"><div class="lt-summary-heading"><h2>自定义提示词</h2>${button('＋ 新建', 'new-custom')}</div><div class="lt-summary-panel lt-summary-custom-panel">${custom(s)}</div></section><section class="lt-summary-section"><h2>事件词库</h2>${routeLink('事件词库管理', 'library', 'lt-summary-library-link')}</section>`;
+    return `<section class="lt-summary-section"><h2>总结内容</h2><div class="lt-summary-panel lt-summary-content-panel"><div class="lt-stack"><h3 class="ui-field__label">不参与总结的楼层</h3><div class="lt-entry"><input class="ui-input" data-ss-floor type="number" min="0" step="1" aria-label="输入要排除的楼层" placeholder="输入楼层">${button('添加', 'add-floor', '', true)}</div><div class="lt-tags">${s.excludedFloors.map(value => typeof value === 'number' ? value : value.floor).sort((a, b) => a - b).map(n => `<span class="ui-tag lt-summary-floor"><span>${n}</span>${icon('close', `移除第 ${n} 楼`, 'remove-floor', `data-floor="${n}"`)}</span>`).join('')}</div></div><div class="lt-summary-divider">${routeLink('总结文本清洗', 'cleaning')}</div></div></section><section class="lt-summary-section"><fieldset class="lt-summary-modes"><legend>生成次数</legend><div>${[['fast', '一次生成'], ['quality', '两次生成'], ['enhanced', '三次生成']].map(([mode, name]) => `<label class="lt-mode" ><input type="radio" name="summary-mode" value="${mode}" ${s.draft.generationMode === mode ? 'checked' : ''}>${name}</label>`).join('')}</div><p class="lt-meta">${SUMMARY_MODE_DESCRIPTIONS[s.draft.generationMode]}</p></fieldset></section><section class="lt-summary-section"><h2>总结记忆提示词</h2>${SUMMARY_PROMPT_GROUPS[s.draft.generationMode].map(group => `<section class="lt-summary-prompt-group"><h3>${group.title}</h3>${group.items.map(item => prompt(item, s, group.stage)).join('')}</section>`).join('')}</section><section class="lt-summary-section"><h2>合并记忆提示词</h2><div class="lt-summary-prompt-group"><h3>记忆合并</h3>${MERGE_PROMPT_FIELDS.map(item => prompt(item, s)).join('')}</div></section><section class="lt-summary-section"><div class="lt-summary-heading"><h2>自定义提示词</h2>${button('＋ 新建', 'new-custom')}</div><div class="lt-summary-panel lt-summary-custom-panel">${custom(s)}</div></section><section class="lt-summary-section"><h2>事件词库</h2>${routeLink('事件词库管理', 'library', 'lt-summary-library-link')}</section>`;
   }
   function library(s) {
     const words = s.libraryDraft ?? [];
@@ -70,8 +70,8 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     }).join('')}</div></section>`;
   }
   function cleaning(s) {
-    const rules = s.cleaningPreview ?? s.draft.summaryCleaning.rules;
-    return `<div class="lt-summary-heading">${button(s.quickOpen ? '收起快捷添加' : '快捷添加', 'quick', `aria-expanded="${s.quickOpen}"`)}${button('新建', 'new-rule')}</div>${s.quickOpen ? ['exclude', 'extract'].map(action => `<section class="lt-summary-section"><h2>快捷${labels[action]}</h2>${BUILTIN_SUMMARY_CLEANING_SHORTCUTS.map((rule, index) => ({ ...rule, index })).filter(rule => rule.action === action).map(rule => `<div class="lt-summary-heading"><span>${escape(rule.name)}</span>${button(s.pendingShortcut?.name === rule.name ? (s.status === 'saving' ? '添加中…' : '待确认') : '添加', 'shortcut', `data-index="${rule.index}"`)}</div>`).join('')}</section>`).join('') : ''}${s.pendingShortcut ? `<article class="lt-summary-rule" data-ss-pending-rule="${escape(s.pendingShortcut.id)}" aria-busy="${s.status === 'saving'}"><div class="lt-summary-rule-heading"><span>${escape(s.pendingShortcut.name)}</span><span class="lt-status" role="status">${s.status === 'saving' ? '保存中…' : '保存待确认'}</span></div></article>` : ''}${s.cleaningPreview ? '<p class="lt-status" role="status" data-ss-cleaning-pending>保存中…</p>' : ''}<section class="lt-stack" data-ss-rules>${rules.map(rule => `<article class="lt-summary-rule" data-ss-rule="${escape(rule.id)}"><div class="lt-summary-rule-heading"><button type="button" class="ui-icon-button ui-button--tertiary lt-summary-drag" data-ss-drag="${escape(rule.id)}" aria-label="拖动排序${escape(rule.name)}"><svg class="lt-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 7h8M8 12h8M8 17h8"/><circle cx="5" cy="7" r=".8"/><circle cx="5" cy="12" r=".8"/><circle cx="5" cy="17" r=".8"/></svg></button><span>${escape(rule.name)}</span>${switchControl(rule.enabled, 'toggle-rule', `${rule.enabled ? '停用' : '启用'}${rule.name}`, `data-id="${escape(rule.id)}"`)}</div><div class="lt-summary-rule-actions">${button(labels[rule.action] + (rule.enabled ? '中' : ''), 'cycle-rule', `data-id="${escape(rule.id)}" ${rule.action === 'replace' ? 'disabled' : ''}`)}${button('编辑', 'edit-rule', `data-id="${escape(rule.id)}"`)}${button('删除', 'delete-rule', `data-id="${escape(rule.id)}"`)}</div></article>`).join('')}</section>`;
+    const rules = s.draft.summaryCleaning.rules;
+    return `<div class="lt-summary-heading">${button(s.quickOpen ? '收起快捷添加' : '快捷添加', 'quick', `aria-expanded="${s.quickOpen}"`)}${button('新建', 'new-rule')}</div>${s.quickOpen ? ['exclude', 'extract'].map(action => `<section class="lt-summary-section"><h2>快捷${labels[action]}</h2>${BUILTIN_SUMMARY_CLEANING_SHORTCUTS.map((rule, index) => ({ ...rule, index })).filter(rule => rule.action === action).map(rule => `<div class="lt-summary-heading"><span>${escape(rule.name)}</span>${button('添加', 'shortcut', `data-index="${rule.index}"`)}</div>`).join('')}</section>`).join('') : ''}<section class="lt-stack" data-ss-rules>${rules.map(rule => `<article class="lt-summary-rule" data-ss-rule="${escape(rule.id)}"><div class="lt-summary-rule-heading"><button type="button" class="ui-icon-button ui-button--tertiary lt-summary-drag" data-ss-drag="${escape(rule.id)}" aria-label="拖动排序${escape(rule.name)}"><svg class="lt-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 7h8M8 12h8M8 17h8"/><circle cx="5" cy="7" r=".8"/><circle cx="5" cy="12" r=".8"/><circle cx="5" cy="17" r=".8"/></svg></button><span>${escape(rule.name)}</span>${switchControl(rule.enabled, 'toggle-rule', `${rule.enabled ? '停用' : '启用'}${rule.name}`, `data-id="${escape(rule.id)}"`)}</div><div class="lt-summary-rule-actions">${button(labels[rule.action] + (rule.enabled ? '中' : ''), 'cycle-rule', `data-id="${escape(rule.id)}" ${rule.action === 'replace' ? 'disabled' : ''}`)}${button('编辑', 'edit-rule', `data-id="${escape(rule.id)}"`)}${button('删除', 'delete-rule', `data-id="${escape(rule.id)}"`)}</div></article>`).join('')}</section>`;
   }
   function rule(s) {
     const item = s.ruleDraft;
@@ -82,16 +82,63 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     if (slot) { slot.textContent = s.error ? s.message : ''; slot.hidden = !s.error || !s.message; slot.className = 'lt-error'; slot.setAttribute('role', 'alert'); }
     const notice = container.querySelector('[data-ss-saved]');
     if (notice) { notice.hidden = savedUntil <= Date.now(); notice.textContent = notice.hidden ? '' : '已保存'; }
+    if (s.status === 'ready') for (const control of container.querySelectorAll('[type=submit], [data-ss-action=save-library], [data-ss-action=save-rule], [data-ss-action=add-floor], [data-ss-action=remove-floor], [data-ss-action=delete-custom]')) control.disabled = !!s.autoSaving;
     for (const form of container.querySelectorAll('[data-ss-form=prompt]')) {
       const dirty = Object.hasOwn(s.promptDrafts, form.dataset.key);
       const p = form.querySelector('[data-ss-dirty]'); if (p) p.textContent = dirty ? '尚未保存' : '';
-      const save = form.querySelector('[type=submit]'); if (save) save.disabled = !dirty;
+      const save = form.querySelector('[type=submit]'); if (save) save.disabled = !dirty || s.autoSaving;
     }
+  }
+  function contentKey(s, omitRules = false, omitMode = false) {
+    const draft = s.draft && { ...s.draft,
+      ...(omitRules ? { summaryCleaning: null } : {}),
+      ...(omitMode ? { generationMode: null } : {}) };
+    return JSON.stringify([s.route, draft, s.excludedFloors, s.promptDrafts, s.customDrafts,
+      s.libraryDraft, s.libraryOpen, s.librarySelection, s.libraryMulti,
+      s.ruleDraft, s.ruleId, s.quickOpen]);
+  }
+  function patchLightChange(s) {
+    const before = renderedSnapshot;
+    if (!before || before.route !== s.route || before.status !== 'ready' || s.status !== 'ready') return false;
+    if (contentKey(before) === contentKey(s)) { patchStatus(s); return true; }
+    if (s.route === 'cleaning' && contentKey(before, true) === contentKey(s, true)) {
+      const oldRules = before.draft.summaryCleaning.rules, rules = s.draft.summaryCleaning.rules;
+      const shape = list => JSON.stringify(list.map(({ enabled, action, ...rest }) => rest));
+      if (shape(oldRules) !== shape(rules)) return false;
+      const rows = [...container.querySelectorAll('[data-ss-rule]')];
+      if (rows.length !== rules.length) return false;
+      for (let i = 0; i < rules.length; i++) {
+        const item = rules[i], row = rows[i];
+        if (row.dataset.ssRule !== item.id) return false;
+        const toggle = row.querySelector('[data-ss-action=toggle-rule]');
+        toggle.setAttribute('aria-checked', String(item.enabled));
+        toggle.setAttribute('aria-label', `${item.enabled ? '停用' : '启用'}${item.name}`);
+        const action = row.querySelector('[data-ss-action=cycle-rule]');
+        action.textContent = labels[item.action] + (item.enabled ? '中' : '');
+        action.disabled = item.action === 'replace';
+      }
+      patchStatus(s); return true;
+    }
+    if (s.route === 'settings' && contentKey(before, false, true) === contentKey(s, false, true)) {
+      const main = container.querySelector('.lt-main'), scroll = main.scrollTop;
+      const fragment = container.ownerDocument.createElement('div'); fragment.innerHTML = settings(s);
+      const oldModes = container.querySelector('.lt-summary-modes');
+      const oldPrompts = container.querySelector('.lt-summary-prompt-group')?.parentElement;
+      const prompts = fragment.querySelector('.lt-summary-prompt-group')?.parentElement;
+      if (!oldModes || !oldPrompts || !prompts) return false;
+      remember();
+      for (const radio of oldModes.querySelectorAll('input[name=summary-mode]')) radio.checked = radio.value === s.draft.generationMode;
+      oldModes.querySelector('.lt-meta').textContent = SUMMARY_MODE_DESCRIPTIONS[s.draft.generationMode];
+      oldPrompts.replaceWith(prompts);
+      main.scrollTop = scroll; patchStatus(s); return true;
+    }
+    return false;
   }
   function render(snapshot=controller.inspect()) {
     if (disposed) return;
     const s = latest=snapshot; observeSaved(s);
     if (composing) { pendingRender = true; return; }
+    if (!editingText && patchLightChange(s)) { renderedSnapshot=s; return; }
     const currentScroll = container.querySelector('.lt-main')?.scrollTop;
     remember(false);
     const previousRoute = renderedRoute;
@@ -103,11 +150,11 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     const title = s.route === 'settings' ? '事件总结设置' : s.route === 'library' ? '事件词库' : s.route === 'cleaning' ? '总结文本清洗' : s.ruleId ? '编辑清洗规则' : '新建清洗规则';
     const locked = s.status !== 'ready', content = !s.draft ? (s.status==='loading'?'<p class="lt-status">正在读取设置…</p>':'<p class="lt-status">设置暂不可用。</p>') : s.route === 'settings' ? settings(s) : s.route === 'library' ? library(s) : s.route === 'cleaning' ? cleaning(s) : s.ruleDraft ? rule(s) : '';
     container.innerHTML = `<section class="lantai lt-summary-settings ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(container)}" aria-label="${title}"><header class="lt-header ui-header ui-header--centered">${icon('back', '返回', 'back')}<h1 class="ui-page-title">${title}</h1>${icon('close', '关闭兰台本末', 'close')}</header><main class="lt-main ui-main" tabindex="-1">${content}<p data-ss-message role="${s.error ? 'alert' : 'status'}" class="${s.error ? 'lt-error' : 'lt-status'}" ${s.error && s.message ? '' : 'hidden'}>${s.error ? escape(s.message) : ''}</p>${s.status === 'error' || s.status === 'unconfirmed' ? button('重新读取已保存设置', 'read', '', true) : ''}</main><footer class="lt-footer ui-action-footer" ${s.route === 'library' || s.route === 'rule' ? '' : 'hidden'}>${s.route === 'library' ? '<button type="button" class="ui-button ui-button--primary" data-ss-action="save-library">保存</button>' : s.route === 'rule' ? `<div class="lt-summary-editor-actions">${button('取消', 'cancel-rule')}<button type="button" class="ui-button ui-button--primary" data-ss-action="save-rule">保存</button></div>` : ''}</footer></section>`;
-    if (locked) for (const control of container.querySelectorAll('main input,main textarea,main select,main button,footer button')) control.disabled = !(s.status === 'saving' && s.previewMode && control.name === 'summary-mode');
+    if (locked) for (const control of container.querySelectorAll('main input,main textarea,main select,main button,footer button')) control.disabled = true;
     const saved = container.ownerDocument.createElement('p'); saved.className = 'lt-saved lt-status'; saved.dataset.ssSaved = ''; saved.setAttribute('role', 'status'); saved.hidden = true;
     container.querySelector('.lt-main').after(saved); patchStatus(s);
     const reload = container.querySelector('[data-ss-action=read]'); if (reload) reload.disabled = ['saving', 'loading'].includes(s.status);
-    renderedRoute = s.route; container.querySelector('.lt-main').scrollTop = s.route === previousRoute && currentScroll != null ? currentScroll : s.scroll[s.route] ?? 0;
+    renderedSnapshot=s; renderedRoute = s.route; container.querySelector('.lt-main').scrollTop = s.route === previousRoute && currentScroll != null ? currentScroll : s.scroll[s.route] ?? 0;
     if (focusData && s.route === previousRoute) {
       const controls = [...container.querySelectorAll('input,textarea,select,button')];
       const next = controls.find(node => focusData.field ? node.dataset.ssField === focusData.field && node.dataset.key === focusData.key && node.dataset.id === focusData.id && node.dataset.field === focusData.subfield : focusData.action && node.dataset.ssAction === focusData.action && node.dataset.id === focusData.id && node.dataset.key === focusData.key);

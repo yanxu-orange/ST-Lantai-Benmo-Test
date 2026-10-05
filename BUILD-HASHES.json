@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "0CD1FAD9313EEE56AAADA49EE25EF30B398D02E13995C31F16CF11CDF532A6D8"
+    "sha256": "A0646D3E8CB5FA4F6DEF403F3F772E89BC151415EFB2CCF5A3B8AA005A1ECD56"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -76,6 +76,10 @@
     "sha256": "6AF59482E0962999E11FBDBDBA54909D93920190DC6A19D467FD2049A2E9B015"
   },
   {
+    "path": "dist/app/latest-settings-write.js",
+    "sha256": "DD5986035273FD1CBBCD70D75812C91547EF67D5469C67A5AA8D22BCE4C1FB22"
+  },
+  {
     "path": "dist/app/management-controller.js",
     "sha256": "C6E46A916742655A5532D85941627F90E3D20943A34A2920FF5F96CC4D60541D"
   },
@@ -117,7 +121,7 @@
   },
   {
     "path": "dist/app/recall-controller.js",
-    "sha256": "9E65E97D24C0B6E4709ED5D436E99FD394A3F6BC19BEAE854D23C3098E56B17E"
+    "sha256": "C79A5C7DC0DE0F7BB34872F91206336C92EC8E8248C5BF5053EC66B16FE07367"
   },
   {
     "path": "dist/app/recall-ranking-reasons.js",
@@ -129,7 +133,7 @@
   },
   {
     "path": "dist/app/recall-view.js",
-    "sha256": "556D9CF5DAD80FB49065B1166BA72D39C9FEC0F2EC32EE888486D423AB45D55C"
+    "sha256": "3BB6B66A9C81A340C1ECE205B47D59D8ED1B5010416CE0BF4778E47FD210852E"
   },
   {
     "path": "dist/app/snow-ermine/assets/close-snow.svg",
@@ -173,15 +177,15 @@
   },
   {
     "path": "dist/app/summary-settings-controller.js",
-    "sha256": "59F2526371E39F9CDBE4B715BD8CE7620FF47BE55E3B143941475DF3B7A96527"
+    "sha256": "D877BD0A165F669EB97905CC2444FB741861C3E36EAC1FE59A9F5A319DA950BF"
   },
   {
     "path": "dist/app/summary-settings-view.js",
-    "sha256": "0060C661FB177DE838AFA67F32AC6BA62A0904F3C547F392D308F0B088549AC1"
+    "sha256": "E463F75A19ECE64308C91356B3856E84B81D197FADE9DB0B125DF0BE756616B5"
   },
   {
     "path": "dist/app/summary-settings.css",
-    "sha256": "9AFE801924962E5675D27E6851DAEF2DD0A726653A9ED3F1956D136C74E523B9"
+    "sha256": "554E0946D5601E5B64D4F32506497030AE5881DEF6B478ECE59BA37F53935258"
   },
   {
     "path": "dist/app/summary-view.css",
@@ -333,7 +337,7 @@
   },
   {
     "path": "dist/platform/sillytavern/appearance-adapter.js",
-    "sha256": "A75557167C808A2FF7F5FD30C71B09EE895C626B59A5583E1A73834F95729BD9"
+    "sha256": "426C75CCE5FD86DC95DC15A62DA49418F754F23F861C6BFFFDBFBBE9CADC9C4D"
   },
   {
     "path": "dist/platform/sillytavern/context.js",
@@ -341,7 +345,7 @@
   },
   {
     "path": "dist/platform/sillytavern/cumulative-history.js",
-    "sha256": "0B582637BBEB97002BF31966FCF862250A4C10B6A90B7E54D22561BBCEE7D46D"
+    "sha256": "DD223213B1CAB8887FFBE67ADDDB24E234C76427BA078420F683843A0267AB64"
   },
   {
     "path": "dist/platform/sillytavern/cumulative-runtime.js",
@@ -405,7 +409,7 @@
   },
   {
     "path": "dist/platform/sillytavern/summary-history.js",
-    "sha256": "462B2014CB22656805DBB550C93F7687A6CCE808CA46EB3331CFA330A846792A"
+    "sha256": "54BC0B11B9D4E4BACFC9A77417B78EC85106B5A6041E0D699BF0AEDA36C0A534"
   },
   {
     "path": "dist/platform/sillytavern/summary-notifications.js",
@@ -445,7 +449,7 @@
   },
   {
     "path": "dist/shared/settings/repository.js",
-    "sha256": "8B34F7253417AC88E0586DC0A64B5A28D80C851F979DD86815AC3DFD68735FDC"
+    "sha256": "86E3985EF63DD371314D286FB2559204D25106037661F74FC08D8E3BA97B45E9"
   },
   {
     "path": "dist/shared/settings/summary-prompts.js",
@@ -465,6 +469,6 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "504960AB9704F83044FAD0D5A1AD3EDFB50BBF63E20DA326341E64FB416BA878"
+    "sha256": "83B90B37A525DBF91D73EE18A7F295F6D10CFF5C06F4520B78233E3E7547C715"
   }
 ]

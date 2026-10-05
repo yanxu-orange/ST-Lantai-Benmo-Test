@@ -44,5 +44,3 @@
 .lt-summary-settings .lt-summary-rule.is-dragging { outline:var(--ui-focus-ring-width) solid var(--ui-color-focus-ring); }
 .lt-summary-settings .lt-footer .lt-summary-editor-actions>.ui-button { flex:1; }
 
-/* A pending choice remains visible while its native input is write-locked. */
-.lantai.lt-summary-settings[data-ui-theme] .lt-summary-modes .lt-mode[data-pending-selection="true"] { background:var(--ui-color-selected-background); color:var(--ui-color-selected-text); border-color:var(--ui-color-selected-border); opacity:1; }

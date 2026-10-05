@@ -21,7 +21,10 @@ export function createSettingsRepository(adapter) {
     const previous = adapter.peek();
     const expectedEpoch = requestedEpoch ?? adapter.epochs()[field];
     const work = queue.then(async () => {
-      const root = await adapter.read();
+      // Ordinary settings follow the current ST window. Cross-window edits
+      // require a user refresh; do not fetch the whole server settings before
+      // every small write. Explicit API/credential edits keep reconciliation.
+      const root = field === 'ai' ? await adapter.read() : adapter.peek();
       const epochs = adapter.epochs();
       if (!guard()) throw new SettingsError('SETTINGS_CONFLICT');
       // Caller guards can synchronously mutate host settings without an event.

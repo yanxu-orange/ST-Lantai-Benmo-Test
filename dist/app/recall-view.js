@@ -18,7 +18,7 @@ function reason(item) {
 }
 export function mountRecallView({container,controller}={}) {
   const viewState=()=>controller.inspectView?.()??controller.inspect();
-  let disposed=false,composing=false,editing=false,pending=false,saved=viewState().saved,timer=null,toast=false,dragging=null,renderedRoute=null;
+  let disposed=false,composing=false,editing=false,pending=false,saved=viewState().saved,timer=null,toast=false,dragging=null,renderedRoute=null,renderedSnapshot=null;
   function remember(){const main=container.querySelector('.lt-main');if(main&&renderedRoute)controller.setScroll(renderedRoute,main.scrollTop);for(const node of container.querySelectorAll('details[data-recall-open]'))controller.setOpen(node.dataset.recallOpen,node.open);}
   function updateTools(){const main=container.querySelector('.lt-main'),tools=container.querySelector('.lt-recall-scroll');if(main&&tools)tools.hidden=main.scrollHeight<=main.clientHeight+1;}
   const Resize=container.ownerDocument.defaultView?.ResizeObserver,observer=Resize?new Resize(updateTools):null;
@@ -44,19 +44,47 @@ export function mountRecallView({container,controller}={}) {
   function rule(s){const d=s.ruleDraft;return `<form class="lt-stack" data-recall-rule-form>${field('正则名字','name',d.name)}<label class="ui-field lt-stack"><span class="ui-field__label">动作</span><select class="ui-input" data-recall-field="action" aria-label="动作">${Object.entries(actionName).map(([value,name])=>`<option value="${value}" ${d.action===value?'selected':''}>${name}</option>`).join('')}</select></label><label class="ui-field lt-stack"><span class="ui-field__label">正则表达式</span><textarea class="lt-textarea" data-recall-field="pattern" aria-label="正则表达式" spellcheck="false">${e(d.pattern)}</textarea></label><div data-recall-extract ${d.action==='extract'?'':'hidden'}>${field('提取分组','captureGroup',d.captureGroup,'number','min="0" step="1"')}</div><div data-recall-replace ${d.action==='replace'?'':'hidden'}>${field('替换文字','replacement',d.replacement)}</div></form>`;}
   function patchStatus(s){
     const savedNotice=container.querySelector('.lt-saved');if(savedNotice)savedNotice.hidden=!toast;
-    const message=container.querySelector('[data-recall-save-status]');
-    if(message){message.textContent=s.status==='saving'?'保存中…':s.dirty?'有未保存修改':'';message.hidden=!message.textContent;}
     for(const control of container.querySelectorAll('input,textarea,select,[role=switch],main button:not([data-recall-action=read]),footer button[data-recall-action=save-rule]')){
       const action=control.dataset.recallAction;
       const factBrowse=action==='actual'||s.route==='monitor'&&s.tab==='actual'&&['more','ranking-info'].includes(action);
-      const editablePending=s.route==='settings'&&s.status==='saving'&&numericFields.includes(control.dataset.recallField);
       const fixedAction=action==='cycle-rule'&&s.draft?.recallCleaning.rules.find(rule=>rule.id===control.dataset.id)?.action==='replace';
-      control.disabled=fixedAction||!factBrowse&&!editablePending&&(s.status!=='ready'||action==='start-test'&&s.testStatus==='running');
+      control.disabled=fixedAction||!factBrowse&&(s.status!=='ready'||action==='start-test'&&(s.testStatus==='running'||s.autoSaving)||action==='save-rule'&&s.autoSaving);
     }
   }
-  function render(snapshot=viewState()){if(disposed)return;const s=snapshot;if(s.status!=='ready'||s.dirty){toast=false;clearTimeout(timer);saved=s.saved;}else if(s.saved!==saved){saved=s.saved;toast=true;clearTimeout(timer);timer=setTimeout(()=>{toast=false;const node=container.querySelector('.lt-saved');if(node)node.hidden=true;},2000);}if(composing||editing){pending=true;patchStatus(s);const error=container.querySelector('[data-recall-error]');if(error){error.textContent=s.error;error.hidden=!s.error;}return;}remember();const active=container.getRootNode().activeElement,focus=active&&container.contains(active)?{field:active.dataset.recallField,action:active.dataset.recallAction,id:active.dataset.id}:null;
-    container.innerHTML=`<section class="lantai lt-recall ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(container)}"><header class="lt-header ui-header ui-header--centered">${icon('back','返回','back')}<h1 class="ui-page-title">${s.route==='cleaning'?'召回文本清洗':s.route==='rule'?'编辑清洗规则':'召回'}</h1>${icon('close','关闭','close')}</header>${['monitor','settings'].includes(s.route)?`<nav class="lt-recall-domains" aria-label="召回页面">${button('监控','monitor',`aria-pressed="${s.route==='monitor'}"`)}${button('设置','settings',`aria-pressed="${s.route==='settings'}"`)}</nav>`:''}<p class="lt-saved" role="status" ${toast?'':'hidden'}>已保存</p><main class="lt-main lt-stack ui-main" tabindex="-1"><p class="lt-error" role="alert" data-recall-error ${s.error?'':'hidden'}>${e(s.error)}</p><p class="lt-status" role="status" data-recall-save-status hidden></p>${s.route==='monitor'&&s.tab==='actual'?monitor(s):!s.draft?(s.status==='loading'?'<p class="lt-status">正在读取召回设置…</p>':'<p class="lt-status">召回设置暂不可用。</p>'):s.route==='monitor'?monitor(s):s.route==='settings'?settings(s):s.route==='cleaning'?cleaning(s):rule(s)}${['failed','unconfirmed'].includes(s.status)?button('重新读取','read'):''}</main>${s.route==='rule'?`<footer class="lt-footer ui-action-footer"><div class="lt-editor-actions">${button('取消','back')}${button('保存','save-rule','',true)}</div></footer>`:''}<div class="lt-recall-scroll">${button('↑','top','aria-label="滚动到顶部"')}${button('↓','bottom','aria-label="滚动到底部"')}</div></section>`;
-    renderedRoute=s.route;const updated=controller.viewPosition?.()??viewState();for(const node of container.querySelectorAll('details[data-recall-open]'))node.open=updated.opened[node.dataset.recallOpen]??(node.dataset.recallOpen==='payload');const main=container.querySelector('.lt-main');main.scrollTop=updated.scroll[s.route]??0;observer?.disconnect();observer?.observe(main);updateTools();
+  function contentKey(s, {rules=false,numbers=false}={}) {
+    const draft=s.draft&&{...s.draft};
+    if(draft&&rules)draft.recallCleaning=null;
+    if(draft&&numbers)for(const key of numericFields)delete draft[key];
+    return JSON.stringify([s.route,draft,s.ruleDraft,s.quick,s.error]);
+  }
+  function patchLightChange(s) {
+    const old=renderedSnapshot;
+    if(!old||old.route!==s.route||old.status!=='ready'||s.status!=='ready'||s.route==='monitor')return false;
+    if(contentKey(old)===contentKey(s)){patchStatus(s);return true;}
+    if(s.route==='cleaning'&&contentKey(old,{rules:true})===contentKey(s,{rules:true})){
+      const before=old.draft.recallCleaning.rules,rules=s.draft.recallCleaning.rules;
+      const shape=list=>JSON.stringify(list.map(({enabled,action,...rest})=>rest));
+      if(shape(before)!==shape(rules))return false;
+      const rows=[...container.querySelectorAll('[data-recall-rule]')];if(rows.length!==rules.length)return false;
+      for(let i=0;i<rules.length;i++){
+        const item=rules[i],row=rows[i];if(row.dataset.recallRule!==item.id)return false;
+        const toggle=row.querySelector('[data-recall-action=toggle-rule]');
+        toggle.setAttribute('aria-checked',String(item.enabled));toggle.setAttribute('aria-label',`${item.enabled?'停用':'启用'}${item.name}`);
+        const action=row.querySelector('[data-recall-action=cycle-rule]');action.textContent=actionName[item.action]+(item.enabled?'中':'');
+      }
+      patchStatus(s);return true;
+    }
+    if(s.route==='settings'&&contentKey(old,{numbers:true})===contentKey(s,{numbers:true})){
+      for(const input of container.querySelectorAll('input[data-recall-field]'))if(numericFields.includes(input.dataset.recallField)){
+        const value=s.draft[input.dataset.recallField];input.value=value===null||Number.isNaN(value)?'':String(value);
+      }
+      patchStatus(s);return true;
+    }
+    return false;
+  }
+  function render(snapshot=viewState()){if(disposed)return;const s=snapshot;if(s.status!=='ready'||s.dirty){toast=false;clearTimeout(timer);saved=s.saved;}else if(s.saved!==saved){saved=s.saved;toast=true;clearTimeout(timer);timer=setTimeout(()=>{toast=false;const node=container.querySelector('.lt-saved');if(node)node.hidden=true;},2000);}if(composing||editing){pending=true;patchStatus(s);const error=container.querySelector('[data-recall-error]');if(error){error.textContent=s.error;error.hidden=!s.error;}return;}if(patchLightChange(s)){renderedSnapshot=s;return;}remember();const active=container.getRootNode().activeElement,focus=active&&container.contains(active)?{field:active.dataset.recallField,action:active.dataset.recallAction,id:active.dataset.id}:null;
+    container.innerHTML=`<section class="lantai lt-recall ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(container)}"><header class="lt-header ui-header ui-header--centered">${icon('back','返回','back')}<h1 class="ui-page-title">${s.route==='cleaning'?'召回文本清洗':s.route==='rule'?'编辑清洗规则':'召回'}</h1>${icon('close','关闭','close')}</header>${['monitor','settings'].includes(s.route)?`<nav class="lt-recall-domains" aria-label="召回页面">${button('监控','monitor',`aria-pressed="${s.route==='monitor'}"`)}${button('设置','settings',`aria-pressed="${s.route==='settings'}"`)}</nav>`:''}<p class="lt-saved" role="status" ${toast?'':'hidden'}>已保存</p><main class="lt-main lt-stack ui-main" tabindex="-1"><p class="lt-error" role="alert" data-recall-error ${s.error?'':'hidden'}>${e(s.error)}</p>${s.route==='monitor'&&s.tab==='actual'?monitor(s):!s.draft?(s.status==='loading'?'<p class="lt-status">正在读取召回设置…</p>':'<p class="lt-status">召回设置暂不可用。</p>'):s.route==='monitor'?monitor(s):s.route==='settings'?settings(s):s.route==='cleaning'?cleaning(s):rule(s)}${['failed','unconfirmed'].includes(s.status)?button('重新读取','read'):''}</main>${s.route==='rule'?`<footer class="lt-footer ui-action-footer"><div class="lt-editor-actions">${button('取消','back')}${button('保存','save-rule','',true)}</div></footer>`:''}<div class="lt-recall-scroll">${button('↑','top','aria-label="滚动到顶部"')}${button('↓','bottom','aria-label="滚动到底部"')}</div></section>`;
+    renderedSnapshot=s;renderedRoute=s.route;const updated=controller.viewPosition?.()??viewState();for(const node of container.querySelectorAll('details[data-recall-open]'))node.open=updated.opened[node.dataset.recallOpen]??(node.dataset.recallOpen==='payload');const main=container.querySelector('.lt-main');main.scrollTop=updated.scroll[s.route]??0;observer?.disconnect();observer?.observe(main);updateTools();
     if(focus){const node=[...container.querySelectorAll('input,textarea,select,button')].find(node=>focus.field?node.dataset.recallField===focus.field:node.dataset.recallAction===focus.action&&node.dataset.id===focus.id);node?.focus({preventScroll:true});}
     patchStatus(s);
   }

@@ -86,11 +86,8 @@ export function createAppearanceAdapter({ getContext = getSillyTavernContext, fe
       if (!confirmed || marker) throw failure('APPEARANCE_UNCONFIRMED');
       if (fingerprint(expected) !== fingerprint(confirmed.root) || ticket.fingerprint !== confirmed.fingerprint || ticket.epoch !== confirmed.epoch) throw failure('APPEARANCE_CONFLICT');
       const guard = () => { try { return !disposed && isCurrent() === true; } catch { return false; } };
-      // Reconcile the server before staging: another device may have saved
-      // without an event reaching this tab. Never overwrite that newer choice.
-      const fresh = await read();
-      if (fingerprint(fresh) !== fingerprint(expected)) throw failure('APPEARANCE_CONFLICT');
-      ticket = local();
+      // Use this window's observed appearance. Other windows need a refresh;
+      // local conflict checks and post-save confirmation remain in place.
       const save = await saver(); unchanged(ticket);
       if (!guard()) throw failure('APPEARANCE_CONFLICT');
       unchanged(ticket);

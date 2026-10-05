@@ -17,17 +17,44 @@ function matches(item, key) {
   return messageRole(item)===key.role && (key.id===null || messageId(item)===key.id)
     && (key.date===null || messageDate(item)===key.date);
 }
+// Ephemeral per-call indices preserve ambiguity checks without scanning the
+// entire chat once for every hidden floor. Never cache across chat mutations.
+function identityIndex(messages) {
+  const exact=new Map(),byId=new Map(),byDate=new Map();
+  const add=(map,key,index)=>{const prior=map.get(key);map.set(key,prior===undefined?index:-1);};
+  messages.forEach((message,index)=>{
+    const role=messageRole(message);if(role!=='user'&&role!=='assistant')return;
+    const id=messageId(message),date=messageDate(message);
+    add(exact,JSON.stringify([role,id,date]),index);
+    if(id!==null)add(byId,JSON.stringify([role,id]),index);
+    if(date!==null)add(byDate,JSON.stringify([role,date]),index);
+  });
+  return key=>key.id===null?byDate.get(JSON.stringify([key.role,key.date])):
+    key.date===null?byId.get(JSON.stringify([key.role,key.id])):
+    exact.get(JSON.stringify([key.role,key.id,key.date]));
+}
 // Match identities in both arrays; a saved floor is never a current array index.
 export function filterCumulativePromptCopy({prompt, original, hiddenSegments=[], type='normal'} = {}) {
   const retained=reason=>({status:'retained',reason,prompt,removed:0});
   if(!cumulativeGenerationSupported(prompt,type))return retained('background-or-unsupported');
-  if(!Array.isArray(prompt)||!Array.isArray(original)||prompt===original||prompt.some(item=>original.includes(item)))return retained('not-a-prompt-copy');
+  if(!Array.isArray(prompt)||!Array.isArray(original)||prompt===original)return retained('not-a-prompt-copy');
+  const originalObjects=new Set(original);
+  if(prompt.some(item=>originalObjects.has(item)))return retained('not-a-prompt-copy');
   const removed=new Set();
+  let originalIndex,promptIndex;
   for(const segment of hiddenSegments)for(const item of segment.messages) {
     const key=locator(item);if(!key)continue;
-    if(original.filter(message=>matches(message,key)).length!==1)continue;
-    const indices=prompt.flatMap((message,index)=>matches(message,key)?[index]:[]);
-    if(indices.length===1)removed.add(indices[0]);
+    if(key.role==='user'||key.role==='assistant') {
+      promptIndex??=identityIndex(prompt);
+      const index=promptIndex(key);if(!(index>=0))continue;
+      originalIndex??=identityIndex(original);
+      if(originalIndex(key)>=0)removed.add(index);
+    }else{
+      // Preserve the existing conservative behavior for non-domain inputs.
+      if(original.filter(message=>matches(message,key)).length!==1)continue;
+      const indices=prompt.flatMap((message,index)=>matches(message,key)?[index]:[]);
+      if(indices.length===1)removed.add(indices[0]);
+    }
   }
   const filtered=prompt.filter((_,index)=>!removed.has(index));
   return {status:removed.size?'filtered':'retained',reason:removed.size?null:'no-unique-hidden-message',prompt:filtered,removed:removed.size};
