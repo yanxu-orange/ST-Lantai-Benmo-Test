@@ -6,7 +6,7 @@
   "js": "dist/index.js",
   "generate_interceptor": "lantaiBenmoGenerationInterceptor",
   "author": "Lantai Benmo",
-  "version": "0.1.0-test.20261005.9",
+  "version": "0.1.0-test.20261005.10",
   "homePage": "https://github.com/yanxu-orange/ST-Lantai-Benmo-Test",
   "hooks": {
     "disable": "onDisable",

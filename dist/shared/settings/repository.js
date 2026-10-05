@@ -48,7 +48,14 @@ export function createSettingsRepository(adapter) {
     return work;
   }
   return Object.freeze({
-    read: async () => publicSettings(await adapter.read()),
+    read() {
+      // A newly opened page must not read a namespace staged by an active save.
+      // Readers share the same queue instead of treating that transient state
+      // as a failed or uncertain user operation.
+      const work = queue.then(async () => publicSettings(await adapter.read()));
+      queue = work.catch(() => {});
+      return work;
+    },
     saveAi: (value, options) => update('ai', value, options),
     saveEventGeneration: (value, options) => update('eventGeneration', value, options),
     saveRecall: (value,options)=>update('recall',value,options),
