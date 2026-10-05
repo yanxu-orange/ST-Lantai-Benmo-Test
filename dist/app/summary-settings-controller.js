@@ -16,7 +16,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
   let disposed = false, busy = false, baseline = null, checking = false, externalPending = false;
   let state = { status: 'loading', route: 'settings', draft: null, excludedFloors: [], promptDrafts: {}, customDrafts: {},
     libraryDraft: null, libraryOpen: null, librarySelection: [], libraryMulti: false, ruleDraft: null, ruleId: null,
-    quickOpen: false, pendingShortcut: null, opened: {}, scroll: {}, message: '', error: null };
+    quickOpen: false, pendingShortcut: null, cleaningPreview: null, opened: {}, scroll: {}, message: '', error: null };
   const inspect = () => frozenSettingsCopy(state);
   const notify = () => { if(!listeners.size)return;const snapshot=inspect();for (const listener of [...listeners]) { try { listener(snapshot); } catch { /* Isolated views. */ } } };
   const current = () => { if (disposed) return false; try { return isCurrent() === true && !disposed; } catch { return false; } };
@@ -54,10 +54,11 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
     return false;
   }
   function edit(work) { if (!editable()) return false; work(); state.message = ''; state.error = null; notify(); return true; }
-  async function commit(work, adopted = () => {}) {
+  async function commit(work, adopted = () => {}, previewCleaning = false) {
     if (!editable()) return false;
     const draft = copy(baseline.generation), epoch = baseline.epoch;
     try { work(draft); } catch { state.message = '请检查填写内容。'; state.error = 'INVALID_SETTINGS'; notify(); return false; }
+    if (previewCleaning) state.cleaningPreview = copy(draft.summaryCleaning.rules);
     busy = true; state.status = 'saving'; state.message = ''; state.error = null; notify();
     try {
       // The repository reads fresh authority inside its write queue, merges
@@ -66,15 +67,16 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       await settings.saveEventGeneration(draft, { expectedEpoch: epoch, isCurrent: current });
       if (!afterAwait()) return false;
       baseline = settings.captureEventGeneration(); state.draft = copy(baseline.generation);
-      adopted(); state.pendingShortcut = null; state.status = 'ready'; state.message = '已保存。'; return true;
+      adopted(); state.pendingShortcut = null; state.cleaningPreview = null; state.status = 'ready'; state.message = '已保存。'; return true;
     } catch (error) {
       if (!disposed) {
+        state.cleaningPreview = null;
         if (error?.code === 'INVALID_SETTINGS') { state.status = 'ready'; state.error = error.code; state.message = '请检查填写内容。'; }
         else fail(error);
       }
       return false;
     }
-    finally { busy = false; if (!disposed) notify(); }
+    finally { busy = false; state.cleaningPreview = null; if (!disposed) notify(); }
   }
   async function load(useConfirmed=false) {
     if (disposed || busy) return false;
@@ -89,7 +91,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       if (!Array.isArray(floors)) throw new SettingsError();
       if(captured&&settings.matchesEventGeneration&&!settings.matchesEventGeneration(captured))throw new SettingsError('SETTINGS_CONFLICT');
       captured??=settings.captureEventGeneration();
-      externalPending=false;baseline = captured; state = { ...state, status: 'ready', pendingShortcut: null, draft: copy(captured.generation), excludedFloors: copy(floors),
+      externalPending=false;baseline = captured; state = { ...state, status: 'ready', pendingShortcut: null, cleaningPreview: null, draft: copy(captured.generation), excludedFloors: copy(floors),
         promptDrafts: {}, customDrafts: {}, libraryDraft: state.route === 'library' ? copy(captured.generation.eventWords) : null,
         librarySelection: [], libraryOpen: null, ruleDraft: null, ruleId: null, route: state.route === 'rule' ? 'cleaning' : state.route, error: null, message: '' };
       return true;
@@ -201,10 +203,10 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       return commit(draft => { const i = draft.summaryCleaning.rules.findIndex(item => item.id === next.id); if (i < 0) draft.summaryCleaning.rules.push(next); else draft.summaryCleaning.rules[i] = next; },
         () => { state.ruleDraft = null; state.ruleId = null; state.route = 'cleaning'; });
     },
-    toggleRule(id) { return commit(draft => { const item = draft.summaryCleaning.rules.find(item => item.id === id); if (!item) throw new Error(); item.enabled = !item.enabled; }); },
-    cycleRule(id) { return commit(draft => { const item = draft.summaryCleaning.rules.find(item => item.id === id); if (!item || item.action === 'replace') throw new Error(); item.action = item.action === 'exclude' ? 'extract' : 'exclude'; }); },
-    deleteRule(id) { return commit(draft => { draft.summaryCleaning.rules = draft.summaryCleaning.rules.filter(item => item.id !== id); }); },
-    reorderRules(ids) { return commit(draft => { const rules = draft.summaryCleaning.rules; if (ids.length !== rules.length || new Set(ids).size !== ids.length || ids.some(id => !rules.some(rule => rule.id === id))) throw new Error(); draft.summaryCleaning.rules = ids.map(id => rules.find(rule => rule.id === id)); }); },
+    toggleRule(id) { return commit(draft => { const item = draft.summaryCleaning.rules.find(item => item.id === id); if (!item) throw new Error(); item.enabled = !item.enabled; }, () => {}, true); },
+    cycleRule(id) { return commit(draft => { const item = draft.summaryCleaning.rules.find(item => item.id === id); if (!item || item.action === 'replace') throw new Error(); item.action = item.action === 'exclude' ? 'extract' : 'exclude'; }, () => {}, true); },
+    deleteRule(id) { return commit(draft => { draft.summaryCleaning.rules = draft.summaryCleaning.rules.filter(item => item.id !== id); }, () => {}, true); },
+    reorderRules(ids) { return commit(draft => { const rules = draft.summaryCleaning.rules; if (ids.length !== rules.length || new Set(ids).size !== ids.length || ids.some(id => !rules.some(rule => rule.id === id))) throw new Error(); draft.summaryCleaning.rules = ids.map(id => rules.find(rule => rule.id === id)); }, () => {}, true); },
     addFloor: value => floor('add', value), removeFloor: value => floor('remove', value),
     back() {
       if (state.route === 'rule') return this.cancelRule();
