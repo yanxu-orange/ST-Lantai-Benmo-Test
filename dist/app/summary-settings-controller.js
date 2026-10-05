@@ -16,7 +16,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
   let disposed = false, busy = false, baseline = null, checking = false, externalPending = false;
   let state = { status: 'loading', route: 'settings', draft: null, excludedFloors: [], promptDrafts: {}, customDrafts: {},
     libraryDraft: null, libraryOpen: null, librarySelection: [], libraryMulti: false, ruleDraft: null, ruleId: null,
-    quickOpen: false, opened: {}, scroll: {}, message: '', error: null };
+    quickOpen: false, pendingShortcut: null, opened: {}, scroll: {}, message: '', error: null };
   const inspect = () => frozenSettingsCopy(state);
   const notify = () => { if(!listeners.size)return;const snapshot=inspect();for (const listener of [...listeners]) { try { listener(snapshot); } catch { /* Isolated views. */ } } };
   const current = () => { if (disposed) return false; try { return isCurrent() === true && !disposed; } catch { return false; } };
@@ -66,7 +66,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       await settings.saveEventGeneration(draft, { expectedEpoch: epoch, isCurrent: current });
       if (!afterAwait()) return false;
       baseline = settings.captureEventGeneration(); state.draft = copy(baseline.generation);
-      adopted(); state.status = 'ready'; state.message = '已保存。'; return true;
+      adopted(); state.pendingShortcut = null; state.status = 'ready'; state.message = '已保存。'; return true;
     } catch (error) {
       if (!disposed) {
         if (error?.code === 'INVALID_SETTINGS') { state.status = 'ready'; state.error = error.code; state.message = '请检查填写内容。'; }
@@ -89,7 +89,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       if (!Array.isArray(floors)) throw new SettingsError();
       if(captured&&settings.matchesEventGeneration&&!settings.matchesEventGeneration(captured))throw new SettingsError('SETTINGS_CONFLICT');
       captured??=settings.captureEventGeneration();
-      externalPending=false;baseline = captured; state = { ...state, status: 'ready', draft: copy(captured.generation), excludedFloors: copy(floors),
+      externalPending=false;baseline = captured; state = { ...state, status: 'ready', pendingShortcut: null, draft: copy(captured.generation), excludedFloors: copy(floors),
         promptDrafts: {}, customDrafts: {}, libraryDraft: state.route === 'library' ? copy(captured.generation.eventWords) : null,
         librarySelection: [], libraryOpen: null, ruleDraft: null, ruleId: null, route: state.route === 'rule' ? 'cleaning' : state.route, error: null, message: '' };
       return true;
@@ -180,8 +180,9 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
     },
     toggleQuick() { return edit(() => { state.quickOpen = !state.quickOpen; }); },
     addShortcut(index) {
-      const source = BUILTIN_SUMMARY_CLEANING_SHORTCUTS[index]; if (!source) return Promise.resolve(false);
+      const source = BUILTIN_SUMMARY_CLEANING_SHORTCUTS[index]; if (!source || !editable()) return Promise.resolve(false);
       const item = { id: uuid(), ...copy(source) };
+      state.pendingShortcut = copy(item);
       return commit(draft => { draft.summaryCleaning.rules.push(item); });
     },
     beginRule(id = null) {

@@ -12,15 +12,16 @@ export function createAppearanceSession({ adapter, prepareTheme = async () => {}
   const listeners = new Set();
   const inspect = () => Object.freeze({ ...state });
   const notify = () => { for (const listener of [...listeners]) { try { listener(inspect()); } catch { /* View isolation. */ } } };
-  const fail = error => { const code = Object.hasOwn(messages,error?.code) ? error.code : 'APPEARANCE_UNAVAILABLE'; const confirmationRequired = state.confirmationRequired || code === 'APPEARANCE_UNCONFIRMED'; state = { ...state, status: confirmationRequired ? 'unconfirmed' : 'error', confirmationRequired, error: code, message: messages[code] }; };
+  const fail = error => { const code = Object.hasOwn(messages,error?.code) ? error.code : 'APPEARANCE_UNAVAILABLE'; const confirmationRequired = state.confirmationRequired || code === 'APPEARANCE_UNCONFIRMED'; state = { ...state, previewTheme: null, status: confirmationRequired ? 'unconfirmed' : 'error', confirmationRequired, error: code, message: messages[code] }; };
   function run(action, status) {
     if (disposed || pending) return pending ?? Promise.resolve(false);
-    state = { ...state, status, error: null, message: '' }; notify();
+    state = { ...state, status, error: null, message: '' };
     pending = Promise.resolve().then(action).then(async root => {
       await prepareTheme(root.theme);
       if (disposed) return false;
       baseline = root; state = { status: 'ready', theme: root.theme, error: null, confirmationRequired: false, message: status === 'saving' ? '外观已保存。' : '' }; return true;
     }).catch(error => { if (!disposed) fail(error); return false; }).finally(() => { pending = null; if (!disposed) notify(); });
+    notify();
     return pending;
   }
   return Object.freeze({
@@ -32,10 +33,13 @@ export function createAppearanceSession({ adapter, prepareTheme = async () => {}
       return run(async () => {
         if (!canSave()) throw Object.assign(new Error(), { code: 'APPEARANCE_CONFLICT' });
         await prepareTheme(theme);
+        if (disposed || !canSave()) throw Object.assign(new Error(), { code: 'APPEARANCE_CONFLICT' });
+        // The visual preview is independent of confirmed persistence authority.
+        state = { ...state, previewTheme: theme }; notify();
         return adapter.save(theme, baseline, { isCurrent: () => !disposed && canSave() });
       }, 'saving');
     },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    dispose() { disposed = true; adapter.dispose(); listeners.clear(); },
+    dispose() { disposed = true; state = { ...state, previewTheme: null }; adapter.dispose(); listeners.clear(); },
   });
 }

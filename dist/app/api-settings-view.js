@@ -54,7 +54,7 @@ export function mountApiSettingsView(container, session, { appearance } = {}) {
     if (!appearance || disposed) return;
     const state = appearance.inspect(), api = session.inspect();
     const select = container.querySelector('[data-appearance-theme]');
-    if (select) { select.value = state.theme; select.disabled = state.status !== 'ready' || !['ready','saved'].includes(api.status); }
+    if (select) { select.value = state.previewTheme ?? state.theme; select.disabled = state.status !== 'ready' || !['ready','saved'].includes(api.status); }
     const message = container.querySelector('[data-appearance-message]');
     if (message) {
       message.textContent = state.status === 'saving' ? '正在保存外观…' : state.message;

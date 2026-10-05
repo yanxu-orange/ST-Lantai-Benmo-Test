@@ -1,4 +1,4 @@
-.lt-summary-workspace .lt-summary-main{display:grid;align-content:start;gap:var(--ui-space-section)}
+.lt-summary-workspace .lt-summary-main{display:grid;grid-auto-rows:max-content;align-content:start;gap:var(--ui-space-section)}
 .lt-summary-workspace .lt-summary-section{display:grid;gap:var(--ui-space-related)}
 .lt-summary-workspace .lt-summary-section h2,.lt-summary-workspace .lt-summary-candidate h2{font-size:var(--ui-type-ui-body-size);font-weight:600}
 .lt-summary-workspace .lt-summary-range{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--ui-space-related)}

@@ -241,7 +241,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   async function notificationStyles() {
     const css = await styles();
-    if (appearance.inspect().theme !== 'snow-ermine') return css;
+    if ((appearance.inspect().previewTheme ?? appearance.inspect().theme) !== 'snow-ermine') return css;
     // Notices live in separate short-lived shadows. Snapshot the current
     // presentation roles without making their business lifecycle theme-aware.
     return css + '\n' + (await snowStyles()).replaceAll(':host([data-ui-theme="snow-ermine"])', ':host');
@@ -334,7 +334,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   function syncMemphis() {
     if (!panel || !memphisStyle) return;
-    const theme = appearance.inspect().theme === 'snow-ermine' && snowCss ? 'snow-ermine' : DEFAULT_THEME;
+    const theme = (appearance.inspect().previewTheme ?? appearance.inspect().theme) === 'snow-ermine' && snowCss ? 'snow-ermine' : DEFAULT_THEME;
     panel.setAttribute('data-ui-theme', theme);
     applyTheme(content, theme);
     let active = false;
