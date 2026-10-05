@@ -160,6 +160,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         const versions=domain.versions.slice(0,index+1),version=versions.at(-1),next={...domain,versions,currentVersionId:id,progress:{lastProcessedFloor:Math.max(...version.coverageRanges.map(range=>range.end))}};delete next.pending;return next;
       });
     },
+    async captureSummaryView(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,revision:root.revision,summary:summaryOf(root),formalIds:root.events.map(event=>event.id)});},
     async captureSummary(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,revision:root.revision,summary:summaryOf(root)});},
     async captureBatch(target,id){const frozen=copy(target),root=await read(frozen),summary=summaryOf(root),batch=summary.batches.find(item=>item.id===id);if(!batch)throw new Error('没有可确认的独立批记录');return freeze({target:frozen,revision:root.revision,summary,batch:copy(batch),events:copy(root.events.filter(event=>batch.eventIds.includes(event.id)))});},
     matchesSummary(target,snapshot){try{requireTarget(target);matchSummary(assertRoot(adapter.peekConfirmed(target),target),target,snapshot);requireTarget(target);return true;}catch{return false;}},

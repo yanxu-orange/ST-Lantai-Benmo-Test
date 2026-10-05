@@ -53,8 +53,7 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
   function queryPanels() {
     return `<div class="lt-entry" id="lt-search-panel" ${searchOpen?'':'hidden'}><input class="ui-input" type="search" data-query aria-label="搜索记忆" placeholder="搜索标题与正文" value="${escape(query)}">${button('收起','search')}</div><div class="lt-section" id="lt-filter-panel" ${filterOpen?'':'hidden'}>${filterGroup('召回方式','filterMode',[['all','全部'],['resident','常驻'],['trigger','触发']],filterMode)}${filterGroup('关键词','filterWords',[['all','全部'],['event','缺事件词'],['detail','缺细节词'],['none','无新词']],filterWords)}</div><p class="lt-meta" id="lt-query-state" role="status" ${hasQuery()||hasFilters()?'':'hidden'}>${visibleMemories().length} 条</p>`;
   }
-  function collection() {
-    const events=visibleMemories();
+  function collection(events=visibleMemories()) {
     return events.length?(rootView==='timeline'?timeline(events):events.map(card).join('')):`<p class="lt-meta">${state.root?.events.length?'没有符合条件的记忆':'尚无事件记忆'}</p>`;
   }
   function updateCollection() {
@@ -62,8 +61,8 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
     if(multi){pruneSelection();$('#lt-memory-list').innerHTML=collection();updateSelection();return;}
     const queryField=$('[data-query]');if(!queryField){render({focus:false});return;}if(queryField.value!==query)queryField.value=query;
     for(const field of container.querySelectorAll('[data-filter]'))field.checked=field.value===(field.dataset.filter==='filterMode'?filterMode:filterWords);
-    $('#lt-memory-list').innerHTML=collection();
-    $('#lt-query-state').hidden=!(hasQuery()||hasFilters());$('#lt-query-state').textContent=`${visibleMemories().length} 条`;
+    const events=visibleMemories();$('#lt-memory-list').innerHTML=collection(events);
+    $('#lt-query-state').hidden=!(hasQuery()||hasFilters());$('#lt-query-state').textContent=`${events.length} 条`;
     for(const [name,open,active] of [['search',searchOpen,hasQuery()],['filter',filterOpen,hasFilters()]]) {
       $(`#lt-${name}-panel`).hidden=!open;
       const control=$(`.lt-list-icons [data-action=${name}]`);control.setAttribute('aria-pressed',String(open||active));control.setAttribute('aria-expanded',String(open));

@@ -16,7 +16,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
   let disposed = false, busy = false, baseline = null, checking = false, externalPending = false;
   let state = { status: 'loading', route: 'settings', draft: null, excludedFloors: [], promptDrafts: {}, customDrafts: {},
     libraryDraft: null, libraryOpen: null, librarySelection: [], libraryMulti: false, ruleDraft: null, ruleId: null,
-    quickOpen: false, pendingShortcut: null, cleaningPreview: null, opened: {}, scroll: {}, message: '', error: null };
+    quickOpen: false, pendingShortcut: null, cleaningPreview: null, previewMode: null, opened: {}, scroll: {}, message: '', error: null };
   const inspect = () => frozenSettingsCopy(state);
   const notify = () => { if(!listeners.size)return;const snapshot=inspect();for (const listener of [...listeners]) { try { listener(snapshot); } catch { /* Isolated views. */ } } };
   const current = () => { if (disposed) return false; try { return isCurrent() === true && !disposed; } catch { return false; } };
@@ -67,16 +67,16 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       await settings.saveEventGeneration(draft, { expectedEpoch: epoch, isCurrent: current });
       if (!afterAwait()) return false;
       baseline = settings.captureEventGeneration(); state.draft = copy(baseline.generation);
-      adopted(); state.pendingShortcut = null; state.cleaningPreview = null; state.status = 'ready'; state.message = '已保存。'; return true;
+      adopted(); state.pendingShortcut = null; state.cleaningPreview = null; state.previewMode = null; state.status = 'ready'; state.message = '已保存。'; return true;
     } catch (error) {
       if (!disposed) {
-        state.cleaningPreview = null;
+        state.cleaningPreview = null; state.previewMode = null;
         if (error?.code === 'INVALID_SETTINGS') { state.status = 'ready'; state.error = error.code; state.message = '请检查填写内容。'; }
         else fail(error);
       }
       return false;
     }
-    finally { busy = false; state.cleaningPreview = null; if (!disposed) notify(); }
+    finally { busy = false; state.cleaningPreview = null; state.previewMode = null; if (!disposed) notify(); }
   }
   async function load(useConfirmed=false) {
     if (disposed || busy) return false;
@@ -91,7 +91,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       if (!Array.isArray(floors)) throw new SettingsError();
       if(captured&&settings.matchesEventGeneration&&!settings.matchesEventGeneration(captured))throw new SettingsError('SETTINGS_CONFLICT');
       captured??=settings.captureEventGeneration();
-      externalPending=false;baseline = captured; state = { ...state, status: 'ready', pendingShortcut: null, cleaningPreview: null, draft: copy(captured.generation), excludedFloors: copy(floors),
+      externalPending=false;baseline = captured; state = { ...state, status: 'ready', pendingShortcut: null, cleaningPreview: null, previewMode: null, draft: copy(captured.generation), excludedFloors: copy(floors),
         promptDrafts: {}, customDrafts: {}, libraryDraft: state.route === 'library' ? copy(captured.generation.eventWords) : null,
         librarySelection: [], libraryOpen: null, ruleDraft: null, ruleId: null, route: state.route === 'rule' ? 'cleaning' : state.route, error: null, message: '' };
       return true;
@@ -132,7 +132,7 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     setScroll(route, value) { if (!disposed && Number.isFinite(value) && value >= 0) state.scroll[route] = value; },
     setOpen(key, value) { if (!disposed) state.opened[key] = !!value; },
-    setMode(mode) { if (!['fast', 'quality', 'enhanced'].includes(mode)) return Promise.resolve(false); return commit(draft => { draft.generationMode = mode; }); },
+    setMode(mode) { if (!['fast', 'quality', 'enhanced'].includes(mode) || !editable()) return Promise.resolve(false); state.previewMode = mode; return commit(draft => { draft.generationMode = mode; }); },
     editPrompt(key, text) { if (!SUMMARY_PROMPT_KEYS.includes(key) || typeof text !== 'string') return false; return edit(() => { state.promptDrafts[key] = text; }); },
     restorePrompt(key) { return this.editPrompt(key, summaryPromptDefault(key)); },
     cancelPrompt(key) { return edit(() => { delete state.promptDrafts[key]; state.opened[key] = false; }); },
