@@ -27,6 +27,10 @@ export function createAppearanceSession({ adapter, prepareTheme = async () => {}
   return Object.freeze({
     inspect,
     read: () => run(() => adapter.read(), 'loading'),
+    ensure() {
+      if(!disposed&&!pending&&baseline&&state.status==='ready'&&!state.confirmationRequired&&adapter.isConfirmed?.(baseline))return Promise.resolve(true);
+      return run(() => adapter.read(), 'loading');
+    },
     select(theme) {
       if (!isTheme(theme) || !baseline || state.status !== 'ready' || disposed || pending) return Promise.resolve(false);
       if (theme === state.theme) return Promise.resolve(true);

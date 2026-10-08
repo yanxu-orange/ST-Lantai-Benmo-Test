@@ -1,3 +1,6 @@
+import {assertChatControls} from '../controls/model.js';
+import {assertWorkshop,inheritWorkshop} from '../workshop/model.js';
+import {assertTime,inheritTime} from '../time/data.js';
 import {emptySummary,assertSummary,summaryOf} from '../summary/data.js';
 import {assertCumulative,inheritCumulative} from '../cumulative/data.js';
 const clone = value => structuredClone(value);
@@ -66,6 +69,9 @@ export function assertRoot(root, target) {
   assertMergeRelations(root.events, Object.hasOwn(root, 'deletedMergeIds') ? root.deletedMergeIds : []);
   if(Object.hasOwn(root,'summary')){assertSummary(root.summary,root.events);if(root.summary.pending?.events.some(event=>root.deletedMergeIds?.includes(event.id)))throw new Error('待审核身份占用合并删除证明');}
   if(Object.hasOwn(root,'cumulative'))assertCumulative(root.cumulative);
+  if(Object.hasOwn(root,'time'))assertTime(root.time);
+  if(Object.hasOwn(root,'controls'))assertChatControls(root.controls);
+  if(Object.hasOwn(root,'workshop'))assertWorkshop(root.workshop);
   return clone(root);
 }
 export function inheritEvents(events, floor) {
@@ -92,7 +98,7 @@ export function inheritEvents(events, floor) {
   } while (changed);
   return clone(events.filter(event => selected.has(event.id)));
 }
-export function inheritMemoryRoot(root,rootId,floor) {
+export function inheritMemoryRoot(root,rootId,floor,{timeMessages=null}={}) {
   const summary=summaryOf(root), known=new Set(summary.batches.map(batch=>batch.id));
   delete summary.pending;
   let selected=inheritEvents(root.events,floor), previous;
@@ -112,5 +118,5 @@ export function inheritMemoryRoot(root,rootId,floor) {
   summary.preferences.manual.startFloor=Math.min(summary.preferences.manual.startFloor,floor);
   summary.preferences.manual.endFloor=null;
   summary.preferences.auto.startFloor=Math.min(summary.preferences.auto.startFloor,floor);
-  return {...emptyRoot(rootId),events:selected,summary,...(Object.hasOwn(root,'cumulative')?{cumulative:inheritCumulative(root.cumulative,floor)}:{})};
+  return {...emptyRoot(rootId),events:selected,summary,...(Object.hasOwn(root,'controls')?{controls:assertChatControls(root.controls)}:{}),...(Object.hasOwn(root,'workshop')?{workshop:inheritWorkshop(root.workshop,floor)}:{}),...(Object.hasOwn(root,'cumulative')?{cumulative:inheritCumulative(root.cumulative,floor)}:{}),...(Object.hasOwn(root,'time')?{time:inheritTime(root.time,{messages:timeMessages})}:{})};
 }

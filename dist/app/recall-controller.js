@@ -4,7 +4,7 @@ import {sameTarget} from '../domain/memory/repository.js';
 import {normalizeCleaningRule,BUILTIN_SUMMARY_CLEANING_SHORTCUTS} from '../domain/summary/cleaning.js';
 
 const copy=value=>structuredClone(value);
-const numericFields=['recentFloorCount','maxCount','maxTokens','memoryDepth'];
+const numericFields=['recentFloorCount','maxCount','maxTokens','memoryDepth','anniversaryPoolLimit'];
 const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
 export function createRecallController({repository,settings,runtime,onBack=()=>{},onClose=()=>{}}={}) {
   let disposed=false,ticket=0,previewTicket=0,baseline=null,visible=true,sessionTarget=null,reading=false,checking=false,externalPending=false,writer=null;
@@ -114,6 +114,7 @@ export function createRecallController({repository,settings,runtime,onBack=()=>{
     invalidatePreview(){cancelPreview();state.preview=null;state.testStatus='stale';},resume(){visible=true;},suspend(){visible=false;cancelPreview();if(state.testStatus==='running'){state.testStatus='stale';state.preview=null;}},
     route(value){cancelPreview();if(state.testStatus==='running'){state.testStatus='stale';state.preview=null;}state.route=value;state.error='';state.actual=actualView();notify();},tab(value){cancelPreview();if(state.testStatus==='running'){state.testStatus='stale';state.preview=null;}state.tab=value;state.actual=actualView();notify();},
     edit(field,value){syncSession();if(!numericFields.includes(field)||!state.draft||state.status!=='ready')return false;if(!state.autoSaving&&!validateBaseline())return false;if(!Object.is(state.draft[field],value)){state.draft[field]=value;}return true;},
+    toggleSameDay(){return changeLight(draft=>{draft.automaticSameDayEnabled=!draft.automaticSameDayEnabled;});},
     addTerm(value){const word=value.trim();if(!word)return Promise.resolve(false);return changeLight(draft=>{if(!draft.excludedTerms.includes(word))draft.excludedTerms.push(word);});},
     removeTerm(index){const word=state.draft?.excludedTerms[index];if(word===undefined)return Promise.resolve(false);return changeLight(draft=>{draft.excludedTerms=draft.excludedTerms.filter(item=>item!==word);});},
     quick(){state.quick=!state.quick;notify();},

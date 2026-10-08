@@ -1,4 +1,5 @@
-// Compatibility source revision: 01e50d63.
+// Pure compatibility evidence: old fixed 01e50d63, adapted to TASK-016 boundaries.
+import {collectStoryTimeRecallEvidence} from './story-time-evidence.js';
 import { collectStructuredRecallCandidates } from './structured-candidates.js';
 import { evaluateStructuredCandidate, evaluateStructuredRecallCandidates } from './structured-relevance.js';
 
@@ -168,7 +169,6 @@ export function combineStructuredAndTimeEvidence({ memories, structuredResult, t
 export function evaluateOrdinaryRecallV2({ memories, currentInput, recentHistory = [], currentStoryTime = null, fictionalCalendar = {}, structuredConfig }) {
     const candidates = collectStructuredRecallCandidates({ memories, currentInput, recentHistory });
     const structuredResult = evaluateStructuredRecallCandidates(candidates, { memories, config: structuredConfig });
-    // P6 owns date qualification. Only structure/alias evidence qualifies in P3.
-    const timeResult = {enabled:false, fragments:structuredResult.fragments,evaluated:memories.map((memory,libraryIndex)=>({memoryId:memory.id,libraryIndex,evaluations:[]}))};
+    const timeResult = collectStoryTimeRecallEvidence({memories,currentInput,recentHistory,currentStoryTime,fictionalCalendar});
     return combineStructuredAndTimeEvidence({ memories, structuredResult, timeResult });
 }

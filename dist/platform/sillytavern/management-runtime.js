@@ -1,3 +1,4 @@
+import {featureGate} from '../../domain/controls/gate.js';
 import { createSillyTavernSettingsAdapter } from './settings-adapter.js';
 import { createSillyTavernAiTransport, mainSnapshot } from './ai-provider.js';
 import { createSettingsRepository } from '../../shared/settings/repository.js';
@@ -18,7 +19,8 @@ const MAIN_EVENTS = ['MAIN_API_CHANGED', 'CHATCOMPLETION_MODEL_CHANGED', 'CHATCO
 
 // One owner survives mounted pages. All network and host exports are injectable.
 export async function createManagementRuntime({ repository, getContext, document: doc,
-  fetchImpl = globalThis.fetch, settingsOptions = {}, mainIdentityOptions = {}, jquery = globalThis.jQuery, signal, captureSummarySource } = {}) {
+  fetchImpl = globalThis.fetch, settingsOptions = {}, mainIdentityOptions = {}, jquery = globalThis.jQuery, signal, captureSummarySource,getControls } = {}) {
+  const allowed=key=>!getControls||!!getControls()?.allowed(key);
   const manager = createBackgroundTaskManager(), releases = [];
   let settings = null, controller = null, summaryService=null, summaryController=null, disposed = false, effective = null, epoch = 0, mainEpoch = 0, lastMain = null, jqueryCapable = false;
   const reported = new Map();
@@ -125,7 +127,7 @@ export async function createManagementRuntime({ repository, getContext, document
     let identity = null;
     if (config.source === 'sillytavern') { mainIdentity(); observeMain(); identity = mainEpoch; }
     if (config.source === 'plugin') identity = config.credentialEpoch;
-    const next = JSON.stringify([value.epoch, config.source, identity]);
+    const next = JSON.stringify([value.generationEpoch, settings.captureAi().epoch, config.source, identity]);
     if (effective !== next) { effective = next; epoch++; }
     return { ...value, epoch };
   }
@@ -168,15 +170,17 @@ export async function createManagementRuntime({ repository, getContext, document
     resolveCredential: config => settings.resolveCredential(config) }) });
   const apiOperations = createApiSettingsOperations({ getContext: transportContext, fetchImpl,
     captureMain() { if (disposed) throw new AiProviderError('unavailable'); mainIdentity(); observeMain(); return mainEpoch; } });
-  const service = createMemoryManagementService({ repository, manager, provider, getGenerationSettings, getOriginalSnapshot });
+  const eventGeneration=()=>{if(!allowed('event'))throw new Error('事件记忆已关闭');return getGenerationSettings();};
+  const cumulativeGeneration=()=>{if(!allowed('cumulative'))throw new Error('古法总结已关闭');return getCumulativeGenerationSettings();};
+  const service = createMemoryManagementService({ repository, manager, provider, getGenerationSettings:eventGeneration,control:featureGate(getControls,'event'), getOriginalSnapshot });
   controller = createManagementController({ service, repository, originalAvailable, getOriginalSnapshot,
     getSettingsEpoch: () => getGenerationSettings().epoch });
   if(typeof captureSummarySource==='function') {
-    summaryService=createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource:captureSummarySource});
-    summaryController=createSummaryController({repository,service:summaryService,captureSource:captureSummarySource});
-    cumulativeService=createCumulativeSummaryService({repository,manager,provider,getGenerationSettings:getCumulativeGenerationSettings,captureSource:captureSummarySource});
+    summaryService=createEventSummaryService({repository,manager,provider,getGenerationSettings:eventGeneration,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
+    summaryController=createSummaryController({repository,service:summaryService,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
+    cumulativeService=createCumulativeSummaryService({repository,manager,provider,getGenerationSettings:cumulativeGeneration,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     cumulativeRunner=createAutomaticCumulativeRunner({repository,service:cumulativeService,captureSource:captureSummarySource});
-    cumulativeController=createCumulativeController({repository,service:cumulativeService,runner:cumulativeRunner,captureSource:captureSummarySource});
+    cumulativeController=createCumulativeController({repository,service:cumulativeService,runner:cumulativeRunner,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     let completedReply=null,lastReplyFloor=(ctx?.chat?.length??0)-1;
     const on=(name,listener)=>{const type=ctx?.eventTypes?.[name];if(!type||typeof source?.on!=='function')return;source.on(type,listener);releases.push(()=>(source.off??source.removeListener)?.call(source,type,listener));};
     // MESSAGE_RECEIVED is emitted for a completed real chat reply. Quiet raw
@@ -185,7 +189,10 @@ export async function createManagementRuntime({ repository, getContext, document
     // STOPPED has no operation identity in ST. It cannot revoke a receipt
     // already emitted for a complete normal reply (it may belong to quiet).
     on('CHAT_CHANGED',()=>{completedReply=null;lastReplyFloor=(getContext()?.chat?.length??0)-1;});
-    on('GENERATION_ENDED',()=>{const reply=completedReply;completedReply=null;try{if(reply&&sameTarget(reply.target,repository.captureTarget())&&getContext()?.chat?.[reply.floor]===reply.message){summaryController.wake();cumulativeController.wake();}}catch{/* target closed */}});
+    // Floor positions are reusable after deletion. Rebase the duplicate fence
+    // without waking a runner until a new complete normal reply arrives.
+    on('MESSAGE_DELETED',()=>{completedReply=null;lastReplyFloor=(getContext()?.chat?.length??0)-1;});
+    on('GENERATION_ENDED',()=>{const reply=completedReply;completedReply=null;try{if(reply&&sameTarget(reply.target,repository.captureTarget())&&getContext()?.chat?.[reply.floor]===reply.message){if(allowed('event'))summaryController.wake();if(allowed('cumulative'))cumulativeController.wake();}}catch{/* target closed */}});
   }
   return Object.freeze({ settings, manager, provider, apiOperations, service, controller, summaryService, summaryController, cumulativeService,cumulativeRunner,cumulativeController,getCumulativeGenerationSettings,getGenerationSettings, getOriginalSnapshot, originalAvailable,
     dispose() { if (disposed) return; abort(); signal?.removeEventListener('abort', abort); } });

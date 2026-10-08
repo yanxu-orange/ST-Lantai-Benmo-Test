@@ -8,7 +8,7 @@ const active=task=>['starting','running','awaiting-user','committing'].includes(
 const sameParams=(a,b)=>!!a&&!!b&&Object.keys(a).length===Object.keys(b).length&&Object.keys(a).every(key=>Object.is(a[key],b[key]));
 const PARAMETER_SAVE_DELAY=250;
 // Host owns the controller, service and runner. Unmounting a page is independent.
-export function createCumulativeController({repository,service,runner,captureSource,onCommitted=()=>{}}={}) {
+export function createCumulativeController({repository,service,runner,captureSource,control=null,onCommitted=()=>{}}={}) {
   const listeners=new Set(),retiredTasks=new Set();let parameterDrafts={},parameterTimer=null;let disposed=false,serial=0,opening=0,queue=Promise.resolve(),parameterError=null,visible=false,reloadBinding=null,reloadSequence=0,taskError=null;
   const state={target:null,selection:null,cumulative:null,route:'root',origin:'manual',params:null,latestFloor:null,taskId:null,task:null,draft:null,editDraft:null,editSelection:null,restore:null,preview:null,previewOpen:false,previewView:'source',busy:false,unconfirmed:false,error:'',message:'',noticeSequence:0,scroll:{},opened:{}};
   const inspect=()=>copy({...state,reloadInvalidated:!!reloadBinding,parameterReadRequired:parameterDrafts[state.origin]?.readRequired===true,automatic:runner.inspect()});
@@ -27,7 +27,7 @@ export function createCumulativeController({repository,service,runner,captureSou
   };
   const feedback=message=>{state.message=message;state.noticeSequence++;};
   async function refresh(){const ticket=serial,target=state.target;if(!target)return false;const selection=await repository.captureCumulative(target);if(!current(ticket,target))return false;adopt(selection);state.latestFloor=captureSource(target).messages.at(-1)?.floor??0;return true;}
-  async function action(work,recovery=false){if(state.busy||disposed||reloadBinding||(state.unconfirmed||state.task?.outcome==='unconfirmed')&&!recovery)return false;const ticket=serial,target=state.target;state.busy=true;state.error='';taskError=null;notify();try{return await work(()=>current(ticket,target));}catch(error){if(current(ticket,target)){taskError=null;state.unconfirmed=state.unconfirmed||error.code==='COMMIT_UNCONFIRMED';state.error=state.unconfirmed?'保存结果尚未确认，请重新读取':error.message;}return false;}finally{if(current(ticket,target)){state.busy=false;notify();}}}
+  async function action(work,recovery=false){if(state.busy||disposed||reloadBinding||(state.unconfirmed||state.task?.outcome==='unconfirmed')&&!recovery)return false;const controlProof=control?.capture(),ticket=serial,target=state.target;state.busy=true;state.error='';taskError=null;notify();try{return await work(()=>current(ticket,target)&&(!control||control.matches(controlProof)));}catch(error){if(current(ticket,target)){taskError=null;state.unconfirmed=state.unconfirmed||error.code==='COMMIT_UNCONFIRMED';state.error=state.unconfirmed?'保存结果尚未确认，请重新读取':error.message;}return false;}finally{if(current(ticket,target)){state.busy=false;notify();}}}
   function acceptTask(taskId){if(retiredTasks.has(taskId))return false;if(state.taskId&&state.taskId!==taskId)retiredTasks.add(state.taskId);state.taskId=taskId;return true;}
   function taskChanged(task){if(!task||disposed||reloadBinding||!sameTarget(task.target,state.target)||task.taskId!==state.taskId)return;const newSuccess=task.status==='succeeded'&&(state.task?.taskId!==task.taskId||state.task?.status!=='succeeded');state.task=task;
     // A new accepted task retires the old task's alert, not unrelated validation

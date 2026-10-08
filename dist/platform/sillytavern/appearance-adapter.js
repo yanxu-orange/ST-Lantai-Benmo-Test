@@ -1,3 +1,4 @@
+import { trackSettingsSave } from './pending-settings-saves.js';
 import { getSillyTavernContext } from './context.js';
 import { DEFAULT_THEME, isTheme } from '../../app/styles/theme.js';
 
@@ -17,7 +18,7 @@ export function assertAppearance(value) {
 }
 export function createAppearanceAdapter({ getContext = getSillyTavernContext, fetchImpl = globalThis.fetch,
   saveHost, loadHostModule = () => import('/script.js'), readServerNamespace } = {}) {
-  let confirmed = null, marker = null, disposed = false, epoch = 0, observed, off;
+  let confirmed = null, disposed = false, epoch = 0, observed, off;
   function local() {
     const ctx = !disposed && getContext();
     if (!ctx?.extensionSettings || typeof ctx.extensionSettings !== 'object') throw failure('APPEARANCE_UNAVAILABLE');
@@ -65,52 +66,47 @@ export function createAppearanceAdapter({ getContext = getSillyTavernContext, fe
     if (raw === undefined) delete ctx.extensionSettings[APPEARANCE_KEY];
     else ctx.extensionSettings[APPEARANCE_KEY] = root;
     const installed = local();
-    confirmed = { root, fingerprint: fingerprint(raw), epoch: installed.epoch }; marker = null;
+    confirmed = { root, fingerprint: fingerprint(raw), epoch: installed.epoch };
     return root;
   }
   async function read() {
-    const ticket = local(), previous = marker;
-    if (marker?.inFlight) throw failure('APPEARANCE_UNCONFIRMED');
+    const ticket = local();
     const raw = await server(), root = raw === undefined ? assertAppearance(defaults()) : assertAppearance(raw);
-    if (marker !== previous || marker?.inFlight) throw failure('APPEARANCE_UNCONFIRMED');
     unchanged(ticket);
-    if (!(previous && ticket.fingerprint === previous.stagedFingerprint)
-      && ticket.raw !== undefined && fingerprint(root) !== fingerprint(ticket.root) && root.revision <= ticket.root.revision) throw failure('APPEARANCE_CONFLICT');
+    if (ticket.raw !== undefined && fingerprint(root) !== fingerprint(ticket.root) && root.revision <= ticket.root.revision) throw failure('APPEARANCE_CONFLICT');
     return install(raw, root, ticket);
   }
   return Object.freeze({
     read,
+    isConfirmed(expected) {
+      if(disposed||!confirmed)return false;
+      try{const current=local();return fingerprint(expected)===fingerprint(confirmed.root)&&current.fingerprint===confirmed.fingerprint&&current.epoch===confirmed.epoch;}catch{return false;}
+    },
     async save(theme, expected, { isCurrent = () => true } = {}) {
       if (!isTheme(theme)) throw failure('APPEARANCE_INVALID');
       let ticket = local();
-      if (!confirmed || marker) throw failure('APPEARANCE_UNCONFIRMED');
+      if (!confirmed) throw failure('APPEARANCE_UNCONFIRMED');
       if (fingerprint(expected) !== fingerprint(confirmed.root) || ticket.fingerprint !== confirmed.fingerprint || ticket.epoch !== confirmed.epoch) throw failure('APPEARANCE_CONFLICT');
       const guard = () => { try { return !disposed && isCurrent() === true; } catch { return false; } };
-      // Use this window's observed appearance. Other windows need a refresh;
-      // local conflict checks and post-save confirmation remain in place.
       const save = await saver(); unchanged(ticket);
       if (!guard()) throw failure('APPEARANCE_CONFLICT');
       unchanged(ticket);
       if (theme === ticket.root.theme) return confirmed.root;
       const next = assertAppearance({ schema: 1, revision: ticket.root.revision + 1, theme });
-      const record = { inFlight: true }; marker = record;
-      ticket.ctx.extensionSettings[APPEARANCE_KEY] = next;
-      ticket = local(); record.stagedFingerprint = ticket.fingerprint; confirmed = null;
+      const previous = ticket.raw;
+      install(next, next, ticket);
+      ticket = local();
       try {
-        unchanged(ticket);
-        if (!guard()) throw failure('APPEARANCE_UNCONFIRMED');
-        try { await save(); } catch { /* Only server readback confirms persistence. */ }
-        unchanged(ticket);
-        const raw = await server(), actual = assertAppearance(raw);
-        unchanged(ticket);
-        if (!guard() || marker !== record || fingerprint(actual) !== fingerprint(next)) throw failure('APPEARANCE_UNCONFIRMED');
-        return install(raw, actual, ticket);
+        // The host owns background persistence. Do not wait or read it back.
+        trackSettingsSave(ticket.ctx.extensionSettings, save());
       } catch {
-        record.inFlight = false;
-        // Do not roll back a potentially saved host value. Explicit reread is
-        // required before either theme save or the settings UI's API save.
-        throw failure('APPEARANCE_UNCONFIRMED');
+        if (ticket.ctx.extensionSettings[APPEARANCE_KEY] === next) {
+          install(previous, previous === undefined ? assertAppearance(defaults()) : assertAppearance(previous), ticket);
+        }
+        throw failure('APPEARANCE_UNAVAILABLE');
       }
+      unchanged(ticket);
+      return next;
     },
     dispose() { disposed = true; confirmed = null; off?.(); off = null; },
   });

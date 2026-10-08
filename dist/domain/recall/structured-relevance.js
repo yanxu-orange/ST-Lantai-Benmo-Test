@@ -1,4 +1,4 @@
-// Compatibility source revision: 01e50d63.
+// Pure compatibility evidence: old fixed 01e50d63, adapted to TASK-016 boundaries.
 import { buildDetailQuerySurfaceModel } from './detail-query-surface.js';
 
 const FAMILIES = Object.freeze({ title: 'title', event: 'event', detail: 'detail',

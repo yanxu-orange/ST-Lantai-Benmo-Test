@@ -1,4 +1,7 @@
-
+/* Product trial palette authorized by TASK-009 Amendment 7.
+   Direction: plugin-ui-system/experiments/quiet-light-tags/preview.css;
+   softer Lantai values apply only to external memory cards.
+   These category roles are not promoted Theme Contract variables. */
 .lantai {
   --lt-tag-event-bg: #f1eef3;
   --lt-tag-event-ink: #665c70;

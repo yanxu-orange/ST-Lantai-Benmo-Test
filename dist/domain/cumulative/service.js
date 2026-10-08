@@ -24,7 +24,7 @@ const AI_FAILURE_MESSAGES=Object.freeze({
 // The host supplies PUBLIC tickets only:
 // {generation,cumulativeEpoch,summaryCleaning,cleaningEpoch,aiIdentity,aiEpoch}.
 // aiIdentity is an opaque public selection identity, never a credential or API object.
-export function createCumulativeSummaryService({repository,manager,provider,captureSource,getGenerationSettings,uuid=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}) {
+export function createCumulativeSummaryService({repository,manager,provider,captureSource,getGenerationSettings,control=null,uuid=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}) {
   const records=new Map(),listeners=new Set(),reservations=new Set(),reboundReceipts=new WeakSet();let disposed=false;
   const frozen=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(frozen);Object.freeze(value);}return value;};
   function reboundGuard(previous,next,isCurrent){
@@ -82,6 +82,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
       ?AI_FAILURE_MESSAGES[error.code]:'古法任务未完成，请检查来源与配置后明确重试';
   }
   async function confirm(taskId,edited) {
+    if(control&&!control.allowed()){const record=records.get(taskId);if(record)record.autoConfirmPaused=!record.reviewRequired;return {status:'paused'};}
     const record=records.get(taskId),state=inspect(taskId);if(!record||record.outcome==='unconfirmed'||!state?.candidate)return {status:'rejected'};
     let version;try{version=reviewVersion(state.candidate,edited);}catch(error){return {status:'invalid',error:error.message};}
     const result=await manager.confirm(taskId,async ctx=>{
@@ -99,11 +100,13 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     if(state.status==='awaiting-user'&&!state.reviewPending&&!record.reviewRequired&&!record.autoConfirmScheduled){record.autoConfirmScheduled=true;queueMicrotask(()=>void confirm(state.taskId));}
   });
   async function launch(origin,options={},pending=null) {
+    const operationProof=control?.capture();if(control&&!control.allowed())throw new Error('功能已关闭');
     if(disposed)throw new Error('古法服务已关闭');
     const initialTarget=repository.captureTarget(),key=initialTarget?.chatId;if(!key||reservations.has(key))throw new Error('当前聊天已有古法任务');reservations.add(key);
     try{
       for(const id of records.keys()){const state=inspect(id);if(state?.target.chatId===key&&(['starting','running','awaiting-user','committing'].includes(state.status)||state.outcome==='unconfirmed'||state.rebindRequired))throw new Error('当前聊天已有古法任务或未确认保存');}
       const snapshot=await capture(origin,options,pending);
+      if(control&&!control.matches(operationProof))throw new Error('功能开关已变化，请重新开始');
       if(!sameTarget(initialTarget,snapshot.target))throw new Error('古法聊天目标已变化');
       if(snapshot.selection.cumulative.pending&&!pending)throw new Error('请先处理保留的古法草稿');
       if(pending&&!equalData(snapshot.selection.cumulative.pending,pending))throw new Error('古法草稿已变化');
@@ -127,6 +130,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
   }
   const service={
     async preview(origin='manual',options={}){const snapshot=await capture(origin,options);return {...buildCumulativeRequest({source:snapshot.source,previousSummary:snapshot.baseSnapshot?.body??null,settings:snapshot.settings.generation}),snapshot};},
+    resumeAutoConfirm(){for(const [id,record]of records)if(record.autoConfirmPaused&&control?.allowed()){record.autoConfirmPaused=false;queueMicrotask(()=>void confirm(id));}},
     start:(origin='manual',options={})=>launch(origin,options),confirm,inspect,settled:taskId=>manager.settled(taskId),
     completed(taskId){return new Promise(resolve=>{let off;const check=()=>{const state=inspect(taskId),record=records.get(taskId);if(!state||['succeeded','failed','stale','cancelled'].includes(state.status)||state.status==='awaiting-user'&&record.reviewRequired){off?.();resolve(state);}};off=service.subscribe(state=>{if(state.taskId===taskId)check();});check();});},
     cancel:taskId=>records.has(taskId)&&manager.cancel(taskId),

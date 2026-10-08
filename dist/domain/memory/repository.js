@@ -1,3 +1,6 @@
+import {assertChatControls,defaultChatControls} from '../controls/model.js';
+import {workshopOf,assertWorkshop} from '../workshop/model.js';
+import {timeOf,assertTime} from '../time/data.js';
 import { assertRoot, validateEvent, validateEventForSave, activeEvents } from './model.js';
 import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence} from '../summary/data.js';
 import {matchesStoredSummarySource} from '../summary/source.js';
@@ -45,10 +48,10 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
   const requireTarget = target => { if (!sameTarget(target, adapter.captureTarget())) throw new Error('聊天目标已变化，请返回列表重新进入'); };
   const enqueue = action => { const work = queue.then(action); queue = work.catch(() => {}); return work; };
   const read = async target => { requireTarget(target); const root = assertRoot(await adapter.read(target), target); requireTarget(target); return root; };
-  const commit = async (target, root, next, guard = () => true) => {
+  const commit = async (target, root, next, guard = () => true, options = {}) => {
     const check = current => { requireTarget(target); if (guard(current) !== true) throw new Error('任务已取消或来源已失效'); return true; };
     assertRoot(next, target); check(root);
-    const committed = await adapter.commit(target, next, root.revision, { guard: check });
+    const committed = await adapter.commit(target, next, root.revision, { ...options, guard: check });
     requireTarget(target);
     return assertRoot(committed, target);
   };
@@ -97,6 +100,43 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     const next={...domain};delete next.pending;return next;
   };
   return {
+    async captureControls(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,controls:root.controls??defaultChatControls()});},
+    updateControls(target,selection,value,{isCurrent=()=>true}={}){
+      const frozen=copy(target),snapshot=copy(selection),candidate=assertChatControls(value);
+      const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(root.controls??defaultChatControls(),snapshot.controls))throw new Error('当前聊天开关已变化');return true;};
+      return enqueue(async()=>{
+        const root=await read(frozen);guard(root);
+        if(equal(root.controls??defaultChatControls(),candidate))return {status:'unchanged',selection:freeze({target:frozen,controls:candidate})};
+        await commit(frozen,root,{...root,revision:root.revision+1,controls:candidate},guard);
+        return {status:'committed',selection:freeze({target:frozen,controls:candidate})};
+      });
+    },
+    async captureTime(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,time:timeOf(root)});},
+    updateTime(target,selection,value,{isCurrent=()=>true}={}){
+      const frozen=copy(target),snapshot=copy(selection),candidate=assertTime(value);
+      const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(timeOf(root),snapshot.time))throw new Error('时间来源或配置已变化');return true;};
+      return enqueue(async()=>{
+        const root=await read(frozen);guard(root);const current=timeOf(root);
+        const nextTime={...candidate,revision:current.revision};
+        if(equal(current,nextTime))return {status:'unchanged',root,selection:freeze({target:frozen,time:current})};
+        nextTime.revision++;
+        const saved=await commit(frozen,root,{...root,revision:root.revision+1,time:nextTime},guard);
+        return {status:'committed',root:saved,selection:freeze({target:frozen,time:timeOf(saved)})};
+      });
+    },
+    async captureWorkshop(target){const frozen=copy(target);return freeze({target:frozen,workshop:workshopOf(await read(frozen))});},
+    updateWorkshop(target,selection,value,{isCurrent=()=>true,workshopProof,forceSave=false,requireConfirmation=false}={}){
+      const frozen=copy(target),snapshot=copy(selection),candidate=assertWorkshop(value);
+      const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(workshopOf(root),snapshot.workshop))throw new Error('工坊来源或配置已变化');return true;};
+      return enqueue(async()=>{
+        const root=await read(frozen);guard(root);const current=workshopOf(root);
+        const nextWorkshop={...candidate,revision:current.revision};
+        if(!forceSave&&equal(current,nextWorkshop))return {status:'unchanged',root,selection:freeze({target:frozen,workshop:current})};
+        nextWorkshop.revision++;
+        const saved=await commit(frozen,root,{...root,revision:root.revision+1,workshop:nextWorkshop},guard,{workshopProof,requireConfirmation});
+        return {status:'committed',root:saved,selection:freeze({target:frozen,workshop:workshopOf(saved)})};
+      });
+    },
     captureTarget: () => { const target = adapter.captureTarget(); requireTarget(target); return copy(target); },
     read,
     async captureCumulative(target){const frozen=copy(target);return captureCumulativeRoot(frozen,await read(frozen));},

@@ -2,6 +2,7 @@
   "theme": "snow-ermine",
   "ownership": "consumer",
   "reference": {
+    "file": "lantai-snow-ermine-solid-preview.html",
     "version": 3,
     "handoffDate": "2026-10-04"
   },
@@ -10,7 +11,7 @@
     {
       "file": "assets/snow-ermine-header.png",
       "source": "assets/snow-ermine-header.png",
-      "role": "Root memory header only; exact original bytes",
+      "role": "Primary section root headers; exact original bytes",
       "sha256": "674ff57c3841bb1ab22f786c00a2f9ac86adedb93f5149512923a77868460fb8"
     },
     {

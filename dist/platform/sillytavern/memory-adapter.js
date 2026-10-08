@@ -1,3 +1,7 @@
+import {emptySummary} from '../../domain/summary/data.js';
+import {emptyCumulative} from '../../domain/cumulative/data.js';
+import {emptyWorkshop} from '../../domain/workshop/model.js';
+import {assertWorkshopProof} from './workshop-identities.js';
 import { getSillyTavernContext } from './context.js';
 import { emptyRoot, assertRoot, inheritMemoryRoot } from '../../domain/memory/model.js';
 import { sameTarget } from '../../domain/memory/repository.js';
@@ -10,14 +14,25 @@ const sameBinding = (a, b) => !!a && !!b && identity(a) === identity(b);
 const stale = () => new Error('聊天目标已变化，请返回列表重新进入');
 const unconfirmed = () => Object.assign(new Error('保存结果尚未确认，可能已经写入或聊天目标已变化；请恢复连接后重新读取'), { code: 'COMMIT_UNCONFIRMED' });
 
-// 1.18/1.19 saveMetadata swallows transport failures. A server readback of
-// this exact chat is necessary before accepting a plugin commit.
+// Ordinary chat configuration uses the host's normal background save. Only
+// known configuration fields are excluded here: results, memory and unknown
+// extensions remain protected even when a write also changes configuration.
+function protectedContent(root) {
+  const { revision, controls, time, workshop, summary, cumulative, ...content } = root;
+  const { revision: workshopRevision, modules, imports, captureCounters, ...results } = workshop ?? emptyWorkshop();
+  const { revision: summaryRevision, preferences: summaryPreferences, ...summaryMemory } = summary ?? emptySummary();
+  const { revision: cumulativeRevision, preferences: cumulativePreferences, ...cumulativeMemory } = cumulative ?? emptyCumulative();
+  return { ...content, workshop: results, summary: summaryMemory, cumulative: cumulativeMemory };
+}
+// 1.18/1.19 saveMetadata swallows transport failures. Memory-result commits
+// still require a server readback of this exact chat.
 export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernContext, fetch: request = globalThis.fetch, uuid = () => crypto.randomUUID() } = {}) {
   let epoch = 0, observed = null, prepared = null, disposed = false, preparing = null;
   const listeners = new Set(), subscriptions = [];
   const renames = new Map();
   const branchPoints = new Map();
   const uncertain = new Map();
+  const configurationSaves = new Set();
   let activeSnapshot = null;
   let sourceEpoch=0,sourceSerial=0;
   const messageIds=new WeakMap(),sourceVersions=new Map();
@@ -143,14 +158,57 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       snapshotMessages();
     } catch { throw unconfirmed(); }
   }
-  async function persist(target, next, guard = () => true) {
+  function persistConfiguration(target, next, guard) {
+    const current = check(target), context = capabilities();
+    requireConfirmed(current);
+    const had = Object.hasOwn(context.chatMetadata, MEMORY_KEY);
+    const previous = copy(context.chatMetadata[MEMORY_KEY]);
+    if (guard(copy(previous ?? prepared)) !== true) throw new Error('任务已取消或来源已失效');
+    check(target);
+    context.chatMetadata[MEMORY_KEY] = copy(next);
+    try {
+      // Invoke while the checked chat is still current; never defer invocation
+      // to a promise continuation that could run after a chat switch.
+      const save = context.saveMetadata;
+      const pending = { chatId: target.chatId, promise: Promise.resolve(save()).catch(() => {}) };
+      configurationSaves.add(pending);
+      void pending.promise.then(() => configurationSaves.delete(pending));
+    } catch (error) {
+      // Only a synchronous failure is observable in this lightweight path.
+      // Late failure cannot roll back a newer edit or a newly opened chat.
+      try {
+        check(target);
+        const fresh = getContext();
+        if (equal(fresh.chatMetadata[MEMORY_KEY], next)) {
+          if (had) fresh.chatMetadata[MEMORY_KEY] = previous;
+          else delete fresh.chatMetadata[MEMORY_KEY];
+        }
+      } catch { /* Never restore into another loaded chat. */ }
+      throw error;
+    }
+    check(target);
+    prepared = copy(next);
+    snapshotMessages();
+    return copy(next);
+  }
+  async function persist(target, next, guard = () => true, workshopProof) {
+    // A delayed older configuration snapshot must not land after a confirmed
+    // memory result. Only protected writes wait for these host saves.
+    const pending = [...configurationSaves].filter(save => save.chatId === target.chatId);
+    if (pending.length) {
+      check(target);
+      const baseline = copy(getContext().chatMetadata[MEMORY_KEY] ?? prepared);
+      await Promise.all(pending.map(save => save.promise));
+      check(target);
+      if (!equal(getContext().chatMetadata[MEMORY_KEY] ?? prepared, baseline)) throw new Error('保存冲突，请返回列表重新读取');
+    }
     const current = check(target), context = capabilities();
     if (uncertaintyFor(current)) throw unconfirmed();
     const had = Object.hasOwn(context.chatMetadata, MEMORY_KEY);
     const previous = copy(context.chatMetadata[MEMORY_KEY]);
     if (guard(copy(context.chatMetadata[MEMORY_KEY] ?? prepared)) !== true) throw new Error('任务已取消或来源已失效');
     check(target);
-    const record = { key: identity(current), binding: copy(current), previous, previousAuthority: copy(prepared), next: copy(next), inFlight: true };
+    const record = { key: identity(current), binding: copy(current), previous, previousAuthority: copy(prepared), next: copy(next), workshopProof: copy(workshopProof), inFlight: true };
     uncertain.set(record.key, record);
     try {
       context.chatMetadata[MEMORY_KEY] = copy(next);
@@ -163,6 +221,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       check(target);
       if (uncertain.get(record.key) !== record) throw unconfirmed();
       if (!equal(rows[0].chat_metadata[MEMORY_KEY], next)) throw new Error('保存未得到酒馆确认，草稿已保留，请重试');
+      if (workshopProof !== undefined) assertWorkshopProof(rows,workshopProof);
       if (!equal(getContext().chatMetadata[MEMORY_KEY], next)) throw new Error('聊天数据已变化，请重新读取');
       prepared = copy(next);
       if (uncertain.get(record.key) === record) uncertain.delete(record.key);
@@ -216,7 +275,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
             const points = live?.parent === parentName && live.rootId === raw.rootId ? [live.floor]
               : rows.slice(1).flatMap((message, floor) => Array.isArray(message.extra?.branches) && message.extra.branches.includes(current.name) ? [floor] : []);
             if (points.length !== 1 || rows[0].chat_metadata[MEMORY_KEY]?.rootId !== raw.rootId) throw new Error('无法确认准确分支楼层，未猜测继承记忆');
-            prepared = { ...inheritMemoryRoot(raw,uuid(),points[0]), binding: current };
+            prepared = { ...inheritMemoryRoot(raw,uuid(),points[0],{timeMessages:raw.time?.manualAnchor?chatSourceMessages(true):null}), binding: current };
           }
           await persist(targetFor(prepared, current), prepared);
         }
@@ -290,21 +349,51 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
   for (const name of ['MESSAGE_SENT', 'MESSAGE_RECEIVED', 'MESSAGE_DELETED', 'MESSAGE_EDITED', 'MESSAGE_UPDATED', 'MESSAGE_SWIPED', 'USER_MESSAGE_RENDERED', 'CHARACTER_MESSAGE_RENDERED']) {
     if (context.eventTypes[name]) on(name, ['MESSAGE_DELETED','MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED'].includes(name)?sourceChanged:snapshotMessages);
   }
-  snapshotMessages();
-  return {
-    prepare, captureTarget,
-    captureSummarySource(target) {
-      const current=check(target);requireConfirmed(current);
-      if(['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED'].some(name=>!context.eventTypes[name]))throw new Error('酒馆缺少总结来源变化监听能力');
-      const messages=getContext().chat.map((message,floor)=>{
+  function sourceRole(message,includeHidden=false){
+    // Native visibility is not story chronology. TIME retains the original
+    // speaker for hidden narrative messages, while summary keeps its old filter.
+    return (includeHidden||message.is_system!==true)&&typeof message.is_user==='boolean'&&!message.extra?.type&&!message.extra?.tool_invocations&&(!includeHidden||message.role!=='system'&&message.role!=='tool')?(message.is_user?'user':'assistant'):'system';
+  }
+  function chatSourceMessages(includeHidden=false){
+    return getContext().chat.map((message,floor)=>{
         if(!message||typeof message.mes!=='string')throw new Error('总结原始消息不可用');
-        const role=message.is_system!==true&&typeof message.is_user==='boolean'&&!message.extra?.type&&!message.extra?.tool_invocations?(message.is_user?'user':'assistant'):'system';
+        const role=sourceRole(message,includeHidden);
         const date=message.send_date==null?null:String(message.send_date);
         const identity=JSON.stringify([floor,typeof message.id==='string'||Number.isSafeInteger(message.id)?message.id:null,date]);
         return {floor,identity,objectTicket:messageIdentity(message,floor),revision:sourceVersions.get(floor)??0,role,system:message.is_system===true,text:message.mes,date,swipeId:Number.isSafeInteger(message.swipe_id)&&message.swipe_id>=0?message.swipe_id:null};
       });
+  }
+  function captureChatSource(target,includeHidden=false) {
+      const current=check(target);requireConfirmed(current);
+      if(['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED'].some(name=>!context.eventTypes[name]))throw new Error('酒馆缺少总结来源变化监听能力');
+      const messages=chatSourceMessages(includeHidden);
       check(target);return copy({epoch:sourceEpoch,messages});
+  }
+  function matchesSource(target,snapshot,includeHidden=false) {
+      try {
+        const current=check(target);requireConfirmed(current);
+        const chat=getContext().chat;
+        if(!snapshot||snapshot.epoch!==sourceEpoch||!Array.isArray(snapshot.messages)||snapshot.messages.length!==chat.length)return false;
+        const matches=chat.every((message,floor)=>{
+          const saved=snapshot.messages[floor];if(!message||typeof message.mes!=='string'||!saved)return false;
+          const role=sourceRole(message,includeHidden);
+          const date=message.send_date==null?null:String(message.send_date),id=typeof message.id==='string'||Number.isSafeInteger(message.id)?message.id:null;
+          const swipeId=Number.isSafeInteger(message.swipe_id)&&message.swipe_id>=0?message.swipe_id:null;
+          return saved.floor===floor&&saved.identity===JSON.stringify([floor,id,date])&&saved.objectTicket===messageIdentity(message,floor)&&saved.revision===(sourceVersions.get(floor)??0)&&saved.role===role&&saved.system===(message.is_system===true)&&saved.text===message.mes&&saved.date===date&&saved.swipeId===swipeId;
+        });
+        check(target);return matches;
+      } catch {return false;}
+   }
+  snapshotMessages();
+  return {
+    prepare, captureTarget,
+    hasTimeCalendar() {
+      try {observe();const root=getContext().chatMetadata[MEMORY_KEY]??prepared;return !!root?.time?.activeCalendarId&&Array.isArray(root.time.calendars)&&root.time.calendars.some(item=>item.id===root.time.activeCalendarId);}catch{return false;}
     },
+    captureChatSource, captureSummarySource: captureChatSource,
+    captureTimeSource:target=>captureChatSource(target,true),
+    matchesChatSource:(target,snapshot)=>matchesSource(target,snapshot),
+    matchesTimeSource:(target,snapshot)=>matchesSource(target,snapshot,true),
     peekConfirmed(target) {
       const current = check(target); requireConfirmed(current);
       const root = getContext().chatMetadata[MEMORY_KEY] ?? prepared;
@@ -320,14 +409,18 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       if (!sameBinding(root.binding, binding())) throw new Error('记忆聊天归属已变化，请重新读取');
       return assertRoot(root, target);
     },
-    async commit(target, next, expectedRevision, { guard = () => true } = {}) {
+    async commit(target, next, expectedRevision, { guard = () => true, workshopProof, requireConfirmation = false } = {}) {
       check(target);
       await reconcile();
       requireConfirmed(check(target));
       const raw = getContext().chatMetadata[MEMORY_KEY] ?? prepared;
       assertRoot(raw, target); assertRoot(next, target);
       if (!sameBinding(raw.binding, binding()) || raw.revision !== expectedRevision || next.revision !== expectedRevision + 1) throw new Error('保存冲突，请返回列表重新读取');
-      return persist(target, { ...next, binding: binding() }, guard);
+      const candidate = { ...next, binding: binding() };
+      if (!requireConfirmation && workshopProof === undefined && equal(protectedContent(raw), protectedContent(candidate))) {
+        return persistConfiguration(target, candidate, guard);
+      }
+      return persist(target, candidate, guard, workshopProof);
     },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     dispose() { disposed = true; epoch++; prepared = null; listeners.clear(); for (const [type, handler] of subscriptions) (source.removeListener ?? source.off).call(source, type, handler); },

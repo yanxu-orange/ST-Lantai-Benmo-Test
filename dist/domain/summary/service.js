@@ -6,7 +6,7 @@ import { prepareSummarySource, matchesSummarySource, matchesStoredSummarySource 
 import { publicSummarySettingsEvidence } from './data.js';
 
 // Uses the shared manager/provider. Chat transactions remain repository-owned.
-export function createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource,uuid=()=>crypto.randomUUID()}={}) {
+export function createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource,control=null,uuid=()=>crypto.randomUUID()}={}) {
   const records=new Map(),listeners=new Set(),reservations=new Set();
   const readSettings=()=>structuredClone(getGenerationSettings());
   function targetCurrent(snapshot,target) {
@@ -52,6 +52,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     const normalized=normalize(output.data);records.get(ctx.taskId).diagnostics.push(...normalized.diagnostics);return normalized.data;
   }
   async function confirm(taskId,edited) {
+    if(control&&!control.allowed()){const record=records.get(taskId);if(record)record.autoConfirmPaused=!record.reviewRequired;return {status:'paused'};}
     const record=records.get(taskId),state=inspect(taskId);
     if(!record||record.outcome==='unconfirmed'||!state?.candidate)return {status:'rejected'};
     let events;
@@ -76,11 +77,13 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     return Object.freeze({
     async preview(origin,options) {const snapshot=await capture(origin,options);return {...summaryPreview(snapshot.source,snapshot.settings),snapshot};},
     async start(origin='manual',options={}) {
+      const operationProof=control?.capture();if(control&&!control.allowed())throw new Error('功能已关闭');
       if(!['manual','auto','regeneration'].includes(origin))throw new Error('总结来源无效');
       const key=repository.captureTarget().chatId;if(reservations.has(key))throw new Error('当前聊天已有总结任务');reservations.add(key);
       try{
       for(const id of records.keys()){const state=inspect(id);if(state&&sameTarget(state.target,repository.captureTarget())&&['starting','running','awaiting-user','committing'].includes(state.status))throw new Error('当前聊天已有总结任务');}
       const snapshot=await capture(origin,options),resume=options.resumePending;
+      if(control&&!control.matches(operationProof))throw new Error('功能开关已变化，请重新开始');
       if(snapshot.selection.summary.pending&&!resume)throw new Error('请先处理已保留的总结草稿');
       if(resume&&snapshot.selection.summary.pending?.id!==resume.id)throw new Error('总结草稿已变化');
       if(resume)snapshot.batchId=resume.batchId;
@@ -119,6 +122,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
       records.set(taskId,execution);notify(taskId);return taskId;
       }finally{reservations.delete(key);}
     },
+    resumeAutoConfirm(){for(const [id,record]of records)if(record.autoConfirmPaused&&control?.allowed()){record.autoConfirmPaused=false;queueMicrotask(()=>void confirm(id));}},
     confirm,inspect,settled:taskId=>manager.settled(taskId),
     completed(taskId) {
       return new Promise(resolve=>{

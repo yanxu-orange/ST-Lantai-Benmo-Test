@@ -1,0 +1,17 @@
+{
+  "id": "f11c0dba-76c2-4fb8-8f70-e6b717190a30",
+  "scriptName": "兰台-隐藏工坊信息",
+  "disabled": false,
+  "runOnEdit": true,
+  "findRegex": "/<tkm_result\\s+module\\s*=\\s*(?:\"[gch][1-9][0-9]*\"|\\'[gch][1-9][0-9]*\\')\\s*>[\\s\\S]*?<\\/tkm_result\\s*>/gi",
+  "trimStrings": [],
+  "replaceString": "",
+  "placement": [
+    2
+  ],
+  "substituteRegex": 0,
+  "minDepth": null,
+  "maxDepth": null,
+  "markdownOnly": true,
+  "promptOnly": false
+}

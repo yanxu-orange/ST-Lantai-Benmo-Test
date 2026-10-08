@@ -623,3 +623,9 @@
     clip-path: none;
   }
 }
+
+/* Movement feedback is a soft surface, not a selected control. */
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-era-moved{background:var(--ui-color-action-primary-background)}
+
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-prompt-group{border-color:transparent;border-radius:var(--ui-shape-surface-radius);box-shadow:var(--ui-elevation-low-shadow)}
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-prompt-group>.time-group-heading{background:transparent;color:var(--ui-color-text-secondary)}

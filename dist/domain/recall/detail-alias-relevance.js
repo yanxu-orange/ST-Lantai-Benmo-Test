@@ -1,4 +1,4 @@
-// Compatibility source revision: 01e50d63.
+// Pure compatibility evidence: old fixed 01e50d63, adapted to TASK-016 boundaries.
 import { collectDetailAliasCandidates, normalizeDetailAliasBindings } from './detail-alias-candidates.js';
 import { combineStructuredAndTimeEvidence, evaluateOrdinaryRecallV2 } from './joint-qualification.js';
 import { evaluateStructuredRecallCandidates } from './structured-relevance.js';

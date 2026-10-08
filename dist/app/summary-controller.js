@@ -3,7 +3,7 @@ import { createAutomaticSummaryRunner } from '../domain/summary/auto-runner.js';
 
 const sameParams=(a,b)=>!!a&&!!b&&Object.keys(a).length===Object.keys(b).length&&Object.keys(a).every(key=>Object.is(a[key],b[key]));
 const PARAMETER_SAVE_DELAY=250;
-export function createSummaryController({repository,service,captureSource,onCommitted=()=>{}}={}) {
+export function createSummaryController({repository,service,captureSource,control=null,onCommitted=()=>{}}={}) {
   const runner=createAutomaticSummaryRunner({service,repository,captureSource}),listeners=new Set();
   let disposed=false,ticket=0,openRequest=0,visible=false,parameterQueue=Promise.resolve(),parameterFailure=null,parameterTimer=null,parameterDrafts={};
   const state={route:'manual',origin:'manual',target:null,summary:null,formalIds:[],params:null,parametersUnconfirmed:false,taskId:null,task:null,drafts:null,entries:{},openTerms:{},preview:null,previewOpen:false,previewView:'source',error:'',message:'',busy:false,scroll:0};
@@ -53,7 +53,7 @@ export function createSummaryController({repository,service,captureSource,onComm
     });
     return parameterQueue;
   }
-  async function action(work){const serial=ticket,target=state.target;state.busy=true;state.error='';notify();const current=()=>viewCurrent(serial,target);try{await work(current);}catch(error){if(current())state.error=error.message;}finally{if(current()){state.busy=false;notify();}}}
+  async function action(work){const controlProof=control?.capture(),serial=ticket,target=state.target;state.busy=true;state.error='';notify();const current=()=>viewCurrent(serial,target)&&(!control||control.matches(controlProof));try{await work(current);}catch(error){if(current())state.error=error.message;}finally{if(viewCurrent(serial,target)){state.busy=false;notify();}}}
   async function captureView(target){
     if(repository.captureSummaryView)return repository.captureSummaryView(target);
     const selected=await repository.captureSummary(target),root=await repository.read(target);

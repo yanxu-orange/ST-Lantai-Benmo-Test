@@ -1,3 +1,6 @@
+import {assertControls} from '../../domain/controls/model.js';
+import {assertWorkshop} from '../../domain/workshop/model.js';
+import {validateTimeReminders} from './time-reminders.js';
 import { createDefaultEventWords } from './default-event-words.js';
 import { SUMMARY_PROMPT_KEYS } from './summary-prompts.js';
 import { createDefaultCleaningRules, normalizeCleaningRule } from '../../domain/summary/cleaning.js';
@@ -90,10 +93,12 @@ export function settingsFingerprint(value) {
   return JSON.stringify(ordered(value));
 }
 export const equalSettings = (a, b) => settingsFingerprint(a) === settingsFingerprint(b);
-export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:5,maxTokens:null,memoryDepth:9999,excludedTerms:[],recallCleaning:{rules:[]} }; }
+export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:5,maxTokens:null,memoryDepth:9999,anniversaryPoolLimit:2,automaticSameDayEnabled:true,excludedTerms:[],recallCleaning:{rules:[]} }; }
 export function assertRecallSettings(value) {
   try {
-    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning']);
+    value={anniversaryPoolLimit:2,automaticSameDayEnabled:true,...value};
+    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled']);
+    if(typeof value.automaticSameDayEnabled!=='boolean'||!(value.anniversaryPoolLimit===null||Number.isSafeInteger(value.anniversaryPoolLimit)&&value.anniversaryPoolLimit>=0))invalid();
     if(!Number.isSafeInteger(value.recentFloorCount)||value.recentFloorCount<0||!Number.isSafeInteger(value.maxCount)||value.maxCount<1
       ||!(value.maxTokens===null||Number.isSafeInteger(value.maxTokens)&&value.maxTokens>0)||!Number.isSafeInteger(value.memoryDepth)||value.memoryDepth<0||value.memoryDepth>10000)invalid();
     if(!Array.isArray(value.excludedTerms)||value.excludedTerms.some(term=>!text(term))||new Set(value.excludedTerms).size!==value.excludedTerms.length)invalid();
@@ -117,21 +122,31 @@ export function assertCumulativeGeneration(value) {
     return frozenSettingsCopy(value);
   }catch{throw new SettingsError();}
 }
+export function assertTimeReminders(value){try{return frozenSettingsCopy(validateTimeReminders(value));}catch{throw new SettingsError();}}
 export function assertSettings(value) {
   try {
     const legacy = value?.schema === 1;
+    const hasControls=Object.hasOwn(value??{},'controls'),hasControlsRevision=Object.hasOwn(value?.domainRevisions??{},'controls');
+    if(hasControls!==hasControlsRevision)invalid();
     const hasRecall=Object.hasOwn(value??{},'recall'),hasRecallRevision=Object.hasOwn(value?.domainRevisions??{},'recall');
     const hasCumulative=Object.hasOwn(value??{},'cumulativeGeneration'),hasCumulativeRevision=Object.hasOwn(value?.domainRevisions??{},'cumulativeGeneration');
+    const hasWorkshop=Object.hasOwn(value??{},'workshop'),hasWorkshopRevision=Object.hasOwn(value?.domainRevisions??{},'workshop');
+    if(hasWorkshop!==hasWorkshopRevision)invalid();
+    const hasTime=Object.hasOwn(value??{},'timeReminders'),hasTimeRevision=Object.hasOwn(value?.domainRevisions??{},'timeReminders');
+    if(hasTime!==hasTimeRevision)invalid();
     if(hasCumulative!==hasCumulativeRevision)invalid();
     if(hasRecall!==hasRecallRevision)invalid();
-    exact(value, ['schema', 'revision', 'domainRevisions', 'ai', 'eventGeneration', ...(legacy ? [] : ['credentials']),...(hasRecall?['recall']:[]),...(hasCumulative?['cumulativeGeneration']:[])]);
+    exact(value, ['schema', 'revision', 'domainRevisions', 'ai', 'eventGeneration', ...(legacy ? [] : ['credentials']),...(hasRecall?['recall']:[]),...(hasCumulative?['cumulativeGeneration']:[]),...(hasTime?['timeReminders']:[]),...(hasWorkshop?['workshop']:[]),...(hasControls?['controls']:[])]);
     if (![1, 2].includes(value.schema) || !Number.isSafeInteger(value.revision) || value.revision < 0) invalid();
-    exact(value.domainRevisions, ['ai', 'eventGeneration',...(hasRecallRevision?['recall']:[]),...(hasCumulativeRevision?['cumulativeGeneration']:[])]);
+    exact(value.domainRevisions, ['ai', 'eventGeneration',...(hasRecallRevision?['recall']:[]),...(hasCumulativeRevision?['cumulativeGeneration']:[]),...(hasTimeRevision?['timeReminders']:[]),...(hasWorkshopRevision?['workshop']:[]),...(hasControlsRevision?['controls']:[])]);
     if (Object.values(value.domainRevisions).some(version => !Number.isSafeInteger(version) || version < 0)
-      || value.domainRevisions.ai + value.domainRevisions.eventGeneration +(value.domainRevisions.recall??0)+(value.domainRevisions.cumulativeGeneration??0)!== value.revision) invalid();
+      || value.domainRevisions.ai + value.domainRevisions.eventGeneration +(value.domainRevisions.recall??0)+(value.domainRevisions.cumulativeGeneration??0)+(value.domainRevisions.timeReminders??0)+(value.domainRevisions.workshop??0)+(value.domainRevisions.controls??0)!== value.revision) invalid();
     ai(value.ai); const eventGeneration = generation(value.eventGeneration);
     if(!hasRecall&&(value.domainRevisions.recall??0)!==0)invalid();
     const migrated = { ...value, schema: 2, credentials: legacy ? [] : value.credentials, eventGeneration,domainRevisions:{...value.domainRevisions,recall:value.domainRevisions.recall??0},recall:hasRecall?assertRecallSettings(value.recall):defaultRecallSettings() };
+    if(hasControls)migrated.controls=assertControls(value.controls);
+    if(hasWorkshop)migrated.workshop=assertWorkshop(value.workshop);
+    if(hasTime)migrated.timeReminders=assertTimeReminders(value.timeReminders);
     if(hasCumulative)migrated.cumulativeGeneration=assertCumulativeGeneration(value.cumulativeGeneration);
     if (!Array.isArray(migrated.credentials)) invalid();
     const ids = new Set();

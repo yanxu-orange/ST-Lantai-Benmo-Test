@@ -1,10 +1,5 @@
 const fields={people:'人物',location:'地点',locations:'地点',title:'标题',event:'事件词',detail:'细节词'};
 const score=value=>{const shown=Number(value.toPrecision(4));return shown===value?String(shown):`约 ${shown}`;};
-export const RECALL_RANKING_RULES=Object.freeze([
-  '触发记忆先看是否有足够匹配，再按本轮关联分值排序。人物、地点、事件和细节的匹配方式共同影响分值，不是命中词越多就一定排在前面。',
-  '历史楼层越远，影响越小；多条触发记忆共有的词、同类重复线索会减弱区分作用。同分沿原有记忆顺序，不代表哪条更重要，也不按简称更近或更长优先。',
-  '常驻记忆不占触发名额。条数与正文 Token 上限在排序后应用，Token 边界保留最后一条完整正文；入选后的叙事排列不改变竞争排名。',
-]);
 function contributions(facts,reasons=[]){
   const parents=facts.contributions.filter(item=>item.value>0).map(item=>{
     const discounts=[];
@@ -23,8 +18,16 @@ function contributions(facts,reasons=[]){
 }
 export function recallRankingReason(item){
   const facts=item.ranking;if(!facts)return '';
-  if(facts.pool==='resident')return '常驻发送，不占触发记忆名额。';
-  const parts=[`本轮主要匹配依据：${contributions(facts,item.reasons)}。`];
+  if(facts.pool==='special'){const hit=item.dateEvidence?.special??[],words=[...new Set((item.reasons??[]).filter(x=>['keyword-match','alias-match'].includes(x.code)).map(x=>x.alias??x.term).filter(Boolean))].slice(0,3),dates=[...new Set(hit.map(x=>x.matchedLabel??(x.matchedDate?`${x.matchedDate.year}年${x.matchedDate.month}月${x.matchedDate.day}日`:'')).filter(Boolean))];return `时间记忆匹配：${hit.some(x=>x.kind==='named-origin')?'纪念日发生年份':hit.some(x=>x.kind==='named-same-day')?'纪念日对应的过去经历':'历史同日'}${dates.length?`（${dates.join('、')}）`:''}${words.length?`；同时命中关键词或简称：${words.join('、')}`:''}。本轮入选，不占普通名额。`;}
+  if(facts.pool==='resident'){const hits=[...new Set((item.reasons??[]).filter(x=>['keyword-match','alias-match'].includes(x.code)).map(x=>x.alias??x.term).filter(Boolean))],dates=(item.dateEvidence?.ordinary??[]).filter(x=>x.relation==='support').map(x=>x.target.raw);return `常驻发送，不占触发记忆名额。${hits.length?`同时命中：${hits.slice(0,3).join('、')}。`:''}${dates.length?`日期匹配：${[...new Set(dates)].join('、')}。`:''}`;}
+  const dates=item.dateEvidence?.ordinary??[],supports=dates.filter(x=>x.relation==='support');
+  const currentDates=dates.filter(x=>x.target?.fragmentId==='current:0');
+  const hasConflict=currentDates.some(x=>x.relation==='conflict')&&!currentDates.some(x=>x.relation==='support');
+  if(hasConflict&&item.excludedReason)return '当前输入的明确日期与这条记忆冲突，本轮未选入。';
+  if(item.excludedReason==='special-limit')return '符合日期纪念条件，但本轮日期纪念名额已用完或关闭；普通匹配依据不足。';
+  const dateText=supports.length?`日期匹配：${[...new Set(supports.map(x=>x.target.raw))].join('、')}`:'';
+  const structural=(facts.contributions??[]).some(x=>x.value>0)||(facts.combinations??[]).some(x=>x.value>0);
+  const parts=[`本轮主要匹配依据：${dateText?[dateText,structural?contributions(facts,item.reasons):''].filter(Boolean).join('；'):contributions(facts,item.reasons)}。`];
   if(facts.rank===null){parts.push(`关联证据不足，未进入触发排名（关联分值 ${score(facts.score)}）。`);return parts.join(' ');}
   if(!item.excludedReason)parts.push('本轮入选。');
   else parts.push(item.excludedReason==='token-limit'?'前面的正文已达到 Token 上限，因此本条未入选。':'本轮记忆名额已用完，因此本条未入选。');

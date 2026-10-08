@@ -1,4 +1,4 @@
-// Compatibility source revision: 01e50d63.
+// Pure compatibility evidence: old fixed 01e50d63, adapted to TASK-016 boundaries.
 import { compareTimeValues, parseStoryTimePoint } from './narrative-time.js';
 
 export const NARRATIVE_ORDERING_VERSION = 'narrative-ordering-v1';

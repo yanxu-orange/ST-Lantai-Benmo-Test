@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0-candidate.1+memphis",
+  "version": "0.2.0-candidate.1+memphis.task028",
   "status": "opt-in-candidate-not-promoted",
   "theme": "memphis",
   "themeContractVariables": 108,
@@ -7,6 +7,7 @@
   "sourceEntry": "starter/memphis-candidate.css",
   "themeCss": "memphis-candidate.web.css",
   "defaultEntryUnchanged": true,
+  "normalReference": "stages/TASK-027/reference/visual-exploration.html",
   "normalReferenceSHA256": "8c21944b1c10f5e22950726a3f93ae826300844779582a0f7cdd43963ae4b963",
   "sources": [
     {
@@ -46,7 +47,7 @@
       "normalizedSHA256": "891d0fa856bddd17b6c14beb6bd2608927648d55f2271916a32aee08417d392a"
     }
   ],
-  "outputSHA256": "b55af44e890b9b1775b11dfda8c0580a739baf28039e093d54d5bb24800bfbd9",
+  "outputSHA256": "2f909d7a9589d53032ae469a00b5289cce10f93e9a6dac42028aef92a7ac8a3f",
   "calibratedScope": [
     "Lantai memory root list/timeline",
     "Lantai manual summary"
@@ -60,8 +61,13 @@
     "host/device acceptance",
     "promotion"
   ],
-  "distribution": {
-    "change": "Internal development comments removed; CSS rules unchanged; upstream outputSHA256 retained for provenance",
-    "outputSHA256": "279602b0da97d280e90ab1c4b94fced524fa0a91dd161cc932aa9602a651bbec"
-  }
+  "localAdjustments": [
+    {
+      "date": "2026-10-07",
+      "reason": "User requested one softer shared primary purple across settings and workshop",
+      "token": "--ui-color-action-primary-background",
+      "previous": "#5F27CD",
+      "value": "#8465B0"
+    }
+  ]
 }

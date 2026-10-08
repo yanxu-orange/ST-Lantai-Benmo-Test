@@ -17,6 +17,7 @@ export function createAutomaticSummaryRunner({service,repository,captureSource}=
       while(run===active&&!disposed&&active.status==='running') {
         if(active.stopRequested){active.status='stopped';break;}
         const selected=await repository.captureSummary(active.target),raw=captureSource(active.target),plan=automaticSummaryPlan(selected.summary,raw);
+        if(active.stopRequested){active.status='stopped';break;}
         if(plan.status!=='ready'){active.status=plan.status;break;}
         active.taskId=await service.start('auto',plan);notify();
         const outcome=await service.completed(active.taskId);
@@ -36,7 +37,7 @@ export function createAutomaticSummaryRunner({service,repository,captureSource}=
     transferTask(taskId){
       const task=service.inspect(taskId),active=run;if(!active||!task||!sameTarget(active.target,task.target)||!sameTarget(task.target,repository.captureTarget()))return false;
       active.taskId=taskId;active.status='running';active.error='';active.pumping=true;notify();
-      void service.completed(taskId).then(outcome=>{if(disposed||run!==active||active.taskId!==taskId)return;active.status=outcome?.status==='awaiting-user'?'awaiting-user':'failed';if(active.status==='failed')active.error='本批未完成，请明确重试';}).catch(()=>{if(run===active&&active.taskId===taskId){active.status='failed';active.error='本批未完成，请明确重试';}}).finally(()=>{if(run===active&&active.taskId===taskId){active.pumping=false;notify();}});return true;
+      void service.completed(taskId).then(outcome=>{if(disposed||run!==active||active.taskId!==taskId)return;active.status=outcome?.status==='awaiting-user'?'awaiting-user':outcome?.status==='succeeded'?(active.stopRequested?'stopped':'running'):'failed';if(active.status==='failed')active.error='本批未完成，请明确重试';}).catch(()=>{if(run===active&&active.taskId===taskId){active.status='failed';active.error='本批未完成，请明确重试';}}).finally(()=>{if(run===active&&active.taskId===taskId){active.pumping=false;notify();void pump(active);}});return true;
     },
     discard(){if(run){run.status='failed';run.error='已放弃本批，请明确重试';notify();}},
     wake(){if(run?.status==='waiting'&&!run.stopRequested){if(!sameTarget(run.target,repository.captureTarget())){run.status='stopped';notify();return;}run.status='running';void pump(run);}},

@@ -1,3 +1,4 @@
+import {featureGate} from '../../domain/controls/gate.js';
 import {sameTarget} from '../../domain/memory/repository.js';
 import {buildRecall,extractRecallInputs} from '../../domain/recall/build.js';
 import {mapSummaryPromptFloors} from './summary-history.js';
@@ -19,15 +20,16 @@ export function recallInputs(messages,recentFloorCount,original=null) {
   for(let i=index-1;i>=0&&recentHistory.length<recentFloorCount;i--)if(eligible(usable[i])&&text(usable[i]).trim())recentHistory.push({floor:mapping?.[i]??i,text:text(usable[i]),distanceFromCurrent:mapping?mapping[index]-mapping[i]:index-i});
   return {input:index<0?'':text(usable[index]),recentHistory};
 }
-export function createRecallRuntime({repository,settings,getContext,captureSource,build=buildRecall,previewBuild}={}) {
+export function createRecallRuntime({repository,settings,getContext,captureSource,dateRuntime=null,build=buildRecall,previewBuild,getControls}={}) {
+  const gate=featureGate(getControls,'event'),timeGate=featureGate(getControls,'time');
   let disposed=false,ticket=0,proof=null,flight=null,previewAbort=null,recordSequence=0;
   const buildPreview=previewBuild??(build===buildRecall?createRecallPreviewBuilder():build);
   const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;};
   const records=new Map(),listeners=new Set(),releases=[];
   const key=target=>JSON.stringify([target.chatId,target.rootId]);
   const notify=()=>{for(const fn of [...listeners])try{fn();}catch{/* observers cannot break host generation */}};
-  const current=(target,serial,config,source)=>!disposed&&serial===ticket&&sameTarget(target,repository.captureTarget())
-    &&settings.captureRecall().epoch===config.epoch&&(!captureSource||JSON.stringify(captureSource(target))===source);
+  const current=(target,serial,config,source)=>gate.matches(config.controlProof)&&!disposed&&serial===ticket&&sameTarget(target,repository.captureTarget())
+    &&settings.captureRecall().epoch===config.epoch&&(!config.timeReminders||settings.matchesTimeReminders(config.timeReminders))&&(!captureSource||JSON.stringify(captureSource(target))===source);
   function clear(reason='cancelled',expectedTarget=null) {
     cancelPreview();
     const previous=flight,oldProof=proof;ticket++;proof=null;flight=null;
@@ -52,12 +54,16 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     try{if(sameTarget(target,repository.captureTarget()))record(target,{status:'failed',type,message:'本轮召回准备失败，未注入记忆；原上下文已保留。'});}catch{/* Unavailable target cannot receive a guessed record. */}
   }
   async function compute(messages,target,serial,previewInput=null,signal=null) {
-    const config=settings.captureRecall(),source=captureSource?JSON.stringify(captureSource(target)):null;
+    if(!gate.allowed())throw new Error('事件记忆已关闭');
+    const controlProof=gate.capture();
+    const observed=dateRuntime&&timeGate.allowed()?await dateRuntime.request():null;
+    if(disposed||serial!==ticket||!sameTarget(target,repository.captureTarget()))throw new Error('stale');
+    const config={controlProof,...settings.captureRecall(),timeReminders:settings.captureTimeReminders?.()??null},source=captureSource?JSON.stringify(captureSource(target)):null;
     const root=await repository.read(target);
     if(!current(target,serial,config,source))throw new Error('stale');
     const context=getContext(),inputs=previewInput===null?recallInputs(messages,config.recall.recentFloorCount,context?.chat)
       :extractRecallInputs(messages,{recentFloorCount:config.recall.recentFloorCount,input:previewInput,currentIndex:messages.length});
-    const result=await (previewInput===null?build:buildPreview)({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,
+    const result=await (previewInput===null?build:buildPreview)({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,time:root.time??null,timeAvailable:timeGate.allowed()&&(!dateRuntime||!['failed','needs-calibration','cancelled','no-calendar','unavailable'].includes(observed?.status)),timeReminders:config.timeReminders?.reminders??null,
       countTokens:typeof context?.getTokenCountAsync==='function'?body=>context.getTokenCountAsync(body):null},
       {signal,isCurrent:()=>current(target,serial,config,source)});
     if(!current(target,serial,config,source))throw new Error('stale');
@@ -80,7 +86,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   async function intercept(messages,_size,_abort,type='normal') {
     if(disposed)return;
     if(!clear())return;
-    if(!supported.has(type)||messages?.some(message=>text(message).includes('[LANTAI_BACKGROUND_TASK:')))return;
+    if(!gate.allowed()||!supported.has(type)||messages?.some(message=>text(message).includes('[LANTAI_BACKGROUND_TASK:')))return;
     let target;
     const serial=ticket;
     try {

@@ -14,7 +14,7 @@ export function initialMergeTimes(events) {
  };
  return {startTime:boundary('startTime',false),endTime:boundary('endTime',true)};
 }
-export function createMemoryManagementService({repository,manager,provider,getGenerationSettings,getOriginalSnapshot,uuid=()=>crypto.randomUUID()}={}) {
+export function createMemoryManagementService({repository,manager,provider,getGenerationSettings,getOriginalSnapshot,control=null,uuid=()=>crypto.randomUUID()}={}) {
  if(!repository||typeof repository.matchesSelection!=='function'||!manager||typeof manager.start!=='function'||typeof provider?.generateJson!=='function'||typeof getGenerationSettings!=='function')throw new TypeError('记忆管理依赖未配置');
  const records=new Map();
  const readSettings=()=>generationSettings(getGenerationSettings());
@@ -55,7 +55,9 @@ export function createMemoryManagementService({repository,manager,provider,getGe
  }
  return {
   async rebuildKeywords(ids) {
+   const operationProof=control?.capture();if(control&&!control.allowed())throw new Error('功能已关闭');
    const settings=readSettings(),target=repository.captureTarget(),selection=await repository.captureSelection(target,ids),detailIds=new Map(),snapshot={kind:'keywords',settings,selection,sourceMode:'memories',ranges:[],original:null};
+   if(control&&!control.matches(operationProof))throw new Error('功能开关已变化，请重新开始');
    return start(snapshot,async ctx=>{
     const data=await requestIndexes(ctx,ctx.snapshot.selection.events,ctx.snapshot),results=indexesToResults(data,ctx.snapshot.selection.events,detailIds);
     records.get(ctx.taskId).stage='final-review';
@@ -63,12 +65,14 @@ export function createMemoryManagementService({repository,manager,provider,getGe
    });
   },
   async merge(ids,{sourceMode}={}) {
+   const operationProof=control?.capture();if(control&&!control.allowed())throw new Error('功能已关闭');
    if(!['original','memories'].includes(sourceMode))throw new Error('请选择合并来源');
    const settings=readSettings(),target=repository.captureTarget(),selection=await repository.captureSelection(target,ids);
    if(selection.events.length<2||selection.events.some(event=>event.mergedFrom))throw new Error('合并至少需要两条未合并的活动记忆');
    const ranges=mergeRanges(selection.events.flatMap(event=>event.sources));
    if(sourceMode==='original'&&(!ranges.length||typeof getOriginalSnapshot!=='function'))throw new Error('当前记忆缺少可确认的原文来源');
    const original=sourceMode==='original'?originalSnapshot(getOriginalSnapshot(target,structuredClone(ranges)),ranges):null,snapshot={kind:'merge',settings,selection,sourceMode,ranges,original},mergedId=uuid(),detailIds=new Map();
+   if(control&&!control.matches(operationProof))throw new Error('功能开关已变化，请重新开始');
    return start(snapshot,async ctx=>{
     const captured=ctx.snapshot,events=captured.selection.events;await checkAsync(captured,ctx.target);
     const current=()=>!ctx.signal.aborted&&targetCurrent(captured,ctx.target)&&sourcesCurrent(captured,ctx.target);
@@ -85,16 +89,20 @@ export function createMemoryManagementService({repository,manager,provider,getGe
    });
   },
   async undoMerge(id) {
+   const operationProof=control?.capture();if(control&&!control.allowed())throw new Error('功能已关闭');
    const target=repository.captureTarget(),selection=await repository.captureMerge(target,id),snapshot={kind:'undo',settings:null,selection,sourceMode:'memories',ranges:[],original:null};
+   if(control&&!control.matches(operationProof))throw new Error('功能开关已变化，请重新开始');
    return start(snapshot,async ctx=>{await checkAsync(ctx.snapshot,ctx.target);const result=ctx.snapshot.selection.events.find(event=>event.mergedFrom);return {kind:'undo',resultId:result.id,restoreIds:result.mergedFrom,restoreCount:result.mergedFrom.length};});
   },
   review(taskId,fields) {
+   if(control&&!control.allowed())return false;
    const state=manager.inspect(taskId);if(!records.has(taskId)||!state?.reviewPending||state.candidate?.kind!=='merge-body')return false;
    try{validateReview(fields,{...blankEvent('review-validation'),sources:state.candidate.ranges});}catch{return false;}
    const record=records.get(taskId),previousStage=record.stage;record.stage='merge-indexes';
    const resumed=manager.resume(taskId,fields);if(!resumed)record.stage=previousStage;return resumed;
   },
   async confirm(taskId,{reviewedIndexes}={}) {
+   if(control&&!control.allowed())return {taskId,status:'paused'};
    const record=records.get(taskId);if(!record||record.outcome==='unconfirmed')return {taskId,status:'rejected',outcome:record?.outcome??null};
    let reviewed;
    if(reviewedIndexes!==undefined){

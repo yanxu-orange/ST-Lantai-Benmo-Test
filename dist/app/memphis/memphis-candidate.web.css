@@ -1,4 +1,5 @@
-/* GENERATED Memphis opt-in candidate; not promoted.
+/* GENERATED TASK-028 Memphis opt-in candidate; not promoted.
+   Build/check: node tools/build-memphis-candidate.mjs [--check]
    Apply data-ui-theme="memphis"; source entry starter/memphis-candidate.css. */
 
 /* SOURCE: platforms/web-interaction.css */
@@ -29,7 +30,11 @@
 }
 
 /* SOURCE: themes/quiet-light.css */
-
+/*
+  Quiet Light — v0.1 default Web baseline
+  Status: v0.1 canonical mapping plus TASK-007 0.2 candidate field-validation mappings.
+  Purpose: default Web Theme for the frozen baseline and isolated candidate trials.
+*/
 
 :root,
 [data-ui-theme="quiet-light"] {
@@ -58,7 +63,7 @@
   --ui-color-field-border: #92948f;
   --ui-color-field-placeholder: #737772;
   --ui-color-field-focus: #68746f;
-  
+  /* TASK-007 candidate roles; not part of frozen v0.1 */
   --ui-color-field-invalid-border: #a94742;
   --ui-color-feedback-error-text: #a94742;
 
@@ -183,7 +188,12 @@
 }
 
 /* SOURCE: themes/soft-bloom-candidate.css */
-
+/*
+  Soft Bloom Web Candidate
+  Status: TASK-009 review candidate on 0.2.0-candidate.1; not promoted.
+  Purpose: complete 108-role Soft Bloom mapping with an airy editorial voice,
+  gentle depth and restrained reusable ambience without page forks.
+*/
 
 [data-ui-theme="soft-bloom"] {
   color-scheme: light;
@@ -352,7 +362,16 @@ html[data-ui-theme="soft-bloom"] .ui-surface[data-selected="true"] {
 }
 
 /* SOURCE: starter/components.css */
+/*
+  Shared Web Components: v0.1 baseline plus TASK-007 candidate extension.
+  New field/choice/selected states remain unpromoted until consumer validation.
 
+  Theme controls visual expression.
+  Component/platform rules protect interaction safety.
+
+  Theme density is treated as a requested visual size.
+  Platform interaction constraints clamp interactive components where required.
+*/
 
 .ui-surface {
   padding: var(--ui-space-group);
@@ -930,7 +949,8 @@ textarea.ui-input:read-only:not(:disabled) {
 }
 
 /* SOURCE: themes/memphis-candidate.css */
-
+/* TASK-028 opt-in Memphis candidate. 108 existing roles; not promoted.
+   Values from user-approved TASK-027 reference; inherited unshown roles are provisional. */
 [data-ui-theme="memphis"] {
   color-scheme: light;
 
@@ -957,11 +977,11 @@ textarea.ui-input:read-only:not(:disabled) {
   --ui-color-field-border: #202025;
   --ui-color-field-placeholder: #55515b;
   --ui-color-field-focus: #7253e9;
-  
+  /* TASK-007 candidate roles; not part of frozen v0.1 */
   --ui-color-field-invalid-border: #a94742;
   --ui-color-feedback-error-text: #a94742;
 
-  --ui-color-action-primary-background: #5F27CD;
+  --ui-color-action-primary-background: #8465B0;
   --ui-color-action-primary-text: #ffffff;
   --ui-color-action-secondary-background: #ffffff;
   --ui-color-action-secondary-text: #1d1b24;
@@ -1082,7 +1102,7 @@ textarea.ui-input:read-only:not(:disabled) {
 }
 
 /* SOURCE: themes/memphis-candidate.recipe.css */
-
+/* TASK-028 user-reference graphic recipe. Stable shared visual classes, never product routes. */
 [data-ui-theme="memphis"]{--theme-memphis-shadow-ambient-color: #2727272b;
 --theme-memphis-shadow-toast-color: #0003;
 --theme-memphis-color-ink-original: #222;
@@ -1295,7 +1315,7 @@ textarea.ui-input:read-only:not(:disabled) {
 [data-ui-theme="memphis"] .ui-workspace .ui-action-grid .ui-button[data-ui-emphasis="featured"]::after{content:"";position:absolute;right:6px;top:-9px;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:15px solid var(--theme-memphis-decor-purple);pointer-events:none;}
 
 /* SOURCE: themes/memphis-candidate.states.css */
-
+/* TASK-028 bounded state corrections and native semantics. Opt-in only. */
 [data-ui-theme="memphis"] .ui-button { font: inherit; line-height:1.25; position:relative; }
 [data-ui-theme="memphis"] .ui-workspace .ui-input {font:inherit;line-height:normal;}
 [data-ui-theme="memphis"] .ui-workspace .ui-choice { padding:0; font:inherit; background:transparent; color:var(--ui-color-text-primary); border-radius:0; }
@@ -1334,7 +1354,9 @@ textarea.ui-input:read-only:not(:disabled) {
 }
 
 /* SOURCE: starter/graphic-interaction.css */
-
+/* Historical TASK-028 blanket coarse reservation withdrawn after visual review.
+   Explicit compact composite calibration is in platforms/web-compact-group-candidate.css.
+   This compatibility import contains no layout overrides; ordinary System defaults remain. */
 
 /* SOURCE: platforms/web-compact-group-candidate.css */
 /* Explicit compact COMPOSITE calibration candidate, not a Theme rule.

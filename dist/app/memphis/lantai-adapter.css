@@ -1,4 +1,5 @@
-
+/* TASK-018: Lantai's approved geometry and existing real-page markup consume
+   the shared TASK-028 candidate. Theme colors and graphic states live there. */
 .lantai[data-ui-theme="memphis"] {
   --ui-shape-overlay-radius:12px;
   border-radius:var(--ui-shape-overlay-radius);
@@ -226,8 +227,9 @@
   border:2px solid var(--theme-memphis-color-outline);
   border-radius:var(--ui-shape-control-radius);
   background:var(--ui-color-surface-raised);
-  box-shadow:var(--theme-memphis-shadow-control);
 }
+.lantai[data-ui-theme="memphis"].lt-recall .lt-recall-surface { box-shadow:var(--theme-memphis-shadow-control); }
+.lantai[data-ui-theme="memphis"].lt-recall .lt-recall-input { box-shadow:none; }
 .lantai[data-ui-theme="memphis"].lt-recall .lt-recall-detail>summary {
   background:transparent;
 }
@@ -235,3 +237,27 @@
   border:2px solid var(--theme-memphis-color-outline);
   background:var(--ui-color-surface-raised);
 }
+
+/* TIME shares memory's colored controls; ordinary grouping must not become a grid of black boxes. */
+.lantai[data-ui-theme="memphis"].lt-time .time-section { border:0; }
+
+.lantai[data-ui-theme="memphis"].lt-time .time-day-title-row .lt-meta { background:var(--ui-color-selected-background); color:var(--ui-color-selected-text); padding:var(--ui-space-inline); border-radius:var(--ui-shape-control-radius); }
+.lantai[data-ui-theme="memphis"].lt-time .time-story-date { background:var(--ui-color-action-secondary-background); border-radius:var(--ui-shape-control-radius); }
+
+.lantai[data-ui-theme="memphis"].lt-time :is(.time-day-title-row,.time-holiday-record,.time-era-actions) .ui-icon-button { border-color:transparent; background:transparent; box-shadow:none; }
+
+/* Reuse the approved memory settings/card recipes for TIME consumers. */
+.lantai[data-ui-theme="memphis"].lt-time :is(.time-prompt-group,.time-day-list .time-day-item){border:2px solid var(--theme-memphis-color-outline);border-radius:var(--ui-shape-control-radius);background:var(--ui-color-surface-raised);box-shadow:var(--theme-memphis-shadow-control)}
+.lantai[data-ui-theme="memphis"].lt-time .time-prompt-group>.time-group-heading{background:var(--ui-color-surface-subtle);color:var(--ui-color-text-primary)}
+.lantai[data-ui-theme="memphis"].lt-time .time-prompt-group:nth-child(2)>.time-group-heading{background:var(--theme-memphis-decor-cyan)}
+.lantai[data-ui-theme="memphis"].lt-time .time-radio-field input[type=radio]{accent-color:var(--theme-memphis-decor-pink)}
+.lantai[data-ui-theme="memphis"].lt-time .time-entry-actions [data-ui-tone=pink]{background:var(--theme-memphis-decor-pink)}
+
+.lantai[data-ui-theme="memphis"].lt-time .lt-list-icons .ui-icon-button[data-ui-tone="pink"]{background:var(--theme-memphis-decor-pink)}
+
+/* TIME legend and the corresponding calendar/list markers share category colors. */
+.lantai[data-ui-theme="memphis"].lt-time .time-marker{inline-size:6px;block-size:6px}
+.lantai[data-ui-theme="memphis"].lt-time .time-marker--anniversary{background:var(--theme-memphis-decor-purple)}
+.lantai[data-ui-theme="memphis"].lt-time .time-marker--schedule{background:var(--theme-memphis-decor-coral)}
+.lantai[data-ui-theme="memphis"].lt-time .time-marker--holiday{background:var(--theme-memphis-decor-yellow)}
+.lantai[data-ui-theme="memphis"].lt-time .time-marker--term{background:transparent;border-color:var(--theme-memphis-decor-cyan)}

@@ -39,11 +39,14 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
     if (!editable()) return false;
     invalidate(options); work(state.draft); state.status = 'ready'; state.error = null; state.message = ''; notify(); return true;
   }
-  async function read() {
+  async function load(preferConfirmed = false) {
     if (busy || closed) return false;
     busy = true; invalidate({ mask: true }); passwords.clear(); copies.clear(); state.status = state.status === 'unconfirmed' ? 'unconfirmed' : 'loading'; notify();
     try {
-      await repository.read();
+      // Entry reuses confirmed authority through the repository's write queue.
+      // Explicit rereads and save reconciliation still fetch fresh server data.
+      if (preferConfirmed) await repository.ensure();
+      else await repository.read();
       const current = repository.captureAi();
       if (closed) return false;
       passwords.clear(); baseline = current; state = { status: 'ready', draft: copy(current.ai), error: null, message: '' };
@@ -85,7 +88,8 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
   return Object.freeze({
     inspect: snapshot,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    read,
+    initialize: () => load(true),
+    read: () => load(),
     // Narrow view-only access to unsaved password entry; inspect/notifications
     // never expose it and saved credentials are never returned or backfilled.
     passwordDraft: id => closed ? '' : passwords.get(id) ?? '',
