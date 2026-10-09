@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "67ba39750a73073572f749e1d9cfb573bfcb9de2ddd1d63a9133c5e54d85c9fa"
+    "sha256": "57e95af63303f2e5e368162fa39a8948e14629077f1b3da989e02ff04e9e6f5c"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -37,11 +37,11 @@
   },
   {
     "path": "dist/app/benmo-view.css",
-    "sha256": "980265bb55399c30fd10991b7a176a22d1027c029fced6fee625d865004e1b07"
+    "sha256": "b25360ab598bf23a8fbb97b0c2ae94a681760ee5698a3bd4edaec521323562ac"
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "c7a872e3c74d7a428afdc036eeeb2bbf9d8b81b3caafbb0246566d1b05fdf682"
+    "sha256": "0248d747436102f198e9c26c598487ed927de14d500abd9050017344acde7979"
   },
   {
     "path": "dist/app/control-session.js",
@@ -61,7 +61,7 @@
   },
   {
     "path": "dist/app/cumulative-settings-view.js",
-    "sha256": "9acc375e02f201ca4d22a1b2b8b08d03ed909df30e8b558c8e91ed61846092ae"
+    "sha256": "d0ab96897181c3f0dbc95639f9440b4df12460700d0d2d2db7cc0b0c44fec1ac"
   },
   {
     "path": "dist/app/cumulative-view.js",
@@ -117,7 +117,7 @@
   },
   {
     "path": "dist/app/latest-summary-settings-view.js",
-    "sha256": "eaf5f45063187a7f3510a1cf3291fb0e9bf6af902b9027cf2449c1bff8d929b2"
+    "sha256": "d689119da8a47fd97078dfa485d2ad9ba4f49fcbf1b94dfcf50323ab876f0498"
   },
   {
     "path": "dist/app/management-controller.js",
@@ -141,7 +141,7 @@
   },
   {
     "path": "dist/app/memory.css",
-    "sha256": "2081aa0dc1e3e861d7d5ce23567ebb9161848439b6a36b96b02b6437f6ed64d1"
+    "sha256": "b8a6b0350cc573fc382fb84b82ab4259e028f84e57d8b4e023c40d28646c7695"
   },
   {
     "path": "dist/app/memphis/compact-group-candidate.js",
@@ -149,7 +149,7 @@
   },
   {
     "path": "dist/app/memphis/lantai-adapter.css",
-    "sha256": "f1dbb7c8f95439c2c8d8c127c2f6796466ec288f1d60c8016258024926b7e3a7"
+    "sha256": "b478f5b2df586102be5713d61ccc96efff5891bbf6e81abf4fadc5ebec83b98b"
   },
   {
     "path": "dist/app/memphis/manifest.json",
@@ -237,7 +237,7 @@
   },
   {
     "path": "dist/app/summary-settings-view.js",
-    "sha256": "e463f75a19ece64308c91356b3856e84b81d197fade9db0b125df0be756616b5"
+    "sha256": "101c475177b3248fe36153791abdf3f73531b55737eded834044c807f7105407"
   },
   {
     "path": "dist/app/summary-settings.css",
@@ -265,7 +265,7 @@
   },
   {
     "path": "dist/app/time-view.js",
-    "sha256": "66648d20efbe75ef02042eb2a88d456cf75402d40dc638065602300f409432f7"
+    "sha256": "3d1a3d0c53aa58384d4c7580b6dae65e382cd2b6a371a53d8243787853123aba"
   },
   {
     "path": "dist/app/tracking-controller.js",
@@ -273,11 +273,11 @@
   },
   {
     "path": "dist/app/tracking-view.js",
-    "sha256": "01fe3c4d229ac2f1f119c2a6b64dca1d6fff034c19d6ed26b9fc100e5636f942"
+    "sha256": "6fb11dfaea615fb3dd8b6b592e45227167b8dab4ee52e68fabf45db650ce03c0"
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "18b5eace6a1f50e8738ff88eee4cd0516b3e3e9b864d176986ff4e89fda2dbb7"
+    "sha256": "b608ef0cbec02ba22afd7b968aef59aedff62c7e0f0cf3313ec038d37cd9e03b"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -289,11 +289,11 @@
   },
   {
     "path": "dist/app/workshop-view.css",
-    "sha256": "8da68d200c1293f378cb1dc4c1263b800135dcbdf33095eedd7f74f53207a1e9"
+    "sha256": "0cfae70bd1f4fd7fcb55e3bbdc12da3ed07631a1913788f68380148c24a1599c"
   },
   {
     "path": "dist/app/workshop-view.js",
-    "sha256": "b5c8adbfd92ca4762507209f11ee64605d1f5a0cf4f388bed42d768c42f7a3b1"
+    "sha256": "b1e03384e0549f296b5d509b46df3b9769483b7033e96576669a0f969a093add"
   },
   {
     "path": "dist/domain/background/round.js",
@@ -837,10 +837,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "176e833a8142f402eba89b2dbd2747468ed3b06666692501e759a854a02c7a60"
+    "sha256": "4ce0b8ae0f0fb212cd2985207f6c1882022bc599cc6ed557d614f596a8a2a947"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "5aa8568505402214c61659723ddf60e05f6fec7934781ec0f0762f481102cb8c"
+    "sha256": "5a57cf18dd2ee3094909d7218286d565225b098999527b4ccb9f6ebe565d642a"
   }
 ]

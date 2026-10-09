@@ -46,7 +46,7 @@ export async function mountTrackingView({container:app,controller,kind,onBack,on
     if(disposed)return;
     const focused=app.getRootNode().activeElement,focusKey=focused?.dataset?JSON.stringify({...focused.dataset}):null;
     const title=route==='list'?TITLES[kind]:(value.records?.some(row=>row.id===draft.id)?'编辑':'新建')+(kind==='item'?'物品':'NPC');
-    app.innerHTML=`<section class="lantai workshop ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}"><header class="lt-header ui-header ui-header--centered">${icon(route==='list'?'返回工坊':'返回追踪','back','back')}<h1 class="ui-page-title">${title}</h1>${icon('关闭兰台','close','close')}</header><main class="lt-main ui-main" tabindex="-1">${error||value.error?`<p class="lt-error" role="alert">${esc(error||value.error)}</p>${button('重新读取','reload')}`:''}${route==='list'?list():editor()}</main><footer class="lt-footer">${route==='editor'?`<div class="wk-editor-footer">${value.records?.some(row=>row.id===draft.id)?button('删除','delete-record','','danger'):''}${button('保存','save','','primary')}</div>`:''}</footer>${dialog?`<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending?'正在处理，请稍候…':dialog.text)}</p><div class="wk-dialog-actions">${button('取消','cancel-dialog',dialog.pending?'disabled':'')}${button(dialog.pending?'处理中…':'确认','confirm-dialog',dialog.pending?'disabled aria-busy="true"':'','primary')}</div></div></div>`:''}</section>`;
+    app.innerHTML=`<section class="lantai workshop ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}"><header class="lt-header ui-header ui-header--centered">${icon(route==='list'?'返回工坊':'返回追踪','back','back')}<h1 class="ui-page-title">${title}</h1>${icon('关闭兰台','close','close')}</header><main class="lt-main ui-main" tabindex="-1">${error||value.error?`<p class="lt-error" role="alert">${esc(error||value.error)}</p>${button('重新读取','reload')}`:''}${route==='list'?list():editor()}</main><footer class="lt-footer">${route==='editor'?`<div class="wk-editor-footer">${value.records?.some(row=>row.id===draft.id)?button('删除','delete-record','','danger'):''}${button('保存','save','','primary')}</div>`:''}</footer>${dialog?`<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending?'正在处理，请稍候…':dialog.text)}</p><div class="wk-dialog-actions">${button(dialog.cancelLabel??'取消','cancel-dialog',dialog.pending?'disabled':'')}${button(dialog.pending?'处理中…':dialog.confirmLabel??'确认','confirm-dialog',dialog.pending?'disabled aria-busy="true"':'','primary')}</div></div></div>`:''}</section>`;
     if(dialog){for(const node of app.querySelectorAll('.lt-header,.lt-main,.lt-footer'))node.inert=true;app.querySelector('[data-action="cancel-dialog"]')?.focus({preventScroll:true});}
     else {
       const main=app.querySelector('.lt-main');if(main)main.scrollTop=scrolls[route]??0;
@@ -54,8 +54,8 @@ export async function mountTrackingView({container:app,controller,kind,onBack,on
     }
   }
   function goList(){remember();route='list';draft=null;baseline=null;original=null;dialog=null;render();}
-  function confirm(text,action){remember();readDraft();dialog={text,action,pending:false};render();}
-  function leave(action){if(dirty())confirm('放弃未保存的修改？',action);else action();}
+  function confirm(text,action,labels={}){remember();readDraft();dialog={text,action,pending:false,...labels};render();}
+  function leave(action){if(dirty())confirm('放弃未保存的修改？',action,{cancelLabel:'继续编辑',confirmLabel:'放弃修改'});else action();}
   function back(){leave(()=>route==='list'?onBack?.():goList());}
   function syncSwitch(control){
     for(const node of [...app.querySelectorAll('[data-action="toggle-enabled"]'),...(control?[control]:[])]){

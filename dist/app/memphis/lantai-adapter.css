@@ -263,3 +263,5 @@
 .lantai[data-ui-theme="memphis"].lt-time .time-marker--schedule{background:var(--theme-memphis-decor-coral)}
 .lantai[data-ui-theme="memphis"].lt-time .time-marker--holiday{background:var(--theme-memphis-decor-yellow)}
 .lantai[data-ui-theme="memphis"].lt-time .time-marker--term{background:transparent;border-color:var(--theme-memphis-decor-cyan)}
+/* The supplier's UI-input font shorthand must not reset the prompt size. */
+.lantai[data-ui-theme="memphis"] textarea.ui-input.lt-prompt-editor { font-size:var(--lt-prompt-editor-size); }
