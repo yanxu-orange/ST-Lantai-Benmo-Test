@@ -1,7 +1,7 @@
 [
   {
     "path": "README.md",
-    "sha256": "a42d856f763d09fb4385ab29af8ec32b60b61ce49194f785f2692734f08f63a4"
+    "sha256": "04f2276e05d7bfd88c7f2dbf5677a209e8fedbc6edaa4b023ae2a9445d63ec44"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -141,7 +141,7 @@
   },
   {
     "path": "dist/app/memphis/lantai-adapter.css",
-    "sha256": "db047fc3afab22b1f60956aa56a8da672d0b2cf1feb4f366efcfc5a4d5738f3f"
+    "sha256": "f1dbb7c8f95439c2c8d8c127c2f6796466ec288f1d60c8016258024926b7e3a7"
   },
   {
     "path": "dist/app/memphis/manifest.json",
@@ -269,7 +269,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "7a8c170eaf6eef9c2f593c03e10fcd567a104216d234aa01d310e1e7b04fda08"
+    "sha256": "eccc4ba5a836734589c316433532a8b2715190d4dd6b73a8c25112a051de639d"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -825,10 +825,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "a387f73304f3400fc40efe0b0773cbf6f4a8922b712d1efb7e5333d6009da252"
+    "sha256": "d4b1fdb52521590ce64146ddae2f35395f766a457810155969551220899a4789"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "a71ca5b495acd6ef0f724e259835b0d699dd5d19485b04c2cac6e1c653ed42fb"
+    "sha256": "5719975dd497ddff5912c0bfa6b0edb3a31bb8fbc04194d42cd3d15b0d509eb0"
   }
 ]

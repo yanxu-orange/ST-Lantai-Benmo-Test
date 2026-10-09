@@ -1,6 +1,8 @@
 /* TASK-018: Lantai's approved geometry and existing real-page markup consume
    the shared TASK-028 candidate. Theme colors and graphic states live there. */
 .lantai[data-ui-theme="memphis"] {
+  /* Softer shared pink accent; keep the graphic outlines and other hues. */
+  --theme-memphis-decor-pink:#E9B8CC;
   --ui-shape-overlay-radius:12px;
   border-radius:var(--ui-shape-overlay-radius);
 }
