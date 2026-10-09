@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "831151af2a9f9201a3360a39faf11fc049602a8ba170a879faf4755726ee694c"
+    "sha256": "dafc8719d82e5b09639324481e28cb91a965fd17df818f21b5bdde9006699d08"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -277,7 +277,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "ef595a5cd9fb33b03c913a599306c505962ecc18435960a57238cf8d84f819c9"
+    "sha256": "c33de3ac062c363dc3c089e681a21a5e1d8dd07391fdde6b19ea4287f5b55d5f"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -689,7 +689,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-adapter.js",
-    "sha256": "6a184e06c577633c09b589e433868eacfb218375ef9ff5270f4c3cbb6c20ec9a"
+    "sha256": "3b92599989fac2087116db77ce01448c5b6384739719435e8f8917323a8a27e5"
   },
   {
     "path": "dist/platform/sillytavern/memory-host.css",
@@ -837,10 +837,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "be9a92c7be6089ba014e2e9354a1c9e91ee70e7307d0536266f20dc90f4e3d44"
+    "sha256": "d766593706da948d41e7d6184c1864596f3ade7c933cd30a9651e97de8f51fad"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "4467aa3b956aeb6e455bc03fe321667fca13c147bddd0554016a3cfb3fc1535f"
+    "sha256": "c40043402cb69cbb9756e03b9b0b0560560b290c3e114ab6c5c8cb1415c424af"
   }
 ]

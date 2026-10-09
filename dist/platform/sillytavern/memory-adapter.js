@@ -164,7 +164,20 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
   function requireConfirmed(current) {
     if (uncertaintyFor(current)) throw unconfirmed();
   }
-  async function reconcile(current = observe()) {
+  async function waitForWrite(current, ticket = epoch) {
+    // A known local transaction is still working, not an unknown save outcome.
+    // Never expose its staged metadata, and wait through readback/proof too.
+    for (;;) {
+      const record = uncertaintyFor(current);
+      if (!record?.inFlight) return;
+      if (record.epoch !== ticket) throw unconfirmed();
+      const committed = await record.completion;
+      if (ticket !== epoch || !sameBinding(observe(), current)) throw stale();
+      if (!committed) throw unconfirmed();
+    }
+  }
+  async function reconcile(current = observe(), joinWrites = false) {
+    if (joinWrites) while (uncertaintyFor(current)?.inFlight) await waitForWrite(current);
     const record = uncertaintyFor(current);
     if (!record) return;
     if (record.inFlight) throw unconfirmed();
@@ -245,14 +258,15 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     const previous = copy(context.chatMetadata[MEMORY_KEY]);
     if (guard(copy(context.chatMetadata[MEMORY_KEY] ?? prepared)) !== true) throw new Error('任务已取消或来源已失效');
     check(target);
-    const record = { key: identity(current), binding: copy(current), previous, previousAuthority: copy(prepared), next: copy(next), workshopProof: copy(workshopProof), inFlight: true };
+    const record = { key: identity(current), epoch, binding: copy(current), previous, previousAuthority: copy(prepared), next: copy(next), workshopProof: copy(workshopProof), inFlight: true };
+    let finish;
+    record.completion = new Promise(resolve => { finish = resolve; });
     uncertain.set(record.key, record);
     try {
       context.chatMetadata[MEMORY_KEY] = copy(next);
       // Do not retain context/chatMetadata as an authority across awaits.
       const save = context.saveMetadata;
       await save();
-      record.inFlight = false;
       check(target);
       const rows = await serverChat(current);
       check(target);
@@ -265,7 +279,6 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       snapshotMessages();
       return copy(next);
     } catch (error) {
-      record.inFlight = false;
       // Reacquire, and restore only the exact current epoch and our own value.
       try {
         check(target);
@@ -278,12 +291,16 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       // Restoring a local working copy is not evidence of disk rollback.
       // The marker prevents this copy being used as writable authority.
       throw unconfirmed();
+    } finally {
+      record.inFlight = false;
+      finish(uncertain.get(record.key) !== record);
     }
   }
   async function prepare() {
     capabilities();
     const current = observe(), ticket = epoch;
-    await reconcile(current);
+    await reconcile(current, true);
+    while (uncertaintyFor(current)?.inFlight) await waitForWrite(current, ticket);
     if (ticket !== epoch || identity(observe()) !== identity(current)) throw stale();
     requireConfirmed(current);
     if (prepared) return captureTarget();
@@ -478,8 +495,9 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       return assertRoot(root, target);
     },
     async read(target) {
-      check(target);
-      await reconcile();
+      const current = check(target);
+      await reconcile(current, true);
+      while (uncertaintyFor(current)?.inFlight) await waitForWrite(current, target.epoch);
       requireConfirmed(check(target));
       const raw = getContext().chatMetadata[MEMORY_KEY];
       const root = raw === undefined ? prepared : raw;
