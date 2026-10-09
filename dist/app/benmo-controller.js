@@ -67,9 +67,18 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     generateNarrative(kind,options){return write(kind,()=>narrativeRuntime.generate(kind,options));},
     cancelNarrative(kind){return write(kind,()=>narrativeRuntime.cancel(kind));},
     saveTrackingPrompt(kind,prompt,options){return write(kind,()=>trackingRuntime.savePrompt(kind,prompt,options));},
+    saveExclusionNames(kind,names,options){return write(kind,()=>trackingRuntime.saveExclusionNames(kind,names,options));},
+    setRecordExcluded(kind,id,excluded){return write(kind,()=>trackingRuntime.setRecordExcluded(kind,id,excluded));},
     refreshAvailability:publish,
     rebindTarget(next){if(target&&(target.chatId!==next.chatId||target.rootId!==next.rootId))throw new Error('聊天已变化');sequence++;target=copy(next);loading=null;busy=null;status='unconfirmed';error='聊天已重新读取，请重新读取本末';trackingRuntime.rebindTarget?.(next);narrativeRuntime?.rebindTarget?.(next);publish();},
     saveSummary(id,body,options={}){return write('summary',()=>latestRuntime.editRecord(id,body,options));},
+    manualSummary(floor,body,options={}){return write('summary',()=>latestRuntime.manualRecord(floor,body,options));},
+    estimateSummaryBackfill(range){writable('summary');return copy(latestRuntime.estimateBackfill(range));},
+    startSummaryBackfill(range){return write('summary',()=>latestRuntime.startBackfill(range));},
+    stopSummaryBackfill(){
+      if(!current())throw new Error('聊天已变化，请重新读取本末');
+      latestRuntime.stopBackfill();publish();return snapshot();
+    },
     saveSummaryPreferences(patch){return write('summary',()=>latestRuntime.savePreferences(patch));},
     generateSummary(floor){return write('summary',async()=>{const okay=await latestRuntime.generate(floor);if(!okay){const info=latestRuntime.floorInfo(floor);if(info?.error)throw new Error(info.error);}});},
     saveRecord(kind,draft,{original}={}){

@@ -1,7 +1,8 @@
+import { trackingExclusionsOf, effectiveTrackingExclusions, trackingRecordExcluded } from '../../domain/tracking/exclusions.js';
 import {DEFAULT_TRACKING_PROMPTS} from '../../domain/tracking/prompts.js';
 import {sameTarget} from '../../domain/memory/repository.js';
 import {featureGate} from '../../domain/controls/gate.js';
-import {currentTracking,prepareTrackingUpdate,applyTrackingResponseParts,addTrackingRecord,editTrackingRecord,deleteTrackingRecord,setTrackingPreferences,invalidateTrackingFloors,pruneTrackingSnapshots} from '../../domain/tracking/data.js';
+import {currentTracking,prepareTrackingUpdate,applyTrackingResponseParts,addTrackingRecord,editTrackingRecord,deleteTrackingRecord,setTrackingPreferences,invalidateTrackingFloors,pruneTrackingSnapshots,setTrackingExclusionNames,setTrackingRecordExcluded} from '../../domain/tracking/data.js';
 import {TRACKING_FIELDS} from '../../domain/tracking/model.js';
 import {buildTrackingRequest,parseTrackingResponseParts} from '../../domain/tracking/requests.js';
 import {buildTrackingRecall} from '../../domain/tracking/recall.js';
@@ -12,16 +13,17 @@ const KEY='lantai_benmo_tracking_context',supported=new Set(['normal','regenerat
 export function createTrackingRuntime({repository,adapter,settings,getContext,getControls,captureSource,onChange}={}) {
   const controls=()=>getControls?.()??{allowed:()=>false,capture:()=>null,matches:()=>false};
   const gate=featureGate(controls,'enabled'),categoryGates={items:featureGate(controls,'item'),npcs:featureGate(controls,'npc')};
-  let disposed=false,target=null,lastTarget=null,selection=null,state={records:[],preferences:{itemsEnabled:false,npcsEnabled:false},writeBlocked:false,error:'',target:null},tail=Promise.resolve(),serial=0;
+  let disposed=false,target=null,lastTarget=null,selection=null,state={records:[],preferences:{itemsEnabled:false,npcsEnabled:false},writeBlocked:false,error:'',target:null},tail=Promise.resolve(),serial=0,exclusionEpoch=0,pendingExclusions=0;
   const listeners=new Set(),releases=[];
   const effectivePreferences=()=>Object.fromEntries(['items','npcs'].map(key=>[`${key}Enabled`,gate.allowed()&&categoryGates[key].allowed()]));
   const captureCategories=()=>Object.fromEntries(['items','npcs'].map(key=>[key,categoryGates[key].capture()]));
   const contentOf=domain=>{const {revision,preferences,...content}=domain;return content;};
   const current=t=>{try{return !disposed&&sameTarget(t,repository.captureTarget());}catch{return false;}};
-  const snapshot=()=>clone({...state,prompts:settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS,writeBlocked:state.writeBlocked||!gate.allowed()}),notify=()=>{for(const fn of listeners)try{fn(snapshot());}catch{/* Observer cannot break data. */}};
+  const snapshot=()=>clone({...state,exclusions:state.exclusions??trackingExclusionsOf(null),prompts:settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS,writeBlocked:state.writeBlocked||!gate.allowed()}),notify=()=>{for(const fn of listeners)try{fn(snapshot());}catch{/* Observer cannot break data. */}};
   function adopt(t,captured){
-    const projected=currentTracking(captured.tracking,captureSource(t));target=clone(t);lastTarget=clone(t);selection=captured;
-    state={records:projected.records.map(row=>({...row,...(row.kind==='npc'?{absentTurns:projected.absenceTurns[row.id]}:{})})),preferences:captured.tracking.preferences,writeBlocked:false,error:'',target:clone(t),aiTurn:projected.aiTurn};notify();return snapshot();
+    if(selection&&!equal(trackingExclusionsOf(selection.tracking),trackingExclusionsOf(captured.tracking))){exclusionEpoch++;clear();}
+    const projected=currentTracking(captured.tracking,captureSource(t)),exclusions=effectiveTrackingExclusions(captured.tracking,projected.records);target=clone(t);lastTarget=clone(t);selection=captured;
+    state={records:projected.records.map(row=>({...row,excluded:trackingRecordExcluded(row,exclusions),...(row.kind==='npc'?{absentTurns:projected.absenceTurns[row.id]}:{})})),preferences:captured.tracking.preferences,exclusions:trackingExclusionsOf(captured.tracking),writeBlocked:false,error:'',target:clone(t),aiTurn:projected.aiTurn};notify();return snapshot();
   }
   async function load(){const ticket=serial,t=await adapter.prepare(),captured=await repository.captureTracking(t);if(disposed||ticket!==serial||!current(t))throw new Error('聊天已变化，请重新打开追踪');return adopt(t,captured);}
   function clear({invalidate=true}={}){if(invalidate)serial++;try{getContext().setExtensionPrompt(KEY,'',1,0,false,0);return true;}catch{return false;}}
@@ -39,6 +41,13 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
       const result=adopt(requestedTarget,saved.selection);onChange?.();return result;
     }).catch(error=>{if(current(requestedTarget)&&ticket===serial){state={...state,writeBlocked:true,error:error.message};notify();}throw error;});tail=work;return work;
   }
+  function changeExclusions(change){
+    // Invalidate before awaiting persistence: a pending interceptor or provider
+    // must not publish old context/results while a user pause is being saved.
+    exclusionEpoch++;pendingExclusions++;clear();
+    return mutate(change,{fresh:true}).finally(()=>{pendingExclusions--;clear({invalidate:false});});
+  }
+  const visibleRecords=ticket=>ticket.current.filter(record=>ticket.preferences[record.kind==='item'?'itemsEnabled':'npcsEnabled']&&!trackingRecordExcluded(record,ticket.exclusions));
   function saveRecord(kind,draft){
     if(!['item','npc'].includes(kind)||!draft||typeof draft.id!=='string'||!draft.id)throw new Error('追踪记录身份无效');
     const value=clone(draft);
@@ -51,28 +60,42 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     },{category:kind==='item'?'items':'npcs'});
   }
   async function prepareBackground(t,source,{automatic=false,taskId,rules=[]}={}){
-    if(!gate.allowed()||taskId&&taskId!=='tracking')return null;
-    const captured=await repository.captureTracking(t),domain=captured.tracking;
+    if(pendingExclusions||!gate.allowed()||taskId&&taskId!=='tracking')return null;
+    const preparedEpoch=exclusionEpoch,captured=await repository.captureTracking(t),domain=captured.tracking;
     const activePreferences=effectivePreferences();
-    if(!current(t)||!gate.allowed()||!activePreferences.itemsEnabled&&!activePreferences.npcsEnabled)return null;
+    if(preparedEpoch!==exclusionEpoch||pendingExclusions||!current(t)||!gate.allowed()||!activePreferences.itemsEnabled&&!activePreferences.npcsEnabled)return null;
     const raw=captureSource(t);
     if(automatic&&domain.snapshots.some(row=>row.sourceSnapshot.replyId===source.replyId&&matchesStoredLatestSource(row.sourceSnapshot,raw)))return null;
     const ticket=prepareTrackingUpdate({...domain,preferences:activePreferences},raw,{floor:source.assistantFloor,rules});
     const prompts=settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS;
     const request=buildTrackingRequest({ticket,prompts});
-    return {target:clone(t),selection:captured,ticket,prompts,categoryProofs:captureCategories(),gate:gate.capture(),task:{id:'tracking',name:'物品与 NPC 追踪',instructions:request.previewParts.slice(0,-1).map(part=>part.content).join('\n\n'),previousState:ticket.current.filter(record=>ticket.preferences[record.kind==='item'?'itemsEnabled':'npcsEnabled'])}};
+    return {target:clone(t),selection:captured,ticket,prompts,exclusionEpoch:preparedEpoch,categoryProofs:captureCategories(),gate:gate.capture(),task:{id:'tracking',name:'物品与 NPC 追踪',instructions:request.previewParts.slice(0,-1).map(part=>part.content).join('\n\n'),previousState:visibleRecords(ticket)}};
   }
   // Recheck immediately before the shared provider call, without granting a
   // new epoch to a category switched off/on while other plans were prepared.
-  function filterBackgroundPlan(plan){
-    if(!plan||!current(plan.target)||!gate.allowed()||!gate.matches(plan.gate))return null;
+  async function filterBackgroundPlan(plan){
+    const valid=()=>!!plan&&!pendingExclusions&&plan.exclusionEpoch===exclusionEpoch&&current(plan.target)&&gate.allowed()&&gate.matches(plan.gate);
+    if(!valid())return null;
+    // Imports, another runtime and direct root writes do not advance this
+    // runtime's local epoch. Re-read authority before sharing captured facts.
+    let captured;
+    try{captured=await repository.captureTracking(plan.target);}catch{if(valid())clear();return null;}
+    if(!valid())return null;
+    if(!equal(contentOf(captured.tracking),contentOf(plan.selection.tracking))){
+      if(!equal(trackingExclusionsOf(captured.tracking),trackingExclusionsOf(plan.selection.tracking))){exclusionEpoch++;clear();}
+      return null;
+    }
+    return filterCurrentBackgroundPlan(plan);
+  }
+  function filterCurrentBackgroundPlan(plan){
+    if(!plan||pendingExclusions||plan.exclusionEpoch!==exclusionEpoch||!current(plan.target)||!gate.allowed()||!gate.matches(plan.gate))return null;
     const preferences=Object.fromEntries(['items','npcs'].map(key=>[`${key}Enabled`,plan.ticket.preferences[`${key}Enabled`]&&categoryGates[key].matches(plan.categoryProofs[key])]));
     if(!Object.values(preferences).some(Boolean))return null;
     const ticket={...plan.ticket,preferences},request=buildTrackingRequest({ticket,prompts:plan.prompts});
-    return {...plan,ticket,task:{...plan.task,instructions:request.previewParts.slice(0,-1).map(part=>part.content).join('\n\n'),previousState:ticket.current.filter(record=>preferences[record.kind==='item'?'itemsEnabled':'npcsEnabled'])}};
+    return {...plan,ticket,task:{...plan.task,instructions:request.previewParts.slice(0,-1).map(part=>part.content).join('\n\n'),previousState:visibleRecords(ticket)}};
   }
   async function saveBackgroundResult(plan,text,{isCurrent=()=>true,attempt=0}={}){
-    const valid=()=>current(plan.target)&&gate.allowed()&&gate.matches(plan.gate)&&isCurrent();
+    const valid=()=>!pendingExclusions&&plan.exclusionEpoch===exclusionEpoch&&current(plan.target)&&gate.allowed()&&gate.matches(plan.gate)&&isCurrent();
     if(!valid())throw new Error('追踪任务已停止');
     const captured=await repository.captureTracking(plan.target);
     if(!equal(contentOf(captured.tracking),contentOf(plan.selection.tracking)))throw new Error('追踪资料已变化，请重试');
@@ -132,14 +155,14 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
   }
 
   async function intercept(messages,_size,_abort,type='normal'){
-    if(disposed||!clear()||!gate.allowed()||!Object.values(effectivePreferences()).some(Boolean)||!supported.has(type)||messages?.some(row=>String(row?.mes??row?.content??'').includes('[LANTAI_BACKGROUND_TASK:')))return;
+    if(disposed||!clear()||pendingExclusions||!gate.allowed()||!Object.values(effectivePreferences()).some(Boolean)||!supported.has(type)||messages?.some(row=>String(row?.mes??row?.content??'').includes('[LANTAI_BACKGROUND_TASK:')))return;
     const ticket=serial,t=repository.captureTarget(),proof=gate.capture(),categoryProofs=captureCategories(),preferences=effectivePreferences();
     try{
       const captured=await repository.captureTracking(t),raw=captureSource(t),projected=currentTracking(captured.tracking,raw),config=settings.captureRecall();
       const valid=()=>!disposed&&ticket===serial&&current(t)&&gate.matches(proof)&&['items','npcs'].every(key=>!preferences[`${key}Enabled`]||categoryGates[key].matches(categoryProofs[key]))&&settings.captureRecall().epoch===config.epoch&&equal(captureSource(t),raw);
       if(!valid())return;
       const context=getContext(),inputs=recallInputs(messages,config.recall.recentFloorCount,context.chat);
-      const result=await buildTrackingRecall({records:projected.records,preferences,aiTurn:projected.aiTurn,...inputs,settings:config.recall,countTokens:typeof context.getTokenCountAsync==='function'?text=>context.getTokenCountAsync(text):null});
+      const result=await buildTrackingRecall({records:projected.records,exclusions:effectiveTrackingExclusions(captured.tracking,projected.records),preferences,aiTurn:projected.aiTurn,...inputs,settings:config.recall,countTokens:typeof context.getTokenCountAsync==='function'?text=>context.getTokenCountAsync(text):null});
       if(!valid())return;
       const latest=await repository.captureTracking(t);if(!valid()||!equal(latest.tracking,captured.tracking))return;
       context.setExtensionPrompt(KEY,result.prompt,1,config.recall.memoryDepth,false,0);
@@ -149,10 +172,13 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
   const context=getContext();
   for(const name of ['CHAT_CHANGED','CHAT_CREATED','MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED','GENERATION_STOPPED']){
     const event=context?.eventTypes?.[name],events=context?.eventSource;if(!event||!events?.on)continue;
-    const listener=()=>{clear();if(name.startsWith('CHAT_')){target=null;selection=null;state={...state,records:[],target:null};notify();}};
+    const listener=()=>{clear();if(name.startsWith('CHAT_')){target=null;selection=null;state={...state,records:[],exclusions:trackingExclusionsOf(null),target:null};notify();}};
     events.on(event,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,event,listener));
   }
-  return {load,snapshot,saveRecord,defaultPrompts:DEFAULT_TRACKING_PROMPTS,
+  return {load,snapshot,saveRecord,
+    saveExclusionNames(kind,names,{original}={}){const value=clone(names),before=clone(original);return changeExclusions(domain=>{if(before!==undefined&&!equal(trackingExclusionsOf(domain)[kind]?.names,before))throw new Error('追踪排除名单已变化，请重新读取后修改');return setTrackingExclusionNames(domain,kind,value);});},
+    setRecordExcluded(kind,id,excluded){return changeExclusions((domain,raw)=>setTrackingRecordExcluded(domain,raw,kind,id,excluded));},
+    defaultPrompts:DEFAULT_TRACKING_PROMPTS,
     async savePrompt(kind,prompt,{original}={}){
       if(!['item','npc'].includes(kind))throw new Error('追踪类别无效');
       const captured=settings.captureTrackingPrompts();
@@ -166,7 +192,7 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
       return mutate(domain=>setTrackingPreferences(domain,{...domain.preferences,...patch}),{fresh:true,requireConfirmation:false,requireEnabled:false});
     },
     controlsChanged(){clear({invalidate:false});notify();},
-    subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},prepareBackground,filterBackgroundPlan,saveBackgroundResult,reconcile,backgroundState,displayState,floorTasks,intercept,clear,
+    subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},prepareBackground,filterBackgroundPlan,filterCurrentBackgroundPlan,saveBackgroundResult,reconcile,backgroundState,displayState,floorTasks,intercept,clear,
     dispose(){if(disposed)return;clear();disposed=true;for(const release of releases)release();listeners.clear();},
   };
 }

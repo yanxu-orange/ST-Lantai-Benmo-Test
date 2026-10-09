@@ -24,6 +24,7 @@ export async function mountBenmoView({container: app, controller, availability =
   let disposed = false, suspended = false, acting = false, composing = false;
   let error = '', dialog = null, draft = null, baseline = null, original = null, narrativeRecovery = null, narrativeDraftTarget = null, invalidated = false, renderedPolicy = '';
   let returnRoute = 'list', epoch = 0, toastTimer, redirectTimer;
+  let backfillEstimate = null, backfillJob = null;
   const generating = new Map(), narrativeJobs = new Map();
   const state = {
     tab: Object.hasOwn(TABS, initialState.tab) ? initialState.tab : 'records',
@@ -34,6 +35,8 @@ export async function mountBenmoView({container: app, controller, availability =
     scrolls: {...initialState.scrolls},
     expanded: new Set(Array.isArray(initialState.expanded) ? initialState.expanded : []),
     summaryFilter: initialState.summaryFilter === 'missing' ? 'missing' : 'all',
+    summaryBackfillRange: initialState.summaryBackfillRange ? {start:String(initialState.summaryBackfillRange.start ?? ''),end:String(initialState.summaryBackfillRange.end ?? '')} : null,
+    summaryPendingLimit: Number.isSafeInteger(initialState.summaryPendingLimit) ? Math.max(50,initialState.summaryPendingLimit) : 50,
   };
   const externalPolicy = () => typeof availability === 'function' ? availability() ?? {} : availability ?? {};
   function policy() {
@@ -62,7 +65,7 @@ export async function mountBenmoView({container: app, controller, availability =
   const selectedRecord = () => records().find(row => row.id === state.selected);
   const context = () => ['benmo', state.tab, state.kind, state.route, ['detail', 'edit', 'narrative-edit'].includes(state.route) ? state.selected ?? 'new' : '', state.kind === 'summary' && state.route === 'list' ? state.summaryFilter : ''].join(':');
   const blocked = () => !!narrativeRecovery || invalidated || externalPolicy().transient === true || value.writeBlocked === true || !policy()[activeKind()];
-  const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'new', 'generate', 'generate-narrative'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
+  const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'toggle-excluded', 'restore-excluded', 'new', 'generate', 'generate-narrative', 'manual-summary', 'estimate-backfill', 'start-backfill'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
   const textEntry = (label, action, attrs = '') => button(label, action, attrs).replace('ui-button ui-button--tertiary', 'benmo-text-entry');
   const icon = (label, action, file) => `<button type="button" class="ui-icon-button ui-button--tertiary" aria-label="${esc(label)}" data-action="${action}"><img class="lt-icon" data-icon="${file}" src="${new URL(`./icons/${file}.svg`, import.meta.url)}" alt=""></button>`;
   const selectButton = (id, label, current, action) => action === 'kind'
@@ -88,7 +91,7 @@ export async function mountBenmoView({container: app, controller, availability =
     for (const [key, raw] of new FormData(form)) {
       const text = String(raw), custom = customInputs.get(key);
       if (custom) custom[0][custom[1]] = text;
-      else if (state.route === 'tracking-settings' && key === 'prompt') draft.prompt = text;
+      else if (state.route === 'tracking-settings' && ['prompt', 'exclusionNames'].includes(key)) draft[key] = text;
       else if (state.route === 'summary-settings' && ['recentFloors', 'prompt'].includes(key)) draft[key] = text;
       else if (state.kind === 'summary' && key === 'body') draft.body = text;
       else if (state.kind !== 'summary' && key === 'mode') draft.pinned = text === 'resident';
@@ -98,12 +101,13 @@ export async function mountBenmoView({container: app, controller, availability =
   function remember() {
     const main = app.querySelector('.lt-main');
     if (main) state.scrolls[context()] = main.scrollTop;
+    readBackfillRange();
     readDraft();
   }
   const dirty = () => { readDraft(); return !!draft && !same(draft, baseline); };
   function snapshotNavigation() {
     remember();
-    return {tab: state.tab, kind: state.kind, route: draft ? returnRoute : state.route, selected: state.selected, selections: {...state.selections}, scrolls: {...state.scrolls}, expanded: [...state.expanded], summaryFilter: state.summaryFilter};
+    return {tab: state.tab, kind: state.kind, route: draft ? returnRoute : state.route, selected: state.selected, selections: {...state.selections}, scrolls: {...state.scrolls}, expanded: [...state.expanded], summaryFilter: state.summaryFilter, summaryBackfillRange: state.summaryBackfillRange && {...state.summaryBackfillRange}, summaryPendingLimit:state.summaryPendingLimit};
   }
   function normalize() {
     const tabs = enabledTabs(), kinds = enabledKinds();
@@ -143,18 +147,56 @@ export async function mountBenmoView({container: app, controller, availability =
     }
   }
   const missingRows = () => (value.summary?.missing ?? []).filter(row => !runningRows().some(job => Number(job.floor) === Number(row.floor)));
+  const backfillStatus = () => value.summary?.backfill ?? {};
+  const backfillRunning = () => ['queued', 'running', 'stopping'].includes(backfillStatus().status) || !!backfillJob;
+  function reconcileBackfill() {
+    if (!backfillJob) return;
+    const info = backfillStatus();
+    if (['queued', 'running', 'stopping'].includes(info.status)) {
+      if (backfillJob.id && backfillJob.id !== info.id) backfillJob = null;
+      else { backfillJob.id = info.id;backfillJob.observed = true; }
+    } else if (backfillJob.observed) { backfillJob = null;backfillEstimate = null; }
+  }
+  function readBackfillRange() {
+    const start = app.querySelector('[name="backfillStart"]'), end = app.querySelector('[name="backfillEnd"]');
+    if (!start || !end) return;
+    const next = {start:String(start.value),end:String(end.value)};
+    if (!same(next, state.summaryBackfillRange)) { state.summaryBackfillRange = next; backfillEstimate = null; }
+  }
+  function backfillRange() {
+    readBackfillRange();
+    const raw = state.summaryBackfillRange ?? {}, start = Number(raw.start), end = Number(raw.end);
+    if (!String(raw.start ?? '').trim() || !String(raw.end ?? '').trim() || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) throw new Error('请填写有效楼层范围，结束楼层不能早于开始楼层');
+    return {start,end};
+  }
+  function backfillProgress() {
+    const info = backfillStatus();
+    if (!info.status || info.status === 'idle') return '';
+    const labels = {queued:'排队中',running:'补缺中',stopping:'正在停止',stopped:'已停止',cancelled:'已停止',succeeded:'补缺完成',completed:'补缺完成',partial:'补缺结束，部分楼层未完成',failed:'补缺失败'};
+    return `<p class="meta" role="status">${esc(labels[info.status] ?? '补缺已结束')} · 已补 ${esc(info.completed ?? 0)} / ${esc(info.total ?? 0)} 楼${info.skipped ? ` · 已有跳过 ${esc(info.skipped)} 楼` : ''}${info.failed ? ` · 失败 ${esc(info.failed)} 楼` : ''}</p>${info.error ? `<p class="lt-error" role="alert">${esc(info.error)}</p>` : ''}`;
+  }
+  function backfillControls() {
+    if (!controller.estimateSummaryBackfill || !controller.startSummaryBackfill) return '';
+    if (!state.summaryBackfillRange) {
+      const floors = (value.summary?.missing ?? []).map(row => Number(row.floor)).filter(Number.isSafeInteger).sort((a,b)=>a-b);
+      state.summaryBackfillRange = {start: String(floors[0] ?? 0),end:String(floors.at(-1) ?? 0)};
+    }
+    const range = state.summaryBackfillRange, estimate = backfillEstimate?.estimate, running = backfillRunning();
+    return `<section class="card" aria-label="按范围补齐缺失摘要"><h2>按范围补缺</h2><p class="meta">只补当前缺失摘要，已有摘要（包括来源已变化的旧记录）都会跳过。按小批次调用 API；再次补缺只处理仍缺失的楼层。</p><div class="two-cols"><label class="ui-field"><span>开始楼层</span><input class="ui-input" name="backfillStart" type="number" min="0" step="1" inputmode="numeric" value="${esc(range.start)}" ${running ? 'disabled' : ''}></label><label class="ui-field"><span>结束楼层</span><input class="ui-input" name="backfillEnd" type="number" min="0" step="1" inputmode="numeric" value="${esc(range.end)}" ${running ? 'disabled' : ''}></label></div><div data-backfill-estimate>${estimate ? `<p class="meta" role="status">待补 ${esc(estimate.count)} 楼 · 预计调用 ${esc(estimate.calls)} 次 API</p><p class="meta">仅估算当前范围的调用次数，不代表 token 用量或费用。</p>${estimate.oversized?.length ? `<p class="lt-error" role="alert">第 ${esc(estimate.oversized.join('、'))} 楼超过单批字符保护预算，可调整清洗设置后重新估算，或手动补录。不会截断发送。</p>` : ''}` : '<p class="meta">先估算待补楼数和调用次数，再明确开始。</p>'}</div>${backfillProgress()}<div class="actions">${button('估算补缺', 'estimate-backfill', running ? 'disabled' : '', 'secondary')}${button(running ? '补缺中…' : '开始补缺', 'start-backfill', running || !estimate || !estimate.calls ? 'disabled' : '', 'primary')}${running ? button('停止补缺', 'stop-backfill') : ''}</div><p class="meta">关闭页面可继续补缺，切换聊天会停止。</p></section>`;
+  }
   function pendingStrip() {
     const count = missingRows().length, running = runningRows().length;
-    if (!count && !running) return '';
-    return `<section class="pending-strip" aria-label="摘要任务状态"><p class="meta" role="status">${count ? `待补 ${count} 楼` : ''}${running ? `${count ? '<span class="pending-separator" aria-hidden="true"> · </span>' : ''}生成中 ${running} 楼` : ''}</p>${textEntry(state.summaryFilter === 'missing' ? '全部摘要' : '查看', 'filter-summary', `data-id="${state.summaryFilter === 'missing' ? 'all' : 'missing'}" aria-label="${state.summaryFilter === 'missing' ? '返回全部摘要' : '查看待补与生成中的楼层'}"`)}</section>`;
+    if (!count && !running && !backfillRunning()) return '';
+    return `<section class="pending-strip" aria-label="摘要任务状态"><p class="meta" role="status">${count ? `待补 ${count} 楼` : ''}${running ? `${count ? '<span class="pending-separator" aria-hidden="true"> · </span>' : ''}生成中 ${running} 楼` : ''}${!count && !running && backfillRunning() ? '范围补缺进行中' : ''}</p><div class="actions compact-actions">${state.summaryFilter !== 'missing' && backfillRunning() ? button('停止补缺', 'stop-backfill') : ''}${textEntry(state.summaryFilter === 'missing' ? '全部摘要' : '查看', 'filter-summary', `data-id="${state.summaryFilter === 'missing' ? 'all' : 'missing'}" aria-label="${state.summaryFilter === 'missing' ? '返回全部摘要' : '查看待补与生成中的楼层'}"`)}</div></section>`;
   }
   function pendingRows() {
     const missing = missingRows(), running = runningRows();
-    return `<div class="section"><p class="meta">仅统计当前版本的可见、已完成 AI 楼层；不自动补齐历史。</p>${running.map(row => `<article class="record"><div class="row"><div class="pending-row-title"><strong>第 ${esc(row.floor)} 楼</strong><span class="meta" role="status">生成中</span></div></div></article>`).join('')}${missing.map(row => `<article class="record"><div class="row"><strong>第 ${esc(row.floor)} 楼</strong>${button('补生成', 'generate', `data-id="${esc(row.floor)}" ${generating.has(Number(row.floor)) ? 'disabled aria-busy="true"' : ''}`, 'secondary')}</div><p class="meta">${esc(row.error || '当前版本尚无摘要。')}</p></article>`).join('')}${!missing.length && !running.length ? `<p class="meta">暂无待处理楼层。</p>${button('返回全部摘要', 'filter-summary', 'data-id="all"')}` : ''}</div>`;
+    const shownRunning = running.slice(0,state.summaryPendingLimit), shownMissing = missing.slice(0,Math.max(0,state.summaryPendingLimit-shownRunning.length)), shown = shownRunning.length+shownMissing.length, total = missing.length+running.length;
+    return `<div class="section"><p class="meta">仅统计当前版本的可见、已完成 AI 楼层；不自动补齐历史。</p>${backfillControls()}${shownRunning.map(row => `<article class="record"><div class="row"><div class="pending-row-title"><strong>第 ${esc(row.floor)} 楼</strong><span class="meta" role="status">生成中</span></div></div></article>`).join('')}${shownMissing.map(row => `<article class="record"><div class="row"><strong>第 ${esc(row.floor)} 楼</strong><div class="actions compact-actions">${controller.manualSummary ? button('手动补录', 'manual-summary', `data-id="${esc(row.floor)}" ${generating.has(Number(row.floor)) ? 'disabled' : ''}`) : ''}${button('补生成', 'generate', `data-id="${esc(row.floor)}" ${generating.has(Number(row.floor)) ? 'disabled aria-busy="true"' : ''}`, 'secondary')}</div></div><p class="meta">${esc(row.error || '当前版本尚无摘要。')}</p></article>`).join('')}${shown < total ? `<p class="meta">已显示 ${shown} / ${total} 楼</p>${button('显示更多', 'more-summary-missing', 'aria-label="显示更多待补楼层"')}` : ''}${!missing.length && !running.length ? `<p class="meta">暂无待处理楼层。</p>${button('返回全部摘要', 'filter-summary', 'data-id="all"')}` : ''}</div>`;
   }
   function summaryView() {
     const shown = summaryRecords();
-    return `<div class="summary-toolbar"><div class="summary-toolbar-main"><span class="meta">当前聊天 · ${shown.length} 条摘要</span>${textEntry('摘要设置', 'settings-summary')}</div>${pendingStrip()}</div>${state.summaryFilter === 'missing' ? pendingRows() : `<div class="section">${shown.map(row => `<article class="card"><div class="row"><span class="meta">第 ${esc(row.floor)} 楼${row.edited ? ' · 已修改' : ''}${row.stale ? ' · 正文已编辑，可按需更新摘要' : ''}</span><div class="actions compact-actions">${button('编辑', 'edit-summary', `data-id="${esc(row.id)}"`)}${button('重试', 'generate', `data-id="${esc(row.floor)}" ${runningRows().some(job => Number(job.floor) === Number(row.floor)) ? 'disabled' : ''}`)}</div></div><p class="reading ${state.expanded.has(row.id) ? '' : 'summary-collapsed'}">${esc(row.body)}</p>${row.error ? `<p class="lt-error" role="alert">${esc(row.error)}</p>` : ''}${button(state.expanded.has(row.id) ? '收起' : '展开全文', 'expand', `data-id="${esc(row.id)}" aria-expanded="${state.expanded.has(row.id)}"`)}</article>`).join('')}${shown.length ? '' : '<p class="meta">暂无最新摘要。</p>'}</div>`}`;
+    return `<div class="summary-toolbar"><div class="summary-toolbar-main"><span class="meta">当前聊天 · ${shown.length} 条摘要</span>${textEntry('摘要设置', 'settings-summary')}</div>${pendingStrip()}${state.summaryFilter === 'missing' ? '' : backfillProgress()}</div>${state.summaryFilter === 'missing' ? pendingRows() : `<div class="section">${shown.map(row => `<article class="card"><div class="row"><span class="meta">第 ${esc(row.floor)} 楼${row.edited ? ' · 已修改' : ''}${row.stale ? ' · 正文已编辑，可按需更新摘要' : ''}</span><div class="actions compact-actions">${button('编辑', 'edit-summary', `data-id="${esc(row.id)}"`)}${button('重试', 'generate', `data-id="${esc(row.floor)}" ${runningRows().some(job => Number(job.floor) === Number(row.floor)) ? 'disabled' : ''}`)}</div></div><p class="reading ${state.expanded.has(row.id) ? '' : 'summary-collapsed'}">${esc(row.body)}</p>${row.error ? `<p class="lt-error" role="alert">${esc(row.error)}</p>` : ''}${button(state.expanded.has(row.id) ? '收起' : '展开全文', 'expand', `data-id="${esc(row.id)}" aria-expanded="${state.expanded.has(row.id)}"`)}</article>`).join('')}${shown.length ? '' : '<p class="meta">暂无最新摘要。</p>'}</div>`}`;
   }
   const formActions = () => `<div class="form-actions">${button('取消', 'cancel')}${button(acting ? '保存中…' : '保存', 'save', acting ? 'disabled aria-busy="true"' : '', 'primary')}</div>`;
   function summarySettings() {
@@ -162,22 +204,29 @@ export async function mountBenmoView({container: app, controller, availability =
     return `<p class="meta" role="status" data-latest-automatic-status ${automatic?'':'hidden'}>${automatic?`自动生成：${esc(automatic)}`:''}</p><form id="benmo-edit-form" class="section"><section class="card"><label class="ui-field"><span>最近多少楼使用原文</span><input class="ui-input" type="number" name="recentFloors" aria-label="最近多少楼使用原文" min="1" step="1" required value="${esc(draft.recentFloors)}" inputmode="numeric"></label><p class="meta">启用压缩前，请关闭预设中按 X 楼删除正文或只保留摘要的正则，以免重复处理。</p></section><section class="card"><label class="ui-field"><span>最新摘要提示词</span><textarea class="lt-textarea" name="prompt" rows="7" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-prompt')}</div></section>${formActions()}</form>`;
   }
   function trackingSettings() {
-    return `<form id="benmo-edit-form" class="section"><section class="card"><label class="ui-field"><span>${KINDS[state.kind]}要求</span><textarea class="lt-textarea" name="prompt" rows="10" maxlength="20000" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-tracking-prompt')}</div></section>${formActions()}</form>`;
+    const excluded = value.tracking?.exclusions?.[state.kind] ?? {ids:[]};
+    const paused = (excluded.ids ?? []).map(id => {
+      const row = records().find(row => row.id === id);
+      const label = row?.name || excluded.labels?.[id]?.[0] || id;
+      return `<div class="section"><p class="reading meta">${esc(label)}${row ? '' : ' · 当前记录已不在列表中'}</p><div class="actions">${button('恢复追踪', 'restore-excluded', `data-id="${esc(id)}" aria-label="恢复${esc(label)}的追踪"`)}</div></div>`;
+    }).join('');
+    return `<form id="benmo-edit-form" class="section"><section class="card"><label class="ui-field"><span>${KINDS[state.kind]}要求</span><textarea class="lt-textarea" name="prompt" rows="10" maxlength="20000" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-tracking-prompt')}</div></section><section class="card"><label class="ui-field"><span>名称排除名单 · 仅当前聊天</span><textarea class="lt-textarea" name="exclusionNames" rows="5" aria-describedby="tracking-exclusion-help" placeholder="一行一个名称或别名">${esc(draft.exclusionNames)}</textarea></label><p class="meta" id="tracking-exclusion-help">每行一个，精确匹配名称或已知别名；统一全半角、首尾与连续空白、大小写。“手机”不会匹配“某某手机”。未知别名无法自动识别。</p><p class="meta">排除后停止自动追踪与召回，已有资料保留。移除排除或恢复追踪只影响后续，不回补历史。</p></section>${paused ? `<section class="card"><h2>已暂停的记录</h2><p class="meta">恢复立即生效，仅解除这条记录的暂停；名称排除名单独立生效，未保存的设置草稿保留。</p>${paused}</section>` : ''}${formActions()}</form>`;
   }
   function trackingList() {
     const rows = records();
-    return `<div class="row"><span class="meta">当前聊天 · ${rows.length} 条记录${state.kind === 'npc' ? ' · NPC' : ''}</span><div class="actions">${textEntry('追踪设置', 'settings-tracking')}${button('＋ 新建', 'new', '', 'secondary')}</div></div><div class="section">${rows.map(row => `<article class="record ${state.selected === row.id ? 'selected' : ''}"><button type="button" class="record-open" data-action="detail" data-id="${esc(row.id)}" aria-label="查看${esc(row.name)}"><strong>${esc(row.name)}</strong><span class="meta"><span class="tag">${row.pinned ? '常驻' : '触发'}</span> · 查看 ›</span></button><p>${esc(state.kind === 'item' ? row.introduction : [row.identity, row.appearance].filter(Boolean).join(' · '))}</p><p class="meta">${state.kind === 'item' ? esc(`位置：${row.location ?? ''} · 所属者：${row.owner ?? ''}`) : `最后出场：第 ${esc(row.lastAppearanceTurn ?? '—')} 个 AI 回合 · 缺席 ${esc(row.absentTurns ?? '—')} 回合`}</p><div class="keywords">${aliases(row.aliases).map(alias => `<span class="tag">${esc(alias)}</span>`).join('')}</div></article>`).join('')}${rows.length ? '' : `<p class="meta">暂无${state.kind === 'item' ? '物品' : '角色'}记录。</p>`}</div>`;
+    return `<div class="row"><span class="meta">当前聊天 · ${rows.length} 条记录${state.kind === 'npc' ? ' · NPC' : ''}</span><div class="actions">${textEntry('追踪设置', 'settings-tracking')}${button('＋ 新建', 'new', '', 'secondary')}</div></div><div class="section">${rows.map(row => `<article class="record ${state.selected === row.id ? 'selected' : ''}"><button type="button" class="record-open" data-action="detail" data-id="${esc(row.id)}" aria-label="查看${esc(row.name)}"><strong>${esc(row.name)}</strong><span class="meta"><span class="tag">${row.excluded ? '已暂停追踪' : row.pinned ? '常驻' : '触发'}</span> · 查看 ›</span></button><p>${esc(state.kind === 'item' ? row.introduction : [row.identity, row.appearance].filter(Boolean).join(' · '))}</p><p class="meta">${state.kind === 'item' ? esc(`位置：${row.location ?? ''} · 所属者：${row.owner ?? ''}`) : `最后出场：第 ${esc(row.lastAppearanceTurn ?? '—')} 个 AI 回合 · 缺席 ${esc(row.absentTurns ?? '—')} 回合`}</p><div class="keywords">${aliases(row.aliases).map(alias => `<span class="tag">${esc(alias)}</span>`).join('')}</div></article>`).join('')}${rows.length ? '' : `<p class="meta">暂无${state.kind === 'item' ? '物品' : '角色'}记录。</p>`}</div>`;
   }
+  const recordPaused = row => (value.tracking?.exclusions?.[state.kind]?.ids ?? []).includes(row.id);
   function detail() {
     const row = selectedRecord();
     if (!row) return '';
-    return `<section class="card"><div class="row"><h2>${esc(row.name)}</h2><span class="tag">${row.pinned ? '常驻' : '触发'}</span></div><dl>${FIELDS[state.kind].slice(1).map(([key, label]) => `<div><dt>${label}</dt><dd>${esc((key === 'aliases' ? aliases(row.aliases).join('，') : row[key]) || '未记录')}</dd></div>`).join('')}${state.kind === 'npc' ? `<div><dt>最后实际出场／缺席</dt><dd>第 ${esc(row.lastAppearanceTurn ?? '—')} 个 AI 回合／${esc(row.absentTurns ?? '—')} 回合</dd></div>` : ''}${(row.customFields ?? []).filter(field => String(field.value ?? '').trim()).map(field => `<div><dt>${esc(field.name)}</dt><dd>${esc(field.value)}</dd></div>`).join('')}</dl></section><div class="detail-actions">${button('删除', 'delete-record')}${button('编辑', 'edit', '', 'primary')}</div>`;
+    return `<section class="card"><div class="row"><h2>${esc(row.name)}</h2><span class="tag">${row.excluded ? '已暂停追踪' : row.pinned ? '常驻' : '触发'}</span></div><p class="meta">${row.excluded ? '自动追踪与召回已暂停，已有资料保留。' : '正在追踪。'}恢复后只处理后续，不回补历史。${row.excluded && !recordPaused(row) ? '此记录的名称或别名命中排除。请检查追踪设置的名称排除名单，以及同名的已暂停记录。' : ''}</p><div class="actions">${button(recordPaused(row) ? '恢复此记录追踪' : '暂停此记录追踪', 'toggle-excluded')}${row.excluded ? textEntry('追踪设置', 'settings-tracking') : ''}</div><dl>${FIELDS[state.kind].slice(1).map(([key, label]) => `<div><dt>${label}</dt><dd>${esc((key === 'aliases' ? aliases(row.aliases).join('，') : row[key]) || '未记录')}</dd></div>`).join('')}${state.kind === 'npc' ? `<div><dt>最后实际出场／缺席</dt><dd>第 ${esc(row.lastAppearanceTurn ?? '—')} 个 AI 回合／${esc(row.absentTurns ?? '—')} 回合</dd></div>` : ''}${(row.customFields ?? []).filter(field => String(field.value ?? '').trim()).map(field => `<div><dt>${esc(field.name)}</dt><dd>${esc(field.value)}</dd></div>`).join('')}</dl></section><div class="detail-actions">${button('删除', 'delete-record')}${button('编辑', 'edit', '', 'primary')}</div>`;
   }
   function recordCustomFields() {
     return `<section class="section"><h2>自定义字段</h2><p class="meta">仅属于这条${state.kind === 'item' ? '物品' : '角色'}记录。</p>${draft.customFields.map(field => `<section class="custom-field-row" data-field-id="${esc(field.id)}"><div class="custom-field-heading"><label class="ui-field"><span>字段名</span><input class="ui-input" name="${esc(`record-field-${field.id}-name`)}" value="${esc(field.name)}" maxlength="80" required placeholder="如：${state.kind === 'item' ? '耐久' : '擅长技能'}"></label>${button('移除', 'remove-field', `data-id="${esc(field.id)}" aria-label="移除此字段"`)}</div><label class="ui-field"><span>追踪要求</span><textarea class="lt-textarea" name="${esc(`record-field-${field.id}-requirement`)}" rows="2" maxlength="1000" required placeholder="说明需要记录什么、何时更新">${esc(field.requirement)}</textarea></label><label class="ui-field"><span>当前内容</span><textarea class="lt-textarea" name="${esc(`record-field-${field.id}-value`)}" rows="2" maxlength="2000">${esc(field.value)}</textarea></label></section>`).join('')}${button('＋ 添加字段', 'add-field', '', 'secondary')}</section>`;
   }
   function editor() {
-    if (state.kind === 'summary') return `<form id="benmo-edit-form" class="section"><p class="summary-origin">来源：第 ${esc(draft.floor)} 楼 · 当前选中版本</p><label class="ui-field"><span>摘要正文</span><textarea class="lt-textarea" name="body" rows="10" required>${esc(draft.body)}</textarea></label>${formActions()}</form>`;
+    if (state.kind === 'summary') return `<form id="benmo-edit-form" class="section"><p class="summary-origin">来源：第 ${esc(draft.floor)} 楼 · 当前选中版本</p>${!draft.id ? '<p class="meta">可输入或粘贴纯文本。保存后用于该 AI 楼层的摘要展示与压缩，用户原文保留；不会调用 API。</p>' : ''}<label class="ui-field"><span>摘要正文</span><textarea class="lt-textarea" name="body" rows="10" required>${esc(draft.body)}</textarea></label>${formActions()}</form>`;
     return `<form id="benmo-edit-form" class="section"><div class="two-cols">${FIELDS[state.kind].map(([key, label]) => `<label class="ui-field"><span>${label}</span>${MULTILINE.has(key) ? `<textarea class="lt-textarea" name="${key}" rows="2" maxlength="600">${esc(draft[key])}</textarea>` : `<input class="ui-input" name="${key}" value="${esc(draft[key])}" ${key === 'name' ? 'required maxlength="160"' : 'maxlength="2000"'}>`}</label>`).join('')}</div><fieldset class="lt-modes" aria-label="召回方式"><legend class="ui-field__label">召回方式</legend>${[['resident', '常驻'], ['trigger', '触发']].map(([mode, label]) => `<label class="lt-mode"><input type="radio" name="mode" value="${mode}" ${draft.pinned === (mode === 'resident') ? 'checked' : ''}>${label}</label>`).join('')}</fieldset>${state.kind === 'npc' ? '<p class="meta">最后实际出场与缺席回合由剧情记录，此处不手动填写。</p>' : ''}${recordCustomFields()}${formActions()}</form>`;
   }
   const rangesText = ranges => (ranges ?? []).map(range => Number(range.start) === Number(range.end) ? `第 ${range.start} 楼` : `第 ${range.start}—${range.end} 楼`).join('、') || '未读取';
@@ -324,7 +373,7 @@ export async function mountBenmoView({container: app, controller, availability =
     if (state.route === 'tracking-settings') return `${KINDS[state.kind]}设置`;
     if (state.route === 'summary-settings') return '最新摘要设置';
     if (state.route === 'detail') return state.kind === 'item' ? '物品详情' : '角色详情';
-    if (state.route === 'edit') return state.kind === 'summary' ? '编辑最新摘要' : `${returnRoute === 'list' && !original ? '新建' : '编辑'}${state.kind === 'item' ? '物品' : '角色'}`;
+    if (state.route === 'edit') return state.kind === 'summary' ? draft?.id ? '编辑最新摘要' : '手动补录摘要' : `${returnRoute === 'list' && !original ? '新建' : '编辑'}${state.kind === 'item' ? '物品' : '角色'}`;
     return '本末';
   }
   function render() {
@@ -369,12 +418,27 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   function startEdit(record, destination, route = 'edit') {
     remember(); epoch++; returnRoute = destination; original = record ? clone(record) : null;
-    draft = route === 'tracking-settings' ? {prompt: value.tracking?.prompts?.[state.kind] ?? controller.defaultTrackingPrompts?.[state.kind] ?? ''}
+    draft = route === 'tracking-settings' ? {prompt: value.tracking?.prompts?.[state.kind] ?? controller.defaultTrackingPrompts?.[state.kind] ?? '', exclusionNames: (value.tracking?.exclusions?.[state.kind]?.names ?? []).join('\n')}
       : route === 'summary-settings' ? {recentFloors: String(value.summary?.preferences?.recentFloors ?? 6), prompt: value.summary?.preferences?.prompt ?? controller.defaultPrompt ?? ''}
       : state.kind === 'summary' ? {id: record.id, floor: record.floor, body: record.body ?? ''} : makeDraft(record);
     baseline = clone(draft); state.route = route; error = ''; state.scrolls[context()] = 0; render();
   }
   const apply = next => { value = next ?? controller.snapshot?.() ?? value; error = ''; };
+  async function saveTrackingSettings(kind, submitted, operationEpoch) {
+    const before = clone(baseline);
+    let next = value;
+    if (submitted.prompt !== before.prompt) {
+      next = await controller.saveTrackingPrompt(kind, submitted.prompt, {original:before.prompt});
+      // A successful first write must not be retried against a stale prompt
+      // if saving the chat-local names subsequently fails.
+      if (!disposed && epoch === operationEpoch && baseline) baseline.prompt = submitted.prompt;
+    }
+    if (submitted.exclusionNames !== before.exclusionNames) {
+      next = await controller.saveExclusionNames(kind, submitted.exclusionNames.split(/\r?\n/).map(name => name.trim()).filter(Boolean), {original: before.exclusionNames.split('\n').filter(Boolean)});
+      if (!disposed && epoch === operationEpoch && baseline) baseline.exclusionNames = (next.tracking?.exclusions?.[kind]?.names ?? []).join('\n');
+    }
+    return next;
+  }
   async function save() {
     if (!draft || blocked() || composing || !app.querySelector('form')?.reportValidity()) return;
     if (['narrative-settings', 'narrative-edit'].includes(state.route)) return saveNarrative();
@@ -393,17 +457,17 @@ export async function mountBenmoView({container: app, controller, availability =
       if (!payload.name) throw new Error('请填写名称');
       if (payload.customFields.some(field => !field.name || !field.requirement) || new Set(payload.customFields.map(field => field.name)).size !== payload.customFields.length) throw new Error('请填写字段名和追踪要求，字段名不要重复');
     }
-    const next = route === 'tracking-settings' ? await controller.saveTrackingPrompt(kind, submitted.prompt, {original:baseline.prompt})
+    const next = route === 'tracking-settings' ? await saveTrackingSettings(kind, submitted, operationEpoch)
       : route === 'summary-settings' ? await controller.saveSummaryPreferences(payload)
-      : kind === 'summary' ? await controller.saveSummary(submitted.id, submitted.body, {original})
+      : kind === 'summary' ? submitted.id ? await controller.saveSummary(submitted.id, submitted.body, {original}) : await controller.manualSummary(submitted.floor, submitted.body, {original})
         : await controller.saveRecord(kind, payload, {original});
     if (disposed) return;
     apply(next);
     if (epoch !== operationEpoch || suspended || !draft) return;
     remember(); const newer = clone(draft);
     if (!same(newer, submitted)) {
-      const saved = ['summary-settings','tracking-settings'].includes(route) ? null : kind !== 'summary' ? records(kind).find(row => row.id === submitted.id) : summaryRecords().find(row => row.id === submitted.id);
-      const savedDraft = saved ? (kind === 'summary' ? {id: saved.id, floor: saved.floor, body: saved.body} : makeDraft(saved, kind)) : route === 'summary-settings' ? {...payload, recentFloors: String(payload.recentFloors)} : clone(submitted);
+      const saved = ['summary-settings','tracking-settings'].includes(route) ? null : kind !== 'summary' ? records(kind).find(row => row.id === submitted.id) : summaryRecords().find(row => submitted.id ? row.id === submitted.id : row.floor === submitted.floor && row.replyId === original?.replyId);
+      const savedDraft = saved ? (kind === 'summary' ? {id: saved.id, floor: saved.floor, body: saved.body} : makeDraft(saved, kind)) : route === 'summary-settings' ? {...payload, recentFloors: String(payload.recentFloors)} : route === 'tracking-settings' ? {...submitted, exclusionNames: (value.tracking?.exclusions?.[kind]?.names ?? []).join('\n')} : clone(submitted);
       baseline = clone(savedDraft); draft = {...savedDraft, ...Object.fromEntries(Object.entries(newer).filter(([key, text]) => !same(text, submitted[key])))};
       if (saved) original = clone(saved);
       acting = false; render(); toast('已保存提交内容；新修改尚未保存');
@@ -421,7 +485,40 @@ export async function mountBenmoView({container: app, controller, availability =
     catch (failure) { if (!disposed && generating.get(floor) === token && epoch === operationEpoch) error = failure.message || '摘要生成未完成，请重试'; }
     finally { if (generating.get(floor) === token) generating.delete(floor); if (!disposed && !suspended && epoch === operationEpoch) { remember(); render(); } }
   }
+  function estimateBackfill() {
+    if (blocked() || backfillRunning() || !controller.estimateSummaryBackfill) return;
+    const range = backfillRange();
+    backfillEstimate = {range,estimate:controller.estimateSummaryBackfill(range)};
+    error = ''; remember(); render();
+  }
+  async function startBackfill() {
+    if (blocked() || backfillRunning() || !backfillEstimate || !controller.startSummaryBackfill) return;
+    const range = backfillRange();
+    if (!backfillEstimate) return;
+    const estimate = controller.estimateSummaryBackfill(range);
+    if (!same(range, backfillEstimate.range) || !same(estimate, backfillEstimate.estimate)) {
+      backfillEstimate = {range,estimate};error = '待补楼层或调用次数已变化，请查看估算后再次点击开始补缺';remember();render();return;
+    }
+    if (!estimate.calls) return;
+    const token = {}, operationEpoch = epoch;backfillJob = token;error = '';remember();render();
+    try { const next = await controller.startSummaryBackfill(range);if (!disposed && backfillJob === token) apply(next); }
+    catch (failure) { if (!disposed && !suspended && backfillJob === token && epoch === operationEpoch) error = failure.message || '补缺未完成，请重新估算后再试'; }
+    finally { if (backfillJob === token) { backfillJob = null;backfillEstimate = null; }if (!disposed && !suspended && epoch === operationEpoch) { remember();render(); } }
+  }
+  async function stopBackfill() {
+    if (!controller.stopSummaryBackfill) return;
+    const operationEpoch = epoch;
+    backfillJob = null;backfillEstimate = null;
+    const next = await controller.stopSummaryBackfill();
+    if (!disposed) { apply(next);if (!suspended && epoch === operationEpoch) { remember();render(); } }
+  }
   app.addEventListener('submit', event => event.preventDefault(), {signal: lifetime.signal});
+  app.addEventListener('input', event => {
+    if (!['backfillStart', 'backfillEnd'].includes(event.target?.name) || disposed || suspended) return;
+    readBackfillRange();
+    const estimate = app.querySelector('[data-backfill-estimate]');if (estimate) estimate.textContent = '范围已修改，请重新估算后开始。';
+    const start = app.querySelector('[data-action="start-backfill"]');if (start) start.disabled = true;
+  }, {signal: lifetime.signal});
   app.addEventListener('compositionstart', () => { composing = true; }, {signal: lifetime.signal});
   app.addEventListener('compositionend', () => { composing = false; }, {signal: lifetime.signal});
   function syncWriteControls() {
@@ -438,7 +535,7 @@ export async function mountBenmoView({container: app, controller, availability =
     const action = control.dataset.action, id = control.dataset.id;
     if (dialog && !['cancel-dialog', 'confirm-dialog'].includes(action)) return;
     if (acting && !['back', 'cancel', 'close', 'area', 'cancel-dialog', 'confirm-dialog'].includes(action)) return;
-    if (composing && ['save', 'add-field', 'remove-field', 'default-prompt', 'default-tracking-prompt', 'default-narrative-prompt', 'add-narrative-character', 'remove-narrative-character', 'toggle-narrative-setting', 'toggle-narrative-injection'].includes(action)) return;
+    if (composing && ['save', 'restore-excluded', 'add-field', 'remove-field', 'default-prompt', 'default-tracking-prompt', 'default-narrative-prompt', 'add-narrative-character', 'remove-narrative-character', 'toggle-narrative-setting', 'toggle-narrative-injection'].includes(action)) return;
     let ownsAction = false;
     const actionEpoch = epoch;
     try {
@@ -466,12 +563,17 @@ export async function mountBenmoView({container: app, controller, availability =
       if (action === 'toggle-narrative-injection' && state.route === 'narrative-settings') { remember(); const character = draft.characters?.find(row => row.id === id); if (character) { character.inject = !character.inject; render(); } return; }
       if (action === 'add-narrative-character' && state.route === 'narrative-settings' && state.tab === 'self') { remember(); draft.characters.push({id: crypto.randomUUID(), name: '', inject: true}); render(); return; }
       if (action === 'remove-narrative-character' && state.route === 'narrative-settings' && state.tab === 'self') { remember(); draft.characters = draft.characters.filter(row => row.id !== id); render(); return; }
-      if (action === 'settings-tracking' && FIELDS[state.kind]) { startEdit(null, 'list', 'tracking-settings'); return; }
+      if (action === 'settings-tracking' && FIELDS[state.kind]) { startEdit(null, state.route === 'detail' ? 'detail' : 'list', 'tracking-settings'); return; }
       if (action === 'default-tracking-prompt' && state.route === 'tracking-settings') { remember(); draft.prompt = controller.defaultTrackingPrompts?.[state.kind] ?? ''; render(); return; }
       if (action === 'settings-summary' && state.kind === 'summary') { startEdit(null, 'list', 'summary-settings'); return; }
       if (action === 'default-prompt' && state.route === 'summary-settings') { remember(); draft.prompt = controller.defaultPrompt ?? ''; render(); return; }
       if (action === 'expand') { remember(); state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id); render(); return; }
       if (action === 'filter-summary' && ['all', 'missing'].includes(id)) { remember(); state.summaryFilter = id; render(); return; }
+      if (action === 'more-summary-missing' && state.kind === 'summary' && state.summaryFilter === 'missing') { remember();state.summaryPendingLimit += 50;render();return; }
+      if (action === 'manual-summary' && state.kind === 'summary' && !blocked()) { const row = missingRows().find(record => Number(record.floor) === Number(id));if (row && !generating.has(Number(id))) startEdit(row, 'list');return; }
+      if (action === 'estimate-backfill' && state.kind === 'summary') { estimateBackfill();return; }
+      if (action === 'start-backfill' && state.kind === 'summary') { await startBackfill();return; }
+      if (action === 'stop-backfill' && state.kind === 'summary') { await stopBackfill();return; }
       if (action === 'generate' && state.kind === 'summary') { await generate(Number(id)); return; }
       if (action === 'detail') {
         if (!records().some(row => row.id === id)) return;
@@ -485,6 +587,29 @@ export async function mountBenmoView({container: app, controller, availability =
         remember(); const field = draft.customFields.find(row => row.id === id); if (!field) return;
         const remove = () => { draft.customFields = draft.customFields.filter(row => row.id !== id); dialog = null; render(); };
         if (field.value.trim()) confirm(`移除这条记录的“${field.name}”字段及当前内容？保存后生效，取消编辑则保留。`, remove); else remove(); return;
+      }
+      if (action === 'restore-excluded' && state.route === 'tracking-settings' && !blocked()) {
+        const kind = state.kind, token = epoch;
+        if (!(value.tracking?.exclusions?.[kind]?.ids ?? []).includes(id)) return;
+        remember(); acting = ownsAction = true;
+        const next = await controller.setRecordExcluded(kind, id, false);
+        if (disposed) return;
+        if (epoch === token && !suspended) remember();
+        apply(next);
+        if (epoch !== token || suspended) return;
+        render(); toast('已解除记录暂停；名称排除名单仍独立生效'); return;
+      }
+      if (action === 'toggle-excluded' && state.route === 'detail' && !blocked()) {
+        const row = selectedRecord(), kind = state.kind, token = epoch; if (!row) return;
+        const excluded = !recordPaused(row);
+        acting = ownsAction = true;
+        const next = await controller.setRecordExcluded(kind, row.id, excluded);
+        if (disposed) return;
+        apply(next);
+        if (epoch !== token || suspended) return;
+        render();
+        toast(excluded ? '已暂停此记录追踪' : selectedRecord()?.excluded ? '已移除记录暂停；名称排除仍生效' : '已恢复追踪，不回补历史');
+        return;
       }
       if (action === 'delete-record' && state.route === 'detail' && !blocked()) {
         const row = selectedRecord(), kind = state.kind, token = epoch; if (!row) return;
@@ -515,9 +640,10 @@ export async function mountBenmoView({container: app, controller, availability =
     const automaticStatus=app.querySelector('[data-latest-automatic-status]');
     if(automaticStatus){const message=value.summary?.automatic?.message;automaticStatus.textContent=message?`自动生成：${message}`:'';automaticStatus.hidden=!message;}
     reconcileGenerating();
+    reconcileBackfill();
     // A background receipt must never rebuild an active input or its baseline.
     if (!draft && !acting && !dialog && !suspended) { remember(); render(); }
-    else for (const node of app.querySelectorAll('[data-action="save"],[data-action="delete-record"]')) node.disabled = blocked() || acting;
+    else for (const node of app.querySelectorAll('[data-action="save"],[data-action="delete-record"],[data-action="toggle-excluded"],[data-action="restore-excluded"]')) node.disabled = blocked() || acting;
   });
   render();
   return {

@@ -22,17 +22,26 @@ export function prepareLatestSource(raw,{floor,rules}={}) {
   const result={epoch:source.epoch,replyId:reply.replyId,assistantFloor:floor,userFloor,rawMessages:clone(rawMessages),sentFloors:cleaned.filter(item=>item.floor===floor||item.floor===userFloor),fingerprint:sourceFingerprint(rawMessages)};
   return freeze(result);
 }
+// Manual text has a reply binding, not an AI-input claim. It covers only the
+// assistant floor; compression must keep the user's original message.
+export function prepareManualLatestSource(raw,{floor}={}) {
+  const prepared=prepareLatestSource(raw,{floor,rules:[]});
+  const rawMessages=prepared.rawMessages.filter(item=>item.floor===floor);
+  return freeze({...prepared,manual:true,userFloor:null,rawMessages,sentFloors:[],fingerprint:sourceFingerprint(rawMessages)});
+}
 export function storedLatestSource(source) {
-  return assertLatestSource({replyId:source.replyId,assistantFloor:source.assistantFloor,userFloor:source.userFloor,rawMessages:durableSourceMessages(source.rawMessages),sentFloors:durableSourceMessages(source.sentFloors),fingerprint:source.fingerprint});
+  return assertLatestSource({... (source.manual===true?{manual:true}:{}),replyId:source.replyId,assistantFloor:source.assistantFloor,userFloor:source.userFloor,rawMessages:durableSourceMessages(source.rawMessages),sentFloors:durableSourceMessages(source.sentFloors),fingerprint:source.fingerprint});
 }
 export function assertLatestSource(value) {
-  if(!exact(value,['replyId','assistantFloor','userFloor','rawMessages','sentFloors','fingerprint'])||typeof value.replyId!=='string'||!value.replyId||!integer(value.assistantFloor)||!(value.userFloor===null||integer(value.userFloor)&&value.userFloor===value.assistantFloor-1)||!Array.isArray(value.rawMessages)||!Array.isArray(value.sentFloors))throw new Error('最新摘要来源证据无效');
+  if(!exact(value,['replyId','assistantFloor','userFloor','rawMessages','sentFloors','fingerprint',...(Object.hasOwn(value??{},'manual')?['manual']:[])])||typeof value.replyId!=='string'||!value.replyId||!integer(value.assistantFloor)||!(value.userFloor===null||integer(value.userFloor)&&value.userFloor===value.assistantFloor-1)||!Array.isArray(value.rawMessages)||!Array.isArray(value.sentFloors))throw new Error('最新摘要来源证据无效');
+  if(Object.hasOwn(value,'manual')&&(value.manual!==true||value.userFloor!==null||value.sentFloors.length!==0))throw new Error('手写摘要来源证据无效');
   const floors=value.userFloor===null?[value.assistantFloor]:[value.userFloor,value.assistantFloor];
   assertRawSummarySource({epoch:0,messages:value.rawMessages});
-  if(value.rawMessages.length!==floors.length||value.sentFloors.length!==floors.length||value.fingerprint!==sourceFingerprint(value.rawMessages))throw new Error('最新摘要来源指纹或配对不符');
+  if(value.rawMessages.length!==floors.length||value.sentFloors.length!==(value.manual===true?0:floors.length)||value.fingerprint!==sourceFingerprint(value.rawMessages))throw new Error('最新摘要来源指纹或配对不符');
   for(let index=0;index<floors.length;index++) {
     const original=value.rawMessages[index],sent=value.sentFloors[index],role=floors[index]===value.assistantFloor?'assistant':'user';
     if(!exact(original,['floor','identity','role','system','text','date','swipeId'])||original.floor!==floors[index]||original.role!==role||original.system||!(original.swipeId===null||integer(original.swipeId)))throw new Error('最新摘要原始楼层无效');
+    if(value.manual===true)continue;
     if(!exact(sent,['floor','identity','role','system','text','date','swipeId'])||typeof sent.text!=='string'||!sent.text.trim()||['floor','identity','role','system','date','swipeId'].some(key=>sent[key]!==original[key]))throw new Error('最新摘要发送正文无效');
   }
   return clone(value);

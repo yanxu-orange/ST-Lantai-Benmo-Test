@@ -1,3 +1,4 @@
+import { emptyTrackingExclusions, trackingRecordExcluded } from './exclusions.js';
 import { assertRecallSettings, defaultRecallSettings } from '../../shared/settings/model.js';
 import { applySummaryCleaningRules } from '../summary/cleaning.js';
 import { buildRecallQueryFragments, collectMemoryStructuredWitnesses } from '../recall/structured-witness.js';
@@ -13,7 +14,7 @@ export function trackingRecordText(record, aiTurn = 0) {
   return `【${record.kind === 'npc' ? 'NPC' : '物品'}｜${record.name}】${fields.length ? `\n${fields.join('；')}` : ''}`;
 }
 export async function buildTrackingRecall({ records = [], input = '', recentHistory = [], aiTurn = 0,
-  preferences = { itemsEnabled: true, npcsEnabled: true }, settings = defaultRecallSettings(), countTokens = null } = {}) {
+  preferences = { itemsEnabled: true, npcsEnabled: true }, exclusions = emptyTrackingExclusions(), settings = defaultRecallSettings(), countTokens = null } = {}) {
   settings = assertRecallSettings(settings); preferences = assertTrackingPreferences(preferences);
   if (!Array.isArray(records) || typeof input !== 'string' || !Array.isArray(recentHistory) || !Number.isSafeInteger(aiTurn) || aiTurn < 0 || countTokens !== null && typeof countTokens !== 'function') throw new Error('追踪召回输入无效');
   const ids = new Set();
@@ -22,6 +23,7 @@ export async function buildTrackingRecall({ records = [], input = '', recentHist
   const fragments = buildRecallQueryFragments({ currentInput: clean(input), recentHistory: recentHistory.slice(0, settings.recentFloorCount).map(row => ({ rawPosition: row.floor, distanceFromCurrent: row.distanceFromCurrent, originalText: row.text, cleanedText: clean(row.text) })) });
   const excluded = new Set(settings.excludedTerms), candidates = [], unselected = [];
   for (const record of records) {
+    if (trackingRecordExcluded(record, exclusions)) { unselected.push({ id: record.id, excludedReason: 'tracking-excluded' }); continue; }
     if (!preferences[record.kind === 'item' ? 'itemsEnabled' : 'npcsEnabled']) continue;
     // Literal fields reuse recall's full-name boundaries, without fuzzy identity
     // fragments: Ann is not Joanna, and an alias never fuses stored entities.

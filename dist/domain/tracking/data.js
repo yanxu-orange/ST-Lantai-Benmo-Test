@@ -1,3 +1,4 @@
+import { trackingExclusionsOf, assertTrackingExclusions, effectiveTrackingExclusions, filterTrackingChanges, normalizeTrackingName } from './exclusions.js';
 import { assertRawSummarySource, durableSourceMessages } from '../summary/source.js';
 import { prepareLatestSource, storedLatestSource, assertLatestSource, matchesLatestSource, matchesStoredLatestSource } from '../latest/source.js';
 import { assertTrackingRecord, blankTrackingRecord, assertTrackingPatch, assertTrackingChanges, applyTrackingCustomFieldValues, trackingExact, trackingText, trackingInteger, npcAbsenceTurns, TRACKING_FIELDS } from './model.js';
@@ -10,9 +11,10 @@ export function assertTrackingPreferences(value) {
   return clone(value);
 }
 export function assertTracking(value) {
-  if (!trackingExact(value, ['schema', 'revision', 'preferences', 'snapshots', 'manual']) || value.schema !== 1 || !trackingInteger(value.revision)
+  if (!trackingExact(value, ['schema', 'revision', 'preferences', 'snapshots', 'manual', ...(Object.hasOwn(value ?? {}, 'exclusions') ? ['exclusions'] : [])]) || value.schema !== 1 || !trackingInteger(value.revision)
     || !Array.isArray(value.snapshots) || !Array.isArray(value.manual)) throw new Error('追踪数据结构无效');
   assertTrackingPreferences(value.preferences);
+  if (Object.hasOwn(value, 'exclusions')) assertTrackingExclusions(value.exclusions);
   const ids = new Set(), replies = new Set();
   for (const snapshot of value.snapshots) {
     if (!trackingExact(snapshot, ['id', 'sourceSnapshot', 'aiTurn', 'baseKey', 'changes']) || !trackingText(snapshot.id) || ids.has(snapshot.id)
@@ -124,15 +126,17 @@ export function prepareTrackingUpdate(value, raw, { floor, rules } = {}) {
   const domain = assertTracking(value), source = prepareLatestSource(raw, { floor, rules });
   const prior = currentTracking(domain, raw, { beforeFloor: floor }), current = currentTracking(domain, raw, { beforeFloor: floor + 1 });
   return freeze({ source, aiTurn: countTrackingAiTurns(raw, { beforeFloor: floor + 1 }), baseKey: prior.baseKey,
-    revision: domain.revision, current: current.records, preferences: domain.preferences });
+    revision: domain.revision, current: current.records, preferences: domain.preferences, exclusions: effectiveTrackingExclusions(domain, current.records) });
 }
 export function applyTrackingResponse(value, ticket, response, raw, { makeId = generatedId, errors = {} } = {}) {
-  const domain = assertTracking(value), changes = assertTrackingChanges(response);
-  if (!ticket || ticket.revision !== domain.revision || !matchesLatestSource(ticket.source, raw)
+  const domain = assertTracking(value); let changes = assertTrackingChanges(response);
+  if (!ticket || ticket.revision !== domain.revision || (ticket.exclusions?.epoch ?? 0) !== trackingExclusionsOf(domain).epoch || !matchesLatestSource(ticket.source, raw)
     || ticket.aiTurn !== countTrackingAiTurns(raw, { beforeFloor: ticket.source.assistantFloor + 1 })
     || currentTracking(domain, raw, { beforeFloor: ticket.source.assistantFloor }).baseKey !== ticket.baseKey) throw new Error('追踪来源或资料已变化，请重新运行');
   if (!domain.preferences.itemsEnabled && changes.items.length || !domain.preferences.npcsEnabled && changes.npcs.length) throw new Error('追踪类别未开启');
   if (['items', 'npcs'].every(list => !domain.preferences[`${list}Enabled`] || errors[list])) return domain;
+  const capturedRecords = currentTracking(domain, raw, { beforeFloor: ticket.source.assistantFloor + 1 }).records;
+  changes = filterTrackingChanges(changes, capturedRecords, effectiveTrackingExclusions(domain, capturedRecords));
   const previous = domain.snapshots.find(row => row.sourceSnapshot.replyId === ticket.source.replyId && row.baseKey === ticket.baseKey && matchesStoredLatestSource(row.sourceSnapshot, raw));
   const existingIds = new Set([...domain.manual.map(row => row.id), ...domain.snapshots.flatMap(row => [...row.changes.items, ...row.changes.npcs].map(change => change.id)), ...domain.snapshots.map(row => row.id)]);
   const freshId = () => { const id = makeId(); if (!trackingText(id) || existingIds.has(id)) throw new Error('追踪身份重复'); existingIds.add(id); return id; };
@@ -205,6 +209,7 @@ export function applyTrackingResponseParts(value, ticket, parts, raw, options = 
     if (errors[list] || !ticket.preferences[`${list}Enabled`]) continue;
     try {
       changes[list] = assertTrackingChanges({ items: [], npcs: [], [list]: parts?.changes?.[list] })[list];
+      changes[list] = filterTrackingChanges({ items: [], npcs: [], [list]: changes[list] }, ticket.current, effectiveTrackingExclusions(assertTracking(value), ticket.current))[list];
       for (const change of changes[list]) if (change.id !== null) {
         const record = ticket.current.find(row => row.id === change.id && row.kind === kind);
         if (!record) throw new Error('追踪更新须指向已确认的记录 ID');
@@ -232,4 +237,29 @@ export function pruneTrackingSnapshots(value, raw, { replyVersions = raw?.replyV
   while (changed) { const ids = new Set(domain.snapshots.map(row => row.id)), length = domain.snapshots.length;
     domain.snapshots = domain.snapshots.filter(row => row.baseKey === null || ids.has(row.baseKey)); changed = length !== domain.snapshots.length; }
   return domain;
+}
+
+export function setTrackingExclusionNames(value, kind, names) {
+  const domain = assertTracking(value), exclusions = trackingExclusionsOf(domain);
+  if (!['item', 'npc'].includes(kind) || !Array.isArray(names) || names.some(name => typeof name !== 'string')) throw new Error('追踪排除名称无效');
+  const normalized = [...new Set(names.map(normalizeTrackingName).filter(Boolean))];
+  if (JSON.stringify(normalized) === JSON.stringify(exclusions[kind].names)) return domain;
+  exclusions[kind].names = normalized; exclusions.epoch++;
+  domain.exclusions = assertTrackingExclusions(exclusions); domain.revision++; return domain;
+}
+export function setTrackingRecordExcluded(value, raw, kind, id, excluded) {
+  const domain = assertTracking(value), exclusions = trackingExclusionsOf(domain);
+  if (!['item', 'npc'].includes(kind) || typeof excluded !== 'boolean' || !trackingText(id)) throw new Error('追踪排除身份无效');
+  if (!currentTracking(domain, raw).records.some(row => row.id === id && row.kind === kind) && !(exclusions[kind].ids.includes(id) && !excluded)) throw new Error('追踪记录已变化，请重新读取');
+  if (exclusions[kind].ids.includes(id) === excluded) return domain;
+  exclusions[kind].ids = excluded ? [...exclusions[kind].ids, id] : exclusions[kind].ids.filter(value => value !== id);
+  // Keep identity labels captured at pause even if source pruning or a later
+  // same-reply retry replaces the historical snapshot that supplied them.
+  const labels = { ...(exclusions[kind].labels ?? {}) };
+  if (excluded) {
+    const evidence = { ...domain, exclusions: { ...trackingExclusionsOf(domain), [kind]: { names: [], ids: [id] } } };
+    Object.defineProperty(labels, id, { value: effectiveTrackingExclusions(evidence, currentTracking(domain, raw).records)[kind].names, enumerable: true, configurable: true, writable: true });
+  } else delete labels[id];
+  if (Object.keys(labels).length) exclusions[kind].labels = labels; else delete exclusions[kind].labels;
+  exclusions.epoch++; domain.exclusions = assertTrackingExclusions(exclusions); domain.revision++; return domain;
 }

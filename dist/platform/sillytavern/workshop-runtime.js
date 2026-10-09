@@ -99,6 +99,7 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     if(task.module.scope==='chat')return true;
     return equal(settings.captureWorkshop().workshop.modules.find(module=>module.id===task.module.id),task.module);
   }
+  function filterCurrentBackgroundPlan(plan){return plan?{...plan,tasks:plan.tasks.filter(task=>taskAllowed(plan,task))}:null;}
   async function filterBackgroundPlan(plan){
     if(!plan)return null;
     const current=await backgroundState(plan.target);
@@ -128,5 +129,5 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     const event=context?.eventTypes?.[name],events=context?.eventSource;if(!event||!events?.on)continue;
     const listener=()=>{clearTimeout(timer);clear();};events.on(event,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,event,listener));
   }
-  return {request,intercept,clear,changed,setBackgroundSourceReader(reader){backgroundSourceReader=reader;},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},moduleAllowed:module=>gates[module.lifecycle].allowed()&&(module.scope==='chat'||equal(settings.captureWorkshop().workshop.modules.find(item=>item.id===module.id),module)),backgroundState,prepareBackground,filterBackgroundPlan,saveBackgroundResult,reconcileBackground,dispose(){if(disposed)return;clear();disposed=true;clearTimeout(timer);for(const release of releases)release();listeners.clear();}};
+  return {request,intercept,clear,changed,setBackgroundSourceReader(reader){backgroundSourceReader=reader;},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},moduleAllowed:module=>gates[module.lifecycle].allowed()&&(module.scope==='chat'||equal(settings.captureWorkshop().workshop.modules.find(item=>item.id===module.id),module)),backgroundState,prepareBackground,filterBackgroundPlan,filterCurrentBackgroundPlan,saveBackgroundResult,reconcileBackground,dispose(){if(disposed)return;clear();disposed=true;clearTimeout(timer);for(const release of releases)release();listeners.clear();}};
 }

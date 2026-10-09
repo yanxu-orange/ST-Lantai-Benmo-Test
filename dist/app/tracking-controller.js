@@ -14,6 +14,7 @@ export function createTrackingController({runtime,kind}={}) {
   function snapshot(){
     const latest=runtime.snapshot();
     return {records:structuredClone(value?.records??[]).filter(row=>row.kind===kind),
+      exclusions:structuredClone(value?.exclusions?.[kind]??{names:[],ids:[]}),
       enabled:value?.preferences?.[preferenceKey]===true,
       writeBlocked:!!failure||!!latest?.writeBlocked||!!latest?.readOnly||!current(),
       error:message(failure)||message(latest?.error)||message(value?.error),target:structuredClone(value?.target)};
@@ -68,6 +69,8 @@ export function createTrackingController({runtime,kind}={}) {
       if(!value?.records?.some(row=>row.id===id&&row.kind===kind)||!latest.records?.some(row=>row.id===id&&row.kind===kind))throw new Error('追踪记录已变化，请重新读取');
       return write(()=>runtime.deleteRecord(kind,id));
     },
+    saveExclusionNames(names,options){return write(()=>runtime.saveExclusionNames(kind,names,options));},
+    setRecordExcluded(id,excluded){return write(()=>runtime.setRecordExcluded(kind,id,excluded));},
     savePreferences({enabled}={}){
       if(typeof enabled!=='boolean')throw new Error('追踪设置无效');
       return write(()=>runtime.savePreferences({[preferenceKey]:enabled}));

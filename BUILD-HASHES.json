@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "374c67eb4c41b601ddd4b80888848067408204ccaf5d9237cf1d1c9aacb60a89"
+    "sha256": "72538f73a45cf13434fb556dc788fe8367d4860aff35f4d553b2990e83d6ddd9"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -33,7 +33,7 @@
   },
   {
     "path": "dist/app/benmo-controller.js",
-    "sha256": "fa3426ac0d54907d3ea6a38afae9c91f5c66fc78c98f04c5923a5bb1798b7f95"
+    "sha256": "93d95147d603a93699fbd829d660f26c61766d6bc50db1249d1fffe25ef9f2b0"
   },
   {
     "path": "dist/app/benmo-view.css",
@@ -41,7 +41,7 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "a496a1b1797395af33976116447443ef5fd637f8385abbf5ccb380bbf5c7184c"
+    "sha256": "f81ad74d73a6a541249d1fe4950b8738d9b49929efa01f45511adf4025fbeb21"
   },
   {
     "path": "dist/app/control-session.js",
@@ -265,15 +265,15 @@
   },
   {
     "path": "dist/app/tracking-controller.js",
-    "sha256": "e4a52fdd66411430efb904586e0c653d4482940227300f7a11f53e90fccd2400"
+    "sha256": "a681437c4ca0aa4e17fa669ef0491cdfb876b7fb8e9caca7d6b563387d05860d"
   },
   {
     "path": "dist/app/tracking-view.js",
-    "sha256": "dd67dd11e419f7c34ab7d27d9942244833da0b23848c7f79a52ddc97edc54602"
+    "sha256": "01fe3c4d229ac2f1f119c2a6b64dca1d6fff034c19d6ed26b9fc100e5636f942"
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "4019f3a6bd70e68498fd1bb3ebae7cbcbd5d9b70e8a4a6530e989f229492c3dd"
+    "sha256": "30e1a37424f1f3a0ca147f822c47f73b8d58ee35acdde255103eb9f467e12dd6"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -324,6 +324,10 @@
     "sha256": "35e5f550946c8e6ee2c8650ec4227953bc06dba8fb42b0a85e0ef2365fcd0f72"
   },
   {
+    "path": "dist/domain/latest/backfill.js",
+    "sha256": "261bdadd760b093a234e4baf3ada9dbbff4b96b85f26243c212a3b1a7dc5d81a"
+  },
+  {
     "path": "dist/domain/latest/data.js",
     "sha256": "9746185e7e0dea61edcc3b7bc04371c817fe3b3b9b70341cce117c2821c01675"
   },
@@ -333,7 +337,7 @@
   },
   {
     "path": "dist/domain/latest/source.js",
-    "sha256": "110f799f8aea821479626fe937b4707d44043ffc4b3d09342ddc621291dd69cb"
+    "sha256": "7b8add70b70a8a44c946b16bd066764261dcf5fc79048d83b7c10d6a6847f56c"
   },
   {
     "path": "dist/domain/latest/transform.js",
@@ -573,7 +577,11 @@
   },
   {
     "path": "dist/domain/tracking/data.js",
-    "sha256": "98349bd6dd7c8e9169237f55517bf112f1a3b923c86004b4919b81f475ebdc12"
+    "sha256": "77690f4281a4072bec560c917e690ef613bf757f82666d2bd9fad140ed6e2fed"
+  },
+  {
+    "path": "dist/domain/tracking/exclusions.js",
+    "sha256": "32165373c25fa17d5cbe5c6af80b7094ee18bbf655ca963836b229a896ae648b"
   },
   {
     "path": "dist/domain/tracking/model.js",
@@ -585,11 +593,11 @@
   },
   {
     "path": "dist/domain/tracking/recall.js",
-    "sha256": "32fec10dbacdd66797ff53f41cb2a5319046bd348d6d9972478fcc8253fb57e8"
+    "sha256": "4117c1e6f3f01f4c23428f08b7004fc4576a8dd448f39c5c5a518a59b8263d2a"
   },
   {
     "path": "dist/domain/tracking/requests.js",
-    "sha256": "deb4753c365f0c5358a24b48e58ace055d7737157ad85403cfcf95baa89936d0"
+    "sha256": "8ce63dbc0c34578758e23e5912d70415a6a3f75a401c61bd7ba1f01657847f8e"
   },
   {
     "path": "dist/domain/workshop/background.js",
@@ -657,7 +665,7 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "sha256": "47e940776273ce74a6f29b2bcafaf999bc18ab85dc24ec810de50b03637276a5"
+    "sha256": "e249c1741720ec0c6771466fc7beddd96bf7532eeffe3f13e01af7c5b3aa15eb"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -745,7 +753,7 @@
   },
   {
     "path": "dist/platform/sillytavern/tracking-runtime.js",
-    "sha256": "a9a9f911976a7f1f519ab761069457accab0508168f3e547c4b7188cf7d4f388"
+    "sha256": "1c9a0c4ece6c37709bf9efff2cee22587288aaf7b153a4bdc7e75bb44d7b9a8b"
   },
   {
     "path": "dist/platform/sillytavern/workshop-background-display.js",
@@ -761,7 +769,7 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-runtime.js",
-    "sha256": "e9bff08ab0b1443ad85bc514f7efc215de22b528c22c78c09126327b0539b905"
+    "sha256": "426b1e29ecb000e378a8fd3ec2acdcf007a574622991fefdfa458f77b58907da"
   },
   {
     "path": "dist/probe/runtime-probe.js",
@@ -821,10 +829,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "f8b6c175ed357c41b4ab940e8faddbdf46837a107e63abd1e8cdfe10ecf26866"
+    "sha256": "fac58f66d36f7c1c0e9df1fbc29629c9717844b7b29b929d32753e8bc5ff6d54"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "460ae398b6e2bb3962a79f7a54ee3d40b430c0e4b1e699148ef8bc4289b76a5b"
+    "sha256": "b8a6f9812f41aa11003234e16c3a4a3adc9e284c4c3925668fcd8c0a3a3d5e15"
   }
 ]
