@@ -1,3 +1,5 @@
+import {AiProviderError} from '../../shared/ai/provider.js';
+import {SettingsError} from '../../shared/settings/model.js';
 import {latestArchivedFloors} from '../../domain/latest/coverage.js';
 import {cleanSummaryFloors,createDefaultCleaningRules,normalizeCleaningRule} from '../../domain/summary/cleaning.js';
 import {sameTarget} from '../../domain/memory/repository.js';
@@ -17,6 +19,9 @@ const summarySettings=({enabled,...preferences})=>preferences;
 const normalizedRules=rules=>(rules??createDefaultCleaningRules()).map(normalizeCleaningRule);
 const supported=new Set(['normal','regenerate','swipe','continue']);
 const specialKeys=['reasoning','reasoning_content','thinking','tool_calls','function_call','tool_invocations','image','images','media','file','files','attachments','audio','video'];
+const failureLabels={preparation:'准备',config:'配置',request:'请求',parse:'解析',save:'保存'};
+const safeLocalFailures=new Set(['未收到该任务的完整结果','该任务分段格式无效或发生嵌套','该任务返回了空白结果','该任务分段未完整闭合','该任务出现重复分段','清洗后没有可总结的 AI 正文','该楼层没有可总结的 AI 正文','后台任务数量无效','后台任务分段无效','最新摘要设置已变化，请重试','最新摘要已修改，请重新读取']);
+const safeFailure=(error,stage)=>`${failureLabels[stage]}失败：${error instanceof AiProviderError?new AiProviderError(error.code).message:error instanceof SettingsError?new SettingsError(error.code).message:safeLocalFailures.has(error?.message)?error.message:error?.code==='COMMIT_UNCONFIRMED'?'保存结果尚未确认，请重新读取后核对。':'请重试。'}`;
 const present=value=>value!==undefined&&value!==null&&value!==false&&value!==''&&(!Array.isArray(value)||value.length>0);
 const special=message=>specialKeys.some(key=>present(message?.[key])||present(message?.extra?.[key]))||present(message?.extra?.type);
 const pendingProjection=message=>{
@@ -122,20 +127,28 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     selection=saved.selection;state={...selection.latest,status:'ready',error:'',floorStates:{}};publish();return inspect();
   }
   async function generate(floor,{automatic=false,expectedMessage=null,workshopOnly=false,taskId,automaticSummaryProof=null,automaticMasterProof=null,queuedSummary=null}={}){
-    const ticket=serial,controller=new AbortController();jobs.add(controller);let key=String(floor),t,latestTask=false,plan=null,trackingPlan=null,preparationFailed=false,partialResults=false,skippedTasks=0,automaticReceiptKey=null;
+    const ticket=serial,controller=new AbortController();jobs.add(controller);let key=String(floor),t,latestTask=false,plan=null,trackingPlan=null,preparationFailed=false,partialResults=false,skippedTasks=0,automaticReceiptKey=null,stage='preparation',firstFailure='',generationCurrent=null,originSource=null;
+    const inputPair=snapshot=>snapshot.messages.filter(row=>row.floor===floor||row.floor===floor-1).map(({replyId,...row})=>row);
+    const origin=getContext().chat?.[floor],originText=origin?.mes,originSwipe=origin?.swipe_id??0;
+    const failure=(error,at=stage)=>{const message=safeFailure(error,at);firstFailure||=message;return message;};
     const report=(status,message)=>{if(automatic&&!disposed&&ticket===serial&&(!t||current(t))){automaticStatus(status,message,floor);if(automaticReceiptKey)automaticReceipts.set(automaticReceiptKey,copy(automaticState));}};
     const markTracking=(status,error='')=>{trackingFloorStates[key]={status,error};};
     const markWorkshop=(task,status,error='')=>{workshopFloorStates[key]??={};workshopFloorStates[key][task.module.id]={status,error};};
     try{
       t=await adapter.prepare();if(!allowed()||ticket!==serial||!current(t)){report('skipped','总开关未启用或聊天状态已变化，本轮未调用');return false;}
-      key=raw(t).messages.find(row=>row.floor===floor)?.replyId??key;
+      const initialSource=raw(t);originSource=inputPair(initialSource);key=initialSource.messages.find(row=>row.floor===floor)?.replyId??key;
       if(expectedMessage&&getContext().chat?.[floor]!==expectedMessage)return false;
       if(automatic&&getControls?.()?.matches(automaticMasterProof)!==true){report('skipped','收到正文时的功能授权已失效，本轮未调用');return false;}
       await refresh();if(!allowed()||ticket!==serial||!current(t))return false;
       const captured=await repository.captureLatest(t),preferences=captured.latest.preferences,summaryEpoch=latestEpoch,summaryProof=automatic?automaticSummaryProof:getControls?.()?.capture('summary'),masterProof=automatic?automaticMasterProof:getControls?.()?.capture('enabled');
-      const generation=getGenerationSettings(),rawSource=raw(t);key=rawSource.messages.find(row=>row.floor===floor)?.replyId??key;
+      const rawSource=raw(t);key=rawSource.messages.find(row=>row.floor===floor)?.replyId??key;
+      stage='config';const generation=getGenerationSettings();stage='preparation';
       latestTask=!workshopOnly&&summaryMatches(summaryProof);
       const source=prepareLatestSource(rawSource,{floor,rules:generation.summaryCleaning.rules});
+      const valid=()=>{
+        try{return allowed()&&getControls?.()?.matches(masterProof)===true&&!controller.signal.aborted&&ticket===serial&&current(t)&&getGenerationSettings().epoch===generation.epoch&&matchesLatestSource(source,raw(t));}catch{return false;}
+      };
+      generationCurrent=valid;
       const summaryEligible=()=>captured.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId)||!archivedFloor(t,floor);
       if(queuedSummary&&(queuedSummary.replyId!==source.replyId||!equal(queuedSummary.record,captured.latest.records.find(record=>record.sourceSnapshot.replyId===source.replyId)??null)))return false;
       const receiptKey=JSON.stringify([t,source.replyId,source.fingerprint]);
@@ -145,15 +158,12 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       // enabled tasks, while workshop retries can target one failed segment.
       if(automatic||workshopOnly){
         try{plan=await workshopRuntime?.prepareBackground(t,source,{automatic,taskId});}
-        catch(error){preparationFailed=true;for(const module of workshopState?.modules??[])if(taskId===undefined||module.id===taskId)markWorkshop({module},'failed',error.message);}
+        catch(error){if(!valid())return false;preparationFailed=true;for(const module of workshopState?.modules??[])if(taskId===undefined||module.id===taskId)markWorkshop({module},'failed',failure(error));}
       }
-      if(automatic||workshopOnly){try{trackingPlan=await trackingRuntime?.prepareBackground(t,source,{automatic,taskId,rules:generation.summaryCleaning.rules});}catch(error){preparationFailed=true;markTracking('failed',error.message);}}
+      if(automatic||workshopOnly){try{trackingPlan=await trackingRuntime?.prepareBackground(t,source,{automatic,taskId,rules:generation.summaryCleaning.rules});}catch(error){if(!valid())return false;preparationFailed=true;markTracking('failed',failure(error));}}
       let tasks=(plan?.tasks??[]).filter(task=>task.instructions.trim());
       for(const task of plan?.tasks??[])if(!task.instructions.trim()){preparationFailed=true;markWorkshop(task,'failed','请先填写该工坊条目的生成要求');}
       if(!latestTask&&!tasks.length&&!trackingPlan){report('skipped','本轮没有可发送的任务，请检查功能开关、已有结果及工坊生成要求');publish();return false;}
-      const valid=()=>{
-        try{return allowed()&&getControls?.()?.matches(masterProof)===true&&!controller.signal.aborted&&ticket===serial&&current(t)&&getGenerationSettings().epoch===generation.epoch&&matchesLatestSource(source,raw(t));}catch{return false;}
-      };
       if(!valid())return false;
       if(automatic){automaticReceiptKey=receiptKey;automaticReceipts.set(receiptKey,copy(automaticState));if(automaticReceipts.size>256)automaticReceipts.delete(automaticReceipts.keys().next().value);}
       if(latestTask){state.status='running';state.error='';state.floorStates[key]={status:'running',error:''};}
@@ -162,36 +172,36 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       // categories may be sent, even before there is a response to discard.
       latestTask=latestTask&&summaryMatches(summaryProof)&&summaryEligible();
       try{trackingPlan=await trackingRuntime?.filterBackgroundPlan(trackingPlan)??null;}
-      catch(error){preparationFailed=true;markTracking('failed',error.message);trackingPlan=null;}
+      catch(error){if(!valid())return false;preparationFailed=true;markTracking('failed',failure(error));trackingPlan=null;}
       if(plan&&workshopRuntime?.filterBackgroundPlan){
         try{plan=await workshopRuntime.filterBackgroundPlan(plan);tasks=(plan?.tasks??[]).filter(task=>task.instructions.trim());}
-        catch(error){preparationFailed=true;for(const task of tasks)markWorkshop(task,'failed',error.message);tasks=[];}
+        catch(error){if(!valid())return false;preparationFailed=true;for(const task of tasks)markWorkshop(task,'failed',failure(error));tasks=[];}
       }
       latestTask=latestTask&&summaryMatches(summaryProof)&&summaryEligible();
       try{trackingPlan=await trackingRuntime?.filterBackgroundPlan(trackingPlan)??null;}
-      catch(error){preparationFailed=true;markTracking('failed',error.message);trackingPlan=null;}
+      catch(error){if(!valid())return false;preparationFailed=true;markTracking('failed',failure(error));trackingPlan=null;}
       // The final authority read also yields. Recheck each participant's
       // captured control epoch without another await before dispatch.
       latestTask=latestTask&&summaryMatches(summaryProof)&&summaryEligible();
       if(workshopRuntime?.filterCurrentBackgroundPlan){
         try{plan=workshopRuntime.filterCurrentBackgroundPlan(plan);tasks=(plan?.tasks??[]).filter(task=>task.instructions.trim());}
-        catch(error){preparationFailed=true;for(const task of tasks)markWorkshop(task,'failed',error.message);tasks=[];}
+        catch(error){if(!valid())return false;preparationFailed=true;for(const task of tasks)markWorkshop(task,'failed',failure(error));tasks=[];}
       }
       if(trackingRuntime?.filterCurrentBackgroundPlan){
         try{trackingPlan=trackingRuntime.filterCurrentBackgroundPlan(trackingPlan);}
-        catch(error){preparationFailed=true;markTracking('failed',error.message);trackingPlan=null;}
+        catch(error){if(!valid())return false;preparationFailed=true;markTracking('failed',failure(error));trackingPlan=null;}
       }
       if(!valid()||!latestTask&&!tasks.length&&!trackingPlan)return false;
       const descriptors=[...(latestTask?[{id:'latest',name:'最新摘要',instructions:preferences.prompt}]:[]),...tasks,...(trackingPlan?[trackingPlan.task]:[])];
-      const request=tasks.length||trackingPlan?buildBackgroundRoundRequest({source,tasks:descriptors}):buildLatestRequest({source,prompt:preferences.prompt});
+      stage='request';const request=tasks.length||trackingPlan?buildBackgroundRoundRequest({source,tasks:descriptors}):buildLatestRequest({source,prompt:preferences.prompt});
       report('running','正在进行本轮自动生成');
-      const output=await provider.generateText({...request,signal:controller.signal,isCurrent:valid});
+      stage='request';const output=await provider.generateText({...request,signal:controller.signal,isCurrent:valid});
       if(!valid())return false;
-      const segments=tasks.length||trackingPlan?parseBackgroundRoundResponse(output.text,descriptors):new Map([['latest',{text:output.text}]]);
+      stage='parse';const segments=tasks.length||trackingPlan?parseBackgroundRoundResponse(output.text,descriptors):new Map([['latest',{text:output.text}]]);
       let successes=0;
       if(latestTask&&summaryMatches(summaryProof)&&summaryEligible()){
         try{
-          const segment=segments.get('latest');if(segment.error)throw new Error(segment.error);
+          stage='parse';const segment=segments.get('latest');if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
           const latest=await repository.captureLatest(t);
           if(!valid())return false;
           if(!summaryEligible())throw new Error('来源已归档，未新建摘要');
@@ -201,30 +211,30 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           await repository.upsertLatestRecord(t,latest,{id:previous?.id??crypto.randomUUID(),body:segment.text,sourceSnapshot:source,cleaningRules:normalizedRules(generation.summaryCleaning.rules),createdAt:previous?.createdAt??now,updatedAt:now},{isCurrent:()=>valid()&&summaryMatches(summaryProof)&&summaryEpoch===latestEpoch&&summaryEligible()});
           if(!valid())return false;
           state.floorStates[key]={status:'ready',error:''};successes++;
-        }catch(error){if(!valid())return false;if(!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}else{state.floorStates[key]={status:'failed',error:error.message};state.error=error.message;}}
+        }catch(error){if(!valid())return false;if(!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}else{state.floorStates[key]={status:'failed',error:failure(error)};state.error=failure(error);}}
         publish();
       }else if(latestTask&&!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}
       for(const task of tasks){
         if(!valid())return false;
         try{
-          const segment=segments.get(task.id);if(segment.error)throw new Error(segment.error);
+          stage='parse';const segment=segments.get(task.id);if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
           await workshopRuntime.saveBackgroundResult(plan,task,segment.text,{isCurrent:valid});
           if(!valid())return false;
           markWorkshop(task,'ready');successes++;
           workshopState=await workshopRuntime.backgroundState(t);
-        }catch(error){if(!valid())return false;markWorkshop(task,'failed',error.message);}
+        }catch(error){if(!valid())return false;markWorkshop(task,'failed',failure(error));}
         publish();
       }
       if(trackingPlan&&valid()){
         try{
-          const segment=segments.get(trackingPlan.task.id);if(segment.error)throw new Error(segment.error);
+          stage='parse';const segment=segments.get(trackingPlan.task.id);if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
           const result=await trackingRuntime.saveBackgroundResult(trackingPlan,segment.text,{isCurrent:valid});
           if(!valid())return false;
           const errors=Object.entries(result.errors).filter(([,error])=>error).map(([kind,error])=>`${kind==='items'?'物品':'NPC'}：${error}`);
           if(result.skipped){markTracking('idle');skippedTasks++;}
           else{markTracking(errors.length?'failed':'ready',errors.join('；'));successes++;if(errors.length)partialResults=true;}
           trackingState=await trackingRuntime.backgroundState(t);
-        }catch(error){if(!valid())return false;markTracking('failed',error.message);}
+        }catch(error){if(!valid())return false;markTracking('failed',failure(error));}
         publish();
       }
       if(valid()){
@@ -232,15 +242,26 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         selection=latest;state={...latest.latest,status:state.floorStates[key]?.status==='failed'?'failed':'ready',error:state.floorStates[key]?.error??'',floorStates:state.floorStates};publish();
       }
       const complete=successes===descriptors.length&&!preparationFailed&&!partialResults;
-      report(complete?'succeeded':successes?'partial':skippedTasks&&!preparationFailed?'skipped':'failed',complete?'本轮自动生成已保存':successes?'本轮部分结果已保存，其余任务已取消或失败':skippedTasks&&!preparationFailed?'任务授权已变化，本轮结果未写入':'本轮自动生成失败，请在来源楼层查看错误并重试');
+      report(complete?'succeeded':successes?'partial':skippedTasks&&!preparationFailed?'skipped':'failed',complete?'本轮自动生成已保存':successes?'本轮部分结果已保存，其余任务已取消或失败':skippedTasks&&!preparationFailed?'任务授权已变化，本轮结果未写入':`本轮自动生成失败：${firstFailure||'未收到可保存结果，请重试。'}`);
       return successes>0;
     }catch(error){
       if(!disposed&&ticket===serial&&(!t||current(t))){
-        report('failed','本轮自动生成失败，请在来源楼层查看错误并重试');
-        if(latestTask||!plan&&!workshopOnly){state.status='failed';state.error=error.message;state.floorStates[key]={status:'failed',error:error.message};}
+        if(generationCurrent&&!generationCurrent()&&error?.code!=='COMMIT_UNCONFIRMED')return false;
+        // Configuration/preparation can fail before valid exists. Compare the
+        // original input pair too, including hidden flags and user content.
+        try{if(originSource&&!equal(originSource,inputPair(raw(t))))return false;}catch{if(error?.code!=='COMMIT_UNCONFIRMED')return false;}
+        const message=failure(error);
+        report('failed',`本轮自动生成失败：${firstFailure||'未收到可保存结果，请重试。'}`);
+        // refresh may create the reply UUID before preparation fails. Bind only
+        // to the same reply version; a floor number is never an error owner.
+        const messageNow=getContext().chat?.[floor];
+        if(messageNow!==origin||messageNow?.mes!==originText||(messageNow?.swipe_id??0)!==originSwipe)return false;
+        try{key=t?raw(t).messages.find(row=>row.floor===floor)?.replyId:null;}catch{key=null;}
+        if(!key)return false;
+        if(latestTask||!plan&&!workshopOnly){state.status='failed';state.error=message;state.floorStates[key]={status:'failed',error:message};}
         const affected=plan?.tasks??((automatic||workshopOnly)?workshopState?.modules.filter(module=>taskId===undefined||module.id===taskId).map(module=>({module}))??[]:[]);
-        for(const task of affected)markWorkshop(task,'failed',error.message);
-        if(trackingPlan||((automatic||workshopOnly)&&(!taskId||taskId==='tracking')&&(getControls?.()?.allowed('item')||getControls?.()?.allowed('npc'))))markTracking('failed',error.message);publish();
+        for(const task of affected)markWorkshop(task,'failed',failure(error));
+        if(trackingPlan||((automatic||workshopOnly)&&(!taskId||taskId==='tracking')&&(getControls?.()?.allowed('item')||getControls?.()?.allowed('npc'))))markTracking('failed',failure(error));publish();
       }
       return false;
     }finally{
@@ -480,7 +501,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   // ST streaming ends its UI before MESSAGE_RECEIVED; non-streaming reverses
   // this order. Both receipts are required, with successful-stream evidence.
   on('GENERATION_ENDED',()=>{foregroundEnded=true;if(!receipt&&automaticState.status==='waiting')automaticStatus('waiting','已收到结束信号，等待宿主正文回执');flushReceipt();});
-  for(const name of ['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,payload=>{const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;if(name==='MESSAGE_EDITED'){if(Number.isSafeInteger(floor)&&floor>=0)invalidatedFloors.add(floor);else for(const record of [...state.records,...(workshopState?.selection.workshop.results.filter(row=>row.generationSource==='background')??[]),...(trackingState?.tracking.snapshots??[])])for(const row of record.sourceSnapshot.rawMessages)invalidatedFloors.add(row.floor);}cancel();publish();void refresh().catch(()=>{});});
+  for(const name of ['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,payload=>{const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;if(name==='MESSAGE_EDITED'){for(const [index,message] of (getContext().chat??[]).entries())if(!Number.isSafeInteger(floor)||index===floor||index===floor+1){const id=message?.extra?.[WORKSHOP_REPLY_KEY];if(id){delete state.floorStates[id];delete workshopFloorStates[id];delete trackingFloorStates[id];}}if(Number.isSafeInteger(floor)&&floor>=0)invalidatedFloors.add(floor);else for(const record of [...state.records,...(workshopState?.selection.workshop.results.filter(row=>row.generationSource==='background')??[]),...(trackingState?.tracking.snapshots??[])])for(const row of record.sourceSnapshot.rawMessages)invalidatedFloors.add(row.floor);}cancel();publish();void refresh().catch(()=>{});});
   for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{cancel();resetBackfill();readSerial++;invalidatedFloors.clear();target=null;selection=null;state={...emptyLatest(),status:'idle',error:'',floorStates:{}};workshopState=null;workshopFloorStates={};trackingState=null;trackingFloorStates={};automaticReceipts.clear();automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};publish();void read().then(()=>refresh()).catch(()=>{});});
   let displayReadQueued=false;
   const updateWorkshopDisplay=()=>{if(disposed||displayReadQueued)return;displayReadQueued=true;queueMicrotask(()=>{displayReadQueued=false;if(!disposed)void read().catch(()=>{});});};
