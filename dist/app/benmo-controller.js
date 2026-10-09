@@ -59,6 +59,7 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     return load();
   }
   return {snapshot,inspect:snapshot,availability,load,refresh:load,ensure,
+    observeSummaryVisibility:options=>latestRuntime.observeVisibility?.(options)??(()=>{}),
     defaultPrompt:latestRuntime.defaultPrompt,
     defaultTrackingPrompts:trackingRuntime.defaultPrompts,
     defaultNarrativePrompts:narrativeRuntime?.defaultPrompts,

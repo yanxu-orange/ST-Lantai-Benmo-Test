@@ -43,7 +43,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
   let activeSnapshot = null;
   let sourceEpoch=0,sourceSerial=0;
   const messageIds=new WeakMap(),sourceVersions=new Map();
-  const deletionListeners=new Set();
+  const deletionListeners=new Set(),visibilityObservers=new Set();
   let deletionBaseline=null,deletionSerial=0,regenerationRemoval=null;
   function messageIdentity(message,floor){
     if(!messageIds.has(message))messageIds.set(message,`message-${++sourceSerial}`);
@@ -423,6 +423,36 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
         check(target);return matches;
       } catch {return false;}
    }
+  // Native hide/unhide mutates is_system without emitting a host event.
+  // Observers exist only while a consuming page is open. DOM notifications
+  // cover visible rows; the small flag-only check covers paged-out /hide ranges.
+  function observeSourceVisibility(listener,{document:doc=globalThis.document,MutationObserver:Observer=globalThis.MutationObserver,intervalMs=500}={}) {
+    let stopped=false,queued=false,visibilityMutation=false;
+    let rootRevision=null,memoryKey='';
+    const capture=()=>{
+      const context=getContext(),root=context.chatMetadata?.[MEMORY_KEY];
+      if(rootRevision!==root?.revision){rootRevision=root?.revision;memoryKey=JSON.stringify([root?.summary?.revision,root?.cumulative?.revision,root?.events?.map(event=>[event.id,event.supersededBy])]);}
+      return {chatId:identity(binding()),memoryKey,rows:context.chat.map(message=>[message,message?.is_system===true])};
+    };
+    let previous;try{previous=capture();}catch{return ()=>{};}
+    const checkVisibility=()=>{
+      if(stopped||disposed)return;
+      try{
+        const next=capture();
+        const changed=next.chatId===previous.chatId&&(visibilityMutation||next.rows.some(([message,hidden],index)=>previous.rows[index]?.[0]===message&&previous.rows[index][1]!==hidden));
+        visibilityMutation=false;
+        const memoryChanged=next.chatId===previous.chatId&&next.memoryKey!==previous.memoryKey;
+        previous=next;if(changed||memoryChanged)listener({visibilityChanged:changed,memoryChanged});
+      }catch{/* Chat changes are handled by the normal lifecycle. */}
+    };
+    const schedule=()=>{if(stopped||queued)return;queued=true;queueMicrotask(()=>{queued=false;checkVisibility();});};
+    const observer=Observer&&doc?.body?new Observer(records=>{if(records.some(record=>record.target?.matches?.('#chat .mes')&&record.attributeName==='is_system')){visibilityMutation=true;schedule();}}):null;
+    observer?.observe(doc.body,{attributes:true,subtree:true,attributeFilter:['is_system']});
+    const timer=setInterval(checkVisibility,intervalMs);timer.unref?.();
+    doc?.addEventListener?.('visibilitychange',schedule);globalThis.addEventListener?.('focus',schedule);
+    const stop=()=>{if(stopped)return;stopped=true;clearInterval(timer);observer?.disconnect();doc?.removeEventListener?.('visibilitychange',schedule);globalThis.removeEventListener?.('focus',schedule);visibilityObservers.delete(stop);};
+    visibilityObservers.add(stop);return stop;
+  }
   snapshotMessages();refreshDeletionBaseline(true);
   return {
     prepare, captureTarget,
@@ -430,7 +460,10 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     hasTimeCalendar() {
       try {observe();const root=getContext().chatMetadata[MEMORY_KEY]??prepared;return !!root?.time?.activeCalendarId&&Array.isArray(root.time.calendars)&&root.time.calendars.some(item=>item.id===root.time.activeCalendarId);}catch{return false;}
     },
-    captureChatSource, captureSummarySource: captureChatSource,
+    captureChatSource, captureSummarySource: captureChatSource,observeSourceVisibility,
+    // Storage ownership only: never pass this visibility-neutral source to a
+    // generation or prompt consumer. Hidden story replies still own summaries.
+    captureLatestRetentionSource(target){const source=captureChatSource(target,true);return {...source,messages:source.messages.map(message=>({...message,system:message.role==='system'}))};},
     // Narrative reads story chronology even after summary has hidden originals.
     // Preserve genuine system/tool exclusion, without treating visibility as a
     // change to the speaker or to the durable narrative source proof.
@@ -467,6 +500,6 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       return persist(target, candidate, guard, workshopProof);
     },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    dispose() { disposed = true; epoch++; prepared = null; listeners.clear();deletionListeners.clear(); for (const [type, handler] of subscriptions) (source.removeListener ?? source.off).call(source, type, handler); },
+    dispose() { for(const stop of [...visibilityObservers])stop();disposed = true; epoch++; prepared = null; listeners.clear();deletionListeners.clear(); for (const [type, handler] of subscriptions) (source.removeListener ?? source.off).call(source, type, handler); },
   };
 }

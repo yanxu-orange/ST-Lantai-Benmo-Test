@@ -24,7 +24,7 @@ export async function mountBenmoView({container: app, controller, availability =
   let disposed = false, suspended = false, acting = false, composing = false;
   let error = '', dialog = null, draft = null, baseline = null, original = null, narrativeRecovery = null, narrativeDraftTarget = null, invalidated = false, renderedPolicy = '';
   let returnRoute = 'list', epoch = 0, toastTimer, redirectTimer;
-  let backfillEstimate = null, backfillJob = null;
+  let backfillJob = null, summaryVisibilityDisposer = null, observingSummaryVisibility = false;
   const generating = new Map(), narrativeJobs = new Map();
   const state = {
     tab: Object.hasOwn(TABS, initialState.tab) ? initialState.tab : 'records',
@@ -34,9 +34,7 @@ export async function mountBenmoView({container: app, controller, availability =
     selections: {item: null, npc: null, ...initialState.selections},
     scrolls: {...initialState.scrolls},
     expanded: new Set(Array.isArray(initialState.expanded) ? initialState.expanded : []),
-    summaryFilter: initialState.summaryFilter === 'missing' ? 'missing' : 'all',
-    summaryBackfillRange: initialState.summaryBackfillRange ? {start:String(initialState.summaryBackfillRange.start ?? ''),end:String(initialState.summaryBackfillRange.end ?? '')} : null,
-    summaryPendingLimit: Number.isSafeInteger(initialState.summaryPendingLimit) ? Math.max(50,initialState.summaryPendingLimit) : 50,
+    summaryHistoryExpanded: initialState.summaryHistoryExpanded === true,
   };
   const externalPolicy = () => typeof availability === 'function' ? availability() ?? {} : availability ?? {};
   function policy() {
@@ -61,13 +59,14 @@ export async function mountBenmoView({container: app, controller, availability =
     const rows = value.tracking?.records ?? [];
     return Array.isArray(rows) ? rows.filter(row => row.kind === kind) : rows[kind] ?? [];
   };
-  const summaryRecords = () => [...(value.summary?.records ?? [])].sort((a, b) => b.floor - a.floor);
+  const byFloor = rows => [...rows].sort((a, b) => Number(a.floor) - Number(b.floor));
+  const summaryRecords = () => byFloor(value.summary?.records ?? []);
   const selectedRecord = () => records().find(row => row.id === state.selected);
-  const context = () => ['benmo', state.tab, state.kind, state.route, ['detail', 'edit', 'narrative-edit'].includes(state.route) ? state.selected ?? 'new' : '', state.kind === 'summary' && state.route === 'list' ? state.summaryFilter : ''].join(':');
-  const blocked = () => !!narrativeRecovery || invalidated || externalPolicy().transient === true || value.writeBlocked === true || !policy()[activeKind()];
-  const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'toggle-excluded', 'restore-excluded', 'new', 'generate', 'generate-narrative', 'manual-summary', 'estimate-backfill', 'start-backfill'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
+  const context = () => ['benmo', state.tab, state.kind, state.route, ['detail', 'edit', 'narrative-edit'].includes(state.route) ? state.selected ?? 'new' : ''].join(':');
+  const blocked = () => !!narrativeRecovery || summaryDraftHidden() || invalidated || externalPolicy().transient === true || value.writeBlocked === true || !policy()[activeKind()];
+  const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'toggle-excluded', 'restore-excluded', 'new', 'generate', 'generate-narrative', 'manual-summary', 'start-backfill'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
   const textEntry = (label, action, attrs = '') => button(label, action, attrs).replace('ui-button ui-button--tertiary', 'benmo-text-entry');
-  const icon = (label, action, file) => `<button type="button" class="ui-icon-button ui-button--tertiary" aria-label="${esc(label)}" data-action="${action}"><img class="lt-icon" data-icon="${file}" src="${new URL(`./icons/${file}.svg`, import.meta.url)}" alt=""></button>`;
+  const icon = (label, action, file, attrs = '') => `<button type="button" class="ui-icon-button ui-button--tertiary" aria-label="${esc(label)}" data-action="${action}" ${attrs}><img class="lt-icon" data-icon="${file}" src="${new URL(`./icons/${file}.svg`, import.meta.url)}" alt=""></button>`;
   const selectButton = (id, label, current, action) => action === 'kind'
     ? button(label, action, `data-id="${esc(id)}" aria-pressed="${id === current}"`)
     : button(label, action, `data-id="${esc(id)}" ${id === current ? 'aria-current="page"' : ''}`).replace('ui-button ui-button--tertiary', 'ui-button lt-type');
@@ -101,13 +100,12 @@ export async function mountBenmoView({container: app, controller, availability =
   function remember() {
     const main = app.querySelector('.lt-main');
     if (main) state.scrolls[context()] = main.scrollTop;
-    readBackfillRange();
     readDraft();
   }
   const dirty = () => { readDraft(); return !!draft && !same(draft, baseline); };
   function snapshotNavigation() {
     remember();
-    return {tab: state.tab, kind: state.kind, route: draft ? returnRoute : state.route, selected: state.selected, selections: {...state.selections}, scrolls: {...state.scrolls}, expanded: [...state.expanded], summaryFilter: state.summaryFilter, summaryBackfillRange: state.summaryBackfillRange && {...state.summaryBackfillRange}, summaryPendingLimit:state.summaryPendingLimit};
+    return {tab: state.tab, kind: state.kind, route: draft ? returnRoute : state.route, selected: state.selected, selections: {...state.selections}, scrolls: {...state.scrolls}, expanded: [...state.expanded], summaryHistoryExpanded: state.summaryHistoryExpanded};
   }
   function normalize() {
     const tabs = enabledTabs(), kinds = enabledKinds();
@@ -138,7 +136,19 @@ export async function mountBenmoView({container: app, controller, availability =
   // Counts/rows always come from the source-aware runtime. A local pending
   // promise is only a duplicate-click guard, never evidence of a valid job.
   const runningRows = () => value.summary?.running ?? [];
-  const summarySource = floor => [...(value.summary?.missing ?? []), ...runningRows(), ...summaryRecords()].find(row => Number(row.floor) === floor);
+  const summaryCurrentRows = () => {
+    if (Array.isArray(value.summary?.currentRows)) return byFloor(value.summary.currentRows);
+    // Older controller fixtures expose the same current list in three parts.
+    const rows = new Map();
+    for (const row of [...(value.summary?.missing ?? []), ...runningRows(), ...summaryRecords()]) rows.set(Number(row.floor), row);
+    return byFloor(rows.values());
+  };
+  const summaryHistoryRecords = () => byFloor(value.summary?.historyRecords ?? []).filter(row => row.id && row.body && !row.nativeHidden);
+  const summarySource = floor => [...summaryCurrentRows(), ...summaryRecords()].find(row => Number(row.floor) === floor);
+  function summaryDraftHidden() {
+    return state.tab === 'records' && state.kind === 'summary' && state.route === 'edit' && !!draft && summarySource(Number(draft.floor))?.nativeHidden === true;
+  }
+  const summaryRunning = row => generating.has(Number(row.floor)) || ['queued', 'running'].includes(row.status) || runningRows().some(job => Number(job.floor) === Number(row.floor));
   function reconcileGenerating() {
     for (const [floor, token] of generating) {
       const row = summarySource(floor), running = runningRows().some(job => Number(job.floor) === floor && job.replyId === token.replyId);
@@ -146,7 +156,13 @@ export async function mountBenmoView({container: app, controller, availability =
       else if (running) token.observed = true;
     }
   }
-  const missingRows = () => (value.summary?.missing ?? []).filter(row => !runningRows().some(job => Number(job.floor) === Number(row.floor)));
+  const missingRows = () => {
+    const current = new Map(summaryCurrentRows().map(row => [Number(row.floor), row]));
+    return (value.summary?.missing ?? []).filter(row => {
+      const shown = current.get(Number(row.floor));
+      return shown && !shown.nativeHidden && !row.nativeHidden && !shown.id && !summaryRunning(shown);
+    });
+  };
   const backfillStatus = () => value.summary?.backfill ?? {};
   const backfillRunning = () => ['queued', 'running', 'stopping'].includes(backfillStatus().status) || !!backfillJob;
   function reconcileBackfill() {
@@ -155,19 +171,7 @@ export async function mountBenmoView({container: app, controller, availability =
     if (['queued', 'running', 'stopping'].includes(info.status)) {
       if (backfillJob.id && backfillJob.id !== info.id) backfillJob = null;
       else { backfillJob.id = info.id;backfillJob.observed = true; }
-    } else if (backfillJob.observed) { backfillJob = null;backfillEstimate = null; }
-  }
-  function readBackfillRange() {
-    const start = app.querySelector('[name="backfillStart"]'), end = app.querySelector('[name="backfillEnd"]');
-    if (!start || !end) return;
-    const next = {start:String(start.value),end:String(end.value)};
-    if (!same(next, state.summaryBackfillRange)) { state.summaryBackfillRange = next; backfillEstimate = null; }
-  }
-  function backfillRange() {
-    readBackfillRange();
-    const raw = state.summaryBackfillRange ?? {}, start = Number(raw.start), end = Number(raw.end);
-    if (!String(raw.start ?? '').trim() || !String(raw.end ?? '').trim() || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) throw new Error('请填写有效楼层范围，结束楼层不能早于开始楼层');
-    return {start,end};
+    } else if (backfillJob.observed) backfillJob = null;
   }
   function backfillProgress() {
     const info = backfillStatus();
@@ -176,27 +180,23 @@ export async function mountBenmoView({container: app, controller, availability =
     return `<p class="meta" role="status">${esc(labels[info.status] ?? '补缺已结束')} · 已补 ${esc(info.completed ?? 0)} / ${esc(info.total ?? 0)} 楼${info.skipped ? ` · 已有跳过 ${esc(info.skipped)} 楼` : ''}${info.failed ? ` · 失败 ${esc(info.failed)} 楼` : ''}</p>${info.error ? `<p class="lt-error" role="alert">${esc(info.error)}</p>` : ''}`;
   }
   function backfillControls() {
-    if (!controller.estimateSummaryBackfill || !controller.startSummaryBackfill) return '';
-    if (!state.summaryBackfillRange) {
-      const floors = (value.summary?.missing ?? []).map(row => Number(row.floor)).filter(Number.isSafeInteger).sort((a,b)=>a-b);
-      state.summaryBackfillRange = {start: String(floors[0] ?? 0),end:String(floors.at(-1) ?? 0)};
-    }
-    const range = state.summaryBackfillRange, estimate = backfillEstimate?.estimate, running = backfillRunning();
-    return `<section class="card" aria-label="按范围补齐缺失摘要"><h2>按范围补缺</h2><p class="meta">只补当前缺失摘要，已有摘要（包括来源已变化的旧记录）都会跳过。按小批次调用 API；再次补缺只处理仍缺失的楼层。</p><div class="two-cols"><label class="ui-field"><span>开始楼层</span><input class="ui-input" name="backfillStart" type="number" min="0" step="1" inputmode="numeric" value="${esc(range.start)}" ${running ? 'disabled' : ''}></label><label class="ui-field"><span>结束楼层</span><input class="ui-input" name="backfillEnd" type="number" min="0" step="1" inputmode="numeric" value="${esc(range.end)}" ${running ? 'disabled' : ''}></label></div><div data-backfill-estimate>${estimate ? `<p class="meta" role="status">待补 ${esc(estimate.count)} 楼 · 预计调用 ${esc(estimate.calls)} 次 API</p><p class="meta">仅估算当前范围的调用次数，不代表 token 用量或费用。</p>${estimate.oversized?.length ? `<p class="lt-error" role="alert">第 ${esc(estimate.oversized.join('、'))} 楼超过单批字符保护预算，可调整清洗设置后重新估算，或手动补录。不会截断发送。</p>` : ''}` : '<p class="meta">先估算待补楼数和调用次数，再明确开始。</p>'}</div>${backfillProgress()}<div class="actions">${button('估算补缺', 'estimate-backfill', running ? 'disabled' : '', 'secondary')}${button(running ? '补缺中…' : '开始补缺', 'start-backfill', running || !estimate || !estimate.calls ? 'disabled' : '', 'primary')}${running ? button('停止补缺', 'stop-backfill') : ''}</div><p class="meta">关闭页面可继续补缺，切换聊天会停止。</p></section>`;
+    const count = missingRows().length, running = backfillRunning();
+    return `<section class="pending-strip" aria-label="摘要任务状态"><p class="meta" role="status">缺少${count}条</p><div class="actions compact-actions">${controller.startSummaryBackfill ? button('补齐缺失', 'start-backfill', running || !count ? 'disabled' : '', 'secondary') : ''}${running && controller.stopSummaryBackfill ? button('停止补缺', 'stop-backfill', backfillStatus().status === 'stopping' ? 'disabled' : '') : ''}</div></section>${backfillProgress()}`;
   }
-  function pendingStrip() {
-    const count = missingRows().length, running = runningRows().length;
-    if (!count && !running && !backfillRunning()) return '';
-    return `<section class="pending-strip" aria-label="摘要任务状态"><p class="meta" role="status">${count ? `待补 ${count} 楼` : ''}${running ? `${count ? '<span class="pending-separator" aria-hidden="true"> · </span>' : ''}生成中 ${running} 楼` : ''}${!count && !running && backfillRunning() ? '范围补缺进行中' : ''}</p><div class="actions compact-actions">${state.summaryFilter !== 'missing' && backfillRunning() ? button('停止补缺', 'stop-backfill') : ''}${textEntry(state.summaryFilter === 'missing' ? '全部摘要' : '查看', 'filter-summary', `data-id="${state.summaryFilter === 'missing' ? 'all' : 'missing'}" aria-label="${state.summaryFilter === 'missing' ? '返回全部摘要' : '查看待补与生成中的楼层'}"`)}</div></section>`;
+  function summaryCurrentRow(row) {
+    if (row.nativeHidden) return `<p class="meta">第${esc(row.floor)}楼 · 已隐藏</p>`;
+    if (row.id && row.body) return summaryCard(row);
+    const running = summaryRunning(row), disabled = running ? 'disabled aria-busy="true"' : '';
+    return `<article class="card summary-card"><header class="summary-card-header"><span class="meta">第 ${esc(row.floor)} 楼</span><div class="summary-card-actions">${controller.manualSummary ? textEntry('手动补录', 'manual-summary', `data-id="${esc(row.floor)}" ${disabled}`) : ''}${textEntry('生成', 'generate', `data-id="${esc(row.floor)}" ${disabled}`)}</div></header>${running ? '<p class="meta" role="status">生成中</p>' : ''}${row.error ? `<p class="lt-error" role="alert">${esc(row.error)}</p>` : ''}</article>`;
   }
-  function pendingRows() {
-    const missing = missingRows(), running = runningRows();
-    const shownRunning = running.slice(0,state.summaryPendingLimit), shownMissing = missing.slice(0,Math.max(0,state.summaryPendingLimit-shownRunning.length)), shown = shownRunning.length+shownMissing.length, total = missing.length+running.length;
-    return `<div class="section"><p class="meta">仅统计当前版本的可见、已完成 AI 楼层；不自动补齐历史。</p>${backfillControls()}${shownRunning.map(row => `<article class="record"><div class="row"><div class="pending-row-title"><strong>第 ${esc(row.floor)} 楼</strong><span class="meta" role="status">生成中</span></div></div></article>`).join('')}${shownMissing.map(row => `<article class="record"><div class="row"><strong>第 ${esc(row.floor)} 楼</strong><div class="actions compact-actions">${controller.manualSummary ? button('手动补录', 'manual-summary', `data-id="${esc(row.floor)}" ${generating.has(Number(row.floor)) ? 'disabled' : ''}`) : ''}${button('补生成', 'generate', `data-id="${esc(row.floor)}" ${generating.has(Number(row.floor)) ? 'disabled aria-busy="true"' : ''}`, 'secondary')}</div></div><p class="meta">${esc(row.error || '当前版本尚无摘要。')}</p></article>`).join('')}${shown < total ? `<p class="meta">已显示 ${shown} / ${total} 楼</p>${button('显示更多', 'more-summary-missing', 'aria-label="显示更多待补楼层"')}` : ''}${!missing.length && !running.length ? `<p class="meta">暂无待处理楼层。</p>${button('返回全部摘要', 'filter-summary', 'data-id="all"')}` : ''}</div>`;
+  function summaryCard(row) {
+    const expanded = state.expanded.has(row.id), bodyId = `benmo-summary-body-${row.id}`;
+    const running = summaryRunning(row);
+    return `<article class="card summary-card"><header class="summary-card-header"><span class="meta">第 ${esc(row.floor)} 楼</span><div class="summary-card-actions">${icon('编辑摘要', 'edit-summary', 'edit', `data-id="${esc(row.id)}"`)}${icon('重新生成摘要', 'generate', 'refresh', `data-id="${esc(row.floor)}" ${running ? 'disabled aria-busy="true"' : blocked() ? 'disabled' : ''}`)}</div></header><p id="${esc(bodyId)}" class="reading ${expanded ? '' : 'summary-collapsed'}">${esc(row.body)}</p>${row.error ? `<p class="lt-error" role="alert">${esc(row.error)}</p>` : ''}${textEntry(expanded ? '收起' : '展开全文', 'expand', `data-id="${esc(row.id)}" aria-expanded="${expanded}" aria-controls="${esc(bodyId)}"`)}</article>`;
   }
   function summaryView() {
-    const shown = summaryRecords();
-    return `<div class="summary-toolbar"><div class="summary-toolbar-main"><span class="meta">当前聊天 · ${shown.length} 条摘要</span>${textEntry('摘要设置', 'settings-summary')}</div>${pendingStrip()}${state.summaryFilter === 'missing' ? '' : backfillProgress()}</div>${state.summaryFilter === 'missing' ? pendingRows() : `<div class="section">${shown.map(row => `<article class="card"><div class="row"><span class="meta">第 ${esc(row.floor)} 楼${row.edited ? ' · 已修改' : ''}${row.stale ? ' · 正文已编辑，可按需更新摘要' : ''}</span><div class="actions compact-actions">${button('编辑', 'edit-summary', `data-id="${esc(row.id)}"`)}${button('重试', 'generate', `data-id="${esc(row.floor)}" ${runningRows().some(job => Number(job.floor) === Number(row.floor)) ? 'disabled' : ''}`)}</div></div><p class="reading ${state.expanded.has(row.id) ? '' : 'summary-collapsed'}">${esc(row.body)}</p>${row.error ? `<p class="lt-error" role="alert">${esc(row.error)}</p>` : ''}${button(state.expanded.has(row.id) ? '收起' : '展开全文', 'expand', `data-id="${esc(row.id)}" aria-expanded="${state.expanded.has(row.id)}"`)}</article>`).join('')}${shown.length ? '' : '<p class="meta">暂无最新摘要。</p>'}</div>`}`;
+    const current = summaryCurrentRows(), history = summaryHistoryRecords(), count = current.filter(row => row.id && row.body && !row.nativeHidden).length;
+    return `<div class="summary-toolbar"><div class="summary-toolbar-main"><span class="meta">当前聊天 · ${count} 条摘要</span>${textEntry('摘要设置', 'settings-summary')}</div>${backfillControls()}</div><div class="section" aria-label="当前摘要">${current.map(summaryCurrentRow).join('')}${current.length ? '' : '<p class="meta">暂无最新摘要。</p>'}</div><section class="section" aria-label="历史摘要"><button type="button" class="record-open" data-action="toggle-summary-history" aria-expanded="${state.summaryHistoryExpanded}" aria-controls="benmo-summary-history"><strong>历史摘要</strong><span class="meta">${history.length} 条 · ${state.summaryHistoryExpanded ? '收起' : '展开'}</span></button><div id="benmo-summary-history" class="${state.summaryHistoryExpanded ? 'section' : ''}" ${state.summaryHistoryExpanded ? '' : 'hidden'}>${state.summaryHistoryExpanded ? history.map(summaryCard).join('') : ''}</div></section>`;
   }
   const formActions = () => `<div class="form-actions">${button('取消', 'cancel')}${button(acting ? '保存中…' : '保存', 'save', acting ? 'disabled aria-busy="true"' : '', 'primary')}</div>`;
   function summarySettings() {
@@ -380,7 +380,8 @@ export async function mountBenmoView({container: app, controller, availability =
     if (disposed || suspended) return;
     if (externalPolicy().transient) { syncWriteControls(); return; }
     renderedPolicy = JSON.stringify(policy());
-    if (!normalize()) { app.innerHTML = ''; redirectToSettings(); return; }
+    if (!normalize()) { stopSummaryVisibility(); app.innerHTML = ''; redirectToSettings(); return; }
+    if (state.tab === 'records' && state.kind === 'summary') startSummaryVisibility(); else stopSummaryVisibility();
     const focused = app.getRootNode().activeElement;
     const focusName = focused?.name, focusValue = focused?.value, focusData = focused?.dataset ? JSON.stringify({...focused.dataset}) : null;
     const subpage = state.route !== 'list';
@@ -478,47 +479,28 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   async function generate(floor) {
     if (blocked() || generating.has(floor) || !Number.isSafeInteger(floor) || !policy().summary || runningRows().some(row => Number(row.floor) === floor)) return;
-    const exists = [...summaryRecords(), ...missingRows()].some(row => Number(row.floor) === floor);
-    if (!exists) return;
+    const source = summarySource(floor);
+    if (!source || source.nativeHidden || summaryRunning(source) || (!(source.id && source.body) && !missingRows().some(row => Number(row.floor) === floor))) return;
     const operationEpoch = epoch, token = {replyId: summarySource(floor)?.replyId, observed: false}; generating.set(floor, token); remember(); render();
     try { const next = await controller.generateSummary(floor); if (!disposed && generating.get(floor) === token) apply(next); }
     catch (failure) { if (!disposed && generating.get(floor) === token && epoch === operationEpoch) error = failure.message || '摘要生成未完成，请重试'; }
     finally { if (generating.get(floor) === token) generating.delete(floor); if (!disposed && !suspended && epoch === operationEpoch) { remember(); render(); } }
   }
-  function estimateBackfill() {
-    if (blocked() || backfillRunning() || !controller.estimateSummaryBackfill) return;
-    const range = backfillRange();
-    backfillEstimate = {range,estimate:controller.estimateSummaryBackfill(range)};
-    error = ''; remember(); render();
-  }
   async function startBackfill() {
-    if (blocked() || backfillRunning() || !backfillEstimate || !controller.startSummaryBackfill) return;
-    const range = backfillRange();
-    if (!backfillEstimate) return;
-    const estimate = controller.estimateSummaryBackfill(range);
-    if (!same(range, backfillEstimate.range) || !same(estimate, backfillEstimate.estimate)) {
-      backfillEstimate = {range,estimate};error = '待补楼层或调用次数已变化，请查看估算后再次点击开始补缺';remember();render();return;
-    }
-    if (!estimate.calls) return;
-    const token = {}, operationEpoch = epoch;backfillJob = token;error = '';remember();render();
-    try { const next = await controller.startSummaryBackfill(range);if (!disposed && backfillJob === token) apply(next); }
-    catch (failure) { if (!disposed && !suspended && backfillJob === token && epoch === operationEpoch) error = failure.message || '补缺未完成，请重新估算后再试'; }
-    finally { if (backfillJob === token) { backfillJob = null;backfillEstimate = null; }if (!disposed && !suspended && epoch === operationEpoch) { remember();render(); } }
+    if (blocked() || backfillRunning() || !missingRows().length || !controller.startSummaryBackfill) return;
+    const token = {}, operationEpoch = epoch; backfillJob = token; error = ''; remember(); render();
+    try { const next = await controller.startSummaryBackfill(); if (!disposed && backfillJob === token) apply(next); }
+    catch (failure) { if (!disposed && !suspended && backfillJob === token && epoch === operationEpoch) error = failure.message || '补缺未完成，请重试'; }
+    finally { if (backfillJob === token) backfillJob = null; if (!disposed && !suspended && epoch === operationEpoch) { remember(); render(); } }
   }
   async function stopBackfill() {
     if (!controller.stopSummaryBackfill) return;
     const operationEpoch = epoch;
-    backfillJob = null;backfillEstimate = null;
+    backfillJob = null;
     const next = await controller.stopSummaryBackfill();
     if (!disposed) { apply(next);if (!suspended && epoch === operationEpoch) { remember();render(); } }
   }
   app.addEventListener('submit', event => event.preventDefault(), {signal: lifetime.signal});
-  app.addEventListener('input', event => {
-    if (!['backfillStart', 'backfillEnd'].includes(event.target?.name) || disposed || suspended) return;
-    readBackfillRange();
-    const estimate = app.querySelector('[data-backfill-estimate]');if (estimate) estimate.textContent = '范围已修改，请重新估算后开始。';
-    const start = app.querySelector('[data-action="start-backfill"]');if (start) start.disabled = true;
-  }, {signal: lifetime.signal});
   app.addEventListener('compositionstart', () => { composing = true; }, {signal: lifetime.signal});
   app.addEventListener('compositionend', () => { composing = false; }, {signal: lifetime.signal});
   function syncWriteControls() {
@@ -546,7 +528,7 @@ export async function mountBenmoView({container: app, controller, availability =
         await pending.action(); if (disposed) return; if (dialog === pending) dialog = null; render(); return;
       }
       if (action === 'back' || action === 'cancel') { if (action === 'cancel') leave(goBack); else back(); return; }
-      if (action === 'close') { leave(() => { epoch++; clearDraft(); dialog = null; onClose(); }); return; }
+      if (action === 'close') { leave(() => { epoch++; clearDraft(); dialog = null; suspended = true; app.inert = true; stopSummaryVisibility(); onClose(); }); return; }
       if (action === 'area') { leave(() => navigate(id)); return; }
       if (action === 'reload') { acting = ownsAction = true; remember(); const token = epoch; const next = await controller.load({refresh: true}); if (!disposed && token === epoch) { remember(); apply(next); invalidated = false; recoverNarrativeDraft(); render(); } return; }
       if (action === 'tab' && enabledTabs().includes(id)) { leave(() => { remember(); epoch++; state.tab = id; state.route = 'list'; clearDraft(); render(); }); return; }
@@ -568,10 +550,8 @@ export async function mountBenmoView({container: app, controller, availability =
       if (action === 'settings-summary' && state.kind === 'summary') { startEdit(null, 'list', 'summary-settings'); return; }
       if (action === 'default-prompt' && state.route === 'summary-settings') { remember(); draft.prompt = controller.defaultPrompt ?? ''; render(); return; }
       if (action === 'expand') { remember(); state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id); render(); return; }
-      if (action === 'filter-summary' && ['all', 'missing'].includes(id)) { remember(); state.summaryFilter = id; render(); return; }
-      if (action === 'more-summary-missing' && state.kind === 'summary' && state.summaryFilter === 'missing') { remember();state.summaryPendingLimit += 50;render();return; }
+      if (action === 'toggle-summary-history' && state.kind === 'summary') { remember(); state.summaryHistoryExpanded = !state.summaryHistoryExpanded; render(); return; }
       if (action === 'manual-summary' && state.kind === 'summary' && !blocked()) { const row = missingRows().find(record => Number(record.floor) === Number(id));if (row && !generating.has(Number(id))) startEdit(row, 'list');return; }
-      if (action === 'estimate-backfill' && state.kind === 'summary') { estimateBackfill();return; }
       if (action === 'start-backfill' && state.kind === 'summary') { await startBackfill();return; }
       if (action === 'stop-backfill' && state.kind === 'summary') { await stopBackfill();return; }
       if (action === 'generate' && state.kind === 'summary') { await generate(Number(id)); return; }
@@ -580,7 +560,7 @@ export async function mountBenmoView({container: app, controller, availability =
         remember(); epoch++; state.selected = id; state.selections[state.kind] = id; state.route = 'detail'; state.scrolls[context()] = 0; render(); return;
       }
       if (action === 'edit' && state.route === 'detail') { const row = selectedRecord(); if (row) startEdit(row, 'detail'); return; }
-      if (action === 'edit-summary') { const row = summaryRecords().find(record => record.id === id); if (row) startEdit(row, 'list'); return; }
+      if (action === 'edit-summary') { const row = summaryRecords().find(record => record.id === id); if (row && !row.nativeHidden && !summaryCurrentRows().some(current => Number(current.floor) === Number(row.floor) && current.nativeHidden)) startEdit(row, 'list'); return; }
       if (action === 'new' && FIELDS[state.kind] && !blocked()) { remember(); state.selected = null; startEdit(null, 'list'); return; }
       if (action === 'add-field' && draft?.customFields) { remember(); draft.customFields.push({id: crypto.randomUUID(), name: '', requirement: '', value: ''}); render(); return; }
       if (action === 'remove-field' && draft?.customFields) {
@@ -645,6 +625,16 @@ export async function mountBenmoView({container: app, controller, availability =
     if (!draft && !acting && !dialog && !suspended) { remember(); render(); }
     else for (const node of app.querySelectorAll('[data-action="save"],[data-action="delete-record"],[data-action="toggle-excluded"],[data-action="restore-excluded"]')) node.disabled = blocked() || acting;
   });
+  function startSummaryVisibility() {
+    if (disposed || suspended || observingSummaryVisibility || !controller.observeSummaryVisibility) return;
+    observingSummaryVisibility = true;
+    summaryVisibilityDisposer = controller.observeSummaryVisibility({document: app.ownerDocument});
+  }
+  function stopSummaryVisibility() {
+    const dispose = summaryVisibilityDisposer;
+    summaryVisibilityDisposer = null; observingSummaryVisibility = false;
+    dispose?.();
+  }
   render();
   return {
     back() { if (!dialog && !acting) back(); },
@@ -652,8 +642,8 @@ export async function mountBenmoView({container: app, controller, availability =
     snapshotNavigation,
     refreshAvailability() { if (JSON.stringify(policy()) !== renderedPolicy || externalPolicy().transient) { remember(); render(); } },
     invalidate(message) { remember(); epoch++; invalidated = true; error = message; value = {...value, writeBlocked: true}; render(); },
-    suspend() { remember(); suspended = true; epoch++; app.inert = true; },
-    resume() { suspended = false; app.inert = false; render(); },
-    dispose() { disposed = true; epoch++; unsubscribe?.(); lifetime.abort(); clearTimeout(toastTimer); clearTimeout(redirectTimer); app.innerHTML = ''; },
+    suspend() { if (disposed || suspended) return; remember(); suspended = true; epoch++; app.inert = true; stopSummaryVisibility(); },
+    resume() { if (disposed) return; suspended = false; app.inert = false; render(); },
+    dispose() { if (disposed) return; disposed = true; epoch++; stopSummaryVisibility(); unsubscribe?.(); lifetime.abort(); clearTimeout(toastTimer); clearTimeout(redirectTimer); app.innerHTML = ''; },
   };
 }

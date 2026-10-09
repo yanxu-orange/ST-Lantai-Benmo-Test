@@ -1,3 +1,4 @@
+import {latestArchivedFloors} from '../../domain/latest/coverage.js';
 import {cleanSummaryFloors,createDefaultCleaningRules,normalizeCleaningRule} from '../../domain/summary/cleaning.js';
 import {sameTarget} from '../../domain/memory/repository.js';
 import {DEFAULT_LATEST_PROMPT,emptyLatest,pruneLatestRecords} from '../../domain/latest/data.js';
@@ -30,7 +31,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   let state={...emptyLatest(),status:'idle',error:'',floorStates:{}};
   let backfillState={status:'idle',id:null,total:0,completed:0,skipped:0,failed:0,error:''},backfillController=null;
   let automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};
-  const listeners=new Set(),releases=[],jobs=new Set(),queuedFloors=new Set(),invalidatedFloors=new Set();
+  const listeners=new Set(),visibilityReleases=new Set(),releases=[],jobs=new Set(),queuedFloors=new Set(),invalidatedFloors=new Set();
   const allowed=()=>!disposed&&enabled&&getControls?.()?.allowed('enabled')===true;
   const summaryAllowed=()=>allowed()&&getControls?.()?.allowed('summary')===true;
   const summaryMatches=proof=>summaryAllowed()&&getControls?.()?.matches(proof)===true;
@@ -39,8 +40,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   function inspect(){return copy({...state,target,automatic:automaticState,backfill:backfillState});}
   function automaticStatus(status,message,floor=automaticState.floor){automaticState={status,message,floor};publish();}
   function cancel(){stopBackfill();for(const [key,value] of automaticReceipts)if(['queued','running'].includes(value.status))automaticReceipts.set(key,{...value,status:'cancelled',message:'本轮自动生成已取消，未自动重试'});if(['waiting','queued','running'].includes(automaticState.status))automaticState={...automaticState,status:'cancelled',message:'本轮自动生成已取消，未自动重试'};serial++;foregroundType=null;for(const [key,value] of Object.entries(trackingFloorStates))if(value.status==='running')trackingFloorStates[key]={status:'idle',error:''};for(const tasks of Object.values(workshopFloorStates))for(const [key,value] of Object.entries(tasks))if(value.status==='running')tasks[key]={status:'idle',error:''};receipt=null;foregroundEnded=false;generationQueue=Promise.resolve();queuedFloors.clear();for(const job of jobs)job.abort();jobs.clear();for(const [key,value] of Object.entries(state.floorStates))if(value.status==='running')state.floorStates[key]={status:'idle',error:''};if(state.status==='running')state.status='ready';publish();}
-  function raw(t){
-    const snapshot=adapter.captureChatSource(t),chat=getContext().chat;
+  function raw(t,retention=false){
+    const snapshot=retention&&adapter.captureLatestRetentionSource?adapter.captureLatestRetentionSource(t):adapter.captureChatSource(t),chat=getContext().chat;
     snapshot.messages=snapshot.messages.map(item=>{
       const message=chat[item.floor],swipes=message?.swipes,current=message?.swipe_id??0;
       // New swipes first have no slot. Deletion changes the selected slot before
@@ -50,6 +51,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     });
     return snapshot;
   }
+  const archivedFloor=(t,floor)=>latestArchivedFloors(adapter.peekConfirmed(t),raw(t,true)).has(floor);
   function cleaningRules(){const generation=settings?.captureEventGeneration?settings.captureEventGeneration().generation:getGenerationSettings();return normalizedRules(generation.summaryCleaning?.rules);}
   function versions(){return (getContext().chat??[]).flatMap((message,floor)=>{
     if(message?.is_user!==false||typeof message.mes!=='string')return [];
@@ -74,7 +76,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     // rewriting its extra now would attach the survivor's UUID to stale text.
     const identityChat=getContext().chat.map(message=>pendingProjection(message)?null:message);
     const prepared=summaryAllowed()||captured.latest.records.length||workshop?.modules.length||workshop?.selection.workshop.results.some(row=>row.generationSource==='background')||getControls?.()?.allowed('item')||getControls?.()?.allowed('npc')||tracking?.tracking.snapshots.length?prepareWorkshopIdentities(identityChat,{allowPendingLast:true}):{changed:false,selected:[]},source=raw(t);
-    const next=pruneLatestRecords(captured.latest,source,{replyVersions:versions(),retainStale:true});
+    const next=pruneLatestRecords(captured.latest,raw(t,true),{replyVersions:versions(),retainStale:true});
     let rules=null,rebound=false;try{rules=cleaningRules();}catch{/* Missing configuration cannot prove equal generated input. */}
     next.records=next.records.map(record=>{
       const snapshot=record.sourceSnapshot;
@@ -134,6 +136,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       const generation=getGenerationSettings(),rawSource=raw(t);key=rawSource.messages.find(row=>row.floor===floor)?.replyId??key;
       latestTask=!workshopOnly&&summaryMatches(summaryProof);
       const source=prepareLatestSource(rawSource,{floor,rules:generation.summaryCleaning.rules});
+      const summaryEligible=()=>captured.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId)||!archivedFloor(t,floor);
       if(queuedSummary&&(queuedSummary.replyId!==source.replyId||!equal(queuedSummary.record,captured.latest.records.find(record=>record.sourceSnapshot.replyId===source.replyId)??null)))return false;
       const receiptKey=JSON.stringify([t,source.replyId,source.fingerprint]);
       if(automatic&&automaticReceipts.has(receiptKey)){automaticState=copy(automaticReceipts.get(receiptKey));publish();return false;}
@@ -157,19 +160,19 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       for(const task of tasks)markWorkshop(task,'running');if(trackingPlan)markTracking('running');publish();
       // Preparing another participant can yield. Only still-authorized
       // categories may be sent, even before there is a response to discard.
-      latestTask=latestTask&&summaryMatches(summaryProof);
+      latestTask=latestTask&&summaryMatches(summaryProof)&&summaryEligible();
       try{trackingPlan=await trackingRuntime?.filterBackgroundPlan(trackingPlan)??null;}
       catch(error){preparationFailed=true;markTracking('failed',error.message);trackingPlan=null;}
       if(plan&&workshopRuntime?.filterBackgroundPlan){
         try{plan=await workshopRuntime.filterBackgroundPlan(plan);tasks=(plan?.tasks??[]).filter(task=>task.instructions.trim());}
         catch(error){preparationFailed=true;for(const task of tasks)markWorkshop(task,'failed',error.message);tasks=[];}
       }
-      latestTask=latestTask&&summaryMatches(summaryProof);
+      latestTask=latestTask&&summaryMatches(summaryProof)&&summaryEligible();
       try{trackingPlan=await trackingRuntime?.filterBackgroundPlan(trackingPlan)??null;}
       catch(error){preparationFailed=true;markTracking('failed',error.message);trackingPlan=null;}
       // The final authority read also yields. Recheck each participant's
       // captured control epoch without another await before dispatch.
-      latestTask=latestTask&&summaryMatches(summaryProof);
+      latestTask=latestTask&&summaryMatches(summaryProof)&&summaryEligible();
       if(workshopRuntime?.filterCurrentBackgroundPlan){
         try{plan=workshopRuntime.filterCurrentBackgroundPlan(plan);tasks=(plan?.tasks??[]).filter(task=>task.instructions.trim());}
         catch(error){preparationFailed=true;for(const task of tasks)markWorkshop(task,'failed',error.message);tasks=[];}
@@ -186,20 +189,21 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       if(!valid())return false;
       const segments=tasks.length||trackingPlan?parseBackgroundRoundResponse(output.text,descriptors):new Map([['latest',{text:output.text}]]);
       let successes=0;
-      if(latestTask&&summaryMatches(summaryProof)){
+      if(latestTask&&summaryMatches(summaryProof)&&summaryEligible()){
         try{
           const segment=segments.get('latest');if(segment.error)throw new Error(segment.error);
           const latest=await repository.captureLatest(t);
           if(!valid())return false;
+          if(!summaryEligible())throw new Error('来源已归档，未新建摘要');
           if(!summaryMatches(summaryProof)||summaryEpoch!==latestEpoch||!equal(summarySettings(latest.latest.preferences),summarySettings(preferences)))throw new Error('最新摘要设置已变化，请重试');
           const previous=latest.latest.records.find(record=>record.sourceSnapshot.replyId===key),original=captured.latest.records.find(record=>record.sourceSnapshot.replyId===key),now=new Date().toISOString();
           if(!equal(previous??null,original??null))throw new Error('最新摘要已修改，请重新读取');
-          await repository.upsertLatestRecord(t,latest,{id:previous?.id??crypto.randomUUID(),body:segment.text,sourceSnapshot:source,cleaningRules:normalizedRules(generation.summaryCleaning.rules),createdAt:previous?.createdAt??now,updatedAt:now},{isCurrent:()=>valid()&&summaryMatches(summaryProof)&&summaryEpoch===latestEpoch});
+          await repository.upsertLatestRecord(t,latest,{id:previous?.id??crypto.randomUUID(),body:segment.text,sourceSnapshot:source,cleaningRules:normalizedRules(generation.summaryCleaning.rules),createdAt:previous?.createdAt??now,updatedAt:now},{isCurrent:()=>valid()&&summaryMatches(summaryProof)&&summaryEpoch===latestEpoch&&summaryEligible()});
           if(!valid())return false;
           state.floorStates[key]={status:'ready',error:''};successes++;
-        }catch(error){if(!valid())return false;state.floorStates[key]={status:'failed',error:error.message};state.error=error.message;}
+        }catch(error){if(!valid())return false;if(!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}else{state.floorStates[key]={status:'failed',error:error.message};state.error=error.message;}}
         publish();
-      }
+      }else if(latestTask&&!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}
       for(const task of tasks){
         if(!valid())return false;
         try{
@@ -309,12 +313,12 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   }
   function workshopFloorInfo(floor){return workshopFloorInfos([floor]).get(floor)??null;}
   function library(){
-    const result={records:[],missing:[],running:[],preferences:copy(state.preferences),target:copy(target),automatic:copy(automaticState),backfill:copy(backfillState)};
+    const result={records:[],missing:[],running:[],currentRows:[],historyRecords:[],preferences:copy(state.preferences),target:copy(target),automatic:copy(automaticState),backfill:copy(backfillState)};
     if(!target||!current(target))return result;
     try{
       let cleaningRules=[];try{cleaningRules=settings?.captureEventGeneration?settings.captureEventGeneration().generation.summaryCleaning.rules:getGenerationSettings().summaryCleaning.rules;}catch{/* Reading saved facts never requires a connected model. */}
-      const source=raw(target),byFloor=new Map(source.messages.map(row=>[row.floor,row])),byReply=new Map(pruneLatestRecords({schema:state.schema,revision:state.revision,preferences:state.preferences,records:state.records},source,{replyVersions:versions(),retainStale:true}).records.map(row=>[row.sourceSnapshot.replyId,row])),processor=getContext()?.streamingProcessor;
-      for(const row of source.messages){
+      const source=raw(target),retainedSource=raw(target,true),archived=latestArchivedFloors(adapter.peekConfirmed(target),retainedSource),byFloor=new Map(source.messages.map(row=>[row.floor,row])),byReply=new Map(pruneLatestRecords({schema:state.schema,revision:state.revision,preferences:state.preferences,records:state.records},retainedSource,{replyVersions:versions(),retainStale:true}).records.map(row=>[row.sourceSnapshot.replyId,row])),processor=getContext()?.streamingProcessor;
+      for(const row of retainedSource.messages){
         if(row.role!=='assistant'||row.system||!row.replyId||!row.text.trim())continue;
         const hostMessage=getContext().chat?.[row.floor];
         if(hostMessage?.gen_started&&!hostMessage?.gen_finished)continue;
@@ -322,11 +326,17 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         const record=byReply.get(row.replyId),snapshot=record?.sourceSnapshot,run=state.floorStates[row.replyId]??{status:'idle',error:''};
         const pair={epoch:source.epoch,messages:snapshot?.rawMessages.flatMap(item=>byFloor.has(item.floor)?[byFloor.get(item.floor)]:[])??[]};
         const valid=record&&!record.stale&&!snapshot.rawMessages.some(item=>invalidatedFloors.has(item.floor))&&matchesStoredLatestSource(snapshot,pair);
-        if(record)result.records.push({id:record.id,floor:row.floor,replyId:row.replyId,body:record.body,edited:record.edited===true,manual:record.sourceSnapshot.manual===true,...(!valid?{stale:true}:{}),status:run.status,error:run.error??''});
-        if(run.status==='running')result.running.push({floor:row.floor,replyId:row.replyId,sourceProof:prepareManualLatestSource({epoch:source.epoch,messages:[row]},{floor:row.floor}),status:'running'});
-        else if(!record&&cleanSummaryFloors([row],{includeUser:true,rules:cleaningRules}).length)result.missing.push({floor:row.floor,replyId:row.replyId,sourceProof:prepareManualLatestSource({epoch:source.epoch,messages:[row]},{floor:row.floor}),status:run.status,error:run.error??''});
+        const nativeHidden=hostMessage?.is_system===true;
+        const entry=record?{id:record.id,floor:row.floor,replyId:row.replyId,body:record.body,edited:record.edited===true,manual:record.sourceSnapshot.manual===true,...(!valid&&!nativeHidden?{stale:true}:{}),nativeHidden,status:run.status,error:run.error??''}:{floor:row.floor,replyId:row.replyId,nativeHidden,status:run.status,error:run.error??''};
+        if(record)result.records.push(entry);
+        if(archived.has(row.floor)){if(record)result.historyRecords.push(entry);continue;}
+        if(nativeHidden){result.currentRows.push(entry);continue;}
+        if(!record)entry.sourceProof=prepareManualLatestSource({epoch:source.epoch,messages:[row]},{floor:row.floor});
+        if(run.status==='running')result.running.push(entry);
+        else if(!record&&cleanSummaryFloors([row],{includeUser:true,rules:cleaningRules}).length)result.missing.push(entry);
+        if(record||run.status==='running'||result.missing.at(-1)===entry)result.currentRows.push(entry);
       }
-      result.records.sort((a,b)=>b.floor-a.floor);
+      result.records.sort((a,b)=>a.floor-b.floor);result.currentRows.sort((a,b)=>a.floor-b.floor);result.historyRecords.sort((a,b)=>a.floor-b.floor);
     }catch{/* Pending host persistence cannot authorize guessed source rows. */}
     return result;
   }
@@ -336,7 +346,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const t=copy(target),ticket=serial,proof=getControls?.()?.capture('summary');
     const listing=library(),row=[...listing.missing,...listing.running].find(row=>row.floor===floor);
     if(!row||!original||original.replyId!==row.replyId||!equal(original.sourceProof,row.sourceProof))throw new Error('回复版本已变化，请重新打开补录');
-    const source=copy(row.sourceProof),valid=()=>current(t)&&ticket===serial&&summaryMatches(proof)&&matchesLatestSource(source,raw(t));
+    const source=copy(row.sourceProof),valid=()=>current(t)&&ticket===serial&&summaryMatches(proof)&&matchesLatestSource(source,raw(t))&&!archivedFloor(t,floor);
     const captured=await repository.captureLatest(t);
     if(!valid()||captured.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId))throw new Error('该回复已有摘要或来源已变化，请重新读取');
     const now=new Date().toISOString();
@@ -344,7 +354,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     if(!valid())throw new Error('摘要已保存，但聊天来源已变化，请重新读取');
     await read();return library();
   }
-  function backfillPlan({start,end}={}){
+  function backfillPlan(range){
+    const {start=0,end=Number.MAX_SAFE_INTEGER}=range??{};
     if(!target||!current(target)||!summaryAllowed())throw new Error('最新摘要已关闭或聊天已变化');
     if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start)throw new Error('请输入有效的起止楼层');
     const source=raw(target),rules=cleaningRules(),missing=library().missing,byFloor=new Map(source.messages.map(row=>[row.floor,row]));
@@ -364,6 +375,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     backfillController=controller;jobs.add(controller);
     backfillState={status:'queued',id,total:plan.count,completed:0,skipped:0,failed:0,error:plan.oversized.length?`以下楼层超过字符保护预算，未加入请求：${plan.oversized.join('、')}`:''};publish();
     const valid=()=>{try{return !controller.signal.aborted&&backfillState.id===id&&ticket===serial&&current(t)&&summaryMatches(proof)&&epoch===latestEpoch&&getGenerationSettings().epoch===generation.epoch&&adapter.matchesChatSource(t,frozenRaw);}catch{return false;}};
+    const archivedNow=source=>archivedFloor(t,source.assistantFloor);
+    const skipArchived=source=>{state.floorStates[source.replyId]={status:'idle',error:''};backfillState={...backfillState,skipped:backfillState.skipped+1};};
     const execute=async()=>{
       if(!valid()){jobs.delete(controller);if(backfillController===controller)backfillController=null;if(backfillState.id===id&&backfillState.status==='queued'){backfillState={...backfillState,status:'cancelled',error:'来源或配置已变化，补缺未开始'};publish();}return library();}
       backfillState={...backfillState,status:'running'};publish();
@@ -371,7 +384,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         for(const planned of plan.batches){
           if(!valid())break;
           const captured=await repository.captureLatest(t);if(!valid())break;
-          const sources=planned.filter(source=>!captured.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId)&&matchesLatestSource(source,raw(t)));
+          const currentMissing=new Set(library().missing.map(row=>row.replyId));
+          const sources=planned.filter(source=>currentMissing.has(source.replyId)&&!captured.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId)&&matchesLatestSource(source,raw(t)));
           backfillState={...backfillState,skipped:backfillState.skipped+planned.length-sources.length};
           if(!sources.length){publish();continue;}
           for(const source of sources)state.floorStates[source.replyId]={status:'running',error:''};publish();
@@ -388,6 +402,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           for(const source of sources){
             if(!valid())break;
             try{
+              if(archivedNow(source)){skipArchived(source);continue;}
               const segment=parsed.get(source.replyId);if(!segment||segment.error)throw new Error(segment?.error??'未收到该楼层的摘要');
               if(!matchesLatestSource(source,raw(t)))throw new Error('回复来源已变化，结果未保存');
               const latest=await repository.captureLatest(t);if(!valid())break;
@@ -395,7 +410,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
               // this missing-only operation, including stale saved records.
               if(latest.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId)){state.floorStates[source.replyId]={status:'ready',error:''};backfillState={...backfillState,skipped:backfillState.skipped+1};publish();continue;}
               const now=new Date().toISOString();
-              const saved=await repository.upsertLatestRecord(t,latest,{id:crypto.randomUUID(),body:segment.text,sourceSnapshot:source,cleaningRules:plan.rules,createdAt:now,updatedAt:now},{isCurrent:()=>valid()&&matchesLatestSource(source,raw(t))});
+              const saved=await repository.upsertLatestRecord(t,latest,{id:crypto.randomUUID(),body:segment.text,sourceSnapshot:source,cleaningRules:plan.rules,createdAt:now,updatedAt:now},{isCurrent:()=>valid()&&matchesLatestSource(source,raw(t))&&!archivedNow(source)});
               if(!valid())break;
               selection=saved.selection;state={...selection.latest,status:'ready',error:'',floorStates:state.floorStates};
               state.floorStates[source.replyId]={status:'ready',error:''};backfillState={...backfillState,completed:backfillState.completed+1};
@@ -404,6 +419,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
               // Preserve this error even after the adapter revokes authority.
               if(error.code==='COMMIT_UNCONFIRMED')throw error;
               if(!valid())break;
+              if(archivedNow(source)){skipArchived(source);continue;}
               state.floorStates[source.replyId]={status:'failed',error:error.message};backfillState={...backfillState,failed:backfillState.failed+1};
             }
             publish();
@@ -432,8 +448,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   async function editRecord(id,body,{original}={}){
     if(!target||!current(target)||!summaryAllowed())throw new Error('最新摘要已关闭或聊天已变化');
     const t=copy(target),ticket=serial,proof=getControls?.()?.capture('summary'),captured=await repository.captureLatest(t),record=captured.latest.records.find(row=>row.id===id);
-    if(!record||!library().records.some(row=>row.id===id)||(original&&(original.body!==record.body||original.replyId!==undefined&&original.replyId!==record.sourceSnapshot.replyId)))throw new Error('摘要或回复版本已变化，请重新读取');
-    const source=raw(t),valid=()=>current(t)&&ticket===serial&&summaryMatches(proof)&&adapter.matchesChatSource(t,source)&&pruneLatestRecords(captured.latest,raw(t),{replyVersions:versions(),retainStale:true}).records.some(row=>row.id===id);
+    if(!record||!library().records.some(row=>row.id===id&&!row.nativeHidden)||(original&&(original.body!==record.body||original.replyId!==undefined&&original.replyId!==record.sourceSnapshot.replyId)))throw new Error('摘要或回复版本已变化，请重新读取');
+    const source=raw(t),valid=()=>current(t)&&ticket===serial&&summaryMatches(proof)&&adapter.matchesChatSource(t,source)&&pruneLatestRecords(captured.latest,raw(t,true),{replyVersions:versions(),retainStale:true}).records.some(row=>row.id===id);
     if(!valid())throw new Error('摘要来源已变化');
     await repository.editLatestRecord(t,captured,id,body,{isCurrent:valid});
     if(!valid())throw new Error('摘要来源已变化');await read();return library();
@@ -474,7 +490,11 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   // Never generate on initial load, enabling, edits, or selecting old swipes.
   void read().then(()=>refresh()).catch(()=>{});
   return {inspect,read,savePreferences,clear,subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},defaultPrompt:DEFAULT_LATEST_PROMPT,
+    observeVisibility(options){
+      const off=adapter.observeSourceVisibility?.(change=>{if(disposed)return;if(change?.visibilityChanged!==false)cancel();else publish();},options)??(()=>{});
+      const stop=()=>{off();visibilityReleases.delete(stop);};visibilityReleases.add(stop);return stop;
+    },
     library,editRecord,manualRecord,estimateBackfill,startBackfill,stopBackfill,generate:(floor,options={})=>enqueueGeneration(floor,{workshopOnly:options.workshopOnly===true,...(typeof options.taskId==='string'?{taskId:options.taskId}:{})}),intercept,floorInfo,floorInfos,workshopFloorInfo,workshopFloorInfos,refresh,captureSource:(t=target)=>raw(t),
     setEnabled(value){enabled=!!value;if(!enabled)cancel();publish();},
-    dispose(){if(disposed)return;cancel();disposed=true;readSerial++;for(const release of releases)release();listeners.clear();}};
+    dispose(){if(disposed)return;for(const stop of [...visibilityReleases])stop();cancel();disposed=true;readSerial++;for(const release of releases)release();listeners.clear();}};
 }

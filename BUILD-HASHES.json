@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "72538f73a45cf13434fb556dc788fe8367d4860aff35f4d553b2990e83d6ddd9"
+    "sha256": "67ba39750a73073572f749e1d9cfb573bfcb9de2ddd1d63a9133c5e54d85c9fa"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -33,15 +33,15 @@
   },
   {
     "path": "dist/app/benmo-controller.js",
-    "sha256": "93d95147d603a93699fbd829d660f26c61766d6bc50db1249d1fffe25ef9f2b0"
+    "sha256": "b67ff4918de73e8026064ad29b5cd6309efcf1062b5182efb7a0085f87569e30"
   },
   {
     "path": "dist/app/benmo-view.css",
-    "sha256": "9a53eed45fe04b2f5071233f3b7ff7b793564009aefb42fe80c44a3a960b404f"
+    "sha256": "980265bb55399c30fd10991b7a176a22d1027c029fced6fee625d865004e1b07"
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "f81ad74d73a6a541249d1fe4950b8738d9b49929efa01f45511adf4025fbeb21"
+    "sha256": "c7a872e3c74d7a428afdc036eeeb2bbf9d8b81b3caafbb0246566d1b05fdf682"
   },
   {
     "path": "dist/app/control-session.js",
@@ -94,6 +94,10 @@
   {
     "path": "dist/app/icons/multi.svg",
     "sha256": "6698ff8b29ae139b6aeb8b713291f46318984087b3bc1ca4d4d0821eac59ca43"
+  },
+  {
+    "path": "dist/app/icons/refresh.svg",
+    "sha256": "9564b108f054bb5b959b322411ab7c13ea707335262917ed1ea8795575684b73"
   },
   {
     "path": "dist/app/icons/search.svg",
@@ -273,7 +277,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "30e1a37424f1f3a0ca147f822c47f73b8d58ee35acdde255103eb9f467e12dd6"
+    "sha256": "18b5eace6a1f50e8738ff88eee4cd0516b3e3e9b864d176986ff4e89fda2dbb7"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -326,6 +330,10 @@
   {
     "path": "dist/domain/latest/backfill.js",
     "sha256": "261bdadd760b093a234e4baf3ada9dbbff4b96b85f26243c212a3b1a7dc5d81a"
+  },
+  {
+    "path": "dist/domain/latest/coverage.js",
+    "sha256": "bc494400ed161ad75e38aa1437525456d733da98dc61625e5c149088a2344b35"
   },
   {
     "path": "dist/domain/latest/data.js",
@@ -665,7 +673,7 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "sha256": "e249c1741720ec0c6771466fc7beddd96bf7532eeffe3f13e01af7c5b3aa15eb"
+    "sha256": "3ed99bf8313963e28fa3cae14b5c38999bc9226887d0d5635ad3d3f55b9da646"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -681,7 +689,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-adapter.js",
-    "sha256": "590180eae40e8d4e1ad5003f77b9befd22422d13d63b7621c489421152197480"
+    "sha256": "6a184e06c577633c09b589e433868eacfb218375ef9ff5270f4c3cbb6c20ec9a"
   },
   {
     "path": "dist/platform/sillytavern/memory-host.css",
@@ -829,10 +837,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "fac58f66d36f7c1c0e9df1fbc29629c9717844b7b29b929d32753e8bc5ff6d54"
+    "sha256": "176e833a8142f402eba89b2dbd2747468ed3b06666692501e759a854a02c7a60"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "b8a6f9812f41aa11003234e16c3a4a3adc9e284c4c3925668fcd8c0a3a3d5e15"
+    "sha256": "5aa8568505402214c61659723ddf60e05f6fec7934781ec0f0762f481102cb8c"
   }
 ]
