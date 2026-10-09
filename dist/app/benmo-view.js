@@ -59,7 +59,9 @@ export async function mountBenmoView({container: app, controller, availability =
   const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'new', 'generate'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
   const textEntry = (label, action, attrs = '') => button(label, action, attrs).replace('ui-button ui-button--tertiary', 'benmo-text-entry');
   const icon = (label, action, file) => `<button type="button" class="ui-icon-button ui-button--tertiary" aria-label="${esc(label)}" data-action="${action}"><img class="lt-icon" data-icon="${file}" src="${new URL(`./icons/${file}.svg`, import.meta.url)}" alt=""></button>`;
-  const selectButton = (id, label, current, action) => button(label, action, `data-id="${esc(id)}" ${id === current ? 'aria-current="page"' : ''}`).replace('ui-button ui-button--tertiary', action === 'kind' ? 'benmo-category' : 'ui-button lt-type');
+  const selectButton = (id, label, current, action) => action === 'kind'
+    ? button(label, action, `data-id="${esc(id)}" aria-pressed="${id === current}"`)
+    : button(label, action, `data-id="${esc(id)}" ${id === current ? 'aria-current="page"' : ''}`).replace('ui-button ui-button--tertiary', 'ui-button lt-type');
 
   function readDraft() {
     const form = app.querySelector('form');
@@ -164,7 +166,7 @@ export async function mountBenmoView({container: app, controller, availability =
     if (state.route === 'edit') return editor();
     if (state.route === 'detail') return detail();
     if (state.tab !== 'records') return `<section class="section future"><div class="row"><h2>${TABS[state.tab]}</h2><span class="meta">功能待设计</span></div><p class="reading">${state.tab === 'self' ? '从角色自己的视角，回望经历与变化。' : '梳理故事的来龙去脉，留住重要转折。'}</p><p class="meta">内容与操作尚未确定。</p></section>`;
-    return `<nav class="subtabs" aria-label="兰台记录功能">${enabledKinds().map(id => selectButton(id, KINDS[id], state.kind, 'kind')).join('')}</nav>${state.kind === 'summary' ? summaryView() : trackingList()}`;
+    return `<nav class="subtabs lt-view-switch ui-segment-group" role="group" aria-label="兰台记录功能">${enabledKinds().map(id => selectButton(id, KINDS[id], state.kind, 'kind')).join('')}</nav>${state.kind === 'summary' ? summaryView() : trackingList()}`;
   }
   function pageTitle() {
     if (state.route === 'tracking-settings') return `${KINDS[state.kind]}设置`;

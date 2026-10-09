@@ -1,7 +1,7 @@
 [
   {
     "path": "README.md",
-    "sha256": "baefbc9cd64a3ac94504790312c7b31815639d511eec3201c9ee3e261cf2b77d"
+    "sha256": "a4074cbc797c7620a0014f856cf20e69aabca06eaa8a383303657f2c7a6f2a9a"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -33,11 +33,11 @@
   },
   {
     "path": "dist/app/benmo-view.css",
-    "sha256": "323ee4ba6ed2259cdab32bd9833cba178005a52588d054b8426fef123d9a884b"
+    "sha256": "9a53eed45fe04b2f5071233f3b7ff7b793564009aefb42fe80c44a3a960b404f"
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "c4d867d1923425beacd31b46eae077155506634f9ada0f57d1660d14f704c826"
+    "sha256": "a4f2cd6f319aef17c404509de7b4d551ae5dddaf7ed99e36b2d10b3b535f8d97"
   },
   {
     "path": "dist/app/control-session.js",
@@ -269,7 +269,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "e301cbc43516b8bb1db763b8b06e3f4b6b0614ac0de436503839d3a745e5c54e"
+    "sha256": "08541d8dbfd61d1a18d2031d4b5bc80ba7446eb987224ebc9be5dd438076e26b"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -825,10 +825,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "0e7152d598ecf1efbc76b921f57f9da63446b60b2d286412b215aed849256141"
+    "sha256": "921785edbf63542d0ca431b5cb3a0517360990c29a7c7686f53736618cc2a8f7"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "0fdefc0a9c5ef97a112c85d263db49825c71052d091c8fda3e841727661f0dae"
+    "sha256": "4c27d3d7de4a1ec4179a136a068ba008a6e251676a822e0450e756ae29217bdf"
   }
 ]
