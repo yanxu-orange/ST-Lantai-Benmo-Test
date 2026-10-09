@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "251951e69289b233767cb614763a8af2e7a9f9e998bc4a4e40c54a22f7241267"
+    "sha256": "374c67eb4c41b601ddd4b80888848067408204ccaf5d9237cf1d1c9aacb60a89"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -41,7 +41,7 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "4f7384c365d41e9fe00309620c5bb1d1627d21777bdfd8dc22330610ebbdfbec"
+    "sha256": "a496a1b1797395af33976116447443ef5fd637f8385abbf5ccb380bbf5c7184c"
   },
   {
     "path": "dist/app/control-session.js",
@@ -273,7 +273,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "e3d525791f2b0e4ebbda1845b452e5b31b63fe0bac045ce4c02e55307ed29315"
+    "sha256": "4019f3a6bd70e68498fd1bb3ebae7cbcbd5d9b70e8a4a6530e989f229492c3dd"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -293,7 +293,7 @@
   },
   {
     "path": "dist/domain/background/round.js",
-    "sha256": "89592aad0da754a0dec3fda78f287fdb87cd4dc864b263ec6c98fac4481f1acc"
+    "sha256": "ace6711ffd682435d4ec62c10be38dfbdec1240e43d8f3d698bf35dc46f87a92"
   },
   {
     "path": "dist/domain/controls/gate.js",
@@ -325,7 +325,7 @@
   },
   {
     "path": "dist/domain/latest/data.js",
-    "sha256": "e2c7ac290a5645318a0801c81b39c2ac4f4126df8a33121f6c4004df53096840"
+    "sha256": "9746185e7e0dea61edcc3b7bc04371c817fe3b3b9b70341cce117c2821c01675"
   },
   {
     "path": "dist/domain/latest/requests.js",
@@ -337,7 +337,7 @@
   },
   {
     "path": "dist/domain/latest/transform.js",
-    "sha256": "d373c048959976778afab8b72c427a697c9be394fc8f6a8142f4a97c75e81f0c"
+    "sha256": "95d6666f63edf18e81dfb515d0f5b5ec51090259b6f4f8b679641e12e09fced9"
   },
   {
     "path": "dist/domain/memory/event-model.js",
@@ -648,12 +648,16 @@
     "sha256": "c2218c73be968f015f209b683db8ca64ab73075bde40002f214a2d30a11d89c7"
   },
   {
+    "path": "dist/platform/sillytavern/floor-background-display-order.js",
+    "sha256": "e9895975d3a051a14f637cb1c5cd545d77029218d0932a645442b22fd5bef099"
+  },
+  {
     "path": "dist/platform/sillytavern/latest-summary-display.js",
-    "sha256": "7b59df6d97af8004aca512bbacb4459242eda14a25c281988480eda264301098"
+    "sha256": "a3954b4f62f11456db6773804a1dda4978b076539b9828b3eac93a52a707fbe8"
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "sha256": "95ef1e7d1863100872f321b39d9c1e7d54f9b39fe717af39dc8955775f062136"
+    "sha256": "47e940776273ce74a6f29b2bcafaf999bc18ab85dc24ec810de50b03637276a5"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -665,7 +669,7 @@
   },
   {
     "path": "dist/platform/sillytavern/management-runtime.js",
-    "sha256": "0a650d8845b2c71269f02dc9b83ce0bb49b67d4268d3f6340e418cad81f59fab"
+    "sha256": "375cb9c9e3d438f143bcc4e755e6782852b2011af280e04bd31149ecfeee8338"
   },
   {
     "path": "dist/platform/sillytavern/memory-adapter.js",
@@ -745,7 +749,7 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-background-display.js",
-    "sha256": "0176f9dd51097971d45d25676d077210178b62bfa15998be7bee3d4a75801177"
+    "sha256": "fc5e83c0a1e085614319c76eef062afe5fd8e6912edcacf6c46b3bf5b007f33b"
   },
   {
     "path": "dist/platform/sillytavern/workshop-identities.js",
@@ -757,7 +761,7 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-runtime.js",
-    "sha256": "50a8e245b8e4afb742c3069878113a2c59d8fd9f7d84c2e9a3c4347a6f5faf7c"
+    "sha256": "e9bff08ab0b1443ad85bc514f7efc215de22b528c22c78c09126327b0539b905"
   },
   {
     "path": "dist/probe/runtime-probe.js",
@@ -817,10 +821,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "5637d6be1b808e9ae875381159cd88636244c19503aa009f8bd1b45c75b33896"
+    "sha256": "f8b6c175ed357c41b4ab940e8faddbdf46837a107e63abd1e8cdfe10ecf26866"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "5d5a5795a9ebd84f1567f6979c5b048a140deedb2f387cfcf59e09353e150654"
+    "sha256": "460ae398b6e2bb3962a79f7a54ee3d40b430c0e4b1e699148ef8bc4289b76a5b"
   }
 ]

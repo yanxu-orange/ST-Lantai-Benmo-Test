@@ -26,7 +26,7 @@ export function transformLatestMessages({messages,sourceMap,raw,latest}={}){
   const byFloor=new Map(source.messages.map(message=>[message.floor,message])),indexByFloor=new Map();
   mapping.forEach((floor,index)=>{if(integer(floor)&&counts.get(floor)===1&&byFloor.has(floor))indexByFloor.set(floor,index);});
   const recentStart=Math.max(...source.messages.map(message=>message.floor))+1-domain.preferences.recentFloors,removed=new Set(),recordsByFloor=new Map();
-  for(const record of domain.records){const snapshot=record.sourceSnapshot,current=byFloor.get(snapshot.assistantFloor);if(current?.replyId===snapshot.replyId)recordsByFloor.set(snapshot.assistantFloor,record);}
+  for(const record of domain.records){const snapshot=record.sourceSnapshot,current=byFloor.get(snapshot.assistantFloor);if(record.stale!==true&&current?.replyId===snapshot.replyId)recordsByFloor.set(snapshot.assistantFloor,record);}
   for(const [floor,index] of indexByFloor){
     const original=byFloor.get(floor),key=plainMessage(messages[index],original);
     if(!key||original.role!=='assistant')continue;

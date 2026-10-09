@@ -1,3 +1,5 @@
+import { placeFloorBackgroundDisplay } from './floor-background-display-order.js';
+
 // Results are independent floor-tail nodes, never rewritten into story mes.
 export function mountWorkshopBackgroundDisplay({document:doc=globalThis.document,runtime,MutationObserver:Observer=globalThis.MutationObserver}={}) {
   let disposed=false,scheduled=false;
@@ -13,10 +15,7 @@ export function mountWorkshopBackgroundDisplay({document:doc=globalThis.document
       if(!info?.tasks?.length){box?.remove();continue;}
       const parent=message.querySelector('.mes_block')??message;
       if(!box){box=doc.createElement('div');box.className='lantai-workshop-results';}
-      // Latest summary also owns a tail node. Only move after host content,
-      // not after a sibling extension tail, to avoid mutual observer loops.
-      const last=parent.lastElementChild;
-      if(box.parentNode!==parent||(last!==box&&!last?.className?.split(' ').includes('lantai-latest-summary')))parent.append(box);
+      placeFloorBackgroundDisplay(parent,box);
       const previous=rendered.get(box),signature=JSON.stringify(info),replyId=info.replyId;
       if(previous?.target===target&&previous.signature===signature)continue;
       const opens=new Map();

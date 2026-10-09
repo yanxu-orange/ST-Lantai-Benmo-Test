@@ -1,3 +1,5 @@
+import { placeFloorBackgroundDisplay } from './floor-background-display-order.js';
+
 // Append after the complete source floor content. No mes/mes_text rewriting,
 // host chat-data mutation, scrolling, or dependence on the settings page.
 export function mountLatestSummaryDisplay({
@@ -30,9 +32,8 @@ export function mountLatestSummaryDisplay({
         box = doc.createElement('div');
         box.className = 'lantai-latest-summary';
       }
-      // Host re-renders and later host-owned siblings must not strand the
-      // summary inside mes_text or above the end of the complete floor.
-      if (box.parentNode !== parent || parent.lastElementChild !== box) parent.append(box);
+      // Keep both extension tails after complete host content, in fixed order.
+      placeFloorBackgroundDisplay(parent, box);
       const previous = rendered.get(box), signature = JSON.stringify(info), replyId = info.replyId;
       if (previous?.signature === signature && previous.target === target) continue;
       const wasOpen = previous?.target === target && previous.replyId === replyId
@@ -54,7 +55,9 @@ export function mountLatestSummaryDisplay({
       const status = doc.createElement('span');
       status.className = 'lantai-latest-summary-status';
       status.setAttribute('role', 'status');
-      status.textContent = info.status === 'running' ? '正在生成…' : info.error || (!info.body ? '尚未生成' : '');
+      const actionStatus = info.status === 'running' ? '正在生成…' : info.error || (!info.body ? '尚未生成' : '');
+      status.textContent = [info.stale ? '正文已编辑，可按需更新摘要' : '', actionStatus]
+        .filter(Boolean).join(' · ');
       const retry = doc.createElement('button');
       retry.type = 'button';
       retry.className = 'menu_button';
@@ -82,7 +85,8 @@ export function mountLatestSummaryDisplay({
     queueMicrotask(render);
   };
   const touchesChat = record => {
-    if (record.target?.closest?.('.lantai-latest-summary')) return false;
+    if (record.target?.closest?.('.lantai-latest-summary')
+      || record.target?.closest?.('.lantai-workshop-results')) return false;
     if (record.target?.closest?.('#chat')) return true;
     return [...(record.addedNodes ?? []), ...(record.removedNodes ?? [])]
       .some(node => node.id === 'chat' || node.querySelector?.('#chat'));

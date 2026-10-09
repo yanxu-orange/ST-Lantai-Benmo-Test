@@ -181,18 +181,58 @@ export async function createManagementRuntime({ repository, getContext, document
     cumulativeService=createCumulativeSummaryService({repository,manager,provider,getGenerationSettings:cumulativeGeneration,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     cumulativeRunner=createAutomaticCumulativeRunner({repository,service:cumulativeService,captureSource:captureSummarySource});
     cumulativeController=createCumulativeController({repository,service:cumulativeService,runner:cumulativeRunner,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
-    let completedReply=null,lastReplyFloor=(ctx?.chat?.length??0)-1;
+    let replyRun=null,quietDepth=0,lastReplyFloor=(ctx?.chat?.length??0)-1;
+    const replyGates=Object.fromEntries(['event','cumulative'].map(key=>[key,featureGate(getControls,key)]));
     const on=(name,listener)=>{const type=ctx?.eventTypes?.[name];if(!type||typeof source?.on!=='function')return;source.on(type,listener);releases.push(()=>(source.off??source.removeListener)?.call(source,type,listener));};
-    // MESSAGE_RECEIVED is emitted for a completed real chat reply. Quiet raw
-    // tasks do not create one, and their nested lifecycle cannot erase it.
-    on('MESSAGE_RECEIVED',(floor,type)=>{try{const chat=getContext()?.chat,message=chat?.[floor];if(type==='normal'&&Number.isSafeInteger(floor)&&floor>lastReplyFloor&&message&&!message.is_user&&!message.is_system){lastReplyFloor=floor;completedReply={target:repository.captureTarget(),floor,message};}}catch{/* no active chat */}});
-    // STOPPED has no operation identity in ST. It cannot revoke a receipt
-    // already emitted for a complete normal reply (it may belong to quiet).
-    on('CHAT_CHANGED',()=>{completedReply=null;lastReplyFloor=(getContext()?.chat?.length??0)-1;});
-    // Floor positions are reusable after deletion. Rebase the duplicate fence
-    // without waking a runner until a new complete normal reply arrives.
-    on('MESSAGE_DELETED',()=>{completedReply=null;lastReplyFloor=(getContext()?.chat?.length??0)-1;});
-    on('GENERATION_ENDED',()=>{const reply=completedReply;completedReply=null;try{if(reply&&sameTarget(reply.target,repository.captureTarget())&&getContext()?.chat?.[reply.floor]===reply.message){if(allowed('event'))summaryController.wake();if(allowed('cumulative'))cumulativeController.wake();}}catch{/* target closed */}});
+    const currentRun=run=>!disposed&&replyRun===run&&sameTarget(run.target,repository.captureTarget())&&getContext()?.chat===run.chat;
+    const completedProcessor=(processor,floor)=>!processor||(processor.messageId===floor&&processor.isFinished===true&&processor.isStopped!==true&&!processor.abortController?.signal?.aborted&&!processor.toolCalls?.length);
+    function flushReply(){
+      const run=replyRun,reply=run?.reply;if(!reply||!run.ended||run.consumed)return;
+      try{
+        if(!currentRun(run)||reply.floor<=lastReplyFloor||run.chat[reply.floor]!==reply.message
+          ||reply.message.is_user!==false||reply.message.is_system||!reply.message.mes?.trim()
+          ||!completedProcessor(reply.processor,reply.floor)||!completedProcessor(run.endProcessor,reply.floor)
+          ||reply.processor&&run.endProcessor&&reply.processor!==run.endProcessor
+          ||reply.source!==run.endSource||reply.source!==JSON.stringify(captureSummarySource(run.target)))return;
+        // Consume before either controller wakes: their asynchronous runners
+        // retain their existing explicit-start, batch and commit policies.
+        run.consumed=true;lastReplyFloor=reply.floor;
+        if(reply.proofs.event!==undefined&&replyGates.event.matches(reply.proofs.event))summaryController.wake();
+        if(reply.proofs.cumulative!==undefined&&replyGates.cumulative.matches(reply.proofs.cumulative))cumulativeController.wake();
+      }catch{/* Unconfirmed or changed source cannot wake another target. */}
+    }
+    on('GENERATION_STARTED',(type,_options,dryRun)=>{
+      if(dryRun)return;
+      if(type==='quiet'){quietDepth++;return;}
+      replyRun=null;quietDepth=0;
+      if(type!=='normal'&&type!==undefined)return;
+      try{replyRun={target:repository.captureTarget(),chat:getContext()?.chat,startFloor:(getContext()?.chat?.length??0)-1,reply:null,ended:false,consumed:false};}catch{/* No confirmed foreground target. */}
+    });
+    on('MESSAGE_RECEIVED',(floor,type)=>{
+      const run=replyRun;if(!run||run.consumed||type!=='normal'&&type!==undefined||!Number.isSafeInteger(floor)||floor<=lastReplyFloor||floor<=run.startFloor)return;
+      try{
+        if(!currentRun(run))return;
+        const message=run.chat?.[floor];if(message?.is_user!==false||message.is_system||!message.mes?.trim())return;
+        if(!run.reply)run.reply={floor,message,processor:getContext()?.streamingProcessor??null,source:JSON.stringify(captureSummarySource(run.target)),proofs:Object.fromEntries(Object.entries(replyGates).filter(([,gate])=>gate.allowed()).map(([key,gate])=>[key,gate.capture()]))};
+        flushReply();
+      }catch{/* No settled reply source. */}
+    });
+    on('GENERATION_ENDED',()=>{
+      // ENDED is the host's unlabelled UI completion signal. Quiet may finish
+      // without emitting it while a foreground stream is still running. Do not
+      // let an unmatched quiet start hide a proven successful normal reply.
+      const run=replyRun,processor=getContext()?.streamingProcessor;
+      const completeReceipt=run?.reply&&completedProcessor(run.reply.processor,run.reply.floor);
+      const completeStream=run&&processor&&processor.messageId>run.startFloor&&completedProcessor(processor,processor.messageId);
+      if(quietDepth&&!completeReceipt&&!completeStream){quietDepth--;return;}
+      if(!run||run.consumed||run.ended)return;
+      try{if(!currentRun(run))return;run.endProcessor=processor??null;run.endSource=JSON.stringify(captureSummarySource(run.target));run.ended=true;flushReply();}catch{/* Missing completion evidence. */}
+    });
+    on('GENERATION_STOPPED',()=>{const processor=replyRun?.reply?.processor??getContext()?.streamingProcessor;if(!quietDepth||processor?.isStopped||processor?.abortController?.signal?.aborted)replyRun=null;});
+    for(const name of ['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED','MESSAGE_SWIPE_DELETED'])on(name,()=>{replyRun=null;});
+    // Positions can be reused after deletion, but neither deletion nor loading
+    // history is a completed reply and may wake a runner.
+    for(const name of ['CHAT_CHANGED','CHAT_CREATED','MESSAGE_DELETED'])on(name,()=>{replyRun=null;quietDepth=0;lastReplyFloor=(getContext()?.chat?.length??0)-1;});
   }
   return Object.freeze({ settings, manager, provider, apiOperations, service, controller, summaryService, summaryController, cumulativeService,cumulativeRunner,cumulativeController,getCumulativeGenerationSettings,getGenerationSettings, getOriginalSnapshot, originalAvailable,
     dispose() { if (disposed) return; abort(); signal?.removeEventListener('abort', abort); } });
