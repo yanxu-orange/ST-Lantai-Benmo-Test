@@ -6,8 +6,8 @@ import { SETTINGS_KEY, SettingsError, emptySettings, assertSettings, equalSettin
 // never expose/log its surrounding payload. Saving uses ST's own exported API.
 export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernContext,
   fetchImpl = globalThis.fetch, saveHost, loadHostModule = () => import('/script.js'), readServerNamespace, onTiming } = {}) {
-  let disposed = false, confirmed = null, marker = null, epoch = 0, aiEpoch = 0, generationEpoch = 0,recallEpoch=0,cumulativeEpoch=0,timeEpoch=0,workshopEpoch=0,controlsEpoch=0;
-  let observed = null, lastAi = null, lastGeneration = null,lastRecall=null,lastCumulative=null,lastTime=null,lastWorkshop=null,lastControls=null, notificationActive = false;
+  let disposed = false, confirmed = null, marker = null, epoch = 0, aiEpoch = 0, generationEpoch = 0,recallEpoch=0,cumulativeEpoch=0,timeEpoch=0,workshopEpoch=0,controlsEpoch=0,trackingPromptsEpoch=0;
+  let observed = null, lastAi = null, lastGeneration = null,lastRecall=null,lastCumulative=null,lastTime=null,lastWorkshop=null,lastControls=null,lastTrackingPrompts=null, notificationActive = false;
   const listeners = new Set(), events = [], notificationQueue = [];
   // Opt-in diagnostics only. Never include settings, URLs, headers or errors.
   // Content-Length is optional server-reported bytes, not decoded payload size.
@@ -45,7 +45,7 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
     let snapshot;
     try { snapshot = local(); }
     catch (error) {
-      if (observed !== 'invalid') { observed = 'invalid'; epoch++; aiEpoch++; generationEpoch++;recallEpoch++;cumulativeEpoch++;timeEpoch++;workshopEpoch++;controlsEpoch++; confirmed = null; announce(); }
+      if (observed !== 'invalid') { observed = 'invalid'; epoch++; aiEpoch++; generationEpoch++;recallEpoch++;cumulativeEpoch++;timeEpoch++;workshopEpoch++;controlsEpoch++;trackingPromptsEpoch++; confirmed = null; announce(); }
       throw error instanceof SettingsError ? error : new SettingsError();
     }
     const fingerprint = snapshot.absent ? 'absent' : settingsFingerprint(snapshot.root);
@@ -65,6 +65,8 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
       if(nextWorkshop!==lastWorkshop){workshopEpoch++;lastWorkshop=nextWorkshop;}
       const nextControls=settingsFingerprint({revision:snapshot.root.domainRevisions.controls??0,value:snapshot.root.controls??null});
       if(nextControls!==lastControls){controlsEpoch++;lastControls=nextControls;}
+      const nextTrackingPrompts=settingsFingerprint({revision:snapshot.root.domainRevisions.trackingPrompts??0,value:snapshot.root.trackingPrompts??null});
+      if(nextTrackingPrompts!==lastTrackingPrompts){trackingPromptsEpoch++;lastTrackingPrompts=nextTrackingPrompts;}
       confirmed = acceptLocal ? snapshot.root : null;
       announce();
     }
@@ -157,7 +159,7 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
       if (!confirmed || marker) throw new SettingsError('SETTINGS_COMMIT_UNCONFIRMED');
       return confirmed;
     },
-    epochs() { observe(); return Object.freeze({ epoch, ai: aiEpoch, eventGeneration: generationEpoch,recall:recallEpoch,cumulativeGeneration:cumulativeEpoch,timeReminders:timeEpoch,workshop:workshopEpoch,controls:controlsEpoch }); },
+    epochs() { observe(); return Object.freeze({ epoch, ai: aiEpoch, eventGeneration: generationEpoch,recall:recallEpoch,cumulativeGeneration:cumulativeEpoch,timeReminders:timeEpoch,workshop:workshopEpoch,controls:controlsEpoch,trackingPrompts:trackingPromptsEpoch }); },
     async commit(value, expectedRevision, expectedEpoch, { isCurrent, requireConfirmation = false } = {}) {
       if (isCurrent !== undefined && typeof isCurrent !== 'function') throw new SettingsError();
       const guard = () => {
@@ -168,7 +170,7 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
       let ticket = observe();
       if (!confirmed || marker) throw new SettingsError('SETTINGS_COMMIT_UNCONFIRMED');
       if (confirmed.revision !== expectedRevision || ticket.epoch !== expectedEpoch || next.revision !== expectedRevision + 1) throw new SettingsError('SETTINGS_CONFLICT');
-      const fields=['ai','eventGeneration','recall','cumulativeGeneration','timeReminders','workshop','controls'];
+      const fields=['ai','eventGeneration','recall','cumulativeGeneration','timeReminders','workshop','controls','trackingPrompts'];
       const changed=fields.filter(field=>(next.domainRevisions[field]??0)!==(confirmed.domainRevisions[field]??0));
       if(changed.length!==1||(next.domainRevisions[changed[0]]??0)!==(confirmed.domainRevisions[changed[0]]??0)+1
         ||fields.some(field=>field!==changed[0]&&!equalSettings(next[field],confirmed[field]))

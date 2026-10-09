@@ -1,3 +1,4 @@
+import {assertTrackingPrompts,DEFAULT_TRACKING_PROMPTS} from '../../domain/tracking/prompts.js';
 import {assertControls,defaultControls} from '../../domain/controls/model.js';
 import {assertWorkshop,emptyWorkshop} from '../../domain/workshop/model.js';
 import {defaultTimeReminders} from './time-reminders.js';
@@ -12,7 +13,7 @@ export function createSettingsRepository(adapter) {
       if (isCurrent === undefined) return true;
       try { return isCurrent() === true; } catch { return false; }
     };
-    const draft = field==='controls'?assertControls(value):field==='workshop'?assertWorkshop(value):field==='timeReminders'?assertTimeReminders(value):field === 'ai' ? assertAiSettings(value) : field==='recall'?assertRecallSettings(value):field==='cumulativeGeneration'?assertCumulativeGeneration(value):assertEventGeneration(value);
+    const draft = field==='trackingPrompts'?assertTrackingPrompts(value):field==='controls'?assertControls(value):field==='workshop'?assertWorkshop(value):field==='timeReminders'?assertTimeReminders(value):field === 'ai' ? assertAiSettings(value) : field==='recall'?assertRecallSettings(value):field==='cumulativeGeneration'?assertCumulativeGeneration(value):assertEventGeneration(value);
     if (!Array.isArray(credentials) || field !== 'ai' && credentials.length) throw new SettingsError();
     let replacements;
     try { replacements = credentials.map(item => {
@@ -69,6 +70,9 @@ export function createSettingsRepository(adapter) {
     saveEventGeneration: (value, options) => update('eventGeneration', value, options),
     saveRecall: (value,options)=>update('recall',value,options),
     saveCumulativeGeneration:(value,options)=>update('cumulativeGeneration',value,options),
+    saveTrackingPrompts:(value,options)=>update('trackingPrompts',value,options),
+    captureTrackingPrompts(){const root=adapter.peek();return frozenSettingsCopy({prompts:root.trackingPrompts??DEFAULT_TRACKING_PROMPTS,epoch:adapter.epochs().trackingPrompts});},
+    matchesTrackingPrompts(snapshot){try{return snapshot?.epoch===adapter.epochs().trackingPrompts&&equalSettings(snapshot.prompts,adapter.peek().trackingPrompts??DEFAULT_TRACKING_PROMPTS);}catch{return false;}},
     saveControls:(value,options)=>update('controls',value,options),
     captureControls(){const root=adapter.peek();return frozenSettingsCopy({controls:root.controls??defaultControls(),epoch:adapter.epochs().controls});},
     matchesControls(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().controls&&equalSettings(snapshot.controls,root.controls??defaultControls());}catch{return false;}},

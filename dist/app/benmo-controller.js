@@ -37,6 +37,8 @@ export function createBenmoController({latestRuntime,trackingRuntime,repository,
   }
   return {snapshot,inspect:snapshot,load,refresh:load,ensure:()=>current()&&status==='ready'?Promise.resolve(snapshot()):load(),
     defaultPrompt:latestRuntime.defaultPrompt,
+    defaultTrackingPrompts:trackingRuntime.defaultPrompts,
+    saveTrackingPrompt(kind,prompt,options){return write(kind,()=>trackingRuntime.savePrompt(kind,prompt,options));},
     refreshAvailability:publish,
     rebindTarget(next){if(target&&(target.chatId!==next.chatId||target.rootId!==next.rootId))throw new Error('聊天已变化');sequence++;target=copy(next);loading=null;busy=null;status='unconfirmed';error='聊天已重新读取，请重新读取本末';trackingRuntime.rebindTarget?.(next);publish();},
     saveSummary(id,body,options={}){return write('summary',()=>latestRuntime.editRecord(id,body,options));},

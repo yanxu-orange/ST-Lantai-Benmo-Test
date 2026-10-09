@@ -1,3 +1,4 @@
+import {assertTrackingPrompts} from '../../domain/tracking/prompts.js';
 import {normalizeControls} from '../../domain/controls/model.js';
 import {assertWorkshop} from '../../domain/workshop/model.js';
 import {validateTimeReminders} from './time-reminders.js';
@@ -126,6 +127,8 @@ export function assertTimeReminders(value){try{return frozenSettingsCopy(validat
 export function assertSettings(value) {
   try {
     const legacy = value?.schema === 1;
+    const hasTracking=Object.hasOwn(value??{},'trackingPrompts'),hasTrackingRevision=Object.hasOwn(value?.domainRevisions??{},'trackingPrompts');
+    if(hasTracking!==hasTrackingRevision)invalid();
     const hasControls=Object.hasOwn(value??{},'controls'),hasControlsRevision=Object.hasOwn(value?.domainRevisions??{},'controls');
     if(hasControls!==hasControlsRevision)invalid();
     const hasRecall=Object.hasOwn(value??{},'recall'),hasRecallRevision=Object.hasOwn(value?.domainRevisions??{},'recall');
@@ -136,14 +139,15 @@ export function assertSettings(value) {
     if(hasTime!==hasTimeRevision)invalid();
     if(hasCumulative!==hasCumulativeRevision)invalid();
     if(hasRecall!==hasRecallRevision)invalid();
-    exact(value, ['schema', 'revision', 'domainRevisions', 'ai', 'eventGeneration', ...(legacy ? [] : ['credentials']),...(hasRecall?['recall']:[]),...(hasCumulative?['cumulativeGeneration']:[]),...(hasTime?['timeReminders']:[]),...(hasWorkshop?['workshop']:[]),...(hasControls?['controls']:[])]);
+    exact(value, ['schema', 'revision', 'domainRevisions', 'ai', 'eventGeneration', ...(legacy ? [] : ['credentials']),...(hasRecall?['recall']:[]),...(hasCumulative?['cumulativeGeneration']:[]),...(hasTime?['timeReminders']:[]),...(hasWorkshop?['workshop']:[]),...(hasControls?['controls']:[]),...(hasTracking?['trackingPrompts']:[])]);
     if (![1, 2].includes(value.schema) || !Number.isSafeInteger(value.revision) || value.revision < 0) invalid();
-    exact(value.domainRevisions, ['ai', 'eventGeneration',...(hasRecallRevision?['recall']:[]),...(hasCumulativeRevision?['cumulativeGeneration']:[]),...(hasTimeRevision?['timeReminders']:[]),...(hasWorkshopRevision?['workshop']:[]),...(hasControlsRevision?['controls']:[])]);
+    exact(value.domainRevisions, ['ai', 'eventGeneration',...(hasRecallRevision?['recall']:[]),...(hasCumulativeRevision?['cumulativeGeneration']:[]),...(hasTimeRevision?['timeReminders']:[]),...(hasWorkshopRevision?['workshop']:[]),...(hasControlsRevision?['controls']:[]),...(hasTrackingRevision?['trackingPrompts']:[])]);
     if (Object.values(value.domainRevisions).some(version => !Number.isSafeInteger(version) || version < 0)
-      || value.domainRevisions.ai + value.domainRevisions.eventGeneration +(value.domainRevisions.recall??0)+(value.domainRevisions.cumulativeGeneration??0)+(value.domainRevisions.timeReminders??0)+(value.domainRevisions.workshop??0)+(value.domainRevisions.controls??0)!== value.revision) invalid();
+      || value.domainRevisions.ai + value.domainRevisions.eventGeneration +(value.domainRevisions.recall??0)+(value.domainRevisions.cumulativeGeneration??0)+(value.domainRevisions.timeReminders??0)+(value.domainRevisions.workshop??0)+(value.domainRevisions.controls??0)+(value.domainRevisions.trackingPrompts??0)!== value.revision) invalid();
     ai(value.ai); const eventGeneration = generation(value.eventGeneration);
     if(!hasRecall&&(value.domainRevisions.recall??0)!==0)invalid();
     const migrated = { ...value, schema: 2, credentials: legacy ? [] : value.credentials, eventGeneration,domainRevisions:{...value.domainRevisions,recall:value.domainRevisions.recall??0},recall:hasRecall?assertRecallSettings(value.recall):defaultRecallSettings() };
+    if(hasTracking)migrated.trackingPrompts=assertTrackingPrompts(value.trackingPrompts);
     if(hasControls)migrated.controls=normalizeControls(value.controls);
     if(hasWorkshop)migrated.workshop=assertWorkshop(value.workshop);
     if(hasTime)migrated.timeReminders=assertTimeReminders(value.timeReminders);

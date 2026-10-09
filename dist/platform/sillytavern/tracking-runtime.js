@@ -1,3 +1,4 @@
+import {DEFAULT_TRACKING_PROMPTS} from '../../domain/tracking/prompts.js';
 import {sameTarget} from '../../domain/memory/repository.js';
 import {featureGate} from '../../domain/controls/gate.js';
 import {currentTracking,prepareTrackingUpdate,applyTrackingResponseParts,addTrackingRecord,editTrackingRecord,deleteTrackingRecord,setTrackingPreferences,invalidateTrackingFloors,pruneTrackingSnapshots} from '../../domain/tracking/data.js';
@@ -17,7 +18,7 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
   const captureCategories=()=>Object.fromEntries(['items','npcs'].map(key=>[key,categoryGates[key].capture()]));
   const contentOf=domain=>{const {revision,preferences,...content}=domain;return content;};
   const current=t=>{try{return !disposed&&sameTarget(t,repository.captureTarget());}catch{return false;}};
-  const snapshot=()=>clone({...state,writeBlocked:state.writeBlocked||!gate.allowed()}),notify=()=>{for(const fn of listeners)try{fn(snapshot());}catch{/* Observer cannot break data. */}};
+  const snapshot=()=>clone({...state,prompts:settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS,writeBlocked:state.writeBlocked||!gate.allowed()}),notify=()=>{for(const fn of listeners)try{fn(snapshot());}catch{/* Observer cannot break data. */}};
   function adopt(t,captured){
     const projected=currentTracking(captured.tracking,captureSource(t));target=clone(t);lastTarget=clone(t);selection=captured;
     state={records:projected.records.map(row=>({...row,...(row.kind==='npc'?{absentTurns:projected.absenceTurns[row.id]}:{})})),preferences:captured.tracking.preferences,writeBlocked:false,error:'',target:clone(t),aiTurn:projected.aiTurn};notify();return snapshot();
@@ -57,8 +58,9 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     const raw=captureSource(t);
     if(automatic&&domain.snapshots.some(row=>row.sourceSnapshot.replyId===source.replyId&&matchesStoredLatestSource(row.sourceSnapshot,raw)))return null;
     const ticket=prepareTrackingUpdate({...domain,preferences:activePreferences},raw,{floor:source.assistantFloor,rules});
-    const request=buildTrackingRequest({ticket});
-    return {target:clone(t),selection:captured,ticket,categoryProofs:captureCategories(),gate:gate.capture(),task:{id:'tracking',name:'物品与 NPC 追踪',instructions:request.previewParts.slice(0,-1).map(part=>part.content).join('\n\n'),previousState:ticket.current.filter(record=>ticket.preferences[record.kind==='item'?'itemsEnabled':'npcsEnabled'])}};
+    const prompts=settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS;
+    const request=buildTrackingRequest({ticket,prompts});
+    return {target:clone(t),selection:captured,ticket,prompts,categoryProofs:captureCategories(),gate:gate.capture(),task:{id:'tracking',name:'物品与 NPC 追踪',instructions:request.previewParts.slice(0,-1).map(part=>part.content).join('\n\n'),previousState:ticket.current.filter(record=>ticket.preferences[record.kind==='item'?'itemsEnabled':'npcsEnabled'])}};
   }
   // Recheck immediately before the shared provider call, without granting a
   // new epoch to a category switched off/on while other plans were prepared.
@@ -66,7 +68,7 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     if(!plan||!current(plan.target)||!gate.allowed()||!gate.matches(plan.gate))return null;
     const preferences=Object.fromEntries(['items','npcs'].map(key=>[`${key}Enabled`,plan.ticket.preferences[`${key}Enabled`]&&categoryGates[key].matches(plan.categoryProofs[key])]));
     if(!Object.values(preferences).some(Boolean))return null;
-    const ticket={...plan.ticket,preferences},request=buildTrackingRequest({ticket});
+    const ticket={...plan.ticket,preferences},request=buildTrackingRequest({ticket,prompts:plan.prompts});
     return {...plan,ticket,task:{...plan.task,instructions:request.previewParts.slice(0,-1).map(part=>part.content).join('\n\n'),previousState:ticket.current.filter(record=>preferences[record.kind==='item'?'itemsEnabled':'npcsEnabled'])}};
   }
   async function saveBackgroundResult(plan,text,{isCurrent=()=>true,attempt=0}={}){
@@ -150,7 +152,14 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     const listener=()=>{clear();if(name.startsWith('CHAT_')){target=null;selection=null;state={...state,records:[],target:null};notify();}};
     events.on(event,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,event,listener));
   }
-  return {load,snapshot,saveRecord,isCurrent:()=>current(target),
+  return {load,snapshot,saveRecord,defaultPrompts:DEFAULT_TRACKING_PROMPTS,
+    async savePrompt(kind,prompt,{original}={}){
+      if(!['item','npc'].includes(kind))throw new Error('追踪类别无效');
+      const captured=settings.captureTrackingPrompts();
+      if(original!==undefined&&captured.prompts[kind]!==original)throw new Error('追踪要求已变化，请重新读取后修改');
+      await settings.saveTrackingPrompts({...captured.prompts,[kind]:prompt},{expectedEpoch:captured.epoch});
+      notify();return snapshot();
+    },isCurrent:()=>current(target),
     rebindTarget(next){const previous=target??lastTarget;if(!previous||previous.chatId!==next.chatId||previous.rootId!==next.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){clear();target=clone(next);selection=null;state={...state,target:clone(next),writeBlocked:true,error:'聊天已重新读取，请重新读取追踪'};notify();}},
     deleteRecord(kind,id){return mutate((domain,raw)=>{const record=currentTracking(domain,raw).records.find(row=>row.id===id);if(record?.kind!==kind)throw new Error('追踪记录已变化');return deleteTrackingRecord(domain,raw,id);},{category:kind==='item'?'items':'npcs'});},
     savePreferences(patch){

@@ -69,6 +69,7 @@ export async function mountBenmoView({container: app, controller, availability =
     for (const [key, raw] of new FormData(form)) {
       const text = String(raw), custom = customInputs.get(key);
       if (custom) custom[0][custom[1]] = text;
+      else if (state.route === 'tracking-settings' && key === 'prompt') draft.prompt = text;
       else if (state.route === 'summary-settings' && ['recentFloors', 'prompt'].includes(key)) draft[key] = text;
       else if (state.kind === 'summary' && key === 'body') draft.body = text;
       else if (state.kind !== 'summary' && key === 'mode') draft.pinned = text === 'resident';
@@ -138,9 +139,12 @@ export async function mountBenmoView({container: app, controller, availability =
   function summarySettings() {
     return `<form id="benmo-edit-form" class="section"><section class="card"><label class="ui-field"><span>最近多少楼使用原文</span><input class="ui-input" type="number" name="recentFloors" aria-label="最近多少楼使用原文" min="1" step="1" required value="${esc(draft.recentFloors)}" inputmode="numeric"></label><p class="meta">启用压缩前，请关闭预设中按 X 楼删除正文或只保留摘要的正则，以免重复处理。</p></section><section class="card"><label class="ui-field"><span>最新摘要提示词</span><textarea class="lt-textarea" name="prompt" rows="7" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-prompt')}</div></section>${formActions()}</form>`;
   }
+  function trackingSettings() {
+    return `<form id="benmo-edit-form" class="section"><section class="card"><label class="ui-field"><span>${KINDS[state.kind]}要求</span><textarea class="lt-textarea" name="prompt" rows="10" maxlength="20000" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-tracking-prompt')}</div></section>${formActions()}</form>`;
+  }
   function trackingList() {
     const rows = records();
-    return `<div class="row"><span class="meta">当前聊天 · ${rows.length} 条记录${state.kind === 'npc' ? ' · NPC' : ''}</span>${button('＋ 新建', 'new', '', 'secondary')}</div><div class="section">${rows.map(row => `<article class="record ${state.selected === row.id ? 'selected' : ''}"><button type="button" class="record-open" data-action="detail" data-id="${esc(row.id)}" aria-label="查看${esc(row.name)}"><strong>${esc(row.name)}</strong><span class="meta"><span class="tag">${row.pinned ? '常驻' : '触发'}</span> · 查看 ›</span></button><p>${esc(state.kind === 'item' ? row.introduction : [row.identity, row.appearance].filter(Boolean).join(' · '))}</p><p class="meta">${state.kind === 'item' ? esc(`位置：${row.location ?? ''} · 所属者：${row.owner ?? ''}`) : `最后出场：第 ${esc(row.lastAppearanceTurn ?? '—')} 个 AI 回合 · 缺席 ${esc(row.absentTurns ?? '—')} 回合`}</p><div class="keywords">${aliases(row.aliases).map(alias => `<span class="tag">${esc(alias)}</span>`).join('')}</div></article>`).join('')}${rows.length ? '' : `<p class="meta">暂无${state.kind === 'item' ? '物品' : '角色'}记录。</p>`}</div>`;
+    return `<div class="row"><span class="meta">当前聊天 · ${rows.length} 条记录${state.kind === 'npc' ? ' · NPC' : ''}</span><div class="actions">${textEntry('追踪设置', 'settings-tracking')}${button('＋ 新建', 'new', '', 'secondary')}</div></div><div class="section">${rows.map(row => `<article class="record ${state.selected === row.id ? 'selected' : ''}"><button type="button" class="record-open" data-action="detail" data-id="${esc(row.id)}" aria-label="查看${esc(row.name)}"><strong>${esc(row.name)}</strong><span class="meta"><span class="tag">${row.pinned ? '常驻' : '触发'}</span> · 查看 ›</span></button><p>${esc(state.kind === 'item' ? row.introduction : [row.identity, row.appearance].filter(Boolean).join(' · '))}</p><p class="meta">${state.kind === 'item' ? esc(`位置：${row.location ?? ''} · 所属者：${row.owner ?? ''}`) : `最后出场：第 ${esc(row.lastAppearanceTurn ?? '—')} 个 AI 回合 · 缺席 ${esc(row.absentTurns ?? '—')} 回合`}</p><div class="keywords">${aliases(row.aliases).map(alias => `<span class="tag">${esc(alias)}</span>`).join('')}</div></article>`).join('')}${rows.length ? '' : `<p class="meta">暂无${state.kind === 'item' ? '物品' : '角色'}记录。</p>`}</div>`;
   }
   function detail() {
     const row = selectedRecord();
@@ -155,6 +159,7 @@ export async function mountBenmoView({container: app, controller, availability =
     return `<form id="benmo-edit-form" class="section"><div class="two-cols">${FIELDS[state.kind].map(([key, label]) => `<label class="ui-field"><span>${label}</span>${MULTILINE.has(key) ? `<textarea class="lt-textarea" name="${key}" rows="2" maxlength="600">${esc(draft[key])}</textarea>` : `<input class="ui-input" name="${key}" value="${esc(draft[key])}" ${key === 'name' ? 'required maxlength="160"' : 'maxlength="2000"'}>`}</label>`).join('')}</div><fieldset class="lt-modes" aria-label="召回方式"><legend class="ui-field__label">召回方式</legend>${[['resident', '常驻'], ['trigger', '触发']].map(([mode, label]) => `<label class="lt-mode"><input type="radio" name="mode" value="${mode}" ${draft.pinned === (mode === 'resident') ? 'checked' : ''}>${label}</label>`).join('')}</fieldset>${state.kind === 'npc' ? '<p class="meta">最后实际出场与缺席回合由剧情记录，此处不手动填写。</p>' : ''}${recordCustomFields()}${formActions()}</form>`;
   }
   function content() {
+    if (state.route === 'tracking-settings') return trackingSettings();
     if (state.route === 'summary-settings') return summarySettings();
     if (state.route === 'edit') return editor();
     if (state.route === 'detail') return detail();
@@ -162,6 +167,7 @@ export async function mountBenmoView({container: app, controller, availability =
     return `<nav class="subtabs" aria-label="兰台记录功能">${enabledKinds().map(id => selectButton(id, KINDS[id], state.kind, 'kind')).join('')}</nav>${state.kind === 'summary' ? summaryView() : trackingList()}`;
   }
   function pageTitle() {
+    if (state.route === 'tracking-settings') return `${KINDS[state.kind]}设置`;
     if (state.route === 'summary-settings') return '最新摘要设置';
     if (state.route === 'detail') return state.kind === 'item' ? '物品详情' : '角色详情';
     if (state.route === 'edit') return state.kind === 'summary' ? '编辑最新摘要' : `${returnRoute === 'list' && !original ? '新建' : '编辑'}${state.kind === 'item' ? '物品' : '角色'}`;
@@ -209,7 +215,8 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   function startEdit(record, destination, route = 'edit') {
     remember(); epoch++; returnRoute = destination; original = record ? clone(record) : null;
-    draft = route === 'summary-settings' ? {recentFloors: String(value.summary?.preferences?.recentFloors ?? 6), prompt: value.summary?.preferences?.prompt ?? controller.defaultPrompt ?? ''}
+    draft = route === 'tracking-settings' ? {prompt: value.tracking?.prompts?.[state.kind] ?? controller.defaultTrackingPrompts?.[state.kind] ?? ''}
+      : route === 'summary-settings' ? {recentFloors: String(value.summary?.preferences?.recentFloors ?? 6), prompt: value.summary?.preferences?.prompt ?? controller.defaultPrompt ?? ''}
       : state.kind === 'summary' ? {id: record.id, floor: record.floor, body: record.body ?? ''} : makeDraft(record);
     baseline = clone(draft); state.route = route; error = ''; state.scrolls[context()] = 0; render();
   }
@@ -218,7 +225,9 @@ export async function mountBenmoView({container: app, controller, availability =
     if (!draft || blocked() || composing || !app.querySelector('form')?.reportValidity()) return;
     readDraft(); const submitted = clone(draft), operationEpoch = epoch, route = state.route, kind = state.kind;
     let payload = submitted;
-    if (route === 'summary-settings') {
+    if (route === 'tracking-settings') {
+      if (!submitted.prompt.trim() || submitted.prompt.length > 20000) throw new Error('请填写有效的追踪要求（最多 20000 字）');
+    } else if (route === 'summary-settings') {
       const count = Number(submitted.recentFloors);
       if (!Number.isSafeInteger(count) || count < 1 || !submitted.prompt.trim()) throw new Error('请填写有效楼数和提示词');
       payload = {...submitted, recentFloors: count};
@@ -229,7 +238,8 @@ export async function mountBenmoView({container: app, controller, availability =
       if (!payload.name) throw new Error('请填写名称');
       if (payload.customFields.some(field => !field.name || !field.requirement) || new Set(payload.customFields.map(field => field.name)).size !== payload.customFields.length) throw new Error('请填写字段名和追踪要求，字段名不要重复');
     }
-    const next = route === 'summary-settings' ? await controller.saveSummaryPreferences(payload)
+    const next = route === 'tracking-settings' ? await controller.saveTrackingPrompt(kind, submitted.prompt, {original:baseline.prompt})
+      : route === 'summary-settings' ? await controller.saveSummaryPreferences(payload)
       : kind === 'summary' ? await controller.saveSummary(submitted.id, submitted.body, {original})
         : await controller.saveRecord(kind, payload, {original});
     if (disposed) return;
@@ -237,13 +247,13 @@ export async function mountBenmoView({container: app, controller, availability =
     if (epoch !== operationEpoch || suspended || !draft) return;
     remember(); const newer = clone(draft);
     if (!same(newer, submitted)) {
-      const saved = route === 'summary-settings' ? null : kind !== 'summary' ? records(kind).find(row => row.id === submitted.id) : summaryRecords().find(row => row.id === submitted.id);
+      const saved = ['summary-settings','tracking-settings'].includes(route) ? null : kind !== 'summary' ? records(kind).find(row => row.id === submitted.id) : summaryRecords().find(row => row.id === submitted.id);
       const savedDraft = saved ? (kind === 'summary' ? {id: saved.id, floor: saved.floor, body: saved.body} : makeDraft(saved, kind)) : route === 'summary-settings' ? {...payload, recentFloors: String(payload.recentFloors)} : clone(submitted);
       baseline = clone(savedDraft); draft = {...savedDraft, ...Object.fromEntries(Object.entries(newer).filter(([key, text]) => !same(text, submitted[key])))};
       if (saved) original = clone(saved);
       acting = false; render(); toast('已保存提交内容；新修改尚未保存');
     } else {
-      if (kind !== 'summary') { state.selected = submitted.id; state.selections[kind] = submitted.id; }
+      if (kind !== 'summary' && route !== 'tracking-settings') { state.selected = submitted.id; state.selections[kind] = submitted.id; }
       state.route = returnRoute; clearDraft(); acting = false; render(); toast('已保存');
     }
   }
@@ -273,7 +283,7 @@ export async function mountBenmoView({container: app, controller, availability =
     const action = control.dataset.action, id = control.dataset.id;
     if (dialog && !['cancel-dialog', 'confirm-dialog'].includes(action)) return;
     if (acting && !['back', 'cancel', 'close', 'area', 'cancel-dialog', 'confirm-dialog'].includes(action)) return;
-    if (composing && ['save', 'add-field', 'remove-field', 'default-prompt'].includes(action)) return;
+    if (composing && ['save', 'add-field', 'remove-field', 'default-prompt', 'default-tracking-prompt'].includes(action)) return;
     let ownsAction = false;
     const actionEpoch = epoch;
     try {
@@ -289,6 +299,8 @@ export async function mountBenmoView({container: app, controller, availability =
       if (action === 'reload') { acting = ownsAction = true; remember(); const token = epoch; const next = await controller.load({refresh: true}); if (!disposed && token === epoch) { apply(next); invalidated = false; render(); } return; }
       if (action === 'tab' && Object.hasOwn(TABS, id)) { leave(() => { remember(); epoch++; state.tab = id; state.route = 'list'; clearDraft(); render(); }); return; }
       if (action === 'kind' && enabledKinds().includes(id)) { leave(() => { remember(); epoch++; state.kind = id; state.route = 'list'; state.selected = state.selections[id] ?? null; clearDraft(); render(); }); return; }
+      if (action === 'settings-tracking' && FIELDS[state.kind]) { startEdit(null, 'list', 'tracking-settings'); return; }
+      if (action === 'default-tracking-prompt' && state.route === 'tracking-settings') { remember(); draft.prompt = controller.defaultTrackingPrompts?.[state.kind] ?? ''; render(); return; }
       if (action === 'settings-summary' && state.kind === 'summary') { startEdit(null, 'list', 'summary-settings'); return; }
       if (action === 'default-prompt' && state.route === 'summary-settings') { remember(); draft.prompt = controller.defaultPrompt ?? ''; render(); return; }
       if (action === 'expand') { remember(); state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id); render(); return; }
