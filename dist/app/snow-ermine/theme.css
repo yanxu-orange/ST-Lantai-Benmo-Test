@@ -6,7 +6,7 @@
   color-scheme: light;
 
   --ui-color-canvas: #f8fbfe;
-  --ui-color-workspace: #f4f8fb;
+  --ui-color-workspace: #fafcfe;
   --ui-color-surface-base: #fff;
   --ui-color-surface-raised: #fff;
   --ui-color-surface-subtle: #f7fafc;
@@ -29,7 +29,7 @@
   --ui-color-action-primary-text: #2a333b;
   --ui-color-action-secondary-background: #fff;
   --ui-color-action-secondary-text: #2a333b;
-  --ui-color-action-tertiary-text: #5f6b74;
+  --ui-color-action-tertiary-text: #405666;
   --ui-color-selected-background: #287DA8;
   --ui-color-selected-text: #fff;
   --ui-color-selected-border: #287DA8;
@@ -141,7 +141,7 @@
 }
 .lantai[data-ui-theme="snow-ermine"] .lt-icon {
   /* External SVG images do not inherit the owner's currentColor. */
-  filter: brightness(0) saturate(100%) invert(42%) sepia(8%) saturate(629%) hue-rotate(165deg) brightness(94%) contrast(87%);
+  filter: brightness(0) saturate(100%) invert(42%) sepia(8%) saturate(629%) hue-rotate(165deg) brightness(72%) contrast(100%);
 }
 
 /* Root image spans only the title + type navigation. The content remains solid. */
@@ -270,7 +270,7 @@
   white-space: nowrap;
   border-color: transparent;
   background: transparent;
-  color: var(--ui-color-text-secondary);
+  color: var(--ui-color-action-tertiary-text);
 }
 .lantai[data-ui-theme="snow-ermine"] .lt-list-icons.ui-tool-group {
   flex: none;
@@ -437,7 +437,7 @@
   position: relative;
   border-color: transparent;
   background: var(--ui-color-surface-base);
-  color: var(--ui-color-text-secondary);
+  color: var(--ui-color-action-tertiary-text);
   justify-content: center;
 }
 .lantai[data-ui-theme="snow-ermine"] .lt-summary-modes label input {

@@ -1,7 +1,7 @@
 [
   {
     "path": "README.md",
-    "sha256": "04f2276e05d7bfd88c7f2dbf5677a209e8fedbc6edaa4b023ae2a9445d63ec44"
+    "sha256": "baefbc9cd64a3ac94504790312c7b31815639d511eec3201c9ee3e261cf2b77d"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -197,7 +197,7 @@
   },
   {
     "path": "dist/app/snow-ermine/theme.css",
-    "sha256": "4f17debbcaab131f3d7520faccecfe6ceaceac02b271d84159c3d7ffd5c699b9"
+    "sha256": "95c33597a57295eecbc800aa7ea0968105a49285dfac99764eda46cce56e42ef"
   },
   {
     "path": "dist/app/source-deletion-dialog.js",
@@ -269,7 +269,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "eccc4ba5a836734589c316433532a8b2715190d4dd6b73a8c25112a051de639d"
+    "sha256": "e301cbc43516b8bb1db763b8b06e3f4b6b0614ac0de436503839d3a745e5c54e"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -825,10 +825,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "d4b1fdb52521590ce64146ddae2f35395f766a457810155969551220899a4789"
+    "sha256": "0e7152d598ecf1efbc76b921f57f9da63446b60b2d286412b215aed849256141"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "5719975dd497ddff5912c0bfa6b0edb3a31bb8fbc04194d42cd3d15b0d509eb0"
+    "sha256": "0fdefc0a9c5ef97a112c85d263db49825c71052d091c8fda3e841727661f0dae"
   }
 ]
