@@ -3,7 +3,7 @@ import {sameTarget} from '../domain/memory/repository.js';
 export function createControlSession({settings,repository,prepareTarget}={}){
  let disposed=false,sequence=0,pending=null,writing=null,target=null,globalSnapshot=null,chatSnapshot=null;
  let state={status:'loading',busy:null,error:'',controls:defaultControls(),chat:defaultChatControls()};
- let policy=effectiveControls({...defaultControls(),enabled:false}),epochs=Object.fromEntries(FEATURES.map(key=>[key,0]));
+ let policy=effectiveControls({...defaultControls(),enabled:false}),epochs=Object.fromEntries(['enabled',...FEATURES].map(key=>[key,0]));
  const listeners=new Set(),queued=new Set(),unconfirmedKeys=new Set();
  const current=()=>{try{return !!target&&sameTarget(target,repository.captureTarget());}catch{return false;}};
  function publish(){
@@ -11,7 +11,7 @@ export function createControlSession({settings,repository,prepareTarget}={}){
   const controls={enabled:state.controls.enabled&&confirmed.enabled&&!unconfirmedKeys.has('enabled'),features:Object.fromEntries(FEATURES.map(key=>[key,state.controls.features[key]&&confirmed.features[key]&&!unconfirmedKeys.has(key)]))};
   const chat={enabled:state.chat.enabled&&chatConfirmed.enabled&&!unconfirmedKeys.has('chat')};
   const next=effectiveControls(state.status==='ready'?controls:{...controls,enabled:false},chat);
-  for(const key of FEATURES)if(next[key]!==policy[key])epochs[key]++;
+  for(const key of ['enabled',...FEATURES])if(next[key]!==policy[key])epochs[key]++;
   policy=next;
   for(const fn of [...listeners])try{fn(inspect());}catch{/* Consumers cannot break persistence. */}
  }

@@ -1,6 +1,9 @@
+import {assertLatestSource} from '../latest/source.js';
 const clone = structuredClone;
 const text = value => typeof value === 'string' && value.trim().length > 0;
 export const WORKSHOP_KINDS = ['prompt', 'collect', 'sync'];
+export const WORKSHOP_GENERATION_SOURCES = ['story', 'background'];
+export const generationSourceOf = module => module.lifecycle === 'prompt' ? 'story' : module.generationSource ?? 'story';
 export const WORKSHOP_SCOPES = ['global', 'character', 'chat'];
 export function emptyWorkshop() { return { schema: 1, revision: 0, modules: [], results: [], imports: [], captureCounters: { global: 0, character: 0, chat: 0 } }; }
 export function validateModule(value) {
@@ -11,6 +14,7 @@ export function validateModule(value) {
     || (value.lifecycle === 'prompt' ? value.captureTag !== null : !/^[gch][1-9]\d*$/.test(value.captureTag))) {
     throw new Error('工坊模块字段无效');
   }
+  if(value.generationSource!==undefined&&(!WORKSHOP_GENERATION_SOURCES.includes(value.generationSource)||value.lifecycle==='prompt'&&value.generationSource!=='story'))throw new Error('工坊生成来源无效');
   if(value.moveVersion!==undefined&&(!Number.isSafeInteger(value.moveVersion)||value.moveVersion<0))throw new Error('模块移动版本无效');
   if(value.captureAliases!==undefined&&(!Array.isArray(value.captureAliases)||value.captureAliases.some(alias=>!text(alias?.rootId)||! /^[gch][1-9]\d*$/.test(alias?.tag))))throw new Error('历史回收标签无效');
   if (value.scope === 'character' && !text(value.characterKey)) throw new Error('请选择角色');
@@ -39,6 +43,8 @@ export function assertWorkshop(value) {
       || !Number.isSafeInteger(row.index) || row.index < 0 || !Number.isSafeInteger(row.floor) || row.floor < 0
       || typeof row.value !== 'string' || !(row.manualValue === null || typeof row.manualValue === 'string')
       || typeof row.deleted !== 'boolean' || typeof row.active !== 'boolean') throw new Error('工坊结果字段无效');
+    if(row.generationSource!==undefined&&!WORKSHOP_GENERATION_SOURCES.includes(row.generationSource))throw new Error('工坊结果来源无效');
+    if(row.generationSource==='background'){assertLatestSource(row.sourceSnapshot);if(row.replyId!==row.sourceSnapshot.replyId||row.floor!==row.sourceSnapshot.assistantFloor)throw new Error('工坊结果与回复来源不符');}
     resultIds.add(row.id);
     const source = JSON.stringify([row.moduleId,row.replyId]);
     if(sources.has(source)) throw new Error('工坊结果来源重复');

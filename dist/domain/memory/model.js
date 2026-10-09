@@ -1,8 +1,11 @@
+import {assertTracking,inheritTracking} from '../tracking/data.js';
 import {assertChatControls} from '../controls/model.js';
 import {assertWorkshop,inheritWorkshop} from '../workshop/model.js';
 import {assertTime,inheritTime} from '../time/data.js';
 import {emptySummary,assertSummary,summaryOf} from '../summary/data.js';
+import {effectiveBatchPositions,effectiveBatchRanges} from '../summary/source-positions.js';
 import {assertCumulative,inheritCumulative} from '../cumulative/data.js';
+import {assertLatest,inheritLatest} from '../latest/data.js';
 const clone = value => structuredClone(value);
 export const SCHEMA = 1;
 export function emptyRoot(rootId) { return { schema: SCHEMA, rootId, revision: 0, events: [], summary:emptySummary() }; }
@@ -69,6 +72,8 @@ export function assertRoot(root, target) {
   assertMergeRelations(root.events, Object.hasOwn(root, 'deletedMergeIds') ? root.deletedMergeIds : []);
   if(Object.hasOwn(root,'summary')){assertSummary(root.summary,root.events);if(root.summary.pending?.events.some(event=>root.deletedMergeIds?.includes(event.id)))throw new Error('待审核身份占用合并删除证明');}
   if(Object.hasOwn(root,'cumulative'))assertCumulative(root.cumulative);
+  if(Object.hasOwn(root,'latest'))assertLatest(root.latest);
+  if(Object.hasOwn(root,'tracking'))assertTracking(root.tracking);
   if(Object.hasOwn(root,'time'))assertTime(root.time);
   if(Object.hasOwn(root,'controls'))assertChatControls(root.controls);
   if(Object.hasOwn(root,'workshop'))assertWorkshop(root.workshop);
@@ -101,8 +106,11 @@ export function inheritEvents(events, floor) {
 export function inheritMemoryRoot(root,rootId,floor,{timeMessages=null}={}) {
   const summary=summaryOf(root), known=new Set(summary.batches.map(batch=>batch.id));
   delete summary.pending;
-  let selected=inheritEvents(root.events,floor), previous;
-  summary.batches=summary.batches.filter(batch=>batch.requestedRange.end<floor&&batch.actualRange.end<floor);
+  // Project only eligibility. Inherited cards and batch evidence stay exactly as
+  // saved, including original ranges; their copied overlay holds current floors.
+  const projected=branchPositionedEvents(root.events,summary);
+  let selected=inheritEvents(projected,floor), previous;
+  summary.batches=summary.batches.filter(batch=>{const ranges=effectiveBatchRanges(batch,summary);return ranges&&ranges.requestedRange.end<floor&&ranges.actualRange.end<floor;});
   // A ledger's requested tail can cross the branch even when its event range
   // does not. Removing that batch must also remove overlapping merge groups.
   do {
@@ -112,11 +120,40 @@ export function inheritMemoryRoot(root,rootId,floor,{timeMessages=null}={}) {
     const allowed=new Set(summary.batches.map(batch=>batch.id));
     selected=inheritEvents(selected.filter(event=>!known.has(event.batch?.id)||allowed.has(event.batch.id)),floor);
   } while(previous!==JSON.stringify([selected.map(event=>event.id),summary.batches.map(batch=>batch.id)]));
+  const selectedIds=new Set(selected.map(event=>event.id));selected=clone(root.events.filter(event=>selectedIds.has(event.id)));
+  if(summary.sourcePositions){const inherited=new Set(summary.batches.map(batch=>batch.id));summary.sourcePositions=Object.fromEntries(Object.entries(summary.sourcePositions).filter(([id])=>inherited.has(id)));if(!Object.keys(summary.sourcePositions).length)delete summary.sourcePositions;}
   summary.excludedFloors=summary.excludedFloors.filter(item=>item.floor<floor);
   summary.revision=0;
-  summary.progress={startFloor:Math.min(summary.progress.startFloor,floor),lastProcessedFloor:summary.batches.length?Math.max(...summary.batches.map(batch=>batch.actualRange.end)):null,nextBatchOrdinal:summary.batches.length?Math.max(...summary.batches.map(batch=>batch.ordinal))+1:1};
+  summary.progress={startFloor:Math.min(summary.progress.startFloor,floor),lastProcessedFloor:summary.batches.length?Math.max(...summary.batches.map(batch=>effectiveBatchRanges(batch,summary).actualRange.end)):null,nextBatchOrdinal:summary.batches.length?Math.max(...summary.batches.map(batch=>batch.ordinal))+1:1};
   summary.preferences.manual.startFloor=Math.min(summary.preferences.manual.startFloor,floor);
   summary.preferences.manual.endFloor=null;
   summary.preferences.auto.startFloor=Math.min(summary.preferences.auto.startFloor,floor);
-  return {...emptyRoot(rootId),events:selected,summary,...(Object.hasOwn(root,'controls')?{controls:assertChatControls(root.controls)}:{}),...(Object.hasOwn(root,'workshop')?{workshop:inheritWorkshop(root.workshop,floor)}:{}),...(Object.hasOwn(root,'cumulative')?{cumulative:inheritCumulative(root.cumulative,floor)}:{}),...(Object.hasOwn(root,'time')?{time:inheritTime(root.time,{messages:timeMessages})}:{})};
+  return {...emptyRoot(rootId),events:selected,summary,...(Object.hasOwn(root,'controls')?{controls:assertChatControls(root.controls)}:{}),...(Object.hasOwn(root,'workshop')?{workshop:inheritWorkshop(root.workshop,floor)}:{}),...(Object.hasOwn(root,'cumulative')?{cumulative:inheritCumulative(root.cumulative,floor)}:{}),...(Object.hasOwn(root,'latest')?{latest:inheritLatest(root.latest,floor)}:{}),...(Object.hasOwn(root,'tracking')?{tracking:inheritTracking(root.tracking,floor)}:{}),...(Object.hasOwn(root,'time')?{time:inheritTime(root.time,{messages:timeMessages})}:{})};
+}
+function branchPositionedEvents(events,summary) {
+  if(!summary.sourcePositions)return events;
+  const batches=new Map(summary.batches.map(batch=>[batch.id,batch]));
+  const projected=events.map(event=>{
+    const batch=batches.get(event.batch?.id);if(!batch||!Object.hasOwn(summary.sourcePositions,batch.id))return clone(event);
+    const ranges=effectiveBatchRanges(batch,summary),positions=effectiveBatchPositions(batch,summary);
+    const moveRange=range=>{
+      if(!validRange(range)||range.start<batch.actualRange.start||range.end>batch.actualRange.end)return null;
+      return {start:positions[range.start-batch.requestedRange.start].floor,end:positions[range.end-batch.requestedRange.start].floor};
+    };
+    const sources=ranges?event.sources.map(moveRange):[];
+    return {...clone(event),sources:sources.some(source=>source===null)?[]:sources,batch:{...clone(event.batch),sources:ranges?[ranges.actualRange]:[]}};
+  });
+  const union=ranges=>{
+    const merged=[];
+    for(const range of clone(ranges).sort((a,b)=>a.start-b.start||a.end-b.end)){const last=merged.at(-1);if(last&&range.start<=last.end+1)last.end=Math.max(last.end,range.end);else merged.push(range);}
+    return merged;
+  };
+  for(const result of projected.filter(event=>event.mergedFrom)){
+    const sources=events.filter(event=>result.mergedFrom.includes(event.id));
+    if(!sources.some(source=>Object.hasOwn(summary.sourcePositions,source.batch?.id)))continue;
+    // An independently edited result range has no trustworthy coordinate map.
+    result.sources=JSON.stringify(result.sources)===JSON.stringify(union(sources.flatMap(source=>source.sources)))
+      ?union(projected.filter(event=>result.mergedFrom.includes(event.id)).flatMap(source=>source.sources)):[];
+  }
+  return projected;
 }

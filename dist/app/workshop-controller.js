@@ -2,7 +2,7 @@ import {createWorkshopExamples,reviseWorkshopExamples} from '../domain/workshop/
 import {allocateCaptureTag,validateModule} from '../domain/workshop/model.js';
 import {visibleResults,resultText,editResult,deleteResult} from '../domain/workshop/results.js';
 import {sameTarget} from '../domain/memory/repository.js';
-export function createWorkshopController({repository,settings,target,runtime,ensureRegex,getCharacterName,onProgress,onMemory,onTime,onSettings,onClose}={}) {
+export function createWorkshopController({repository,settings,target,runtime,ensureRegex,getCharacterName,onProgress,onMemory,onTime,onSettings,onBenmo,onClose}={}) {
   let disposed=false,globalSnapshot,chatSnapshot,binding,busy=0,warning='',writeFailure=null,tail=Promise.resolve(),generation=0,operationGeneration=0;
   const enabledIntents=new Map(),toggleTasks=new Map(),deleting=new Set(),saving=new Set();
   const current=()=>!disposed&&operationGeneration===generation&&sameTarget(target,repository.captureTarget());
@@ -54,18 +54,18 @@ export function createWorkshopController({repository,settings,target,runtime,ens
   function snapshot(){
     const globals=globalSnapshot.workshop.modules.filter(module=>module.scope==='global'||module.scope==='character'&&module.characterKey===binding?.owner);
     const visible=new Map([...globals,...chatSnapshot.workshop.modules].map(module=>[module.id,module]));
-    const modules=[...visible.values()].sort((a,b)=>Number(!!b.example)-Number(!!a.example)).map(module=>({...structuredClone(module),kind:module.lifecycle,...(enabledIntents.has(module.id)?{enabled:enabledIntents.get(module.id)}:{})}));
+    const modules=[...visible.values()].sort((a,b)=>Number(!!b.example)-Number(!!a.example)).map(module=>({...structuredClone(module),kind:module.lifecycle,generationSource:module.lifecycle==='prompt'?'story':module.generationSource??'story',...(enabledIntents.has(module.id)?{enabled:enabledIntents.get(module.id)}:{})}));
     const results=Object.fromEntries(modules.map(module=>[module.id,(module.lifecycle==='sync'?visibleResults(chatSnapshot.workshop.results,module.id).slice(-3).reverse():visibleResults(chatSnapshot.workshop.results,module.id)).map(row=>({...row,text:resultText(row),edited:row.manualValue!==null}))]));
     return {modules,results,warning,pendingIds:[...toggleTasks.keys()],deletingIds:[...deleting],writeBlocked:!!writeFailure,characterName:getCharacterName?.(binding)??'当前角色',canUseCharacter:binding?.kind==='character'};
   }
   async function commitGlobal(value,options={}){
     const result=await settings.saveWorkshop(value,{...options,expectedEpoch:globalSnapshot.epoch,isCurrent:current});
     if(result.status!=='committed')throw new Error('模块保存尚未确认');
-    globalSnapshot=settings.captureWorkshop();
+    globalSnapshot=settings.captureWorkshop();runtime?.changed?.();
   }
   async function commitChat(value,options={}){
     const result=await repository.updateWorkshop(target,chatSnapshot,value,{...options,isCurrent:current});
-    chatSnapshot=result.selection;
+    chatSnapshot=result.selection;runtime?.changed?.();
   }
   function exclusive(action,{reconcile=false}={}){
     busy++;const queuedGeneration=generation;
@@ -119,7 +119,7 @@ export function createWorkshopController({repository,settings,target,runtime,ens
     const lifecycle=draft.kind??draft.lifecycle;
     let captureTag=old?.captureTag??null;
     if(lifecycle!=='prompt'&&(!captureTag||old?.scope!==draft.scope)){const allocation=allocateCaptureTag(store,draft.scope);captureTag=allocation.tag;store=allocation.workshop;}
-    const module=validateModule({id:old?.id??draft.id??crypto.randomUUID(),name:draft.name,content:draft.content,scope:draft.scope,role:draft.role,depth:Number(draft.depth),enabled:draft.enabled,lifecycle,captureTag:lifecycle==='prompt'?null:captureTag,
+    const module=validateModule({id:old?.id??draft.id??crypto.randomUUID(),name:draft.name,content:draft.content,scope:draft.scope,role:draft.role,depth:Number(draft.depth),enabled:draft.enabled,lifecycle,generationSource:lifecycle==='prompt'?'story':draft.generationSource??'story',captureTag:lifecycle==='prompt'?null:captureTag,
       ...(old?.example?{example:true}:{}),
       moveVersion:(old?.moveVersion??0)+(old&&((old.scope==='chat')!==(draft.scope==='chat'))?1:0),
       ...(old?.captureTag&&old.captureTag!==captureTag?{captureAliases:[...(old.captureAliases??[]),{tag:old.captureTag,rootId:target.rootId}]}:old?.captureAliases?{captureAliases:old.captureAliases}:{}),
@@ -154,7 +154,7 @@ export function createWorkshopController({repository,settings,target,runtime,ens
     deleteModule(id){if(deleting.has(id))return Promise.reject(new Error('正在删除模块'));deleting.add(id);enabledIntents.delete(id);return exclusive(async()=>{const module=[...globalSnapshot.workshop.modules,...chatSnapshot.workshop.modules].find(row=>row.id===id);if(!module)throw new Error('模块已不存在');if(module){const store=structuredClone(module.scope==='chat'?chatSnapshot.workshop:globalSnapshot.workshop);store.modules=store.modules.filter(row=>row.id!==id);if(module.scope==='chat')await commitChat(store);else await commitGlobal(store);}deleting.delete(id);});},
     editResult(id,text){return exclusive(()=>commitChat({...chatSnapshot.workshop,results:editResult(chatSnapshot.workshop.results,id,text)}));},
     deleteResult(id){return exclusive(()=>commitChat({...chatSnapshot.workshop,results:deleteResult(chatSnapshot.workshop.results,id)}));},
-    memory:()=>onMemory?.(),time:()=>onTime?.(),settings:()=>onSettings?.(),close:()=>onClose?.(),
+    memory:()=>onMemory?.(),time:()=>onTime?.(),benmo:()=>onBenmo?.(),settings:()=>onSettings?.(),close:()=>onClose?.(),
     dispose(){disposed=true;enabledIntents.clear();},isBusy:()=>busy>0,
   };
 }

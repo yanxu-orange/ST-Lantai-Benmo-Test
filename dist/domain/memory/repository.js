@@ -1,3 +1,8 @@
+import {trackingOf,assertTracking} from '../tracking/data.js';
+import {latestOf,assertLatest,assertLatestPreferences,assertLatestRecord} from '../latest/data.js';
+import {storedLatestSource} from '../latest/source.js';
+import {affectedSummaryDeletion} from '../summary/source-deletion.js';
+import {rebaseSummaryPositions} from '../summary/source-positions.js';
 import {assertChatControls,defaultChatControls} from '../controls/model.js';
 import {workshopOf,assertWorkshop} from '../workshop/model.js';
 import {timeOf,assertTime} from '../time/data.js';
@@ -45,6 +50,7 @@ export function mergeParticipants(events) {
 }
 export function createRepository(adapter, now = () => new Date().toISOString()) {
   let queue = Promise.resolve();
+  const sourceDeletionReceipts=new Map();
   const requireTarget = target => { if (!sameTarget(target, adapter.captureTarget())) throw new Error('聊天目标已变化，请返回列表重新进入'); };
   const enqueue = action => { const work = queue.then(action); queue = work.catch(() => {}); return work; };
   const read = async target => { requireTarget(target); const root = assertRoot(await adapter.read(target), target); requireTarget(target); return root; };
@@ -99,7 +105,55 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     }else if(options.pendingId!==undefined)throw new Error('古法待审核已变化');
     const next={...domain};delete next.pending;return next;
   };
+  const latestMutation=(target,selection,options,change)=>{
+    const frozen=copy(target),snapshot=copy(selection);
+    const guard=root=>{requireTarget(frozen);if((options.isCurrent??(()=>true))()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(latestOf(root),snapshot.latest))throw new Error('最新摘要来源或配置已变化');return true;};
+    return enqueue(async()=>{
+      const root=await read(frozen);guard(root);const current=latestOf(root),candidate=assertLatest(change(copy(current))),nextLatest={...candidate,revision:current.revision};
+      if(!options.forceSave&&equal(current,nextLatest))return {status:'unchanged',root,selection:freeze({target:frozen,latest:current})};
+      nextLatest.revision++;
+      const saved=await commit(frozen,root,{...root,revision:root.revision+1,latest:nextLatest},guard,{workshopProof:options.workshopProof,requireConfirmation:options.requireConfirmation??false});
+      return {status:'committed',root:saved,selection:freeze({target:frozen,latest:latestOf(saved)})};
+    });
+  };
   return {
+    async captureTracking(target){const frozen=copy(target);return freeze({target:frozen,tracking:trackingOf(await read(frozen))});},
+    updateTracking(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
+      const frozen=copy(target),snapshot=copy(selection),candidate=assertTracking(value);
+      const guard=root=>{requireTarget(frozen);if(!isCurrent()||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(trackingOf(root),snapshot.tracking))throw new Error('追踪来源或资料已变化');return true;};
+      return enqueue(async()=>{
+        const root=await read(frozen);guard(root);const current=trackingOf(root),next={...candidate,revision:current.revision};
+        if(equal(current,next))return {status:'unchanged',root,selection:freeze({target:frozen,tracking:current})};
+        next.revision++;
+        const saved=await commit(frozen,root,{...root,revision:root.revision+1,tracking:next},guard,{requireConfirmation});
+        return {status:'committed',root:saved,selection:freeze({target:frozen,tracking:trackingOf(saved)})};
+      });
+    },
+    async captureLatest(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,latest:latestOf(root)});},
+    matchesLatest(target,selection){try{requireTarget(target);const current=assertRoot(adapter.peekConfirmed(target),target);return !!selection&&sameTarget(target,selection.target)&&equal(latestOf(current),selection.latest);}catch{return false;}},
+    updateLatest(target,selection,value,options={}){const candidate=assertLatest(value);return latestMutation(target,selection,options,()=>candidate);},
+    updateLatestPreferences(target,selectionOrPatch,patchOrOptions={},options={}){
+      const selected=selectionOrPatch?.latest!==undefined,patch=selected?patchOrOptions:selectionOrPatch,opts=selected?options:patchOrOptions,draft=copy(patch);
+      if(!draft||Object.getPrototypeOf(draft)!==Object.prototype||Object.keys(draft).some(key=>!['enabled','recentFloors','prompt'].includes(key)))throw new Error('最新摘要设置无效');
+      const apply=selection=>latestMutation(target,selection,opts,domain=>{if(opts.expectedLatestRevision!==undefined&&domain.revision!==opts.expectedLatestRevision)throw new Error('最新摘要设置已变化');return {...domain,preferences:assertLatestPreferences({...domain.preferences,...draft})};});
+      if(selected)return apply(selectionOrPatch);
+      const frozen=copy(target);return read(frozen).then(root=>apply(freeze({target:frozen,latest:latestOf(root)})));
+    },
+    upsertLatestRecord(target,selection,record,options={}){
+      const draft=assertLatestRecord({...copy(record),sourceSnapshot:storedLatestSource(record.sourceSnapshot)});return latestMutation(target,selection,options,domain=>{
+        const previous=domain.records.find(item=>item.sourceSnapshot.replyId===draft.sourceSnapshot.replyId);
+        if(domain.records.some(item=>item.id===draft.id&&item.id!==previous?.id))throw new Error('最新摘要记录身份已占用');
+        const timestamp=now(),next={...draft,id:previous?.id??draft.id,createdAt:previous?.createdAt??timestamp,updatedAt:timestamp};
+        return {...domain,records:previous?domain.records.map(item=>item.id===previous.id?next:item):[...domain.records,next]};
+      });
+    },
+    editLatestRecord(target,selection,id,body,options={}){
+      if(typeof body!=='string'||!body.trim())throw new Error('最新摘要正文不能为空');
+      return latestMutation(target,selection,options,domain=>{if(!domain.records.some(item=>item.id===id))throw new Error('最新摘要记录已变化');return {...domain,records:domain.records.map(item=>item.id===id?{...item,body,edited:true,updatedAt:now()}:item)};});
+    },
+    removeLatestRecords(target,selection,ids,options={}){
+      const selected=selectedIds(ids,true);return latestMutation(target,selection,options,domain=>{if([...selected].some(id=>!domain.records.some(item=>item.id===id)))throw new Error('最新摘要记录已变化');return {...domain,records:domain.records.filter(item=>!selected.has(item.id))};});
+    },
     async captureControls(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,controls:root.controls??defaultChatControls()});},
     updateControls(target,selection,value,{isCurrent=()=>true}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertChatControls(value);
@@ -258,6 +312,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         const created=batchEvents(root,candidates,previous.id,previous.actualRange),summary=summaryOf(root);
         const record=assertBatch({...draft,id:previous.id,ordinal:previous.ordinal,sourceType:previous.sourceType,eventIds:created.map(event=>event.id),createdAt:previous.createdAt,completedAt:now(),generatedCandidates:assertGeneratedEvidence(draft.generatedCandidates)});
         const nextSummary={...consumePending(summary,options,draft,candidates),revision:summary.revision+1,batches:summary.batches.map(item=>item.id===previous.id?record:item)};
+        if(nextSummary.sourcePositions){nextSummary.sourcePositions={...nextSummary.sourcePositions};delete nextSummary.sourcePositions[previous.id];if(!Object.keys(nextSummary.sourcePositions).length)delete nextSummary.sourcePositions;}
         return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,events:[...root.events.filter(event=>!previous.eventIds.includes(event.id)),...created],summary:nextSummary},summaryGuard(frozen,snapshot,options)),batch:copy(record),events:copy(created)};
       });
     },
@@ -284,6 +339,55 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         const updatedAt = now();
         const next = { ...root, revision: root.revision + 1, events: root.events.map(event => selected.has(event.id) && event.mode !== mode ? { ...event, mode, updatedAt } : event) };
         return { root: await commit(frozenTarget, root, next), changed };
+      });
+    },
+    reconcileSummarySourceDeletion(target,deletions,{isCurrent=()=>true}={}) {
+      const frozen=copy(target),evidence=copy(deletions),key=JSON.stringify([frozen,evidence.map(item=>[item.before.epoch,item.after.epoch,item.removedFloors])]);
+      return enqueue(async()=>{
+        const recovery=sourceDeletionReceipts.get(key);
+        if(recovery){
+          if(recovery.superseded)throw new Error('该来源删除操作已处理');
+          const current=await read(frozen);
+          if(!isCurrent())throw new Error('聊天目标已变化');
+          if(equal(current.events,recovery.events)&&equal(summaryOf(current),recovery.nextSummary))return recovery.proposal;
+          if(!equal(current.events,recovery.events)||!equal(summaryOf(current),recovery.previousSummary))throw new Error('来源定位保存后数据已变化，请重新查看记忆');
+        }
+        const root=await read(frozen),normal=new Map(),merged=new Map(),batchIds=new Set(),unresolved=new Set();let next=root;
+        for(const deletion of evidence){
+          const affected=affectedSummaryDeletion(next,deletion);
+          for(const kind of ['normal','merged'])for(const event of affected[kind])(kind==='normal'?normal:merged).set(event.id,event);
+          affected.batchIds.forEach(id=>batchIds.add(id));affected.unresolved.forEach(id=>unresolved.add(id));
+          next=rebaseSummaryPositions(next,deletion);
+        }
+        const guard=current=>{if(!isCurrent()||!equal(summaryOf(current),summaryOf(root))||!equal(current.events,root.events))throw new Error('来源删除期间记忆已变化，请重新查看');return true;};
+        guard(root);
+        const candidate=equal(next,root)?root:{...next,revision:root.revision+1,summary:{...summaryOf(next),revision:summaryOf(root).revision+1}};
+        const proposal=freeze({target:frozen,normal:[...normal.values()],merged:[...merged.values()],batchIds:[...batchIds],batchCount:batchIds.size,unresolved:[...unresolved],summary:summaryOf(candidate),events:copy(candidate.events),deletedMergeIds:copy(candidate.deletedMergeIds??[])});
+        for(const oldKey of sourceDeletionReceipts.keys())if(oldKey!==key)sourceDeletionReceipts.set(oldKey,{superseded:true});
+        sourceDeletionReceipts.set(key,{previousSummary:summaryOf(root),nextSummary:summaryOf(candidate),events:copy(root.events),proposal});
+        if(candidate!==root)await commit(frozen,root,candidate,guard);
+        return proposal;
+      });
+    },
+    async refreshSummarySourceDeletion(target,proposal) {
+      const frozen=copy(target),snapshot=copy(proposal);if(!sameTarget(frozen,snapshot.target))throw new Error('聊天目标已变化');
+      const root=await read(frozen),rows=kind=>snapshot[kind].flatMap(previous=>{const event=root.events.find(item=>item.id===previous.id&&!item.supersededBy);return event&&!!event.mergedFrom===(kind==='merged')?[copy(event)]:[];});
+      return freeze({...snapshot,normal:rows('normal'),merged:rows('merged'),summary:summaryOf(root),events:copy(root.events),deletedMergeIds:copy(root.deletedMergeIds??[])});
+    },
+    removeSummarySourceSelection(target,proposal,selection,{isCurrent=()=>true}={}) {
+      const frozen=copy(target),snapshot=copy(proposal),choice=copy(selection);
+      if(!choice||typeof choice.normal!=='boolean'||typeof choice.merged!=='boolean')throw new Error('请选择要删除的记忆类别');
+      const ids=[...(choice.normal?snapshot.normal:[]),...(choice.merged?snapshot.merged:[])].map(event=>event.id),selected=selectedIds(ids,true);
+      const guard=root=>{
+        if(!isCurrent()||!sameTarget(frozen,snapshot.target)||!equal(root.events,snapshot.events)||!equal(summaryOf(root),snapshot.summary)||!equal(root.deletedMergeIds??[],snapshot.deletedMergeIds))throw new Error('记忆或批次已变化，未执行删除，请重新查看');
+        select(root,[...selected]);return true;
+      };
+      return enqueue(async()=>{
+        const root=await read(frozen);guard(root);
+        const deleted=select(root,[...selected]).filter(event=>event.mergedFrom).map(event=>event.id);
+        const next={...root,revision:root.revision+1,events:root.events.filter(event=>!selected.has(event.id))};
+        if(deleted.length)next.deletedMergeIds=[...(root.deletedMergeIds??[]),...deleted];
+        return {status:'committed',root:await commit(frozen,root,next,guard),removed:selected.size};
       });
     },
     removeMany(target, ids) {

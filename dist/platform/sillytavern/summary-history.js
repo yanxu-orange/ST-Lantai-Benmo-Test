@@ -1,6 +1,7 @@
 import {sameTarget} from '../../domain/memory/repository.js';
 import {matchesStoredSummarySource} from '../../domain/summary/source.js';
 import {summaryOf} from '../../domain/summary/data.js';
+import {positionedSummarySnapshot} from '../../domain/summary/source-positions.js';
 
 // ST rewrites mes and supplies a filtered index. Neither is a source identity.
 export function mapSummaryPromptFloors(prompt,original) {
@@ -30,10 +31,12 @@ export function filterSummaryPromptCopy({prompt,original,root,raw,replacementEve
   if(!(replacementEventIds instanceof Set)||!replacementEventIds.size)return retained('no-replacement-consumer');
   const mapping=mapSummaryPromptFloors(prompt,original);if(!mapping)return retained('source-mapping-unavailable');
   const floors=new Set();
-  for(const batch of summaryOf(root).batches) {
+  const summary=summaryOf(root);
+  for(const batch of summary.batches) {
     const members=root.events.filter(event=>batch.eventIds.includes(event.id)&&!event.supersededBy);
-    if(!batch.hideOriginal||!members.length||members.length!==batch.eventIds.length||members.some(event=>!replacementEventIds.has(event.id))||!matchesStoredSummarySource(batch.sourceSnapshot,raw))continue;
-    for(const message of batch.sourceSnapshot.sentFloors)floors.add(message.floor);
+    const source=positionedSummarySnapshot(batch,summary);
+    if(!batch.hideOriginal||!members.length||members.length!==batch.eventIds.length||members.some(event=>!replacementEventIds.has(event.id))||!source||!matchesStoredSummarySource(source,raw))continue;
+    for(const message of source.sentFloors)floors.add(message.floor);
   }
   const filtered=prompt.filter((_,index)=>!floors.has(mapping[index]));
   return {status:filtered.length===prompt.length?'retained':'filtered',reason:filtered.length===prompt.length?'no-qualified-batch':null,prompt:filtered,removed:prompt.length-filtered.length};

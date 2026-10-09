@@ -16,6 +16,7 @@ export const BASE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../recall-view.css'),
   entry('shared','../time-view.css'),
   entry('shared','../workshop-view.css'),
+  entry('shared','../benmo-view.css'),
   entry('shared','../../platform/sillytavern/memory-host.css'),
 ]);
 // Separate opt-in sheet: the host retains its cache and all/not-all media switch.

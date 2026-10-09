@@ -75,7 +75,7 @@ export function assertBatch(batch) {
   return copy(batch);
 }
 export function assertSummary(summary,events=[]) {
-  exact(summary,['schema','revision','preferences','excludedFloors','batches','progress',...(Object.hasOwn(summary,'pending')?['pending']:[])]);
+  exact(summary,['schema','revision','preferences','excludedFloors','batches','progress',...(Object.hasOwn(summary,'pending')?['pending']:[]),...(Object.hasOwn(summary,'sourcePositions')?['sourcePositions']:[])]);
   if(summary.schema!==1||!integer(summary.revision)||!Array.isArray(summary.batches))throw new Error('总结版本无效');
   const preferences=assertSummaryPreferences(summary.preferences);assertExcludedFloors(summary.excludedFloors);
   exact(summary.progress,['startFloor','lastProcessedFloor','nextBatchOrdinal']);
@@ -83,8 +83,24 @@ export function assertSummary(summary,events=[]) {
   const ids=new Set(),tasks=new Set(),ordinals=new Set(),members=new Set();
   for(const batch of summary.batches){assertBatch(batch);if(ids.has(batch.id)||tasks.has(batch.taskId)||ordinals.has(batch.ordinal)||batch.ordinal>=summary.progress.nextBatchOrdinal)throw new Error('批历史身份重复或游标无效');ids.add(batch.id);tasks.add(batch.taskId);ordinals.add(batch.ordinal);for(const id of batch.eventIds){if(members.has(id))throw new Error('批成员归属重复');members.add(id);const event=events.find(item=>item.id===id);if(event&&(event.batch?.id!==batch.id||JSON.stringify(event.batch.sources)!==JSON.stringify([batch.actualRange])))throw new Error('切片与独立批归属不符');}}
   for(const event of events){if(ids.has(event.batch?.id)&&!summary.batches.find(batch=>batch.id===event.batch.id).eventIds.includes(event.id))throw new Error('批成员不在正式历史中');}
+  if(Object.hasOwn(summary,'sourcePositions'))assertSummarySourcePositions(summary.sourcePositions,summary.batches);
   if(Object.hasOwn(summary,'pending')&&summary.pending!==null){const pending=assertSummaryPending(summary.pending);if(ids.has(pending.batchId)||tasks.has(pending.id)||pending.events.some(candidate=>events.some(event=>event.id===candidate.id)))throw new Error('待审核与正式身份冲突');}
   return {...copy(summary),preferences};
+}
+export function assertSummarySourcePositions(value,batches) {
+  if(!value||Object.getPrototypeOf(value)!==Object.prototype)throw new Error('总结来源位置无效');
+  for(const [id,positions] of Object.entries(value)){
+    const batch=batches.find(item=>item.id===id);
+    if(!batch||!Array.isArray(positions)||positions.length!==batch.sourceSnapshot.rawMessages.length)throw new Error('总结来源位置归属无效');
+    let previous=-1;
+    for(let index=0;index<positions.length;index++){
+      const position=positions[index];if(position===null)continue;
+      exact(position,['floor','identity']);
+      if(!integer(position.floor)||position.floor<=previous||position.floor>batch.sourceSnapshot.rawMessages[index].floor||!text(position.identity))throw new Error('总结来源位置证据无效');
+      previous=position.floor;
+    }
+  }
+  return copy(value);
 }
 export function summaryOf(root) { return root.summary===undefined?emptySummary():assertSummary(root.summary,root.events); }
 export function projectSummaryBatches(root) {

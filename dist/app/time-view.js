@@ -122,6 +122,7 @@ export function mountTimeView({container,controller,availability=()=>({memory:tr
   else if(action==='confirm-navigation')controller.confirm();else if(action==='cancel-navigation')controller.cancelConfirm();else if(action==='reset-item'){deleteConfirm='reset';render();}
   else if(action==='delete'){deleteConfirm=true;render();}else if(action==='cancel-delete'){deleteConfirm=false;render();}else if(action==='confirm-delete'){const reset=deleteConfirm==='reset';deleteConfirm=false;void (reset?controller.resetItem():controller.remove());}
   else if(action==='workshop')return controller.workshop();
+  else if(action==='benmo')return controller.benmo();
   else if(action==='memory')controller.memory();else if(action==='settings')controller.settings();else if(action==='close')controller.close();
  }
  function keyboard(event){const dialog=container.querySelector('[role=dialog]');if(!dialog)return;

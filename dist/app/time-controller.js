@@ -11,7 +11,7 @@ import {defaultTimeReminders} from '../shared/settings/time-reminders.js';
 import {createLatestSettingsWrite} from './latest-settings-write.js';
 const copy=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const names={schedule:'日程',anniversary:'纪念日',holiday:'节日'};
-export function createTimeController({repository,settings,dateRuntime,captureSource,matchesSource,onMemory=()=>{},onSettings=()=>{},onWorkshop=()=>{},onClose=()=>{},id=()=>globalThis.crypto.randomUUID()}={}){
+export function createTimeController({repository,settings,dateRuntime,captureSource,matchesSource,onMemory=()=>{},onSettings=()=>{},onWorkshop=()=>{},onBenmo=()=>{},onClose=()=>{},id=()=>globalThis.crypto.randomUUID()}={}){
  let disposed=false,ticket=0,target=null,baseline=null,config=null,writer=null,visible=true,navigation=0,refreshTicket=0,previewSerial=0,quickJob=null;
  const listeners=new Set(),stack=[];let pendingNavigation=null;
  let state={route:'home',status:'loading',time:null,reminders:null,draft:null,cursor:null,filter:'all',query:'',error:'',recognitionResult:false,saved:0,saving:false,scroll:{},opened:{},pendingCalendar:null,editorOriginal:null,editorTime:null,draftBaseline:null,confirm:null};
@@ -151,6 +151,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   filter(value){state.filter=value;notify();},query(value){state.query=value;notify();},setScroll(route,value){state.scroll[route]=value;},setOpen(key,value){state.opened[key]=value;},
   memory(){if(!requestDiscard(onMemory))onMemory();},settings(){if(!requestDiscard(onSettings))onSettings();},close(){if(!requestDiscard(onClose))onClose();},suspend(){visible=false;},resume(){visible=true;notify();},
   workshop(){if(!requestDiscard(onWorkshop))onWorkshop();},
+  benmo(){if(!requestDiscard(onBenmo))onBenmo();},
   dispose(){disposed=true;ticket++;resetWriter();unsubscribeDate?.();listeners.clear();}
  };
 }

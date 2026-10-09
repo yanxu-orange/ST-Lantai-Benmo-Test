@@ -1,0 +1,80 @@
+/* TASK-037 approved Benmo layout. Shared controls, typography and themes remain
+   authoritative; the approved page geometry is confined to this surface. */
+/* Every grid track between the viewport and main must be shrinkable. A mount
+   with an auto track otherwise gives a long form its intrinsic page height. */
+.benmo-mount{width:100%;height:100%;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);place-items:center}
+.benmo{width:min(100%,740px);height:100%;max-height:min(100%,940px);min-height:0;min-width:0;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden;--ui-interaction-target-min:44px}
+.benmo .lt-main{min-height:0;min-width:0;overflow:auto;padding:16px;gap:16px;scrollbar-gutter:auto}
+.benmo .lt-main>*{flex-shrink:0}
+.benmo .lt-root-top{min-height:62px;gap:10px}
+.benmo .lt-root-top .ui-page-title{margin-right:auto}
+.benmo .lt-header nav{width:100%;margin:0}
+.benmo .lt-header nav .lt-type{min-height:46px}
+.benmo .subtabs{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:4px;background:var(--ui-color-surface-subtle);padding:4px;border:1px solid var(--ui-color-border-subtle);border-radius:var(--ui-shape-control-radius);position:sticky;top:-16px;z-index:3}
+/* These are the approved local text-entry and category roles, rather than
+   generic graphic buttons. Theme sheets can load later without replacing them. */
+.benmo .benmo-category,.benmo .benmo-text-entry{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;box-sizing:border-box;font-family:var(--ui-type-ui-family);font-weight:var(--ui-type-ui-control-weight);line-height:var(--ui-type-ui-control-line);border-radius:var(--ui-shape-control-radius);box-shadow:none;cursor:pointer}
+.benmo .benmo-category{min-width:0;padding:6px 2px;white-space:nowrap;font-size:13px;border:var(--ui-border-default-width) solid transparent;background:transparent;color:var(--ui-color-text-secondary)}
+.benmo .benmo-category[aria-current=page]{background:var(--ui-color-selected-background);color:var(--ui-color-selected-text);border-color:var(--ui-color-selected-border)}
+.benmo .benmo-text-entry{flex:none;padding:4px 8px;border:0;background:transparent;font-size:13px;font-weight:400;color:var(--ui-color-action-tertiary-text);white-space:nowrap}
+.benmo .benmo-text-entry:hover{text-decoration:underline;text-underline-offset:3px}
+.benmo .benmo-category:focus-visible,.benmo .benmo-text-entry:focus-visible{outline:max(var(--ui-focus-ring-width),var(--ui-interaction-focus-width-min)) solid var(--ui-color-focus-ring);outline-offset:var(--ui-focus-ring-offset)}
+@media(forced-colors:active){.benmo .benmo-category[aria-current=page]{border-color:Highlight;color:Highlight}.benmo .benmo-text-entry{color:LinkText}}
+.benmo .lt-footer{padding:8px 12px max(8px,env(safe-area-inset-bottom))}
+.benmo .lt-footer nav{gap:4px}
+.benmo .lt-footer button{min-width:0;white-space:nowrap;padding:6px 3px;font-size:14px}
+.benmo .row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.benmo .actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.benmo .section{display:grid;gap:12px;min-width:0}
+.benmo .section h2,.benmo .record h2{margin:0;font-size:15px;font-weight:500}
+.benmo .card{padding:14px;background:var(--ui-color-surface-base);border:1px solid var(--ui-color-border-subtle);border-radius:var(--ui-shape-surface-radius);display:grid;gap:12px;min-width:0}
+.benmo .reading{font:var(--ui-type-reading-body-size)/1.85 var(--ui-type-reading-family);white-space:pre-wrap;overflow-wrap:anywhere}
+.benmo .meta{font-size:12px;line-height:1.65;color:var(--ui-color-text-meta)}
+.benmo p{margin:0}
+.benmo .record{display:grid;gap:7px;padding:12px 14px;border:1px solid var(--ui-color-border-subtle);border-radius:var(--ui-shape-surface-radius);background:var(--ui-color-surface-base)}
+.benmo .record-open{display:flex;justify-content:space-between;align-items:center;text-align:left;width:100%;border:0;background:none;padding:0;color:inherit;min-height:44px;font:inherit;gap:8px;cursor:pointer}
+.benmo .record-open strong{font-weight:500;overflow-wrap:anywhere;min-width:0}
+.benmo .record-open>.meta{flex:none}
+.benmo .record p{font-size:13px;line-height:1.65;overflow-wrap:anywhere}
+.benmo .keywords{display:flex;gap:5px;flex-wrap:wrap}
+.benmo .tag{padding:2px 6px;background:var(--ui-color-surface-subtle);border-radius:3px;font-size:11px;color:var(--ui-color-text-meta);overflow-wrap:anywhere}
+.benmo .record.selected{border-color:var(--ui-color-border-strong)}
+.benmo .ui-field{display:grid;gap:6px;min-width:0}
+.benmo input,.benmo textarea{width:100%;min-width:0}
+.benmo textarea{min-height:90px;font-size:16px}
+.benmo input{font-size:16px}
+.benmo .empty{padding:20px 0;display:grid;gap:12px}
+.benmo .detail-heading{justify-content:start}
+.benmo .detail-heading h2{font-size:16px;margin:0}
+.benmo dl{margin:0;display:grid;gap:16px}
+.benmo dt{font-size:12px;color:var(--ui-color-text-meta);margin-bottom:4px}
+.benmo dd{margin:0;font-size:14px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
+.benmo .form-actions{display:flex;gap:8px;position:sticky;bottom:-16px;padding:12px 0;background:var(--ui-color-workspace);z-index:2}
+.benmo .form-actions button{flex:1}
+.benmo .future{margin-top:8px;border-top:1px solid var(--ui-color-border-default);padding-top:20px}
+.benmo .future h2{font-size:16px}
+.benmo .two-cols{display:grid;gap:14px}
+.benmo .ui-button{min-height:44px}
+.benmo .compact-actions .ui-button{font-size:12px;padding-inline:8px}
+.benmo .summary-collapsed{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.benmo .subpage-header{display:flex!important;align-items:center;justify-content:space-between;gap:8px;padding:6px 12px;min-height:62px;isolation:isolate}
+.benmo .subpage-header .ui-page-title{flex:1;min-width:0;text-align:center;line-height:1.5;font-size:16px}
+.benmo .subpage-header button{position:relative;z-index:2;flex:none;min-width:44px}
+.benmo .pending-strip{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:0;border:0}
+.benmo .pending-strip .meta{flex:1;min-width:0;font-size:13px;line-height:1.5}
+.benmo .pending-separator{padding-inline:3px}
+.benmo .pending-row-title{display:grid;gap:2px;min-width:0}
+.benmo .summary-origin{font-size:12px;color:var(--ui-color-text-meta)}
+.benmo .detail-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:16px;padding:4px 0 12px;position:static}
+.benmo .detail-actions [data-action=delete-record]{color:var(--ui-color-danger-text);background:transparent;border-color:transparent;box-shadow:none}
+.benmo .custom-field-row{display:grid;gap:12px;padding:0 0 16px;border-bottom:1px solid var(--ui-color-border-subtle)}
+.benmo .custom-field-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:12px}
+.benmo .custom-field-heading [data-action=remove-field]{font-size:12px;color:var(--ui-color-text-meta);background:transparent;border-color:transparent;box-shadow:none;min-width:44px}
+.benmo [data-action=add-field]{justify-self:start}
+.benmo .summary-toolbar{display:grid;gap:0;padding:0;margin:0}
+.benmo .summary-toolbar-main{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+.benmo .summary-toolbar .pending-strip{margin:0;padding:0}
+.benmo .lt-mode input[type=radio]{width:auto;min-width:0}
+.benmo .lt-modes{padding-block:4px}
+@media(min-width:650px){.benmo .lt-main{padding:24px}.benmo .subtabs{top:-24px}.benmo .two-cols{grid-template-columns:1fr 1fr}.benmo .form-actions{bottom:-24px}.benmo .lt-root-top{min-height:80px}}
+@media(max-width:360px){.benmo .lt-main{padding:12px}.benmo .subtabs{top:-12px}.benmo .subtabs button{font-size:12px}.benmo .form-actions{bottom:-12px}}

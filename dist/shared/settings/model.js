@@ -1,4 +1,4 @@
-import {assertControls} from '../../domain/controls/model.js';
+import {normalizeControls} from '../../domain/controls/model.js';
 import {assertWorkshop} from '../../domain/workshop/model.js';
 import {validateTimeReminders} from './time-reminders.js';
 import { createDefaultEventWords } from './default-event-words.js';
@@ -144,7 +144,7 @@ export function assertSettings(value) {
     ai(value.ai); const eventGeneration = generation(value.eventGeneration);
     if(!hasRecall&&(value.domainRevisions.recall??0)!==0)invalid();
     const migrated = { ...value, schema: 2, credentials: legacy ? [] : value.credentials, eventGeneration,domainRevisions:{...value.domainRevisions,recall:value.domainRevisions.recall??0},recall:hasRecall?assertRecallSettings(value.recall):defaultRecallSettings() };
-    if(hasControls)migrated.controls=assertControls(value.controls);
+    if(hasControls)migrated.controls=normalizeControls(value.controls);
     if(hasWorkshop)migrated.workshop=assertWorkshop(value.workshop);
     if(hasTime)migrated.timeReminders=assertTimeReminders(value.timeReminders);
     if(hasCumulative)migrated.cumulativeGeneration=assertCumulativeGeneration(value.cumulativeGeneration);

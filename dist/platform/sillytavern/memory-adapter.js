@@ -1,3 +1,6 @@
+import {emptyTracking} from '../../domain/tracking/data.js';
+import {emptyLatest} from '../../domain/latest/data.js';
+import {locateDeletedMessages} from '../../domain/summary/source-deletion.js';
 import {emptySummary} from '../../domain/summary/data.js';
 import {emptyCumulative} from '../../domain/cumulative/data.js';
 import {emptyWorkshop} from '../../domain/workshop/model.js';
@@ -18,11 +21,13 @@ const unconfirmed = () => Object.assign(new Error('保存结果尚未确认，�
 // known configuration fields are excluded here: results, memory and unknown
 // extensions remain protected even when a write also changes configuration.
 function protectedContent(root) {
-  const { revision, controls, time, workshop, summary, cumulative, ...content } = root;
+  const { revision, controls, time, workshop, summary, cumulative, latest, tracking, ...content } = root;
   const { revision: workshopRevision, modules, imports, captureCounters, ...results } = workshop ?? emptyWorkshop();
   const { revision: summaryRevision, preferences: summaryPreferences, ...summaryMemory } = summary ?? emptySummary();
   const { revision: cumulativeRevision, preferences: cumulativePreferences, ...cumulativeMemory } = cumulative ?? emptyCumulative();
-  return { ...content, workshop: results, summary: summaryMemory, cumulative: cumulativeMemory };
+  const {revision:latestRevision,preferences:latestPreferences,...latestMemory}=latest??emptyLatest();
+  const {revision:trackingRevision,preferences:trackingPreferences,...trackingMemory}=tracking??emptyTracking();
+  return { ...content, workshop: results, summary: summaryMemory, cumulative: cumulativeMemory, latest:latestMemory,tracking:trackingMemory };
 }
 // 1.18/1.19 saveMetadata swallows transport failures. Memory-result commits
 // still require a server readback of this exact chat.
@@ -36,6 +41,8 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
   let activeSnapshot = null;
   let sourceEpoch=0,sourceSerial=0;
   const messageIds=new WeakMap(),sourceVersions=new Map();
+  const deletionListeners=new Set();
+  let deletionBaseline=null,deletionSerial=0,regenerationRemoval=null;
   function messageIdentity(message,floor){
     if(!messageIds.has(message))messageIds.set(message,`message-${++sourceSerial}`);
     return messageIds.get(message);
@@ -44,7 +51,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;
     if(Number.isSafeInteger(floor)&&floor>=0)sourceVersions.set(floor,(sourceVersions.get(floor)??0)+1);
     else sourceEpoch++;
-    snapshotMessages();
+    snapshotMessages();refreshDeletionBaseline();
   }
   function binding(context = getContext()) {
     const name = context?.getCurrentChatId?.() ?? context?.chatId;
@@ -71,6 +78,34 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       activeSnapshot = { binding: current, rootId: context.chatMetadata[MEMORY_KEY]?.rootId,
         messages: context.chat.map((message, floor) => ({ message, floor })) };
     } catch { activeSnapshot = null; }
+  }
+  function refreshDeletionBaseline(force=false) {
+    try {
+      const current=binding(),messages=getContext().chat;
+      // Render/save callbacks can happen after splice but before MESSAGE_DELETED.
+      // Never erase the pre-delete evidence in that gap.
+      if(!force&&deletionBaseline&&sameBinding(current,deletionBaseline.binding)&&messages.length<deletionBaseline.objects.length)return;
+      deletionBaseline={binding:current,objects:[...messages],sourceEpoch};
+    } catch {deletionBaseline=null;}
+  }
+  function deletedMessages() {
+    const previous=deletionBaseline;
+    sourceEpoch++;sourceVersions.clear();
+    let evidence=null,target=null,error=null;
+    try {
+      const current=binding(),objects=getContext().chat;
+      if(previous&&sameBinding(previous.binding,current)&&objects.length<previous.objects.length){
+        const difference=locateDeletedMessages(previous.objects,objects);
+        const regeneratedTail=difference?.removedFloors.length===1&&difference.removedFloors[0]===previous.objects.length-1&&previous.objects.at(-1)===regenerationRemoval;
+        if(regeneratedTail){regenerationRemoval=null;}
+        else if(!difference)error='来源删除位置无法可靠确认，记忆已保留';
+        else {
+          try{target=captureTarget();}catch{const raw=getContext().chatMetadata[MEMORY_KEY];if(!raw)throw stale();assertRoot(raw,{rootId:raw.rootId});const observedBinding=observe();if(!sameBinding(raw.binding,observedBinding))throw stale();target=targetFor(raw,observedBinding);}
+          evidence={...difference,before:{epoch:previous.sourceEpoch,messages:chatSourceMessages(false,previous.objects)},after:{epoch:sourceEpoch,messages:chatSourceMessages()}};}
+      }
+    } catch { /* An unprepared or changed chat has no authority to mutate. */ }
+    snapshotMessages();refreshDeletionBaseline(true);
+    if(evidence||error)for(const listener of deletionListeners)listener({id:++deletionSerial,target,deletion:evidence,error});
   }
   function captureBranchPoint() {
     try {
@@ -333,7 +368,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     captureBranchPoint(); epoch++;sourceEpoch++;sourceVersions.clear();
     if (unchanged) observed = identity(binding());
     else { observed = null; prepared = null; }
-    snapshotMessages(); notify(unchanged ? 'reload' : 'changed');
+    regenerationRemoval=null;refreshDeletionBaseline(true);snapshotMessages(); notify(unchanged ? 'reload' : 'changed');
   });
   on('CHAT_RENAMED', data => {
     let origin;
@@ -347,15 +382,17 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     });
   });
   for (const name of ['MESSAGE_SENT', 'MESSAGE_RECEIVED', 'MESSAGE_DELETED', 'MESSAGE_EDITED', 'MESSAGE_UPDATED', 'MESSAGE_SWIPED', 'USER_MESSAGE_RENDERED', 'CHARACTER_MESSAGE_RENDERED']) {
-    if (context.eventTypes[name]) on(name, ['MESSAGE_DELETED','MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED'].includes(name)?sourceChanged:snapshotMessages);
+    if (context.eventTypes[name]) on(name, name==='MESSAGE_DELETED'?deletedMessages:['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED'].includes(name)?sourceChanged:()=>{snapshotMessages();refreshDeletionBaseline();});
   }
+  if(context.eventTypes.GENERATION_STARTED)on('GENERATION_STARTED',(type,_options,dryRun)=>{const tail=getContext()?.chat?.at(-1);regenerationRemoval=type==='regenerate'&&dryRun!==true&&tail?.is_user===false?tail:null;});
+  for(const name of ['GENERATION_ENDED','GENERATION_STOPPED'])if(context.eventTypes[name])on(name,()=>{regenerationRemoval=null;refreshDeletionBaseline(true);});
   function sourceRole(message,includeHidden=false){
     // Native visibility is not story chronology. TIME retains the original
     // speaker for hidden narrative messages, while summary keeps its old filter.
     return (includeHidden||message.is_system!==true)&&typeof message.is_user==='boolean'&&!message.extra?.type&&!message.extra?.tool_invocations&&(!includeHidden||message.role!=='system'&&message.role!=='tool')?(message.is_user?'user':'assistant'):'system';
   }
-  function chatSourceMessages(includeHidden=false){
-    return getContext().chat.map((message,floor)=>{
+  function chatSourceMessages(includeHidden=false,messages=getContext().chat){
+    return messages.map((message,floor)=>{
         if(!message||typeof message.mes!=='string')throw new Error('总结原始消息不可用');
         const role=sourceRole(message,includeHidden);
         const date=message.send_date==null?null:String(message.send_date);
@@ -384,9 +421,10 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
         check(target);return matches;
       } catch {return false;}
    }
-  snapshotMessages();
+  snapshotMessages();refreshDeletionBaseline(true);
   return {
     prepare, captureTarget,
+    subscribeSourceDeletions(listener){deletionListeners.add(listener);return()=>deletionListeners.delete(listener);},
     hasTimeCalendar() {
       try {observe();const root=getContext().chatMetadata[MEMORY_KEY]??prepared;return !!root?.time?.activeCalendarId&&Array.isArray(root.time.calendars)&&root.time.calendars.some(item=>item.id===root.time.activeCalendarId);}catch{return false;}
     },
@@ -423,6 +461,6 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       return persist(target, candidate, guard, workshopProof);
     },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    dispose() { disposed = true; epoch++; prepared = null; listeners.clear(); for (const [type, handler] of subscriptions) (source.removeListener ?? source.off).call(source, type, handler); },
+    dispose() { disposed = true; epoch++; prepared = null; listeners.clear();deletionListeners.clear(); for (const [type, handler] of subscriptions) (source.removeListener ?? source.off).call(source, type, handler); },
   };
 }

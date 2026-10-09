@@ -178,6 +178,26 @@ export function createAiProvider({ getConfig, transport } = {}) {
     catch { throw new AiProviderError('configuration'); }
   }
   return Object.freeze({
+    async generateText({ task, messages, signal, isCurrent } = {}) {
+      if (typeof isCurrent !== 'function') throw new AiProviderError('request');
+      assertAiCurrent(signal, isCurrent);
+      const config = readConfig(), fingerprint = JSON.stringify(config);
+      const request = requestCopy({ task, messages });
+      const current = () => {
+        try { return isCurrent() === true && JSON.stringify(readConfig()) === fingerprint; }
+        catch { return false; }
+      };
+      try {
+        assertAiCurrent(signal, current);
+        const text = await transport.generate({ ...request, config, signal, isCurrent: current });
+        assertAiCurrent(signal, current);
+        if (typeof text !== 'string' || !text.trim()) throw new AiProviderError('empty_output');
+        return { text: text.trim(), provider: Object.freeze({ source: config.source }) };
+      } catch (error) {
+        assertAiCurrent(signal, current);
+        throw new AiProviderError(error instanceof AiProviderError ? error.code : 'transport');
+      }
+    },
     async generateJson({ task, messages, jsonSchema = null, signal, isCurrent, validate } = {}) {
       if (typeof validate !== 'function' || typeof isCurrent !== 'function') throw new AiProviderError('request');
       assertAiCurrent(signal, isCurrent);
