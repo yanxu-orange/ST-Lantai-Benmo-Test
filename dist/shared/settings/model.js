@@ -1,7 +1,7 @@
-import {assertTrackingPrompts} from '../../domain/tracking/prompts.js';
-import {normalizeControls} from '../../domain/controls/model.js';
-import {assertWorkshop} from '../../domain/workshop/model.js';
-import {validateTimeReminders} from './time-reminders.js';
+import {assertTrackingPrompts, DEFAULT_TRACKING_PROMPTS} from '../../domain/tracking/prompts.js';
+import {normalizeControls, assertControls, defaultControls} from '../../domain/controls/model.js';
+import {assertWorkshop, emptyWorkshop} from '../../domain/workshop/model.js';
+import {validateTimeReminders, defaultTimeReminders} from './time-reminders.js';
 import { createDefaultEventWords } from './default-event-words.js';
 import { SUMMARY_PROMPT_KEYS } from './summary-prompts.js';
 import { createDefaultCleaningRules, normalizeCleaningRule } from '../../domain/summary/cleaning.js';
@@ -127,23 +127,19 @@ export function assertTimeReminders(value){try{return frozenSettingsCopy(validat
 export function assertSettings(value) {
   try {
     const legacy = value?.schema === 1;
-    const hasTracking=Object.hasOwn(value??{},'trackingPrompts'),hasTrackingRevision=Object.hasOwn(value?.domainRevisions??{},'trackingPrompts');
-    if(hasTracking!==hasTrackingRevision)invalid();
-    const hasControls=Object.hasOwn(value??{},'controls'),hasControlsRevision=Object.hasOwn(value?.domainRevisions??{},'controls');
-    if(hasControls!==hasControlsRevision)invalid();
-    const hasRecall=Object.hasOwn(value??{},'recall'),hasRecallRevision=Object.hasOwn(value?.domainRevisions??{},'recall');
-    const hasCumulative=Object.hasOwn(value??{},'cumulativeGeneration'),hasCumulativeRevision=Object.hasOwn(value?.domainRevisions??{},'cumulativeGeneration');
-    const hasWorkshop=Object.hasOwn(value??{},'workshop'),hasWorkshopRevision=Object.hasOwn(value?.domainRevisions??{},'workshop');
-    if(hasWorkshop!==hasWorkshopRevision)invalid();
-    const hasTime=Object.hasOwn(value??{},'timeReminders'),hasTimeRevision=Object.hasOwn(value?.domainRevisions??{},'timeReminders');
-    if(hasTime!==hasTimeRevision)invalid();
-    if(hasCumulative!==hasCumulativeRevision)invalid();
-    if(hasRecall!==hasRecallRevision)invalid();
-    exact(value, ['schema', 'revision', 'domainRevisions', 'ai', 'eventGeneration', ...(legacy ? [] : ['credentials']),...(hasRecall?['recall']:[]),...(hasCumulative?['cumulativeGeneration']:[]),...(hasTime?['timeReminders']:[]),...(hasWorkshop?['workshop']:[]),...(hasControls?['controls']:[]),...(hasTracking?['trackingPrompts']:[])]);
+    const present = field => Object.hasOwn(value ?? {}, field);
+    const optional = SETTINGS_DOMAIN_KEYS.filter(field => SETTINGS_DOMAINS[field].optional && present(field));
+    for (const field of SETTINGS_DOMAIN_KEYS) {
+      if (SETTINGS_DOMAINS[field].optional && present(field) !== Object.hasOwn(value?.domainRevisions ?? {}, field)) invalid();
+    }
+    const hasTracking = present('trackingPrompts'), hasControls = present('controls'), hasRecall = present('recall');
+    const hasCumulative = present('cumulativeGeneration'), hasWorkshop = present('workshop'), hasTime = present('timeReminders');
+    const required = SETTINGS_DOMAIN_KEYS.filter(field => !SETTINGS_DOMAINS[field].optional);
+    exact(value, ['schema', 'revision', 'domainRevisions', ...required, ...(legacy ? [] : ['credentials']), ...optional]);
     if (![1, 2].includes(value.schema) || !Number.isSafeInteger(value.revision) || value.revision < 0) invalid();
-    exact(value.domainRevisions, ['ai', 'eventGeneration',...(hasRecallRevision?['recall']:[]),...(hasCumulativeRevision?['cumulativeGeneration']:[]),...(hasTimeRevision?['timeReminders']:[]),...(hasWorkshopRevision?['workshop']:[]),...(hasControlsRevision?['controls']:[]),...(hasTrackingRevision?['trackingPrompts']:[])]);
+    exact(value.domainRevisions, [...required, ...optional]);
     if (Object.values(value.domainRevisions).some(version => !Number.isSafeInteger(version) || version < 0)
-      || value.domainRevisions.ai + value.domainRevisions.eventGeneration +(value.domainRevisions.recall??0)+(value.domainRevisions.cumulativeGeneration??0)+(value.domainRevisions.timeReminders??0)+(value.domainRevisions.workshop??0)+(value.domainRevisions.controls??0)+(value.domainRevisions.trackingPrompts??0)!== value.revision) invalid();
+      || SETTINGS_DOMAIN_KEYS.reduce((sum, field) => sum + (value.domainRevisions[field] ?? 0), 0) !== value.revision) invalid();
     ai(value.ai); const eventGeneration = generation(value.eventGeneration);
     if(!hasRecall&&(value.domainRevisions.recall??0)!==0)invalid();
     const migrated = { ...value, schema: 2, credentials: legacy ? [] : value.credentials, eventGeneration,domainRevisions:{...value.domainRevisions,recall:value.domainRevisions.recall??0},recall:hasRecall?assertRecallSettings(value.recall):defaultRecallSettings() };
@@ -164,6 +160,29 @@ export function assertSettings(value) {
 }
 export function assertAiSettings(value) { try { return frozenSettingsCopy(ai(value)); } catch { throw new SettingsError(); } }
 export function assertEventGeneration(value) { try { return frozenSettingsCopy(generation(value)); } catch { throw new SettingsError(); } }
+// Domain assembly only. Stored migrations remain explicit: a
+// read default, a no-op default and an absent fingerprint are different facts.
+export const SETTINGS_DOMAINS = Object.freeze(Object.fromEntries(Object.entries({
+  ai: { validate: assertAiSettings, credentials: true },
+  eventGeneration: { validate: assertEventGeneration },
+  recall: { validate: assertRecallSettings, optional: true },
+  cumulativeGeneration: { validate: assertCumulativeGeneration, optional: true, fingerprintAbsent: true, readDefault: () => ({}) },
+  timeReminders: { validate: assertTimeReminders, optional: true, fingerprintAbsent: true, readDefault: defaultTimeReminders, noOpDefault: defaultTimeReminders },
+  workshop: { validate: assertWorkshop, optional: true, fingerprintAbsent: true, readDefault: emptyWorkshop, noOpDefault: emptyWorkshop },
+  controls: { validate: assertControls, optional: true, fingerprintAbsent: true, readDefault: defaultControls, noOpDefault: defaultControls },
+  trackingPrompts: { validate: assertTrackingPrompts, optional: true, fingerprintAbsent: true, readDefault: () => DEFAULT_TRACKING_PROMPTS },
+}).map(([field, definition]) => [field, Object.freeze(definition)])));
+export const SETTINGS_DOMAIN_KEYS = Object.freeze(Object.keys(SETTINGS_DOMAINS));
+export function settingsDomainValue(root, field, purpose = 'read') {
+  const fallback = SETTINGS_DOMAINS[field][purpose === 'no-op' ? 'noOpDefault' : 'readDefault'];
+  return root[field] ?? (fallback ? fallback() : root[field]);
+}
+export function settingsDomainFingerprint(root, field) {
+  const definition = SETTINGS_DOMAINS[field];
+  const revision = definition.fingerprintAbsent ? root.domainRevisions[field] ?? 0 : root.domainRevisions[field];
+  const value = definition.fingerprintAbsent ? root[field] ?? null : root[field];
+  return settingsFingerprint({ revision, value, ...(definition.credentials ? { credentials: root.credentials } : {}) });
+}
 export function assertCredential(value) {
   if (typeof value !== 'string' || !value.trim() || value.length > 8192 || /[\u0000-\u001f\u007f-\u009f]/.test(value)) invalid();
   return value;

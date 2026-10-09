@@ -1,4 +1,4 @@
-export const DEFAULT_LATEST_PROMPT='根据本轮用户输入与 AI 回复，简要记录已发生的事件、重要信息变化及影响后续的关键对白。只依据提供的内容，不猜测、不续写；保留必要的人名、时间、地点和因果关系，省略重复描写。仅输出摘要正文。';
+export const DEFAULT_LATEST_PROMPT='按事件顺序，简洁客观地记录本轮发生的事情、人物的行动与交谈及其结果。简化动作与环境描写，仅保留理解事件所需的前情，以及影响剧情或具有纪念意义的关键台词。人物说法保留归属，区分打算与已完成的行动。不记录内心活动，不推测动机，不评价、升华、抽象概括或预测后续。时间、地点沿用原文，缺失时不编造。摘要正文通常为100–200字，信息密集时可适当增加，最多300字；简短剧情无需凑字数。时间、地点不计入正文篇幅。';
 export function validLatestSummary(value){return typeof value==='string'&&Boolean(value.trim());}
 export function buildLatestRequest({source,prompt=DEFAULT_LATEST_PROMPT}={}) {
   if(typeof prompt!=='string'||!prompt.trim()||!Array.isArray(source?.sentFloors)||!source.sentFloors.length)throw new Error('最新摘要提示词或来源无效');

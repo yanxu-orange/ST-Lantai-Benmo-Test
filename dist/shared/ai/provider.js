@@ -47,7 +47,15 @@ export function freezeAiConfig(value) {
     model: value.model.trim(), credentialId: value.credentialId.trim(), credentialEpoch: value.credentialEpoch });
 }
 
-function requestCopy({ task, messages, jsonSchema }) {
+// Business output allowance is separate from the tiny connection probe limit.
+// Model-specific context/output limits remain the selected provider's authority.
+export function assertMaxOutputTokens(value) {
+  if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) throw new AiProviderError('request');
+  return value;
+}
+
+function requestCopy({ task, messages, jsonSchema, maxOutputTokens }) {
+  assertMaxOutputTokens(maxOutputTokens);
   if (typeof task !== 'string' || !/^[a-zA-Z0-9_.:-]{1,80}$/.test(task)
     || !Array.isArray(messages) || !messages.length
     || messages.some(message => !message || !['system', 'user', 'assistant'].includes(message.role)
@@ -58,7 +66,7 @@ function requestCopy({ task, messages, jsonSchema }) {
   if (schema !== null && (typeof schema !== 'object' || Array.isArray(schema)
     || !schema.value || typeof schema.value !== 'object' || Array.isArray(schema.value)
     || typeof schema.name !== 'string' || !schema.name.trim())) throw new AiProviderError('request');
-  const result = { task, messages: messages.map(({ role, content }) => Object.freeze({ role, content })), jsonSchema: schema };
+  const result = { task, messages: messages.map(({ role, content }) => Object.freeze({ role, content })), jsonSchema: schema, ...(maxOutputTokens === undefined ? {} : {maxOutputTokens}) };
   return result;
 }
 
@@ -178,11 +186,11 @@ export function createAiProvider({ getConfig, transport } = {}) {
     catch { throw new AiProviderError('configuration'); }
   }
   return Object.freeze({
-    async generateText({ task, messages, signal, isCurrent } = {}) {
+    async generateText({ task, messages, signal, isCurrent, maxOutputTokens } = {}) {
       if (typeof isCurrent !== 'function') throw new AiProviderError('request');
       assertAiCurrent(signal, isCurrent);
       const config = readConfig(), fingerprint = JSON.stringify(config);
-      const request = requestCopy({ task, messages });
+      const request = requestCopy({ task, messages, maxOutputTokens });
       const current = () => {
         try { return isCurrent() === true && JSON.stringify(readConfig()) === fingerprint; }
         catch { return false; }
@@ -198,12 +206,12 @@ export function createAiProvider({ getConfig, transport } = {}) {
         throw new AiProviderError(error instanceof AiProviderError ? error.code : 'transport');
       }
     },
-    async generateJson({ task, messages, jsonSchema = null, signal, isCurrent, validate } = {}) {
+    async generateJson({ task, messages, jsonSchema = null, signal, isCurrent, validate, maxOutputTokens } = {}) {
       if (typeof validate !== 'function' || typeof isCurrent !== 'function') throw new AiProviderError('request');
       assertAiCurrent(signal, isCurrent);
       const config = readConfig();
       const fingerprint = JSON.stringify(config);
-      const request = requestCopy({ task, messages, jsonSchema });
+      const request = requestCopy({ task, messages, jsonSchema, maxOutputTokens });
       const current = () => {
         try { return isCurrent() === true && JSON.stringify(readConfig()) === fingerprint; }
         catch { return false; }

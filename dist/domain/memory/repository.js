@@ -1,3 +1,4 @@
+import {narrativeOf,assertNarrative} from '../narrative/data.js';
 import {trackingOf,assertTracking} from '../tracking/data.js';
 import {latestOf,assertLatest,assertLatestPreferences,assertLatestRecord} from '../latest/data.js';
 import {storedLatestSource} from '../latest/source.js';
@@ -117,6 +118,19 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     });
   };
   return {
+    async captureNarrative(target){const frozen=copy(target);return freeze({target:frozen,narrative:narrativeOf(await read(frozen))});},
+    matchesNarrative(target,selection){try{requireTarget(target);const root=assertRoot(adapter.peekConfirmed(target),target);return !!selection&&sameTarget(target,selection.target)&&equal(narrativeOf(root),selection.narrative);}catch{return false;}},
+    updateNarrative(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
+      const frozen=copy(target),snapshot=copy(selection),candidate=assertNarrative(value);
+      const guard=root=>{requireTarget(frozen);if(!isCurrent()||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(narrativeOf(root),snapshot.narrative))throw new Error('自述或大纲资料已变化，请重新读取');return true;};
+      return enqueue(async()=>{
+        const root=await read(frozen);guard(root);const current=narrativeOf(root),next={...candidate,revision:current.revision};
+        if(equal(current,next))return {status:'unchanged',root,selection:freeze({target:frozen,narrative:current})};
+        next.revision++;
+        const saved=await commit(frozen,root,{...root,revision:root.revision+1,narrative:next},guard,{requireConfirmation});
+        return {status:'committed',root:saved,selection:freeze({target:frozen,narrative:narrativeOf(saved)})};
+      });
+    },
     async captureTracking(target){const frozen=copy(target);return freeze({target:frozen,tracking:trackingOf(await read(frozen))});},
     updateTracking(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertTracking(value);

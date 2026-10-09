@@ -1,4 +1,4 @@
-import { AiProviderError, assertAiCurrent, freezeAiConfig } from '../../shared/ai/provider.js';
+import { AiProviderError, assertAiCurrent, freezeAiConfig, assertMaxOutputTokens } from '../../shared/ai/provider.js';
 import { getSillyTavernContext } from './context.js';
 export const PROXY_SOURCES = Object.freeze(['claude', 'openai', 'mistralai', 'makersuite', 'vertexai', 'deepseek', 'xai', 'zai', 'moonshot']);
 
@@ -64,8 +64,11 @@ export function prepareSillyTavernAiRequest({ task, messages, jsonSchema = null,
 // Host calls and private backend routes live only in this platform adapter.
 export function createSillyTavernAiTransport({ getContext = getSillyTavernContext, fetchImpl = globalThis.fetch, resolveCredential } = {}) {
   return Object.freeze({
-    async generate({ config: configured, task, messages, jsonSchema = null, signal, isCurrent = () => true, maxTokens }) {
+    async generate({ config: configured, task, messages, jsonSchema = null, signal, isCurrent = () => true, maxTokens, maxOutputTokens }) {
       if (maxTokens !== undefined && (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > 128)) throw new AiProviderError('request');
+      assertMaxOutputTokens(maxOutputTokens);
+      if (maxTokens !== undefined && maxOutputTokens !== undefined) throw new AiProviderError('request');
+      const outputLimit = maxOutputTokens ?? maxTokens;
       const config = freezeAiConfig(configured);
       assertAiCurrent(signal, isCurrent);
       let context;
@@ -95,7 +98,7 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
           // use the raw text path there. Chat invalid text must survive intact
           // rather than being replaced with {} by host extraction.
           text = await context.generateRaw({ prompt: prepared.prompt, api: context.mainApi, jsonSchema: prepared.jsonSchema,
-            trimNames: false, quietToLoud: false, instructOverride: false, ...(maxTokens === undefined ? {} : { responseLength: maxTokens }) });
+            trimNames: false, quietToLoud: false, instructOverride: false, ...(outputLimit === undefined ? {} : { responseLength: outputLimit }) });
         } else {
           let key;
           try { key = resolveCredential(config); } catch { throw new AiProviderError('configuration'); }
@@ -104,7 +107,7 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
           key = null;
           const body = JSON.stringify({ chat_completion_source: 'custom', custom_url: config.endpoint,
             model: config.model, secret_id: `lantai-benmo:plugin-owned:${config.credentialId}`, custom_include_headers: authorization,
-            messages: prepared.messages, json_schema: jsonSchema ?? undefined, stream: false, n: 1, ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }) });
+            messages: prepared.messages, json_schema: jsonSchema ?? undefined, stream: false, n: 1, ...(outputLimit === undefined ? {} : { max_tokens: outputLimit }) });
           const headers = context.getRequestHeaders();
           assertAiCurrent(signal, current);
           const response = await fetchImpl('/api/backends/chat-completions/generate', {

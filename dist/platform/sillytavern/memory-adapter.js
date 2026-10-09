@@ -1,3 +1,4 @@
+import {emptyNarrative} from '../../domain/narrative/data.js';
 import {emptyTracking} from '../../domain/tracking/data.js';
 import {emptyLatest} from '../../domain/latest/data.js';
 import {locateDeletedMessages} from '../../domain/summary/source-deletion.js';
@@ -21,13 +22,14 @@ const unconfirmed = () => Object.assign(new Error('保存结果尚未确认，�
 // known configuration fields are excluded here: results, memory and unknown
 // extensions remain protected even when a write also changes configuration.
 function protectedContent(root) {
-  const { revision, controls, time, workshop, summary, cumulative, latest, tracking, ...content } = root;
+  const { revision, controls, time, workshop, summary, cumulative, latest, tracking, narrative, ...content } = root;
   const { revision: workshopRevision, modules, imports, captureCounters, ...results } = workshop ?? emptyWorkshop();
   const { revision: summaryRevision, preferences: summaryPreferences, ...summaryMemory } = summary ?? emptySummary();
   const { revision: cumulativeRevision, preferences: cumulativePreferences, ...cumulativeMemory } = cumulative ?? emptyCumulative();
   const {revision:latestRevision,preferences:latestPreferences,...latestMemory}=latest??emptyLatest();
   const {revision:trackingRevision,preferences:trackingPreferences,...trackingMemory}=tracking??emptyTracking();
-  return { ...content, workshop: results, summary: summaryMemory, cumulative: cumulativeMemory, latest:latestMemory,tracking:trackingMemory };
+  const {revision:narrativeRevision,preferences:narrativePreferences,...narrativeMemory}=narrative??emptyNarrative();
+  return { ...content, narrative:narrativeMemory, workshop: results, summary: summaryMemory, cumulative: cumulativeMemory, latest:latestMemory,tracking:trackingMemory };
 }
 // 1.18/1.19 saveMetadata swallows transport failures. Memory-result commits
 // still require a server readback of this exact chat.
@@ -429,6 +431,10 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       try {observe();const root=getContext().chatMetadata[MEMORY_KEY]??prepared;return !!root?.time?.activeCalendarId&&Array.isArray(root.time.calendars)&&root.time.calendars.some(item=>item.id===root.time.activeCalendarId);}catch{return false;}
     },
     captureChatSource, captureSummarySource: captureChatSource,
+    // Narrative reads story chronology even after summary has hidden originals.
+    // Preserve genuine system/tool exclusion, without treating visibility as a
+    // change to the speaker or to the durable narrative source proof.
+    captureNarrativeSource(target){const source=captureChatSource(target,true);return {...source,messages:source.messages.map(message=>({...message,system:message.role==='system'}))};},
     captureTimeSource:target=>captureChatSource(target,true),
     matchesChatSource:(target,snapshot)=>matchesSource(target,snapshot),
     matchesTimeSource:(target,snapshot)=>matchesSource(target,snapshot,true),

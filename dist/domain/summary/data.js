@@ -1,5 +1,5 @@
 import {sourceFingerprint} from './source.js';
-import {validateEvent} from '../memory/model.js';
+import {validateEvent} from '../memory/event-model.js';
 const copy=value=>structuredClone(value);
 const validRange=value=>value&&Number.isSafeInteger(value.start)&&value.start>=0&&Number.isSafeInteger(value.end)&&value.end>=value.start;
 const exact=(value,keys)=>{if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).length!==keys.length||keys.some(key=>!Object.hasOwn(value,key)))throw new Error('总结数据结构无效');};

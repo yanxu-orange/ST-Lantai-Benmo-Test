@@ -1,8 +1,4 @@
-import {assertTrackingPrompts,DEFAULT_TRACKING_PROMPTS} from '../../domain/tracking/prompts.js';
-import {assertControls,defaultControls} from '../../domain/controls/model.js';
-import {assertWorkshop,emptyWorkshop} from '../../domain/workshop/model.js';
-import {defaultTimeReminders} from './time-reminders.js';
-import { assertTimeReminders, assertAiSettings, assertEventGeneration, assertRecallSettings, assertCumulativeGeneration, assertCredential, aiConfig, equalSettings, frozenSettingsCopy, publicSettings, SettingsError } from './model.js';
+import { SETTINGS_DOMAINS, settingsDomainValue, assertCredential, aiConfig, equalSettings, frozenSettingsCopy, publicSettings, SettingsError } from './model.js';
 
 export function createSettingsRepository(adapter) {
   let queue = Promise.resolve();
@@ -13,7 +9,7 @@ export function createSettingsRepository(adapter) {
       if (isCurrent === undefined) return true;
       try { return isCurrent() === true; } catch { return false; }
     };
-    const draft = field==='trackingPrompts'?assertTrackingPrompts(value):field==='controls'?assertControls(value):field==='workshop'?assertWorkshop(value):field==='timeReminders'?assertTimeReminders(value):field === 'ai' ? assertAiSettings(value) : field==='recall'?assertRecallSettings(value):field==='cumulativeGeneration'?assertCumulativeGeneration(value):assertEventGeneration(value);
+    const draft = SETTINGS_DOMAINS[field].validate(value);
     if (!Array.isArray(credentials) || field !== 'ai' && credentials.length) throw new SettingsError();
     let replacements;
     try { replacements = credentials.map(item => {
@@ -46,7 +42,7 @@ export function createSettingsRepository(adapter) {
         const credential = replacements.find(item => item.presetId === preset.id) ?? root.credentials.find(item => item.presetId === preset.id);
         return credential ? [credential] : [];
       }) : root.credentials;
-      if (equalSettings(field==='controls'?(root[field]??defaultControls()):field==='workshop'?(root[field]??emptyWorkshop()):field==='timeReminders'?(root[field]??defaultTimeReminders()):root[field], draft) && equalSettings(root.credentials, nextCredentials)) return { status: 'committed', root: publicSettings(root), changed: false };
+      if (equalSettings(settingsDomainValue(root, field, 'no-op'), draft) && equalSettings(root.credentials, nextCredentials)) return { status: 'committed', root: publicSettings(root), changed: false };
       const next = { ...root, revision: root.revision + 1,
         domainRevisions: { ...root.domainRevisions, [field]: (root.domainRevisions[field]??0) + 1 }, [field]: draft, credentials: nextCredentials };
       const result = await adapter.commit(next, root.revision, epochs.epoch, { isCurrent: guard, requireConfirmation });
@@ -71,34 +67,34 @@ export function createSettingsRepository(adapter) {
     saveRecall: (value,options)=>update('recall',value,options),
     saveCumulativeGeneration:(value,options)=>update('cumulativeGeneration',value,options),
     saveTrackingPrompts:(value,options)=>update('trackingPrompts',value,options),
-    captureTrackingPrompts(){const root=adapter.peek();return frozenSettingsCopy({prompts:root.trackingPrompts??DEFAULT_TRACKING_PROMPTS,epoch:adapter.epochs().trackingPrompts});},
-    matchesTrackingPrompts(snapshot){try{return snapshot?.epoch===adapter.epochs().trackingPrompts&&equalSettings(snapshot.prompts,adapter.peek().trackingPrompts??DEFAULT_TRACKING_PROMPTS);}catch{return false;}},
+    captureTrackingPrompts(){const {root, epochs}=adapter.snapshot();return frozenSettingsCopy({prompts:settingsDomainValue(root,'trackingPrompts'),epoch:epochs.trackingPrompts});},
+    matchesTrackingPrompts(snapshot){try{return snapshot?.epoch===adapter.epochs().trackingPrompts&&equalSettings(snapshot.prompts,settingsDomainValue(adapter.peek(),'trackingPrompts'));}catch{return false;}},
     saveControls:(value,options)=>update('controls',value,options),
-    captureControls(){const root=adapter.peek();return frozenSettingsCopy({controls:root.controls??defaultControls(),epoch:adapter.epochs().controls});},
-    matchesControls(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().controls&&equalSettings(snapshot.controls,root.controls??defaultControls());}catch{return false;}},
+    captureControls(){const {root, epochs}=adapter.snapshot();return frozenSettingsCopy({controls:settingsDomainValue(root,'controls'),epoch:epochs.controls});},
+    matchesControls(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().controls&&equalSettings(snapshot.controls,settingsDomainValue(root,'controls'));}catch{return false;}},
     saveWorkshop:(value,options)=>update('workshop',value,options),
-    captureWorkshop(){const root=adapter.peek();return frozenSettingsCopy({workshop:root.workshop??emptyWorkshop(),epoch:adapter.epochs().workshop});},
-    matchesWorkshop(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().workshop&&equalSettings(snapshot.workshop,root.workshop??emptyWorkshop());}catch{return false;}},
+    captureWorkshop(){const {root, epochs}=adapter.snapshot();return frozenSettingsCopy({workshop:settingsDomainValue(root,'workshop'),epoch:epochs.workshop});},
+    matchesWorkshop(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().workshop&&equalSettings(snapshot.workshop,settingsDomainValue(root,'workshop'));}catch{return false;}},
     saveTimeReminders:(value,options)=>update('timeReminders',value,options),
-    captureTimeReminders(){const root=adapter.peek();return frozenSettingsCopy({reminders:root.timeReminders??defaultTimeReminders(),epoch:adapter.epochs().timeReminders});},
-    matchesTimeReminders(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().timeReminders&&equalSettings(snapshot.reminders,root.timeReminders??defaultTimeReminders());}catch{return false;}},
-    captureCumulativeGeneration(){const root=adapter.peek();return frozenSettingsCopy({generation:root.cumulativeGeneration??{},epoch:adapter.epochs().cumulativeGeneration});},
-    matchesCumulativeGeneration(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().cumulativeGeneration&&equalSettings(snapshot.generation,root.cumulativeGeneration??{});}catch{return false;}},
-    captureRecall(){const root=adapter.peek();return frozenSettingsCopy({recall:root.recall,epoch:adapter.epochs().recall});},
+    captureTimeReminders(){const {root, epochs}=adapter.snapshot();return frozenSettingsCopy({reminders:settingsDomainValue(root,'timeReminders'),epoch:epochs.timeReminders});},
+    matchesTimeReminders(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().timeReminders&&equalSettings(snapshot.reminders,settingsDomainValue(root,'timeReminders'));}catch{return false;}},
+    captureCumulativeGeneration(){const {root, epochs}=adapter.snapshot();return frozenSettingsCopy({generation:settingsDomainValue(root,'cumulativeGeneration'),epoch:epochs.cumulativeGeneration});},
+    matchesCumulativeGeneration(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().cumulativeGeneration&&equalSettings(snapshot.generation,settingsDomainValue(root,'cumulativeGeneration'));}catch{return false;}},
+    captureRecall(){const {root, epochs}=adapter.snapshot();return frozenSettingsCopy({recall:settingsDomainValue(root,'recall'),epoch:epochs.recall});},
     matchesRecall(snapshot){try{const root=adapter.peek();return snapshot?.epoch===adapter.epochs().recall&&equalSettings(snapshot.recall,root.recall);}catch{return false;}},
     captureEventGeneration() {
-      const root = adapter.peek();
-      return frozenSettingsCopy({ generation: root.eventGeneration, epoch: adapter.epochs().eventGeneration });
+      const { root, epochs } = adapter.snapshot();
+      return frozenSettingsCopy({ generation: root.eventGeneration, epoch: epochs.eventGeneration });
     },
     matchesEventGeneration(snapshot) {
       try { const root=adapter.peek();return snapshot?.epoch===adapter.epochs().eventGeneration&&equalSettings(snapshot.generation,root.eventGeneration); }
       catch { return false; }
     },
     captureAi() {
-      const root = adapter.peek();
-      return frozenSettingsCopy({ ai: root.ai, credentialPresetIds: root.credentials.map(item => item.presetId), epoch: adapter.epochs().ai });
+      const { root, epochs } = adapter.snapshot();
+      return frozenSettingsCopy({ ai: root.ai, credentialPresetIds: root.credentials.map(item => item.presetId), epoch: epochs.ai });
     },
-    getAiConfig: () => aiConfig(adapter.peek(), adapter.epochs().ai),
+    getAiConfig: () => { const { root, epochs } = adapter.snapshot(); return aiConfig(root, epochs.ai); },
     resolvePresetCredential({ presetId, expectedEpoch }) {
       try {
         const root = adapter.peek(), epoch = adapter.epochs().ai;
@@ -120,8 +116,8 @@ export function createSettingsRepository(adapter) {
       } catch { throw new SettingsError('SETTINGS_CONFLICT'); }
     },
     getGenerationSettings() {
-      const root = adapter.peek(), { epoch } = adapter.epochs();
-      return frozenSettingsCopy({ epoch, generationEpoch: adapter.epochs().eventGeneration, ...root.eventGeneration });
+      const { root, epochs } = adapter.snapshot();
+      return frozenSettingsCopy({ epoch: epochs.epoch, generationEpoch: epochs.eventGeneration, ...root.eventGeneration });
     },
     getEpoch: () => { adapter.peek(); return adapter.epochs().epoch; },
     subscribe: listener => adapter.subscribe(listener),

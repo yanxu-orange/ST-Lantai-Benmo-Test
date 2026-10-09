@@ -3,6 +3,8 @@ import {surfaceTheme} from './styles/theme.js';
 
 const TABS = {records: '兰台记录', self: '角色自述', outline: '故事大纲'};
 const KINDS = {summary: '最新摘要', item: '物品追踪', npc: '角色追踪'};
+const NARRATIVES = ['self', 'outline'];
+const FEATURES = [...Object.keys(KINDS), ...NARRATIVES];
 const FIELDS = {
   item: [['name', '名称'], ['introduction', '精简介绍'], ['location', '位置'], ['custodian', '保管者'], ['owner', '所属者'], ['transferFrom', '赠送／转移方'], ['transferTo', '接收方'], ['transferReason', '简短原因'], ['aliases', '名称／简称（关键词）']],
   npc: [['name', '姓名'], ['appearance', '辨识外表'], ['identity', '身份'], ['relationToUser', '与 user 的关系'], ['relationToChar', '与 char 的关系'], ['aliases', '称呼／别名（关键词）']],
@@ -20,9 +22,9 @@ export async function mountBenmoView({container: app, controller, availability =
   const lifetime = new AbortController();
   let value = await (controller.ensure ? controller.ensure() : controller.load());
   let disposed = false, suspended = false, acting = false, composing = false;
-  let error = '', dialog = null, draft = null, baseline = null, original = null, invalidated = false, renderedPolicy = '';
+  let error = '', dialog = null, draft = null, baseline = null, original = null, narrativeRecovery = null, narrativeDraftTarget = null, invalidated = false, renderedPolicy = '';
   let returnRoute = 'list', epoch = 0, toastTimer, redirectTimer;
-  const generating = new Map();
+  const generating = new Map(), narrativeJobs = new Map();
   const state = {
     tab: Object.hasOwn(TABS, initialState.tab) ? initialState.tab : 'records',
     kind: Object.hasOwn(KINDS, initialState.kind) ? initialState.kind : 'summary',
@@ -37,26 +39,30 @@ export async function mountBenmoView({container: app, controller, availability =
   function policy() {
     const supplied = externalPolicy(), saved = value.policy ?? {};
     const result = {...saved, ...supplied};
-    for (const key of ['enabled', 'benmo', ...Object.keys(KINDS)]) {
+    for (const key of ['enabled', 'benmo', ...FEATURES]) {
       if (saved[key] === false || supplied[key] === false) result[key] = false;
     }
-    if (result.summary === undefined) result.summary = false;
-    if (result.item === undefined) result.item = false;
-    if (result.npc === undefined) result.npc = false;
-    if (result.enabled === false || result.benmo === false) result.summary = result.item = result.npc = false;
-    result.benmo = Object.keys(KINDS).some(key => result[key] === true);
+    for (const key of FEATURES) if (result[key] === undefined || result.enabled === false || result.benmo === false) result[key] = false;
+    result.benmo = FEATURES.some(key => result[key] === true);
     return result;
   }
   const enabledKinds = () => Object.keys(KINDS).filter(key => policy()[key]);
+  const enabledTabs = () => Object.keys(TABS).filter(key => key === 'records' ? enabledKinds().length > 0 : policy()[key]);
+  const activeKind = () => state.tab === 'records' ? state.kind : state.tab;
+  const narrativeData = () => value.narrative?.narrative ?? {};
+  const narrativePreferences = (kind = state.tab) => narrativeData().preferences?.[kind] ?? {};
+  const narrativeResults = (kind = state.tab) => narrativeData()[kind] ?? [];
+  const narrativeStatus = (kind = state.tab) => value.narrative?.[kind] ?? {};
+  const narrativeEntry = (id, kind = state.tab) => (kind === 'self' ? narrativeResults(kind).flatMap(row => row.entries ?? []) : narrativeResults(kind)).find(row => row.id === id);
   const records = (kind = state.kind) => {
     const rows = value.tracking?.records ?? [];
     return Array.isArray(rows) ? rows.filter(row => row.kind === kind) : rows[kind] ?? [];
   };
   const summaryRecords = () => [...(value.summary?.records ?? [])].sort((a, b) => b.floor - a.floor);
   const selectedRecord = () => records().find(row => row.id === state.selected);
-  const context = () => ['benmo', state.tab, state.kind, state.route, ['detail', 'edit'].includes(state.route) ? state.selected ?? 'new' : '', state.kind === 'summary' && state.route === 'list' ? state.summaryFilter : ''].join(':');
-  const blocked = () => invalidated || externalPolicy().transient === true || value.writeBlocked === true || !policy()[state.kind];
-  const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'new', 'generate'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
+  const context = () => ['benmo', state.tab, state.kind, state.route, ['detail', 'edit', 'narrative-edit'].includes(state.route) ? state.selected ?? 'new' : '', state.kind === 'summary' && state.route === 'list' ? state.summaryFilter : ''].join(':');
+  const blocked = () => !!narrativeRecovery || invalidated || externalPolicy().transient === true || value.writeBlocked === true || !policy()[activeKind()];
+  const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'new', 'generate', 'generate-narrative'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
   const textEntry = (label, action, attrs = '') => button(label, action, attrs).replace('ui-button ui-button--tertiary', 'benmo-text-entry');
   const icon = (label, action, file) => `<button type="button" class="ui-icon-button ui-button--tertiary" aria-label="${esc(label)}" data-action="${action}"><img class="lt-icon" data-icon="${file}" src="${new URL(`./icons/${file}.svg`, import.meta.url)}" alt=""></button>`;
   const selectButton = (id, label, current, action) => action === 'kind'
@@ -67,6 +73,17 @@ export async function mountBenmoView({container: app, controller, availability =
     const form = app.querySelector('form');
     if (!form || !draft) return;
     const customInputs = new Map();
+    if (state.route === 'narrative-settings') {
+      for (const [key, raw] of new FormData(form)) {
+        if (['background', 'budget', 'depth', 'prompt'].includes(key)) draft[key] = String(raw);
+        else { const character = draft.characters?.find(row => key === `narrative-character-${row.id}`); if (character) character.name = String(raw); }
+      }
+      return;
+    }
+    if (state.route === 'narrative-edit') {
+      for (const [key, raw] of new FormData(form)) if (key === 'text') draft.text = String(raw);
+      return;
+    }
     for (const field of draft.customFields ?? []) for (const key of ['name', 'requirement', 'value']) customInputs.set(`record-field-${field.id}-${key}`, [field, key]);
     for (const [key, raw] of new FormData(form)) {
       const text = String(raw), custom = customInputs.get(key);
@@ -89,20 +106,22 @@ export async function mountBenmoView({container: app, controller, availability =
     return {tab: state.tab, kind: state.kind, route: draft ? returnRoute : state.route, selected: state.selected, selections: {...state.selections}, scrolls: {...state.scrolls}, expanded: [...state.expanded], summaryFilter: state.summaryFilter};
   }
   function normalize() {
-    const enabled = enabledKinds();
-    if (!enabled.length) return false;
-    if (!enabled.includes(state.kind)) {
-      state.kind = enabled[0]; state.tab = 'records'; state.route = 'list';
-      state.selected = state.selections[state.kind] ?? null; draft = baseline = original = null; dialog = null; epoch++;
+    const tabs = enabledTabs(), kinds = enabledKinds();
+    if (!tabs.length) return false;
+    if (!tabs.includes(state.tab) || (state.tab === 'records' && !kinds.includes(state.kind))) {
+      if (!tabs.includes(state.tab)) state.tab = tabs[0];
+      if (state.tab === 'records') state.kind = kinds[0];
+      state.route = 'list'; state.selected = state.selections[state.kind] ?? null;
+      draft = baseline = original = null; narrativeRecovery = narrativeDraftTarget = null; dialog = null; epoch++;
     }
-    if (state.route === 'detail' && !selectedRecord()) { state.route = 'list'; state.selected = null; }
+    if (state.tab === 'records' && state.route === 'detail' && !selectedRecord()) { state.route = 'list'; state.selected = null; }
     return true;
   }
   function redirectToSettings() {
     if (redirectTimer || disposed || suspended) return;
     redirectTimer = setTimeout(() => {
       redirectTimer = null;
-      if (!disposed && !suspended && !externalPolicy().transient && !enabledKinds().length) onNavigate('settings', snapshotNavigation());
+      if (!disposed && !suspended && !externalPolicy().transient && !enabledTabs().length) onNavigate('settings', snapshotNavigation());
     }, 0);
   }
   function toast(text) {
@@ -160,15 +179,147 @@ export async function mountBenmoView({container: app, controller, availability =
     if (state.kind === 'summary') return `<form id="benmo-edit-form" class="section"><p class="summary-origin">来源：第 ${esc(draft.floor)} 楼 · 当前选中版本</p><label class="ui-field"><span>摘要正文</span><textarea class="lt-textarea" name="body" rows="10" required>${esc(draft.body)}</textarea></label>${formActions()}</form>`;
     return `<form id="benmo-edit-form" class="section"><div class="two-cols">${FIELDS[state.kind].map(([key, label]) => `<label class="ui-field"><span>${label}</span>${MULTILINE.has(key) ? `<textarea class="lt-textarea" name="${key}" rows="2" maxlength="600">${esc(draft[key])}</textarea>` : `<input class="ui-input" name="${key}" value="${esc(draft[key])}" ${key === 'name' ? 'required maxlength="160"' : 'maxlength="2000"'}>`}</label>`).join('')}</div><fieldset class="lt-modes" aria-label="召回方式"><legend class="ui-field__label">召回方式</legend>${[['resident', '常驻'], ['trigger', '触发']].map(([mode, label]) => `<label class="lt-mode"><input type="radio" name="mode" value="${mode}" ${draft.pinned === (mode === 'resident') ? 'checked' : ''}>${label}</label>`).join('')}</fieldset>${state.kind === 'npc' ? '<p class="meta">最后实际出场与缺席回合由剧情记录，此处不手动填写。</p>' : ''}${recordCustomFields()}${formActions()}</form>`;
   }
+  const rangesText = ranges => (ranges ?? []).map(range => Number(range.start) === Number(range.end) ? `第 ${range.start} 楼` : `第 ${range.start}—${range.end} 楼`).join('、') || '未读取';
+  function narrativeReport() {
+    const info = narrativeStatus(), progress = narrativeData().progress?.[state.tab], report = info.materialReport ?? progress?.materialsReport;
+    if (!report) return '<p class="meta">生成后显示实际读取范围与材料用量。</p>';
+    return `<section class="card" aria-label="本次读取范围"><h2>本次读取范围</h2><p class="meta">原文：${esc(rangesText(report.originalRanges))}</p><p class="meta">记忆：${esc(rangesText(report.memoryRanges))}</p><p class="meta">材料用量：${report.estimated ? '估算约 ' : '宿主 tokenizer 计数 '}${esc(report.tokens)} / ${esc(report.budget)} token${report.estimated ? '（估算值，不是精确 token 数）' : ''}</p>${Number.isSafeInteger(report.promptTokens) && Number.isSafeInteger(report.outputReserve) ? `<p class="meta">另留提示词 ${esc(report.promptTokens)} token、输出 ${esc(report.outputReserve)} token；不计入材料预算，尚未核验模型上下文上限。</p>` : ''}${report.unavailableMemoryCount > 0 ? `<p class="meta" role="status">已跳过 ${esc(report.unavailableMemoryCount)} 条来源范围无法确认的记忆。</p>` : ''}${report.trimmed ? `<p class="meta" role="status">预算裁剪：已略过 ${esc(report.omittedMemoryCount ?? 0)} 条较早记忆；本批必要材料、已有结果与开启的背景保留。</p>` : '<p class="meta">材料未因预算裁剪。</p>'}</section>`;
+  }
+  function narrativeView() {
+    const kind = state.tab, preferences = narrativePreferences(), info = narrativeStatus(), result = narrativeResults();
+    const running = info.status === 'running' || narrativeJobs.has(kind);
+    const entryMarkup = entry => `<article class="record"><div class="row"><span class="meta">${esc(rangesText(entry.sources))}</span>${button('编辑', 'edit-narrative', `data-id="${esc(entry.id)}"`)}</div><p class="reading">${esc(entry.text)}</p></article>`;
+    return `<div class="row"><span class="meta">当前聊天 · ${kind === 'self' ? `${result.length} 位角色` : `${result.length} 条大纲`}</span><div class="actions">${textEntry(`${TABS[kind]}设置`, 'settings-narrative')}${button(running ? '生成中…' : '生成／更新', 'generate-narrative', running || (kind === 'self' && !preferences.characters?.length) ? `disabled ${running ? 'aria-busy="true"' : ''}` : '', 'secondary')}${running ? button('停止生成', 'cancel-narrative') : ''}</div></div><p class="meta">沿用事件记忆的批次节奏；没有重要变化时不会新增条目。${kind === 'self' ? '指定角色分别生成，选择的自述每轮注入。' : '已启用的大纲每轮注入。'}</p>${kind === 'self' && !preferences.characters?.length ? '<p class="meta">请先在角色自述设置中添加指定角色。</p>' : ''}${info.error && info.error !== (error || value.error) ? `<p class="lt-error" role="alert">${esc(info.error)}</p>` : ''}${narrativeReport()}<div class="section">${kind === 'self' ? result.map(character => { const selected = preferences.characters?.find(row => row.id === character.id); return `<section class="section"><div class="row"><h2>${esc(character.name)}</h2><span class="meta">${selected ? selected.inject ? '每轮注入' : '未选择注入' : '保留的历史自述'}</span></div>${(character.entries ?? []).map(entryMarkup).join('')}${character.entries?.length ? '' : '<p class="meta">暂无自述。</p>'}</section>`; }).join('') : result.map(entryMarkup).join('')}${result.length ? '' : `<p class="meta">暂无${TABS[kind]}。可手动生成，也可等待下一批剧情。</p>`}</div>`;
+  }
+  function narrativeSwitch(key, label, checked, action = 'toggle-narrative-setting') {
+    return `<div class="row"><span class="ui-field__label">${esc(label)}</span><button type="button" class="ui-switch" role="switch" aria-label="${esc(label)}" aria-checked="${checked === true}" data-action="${action}" data-id="${esc(key)}"></button></div>`;
+  }
+  function narrativeSettings() {
+    const self = state.tab === 'self';
+    return `<form id="benmo-edit-form" class="section"><section class="card"><h2>读取材料</h2>${narrativeSwitch('readMemory', '读取记忆', draft.readMemory)}${narrativeSwitch('readOriginal', '读取本批原文', draft.readOriginal)}<p class="meta">记忆与原文至少选择一项。已有${TABS[state.tab]}单独传入；历史记忆只读到本批结束。</p>${self ? `${narrativeSwitch('readCard', '读取角色卡基础设定', draft.readCard)}<p class="meta">仅读取 description、personality、scenario，作为故事初始状态；不读取世界书、开场脚本或其他分支。</p>` : ''}<label class="ui-field"><span>补充背景</span><textarea class="lt-textarea" name="background" rows="5" placeholder="可粘贴本条路线或世界设定">${esc(draft.background)}</textarea></label><p class="meta">背景与角色卡可同时使用；作者秘密与未来安排不会自动成为角色已知事实。</p></section>${self ? `<section class="card"><h2>指定角色与注入</h2><p class="meta">所有指定角色都会生成自述；分别选择哪些角色的自述每轮注入。</p>${draft.characters.map(character => `<section class="section"><div class="custom-field-heading"><label class="ui-field"><span>角色姓名</span><input class="ui-input" name="${esc(`narrative-character-${character.id}`)}" value="${esc(character.name)}" maxlength="160" required></label>${button('移除', 'remove-narrative-character', `data-id="${esc(character.id)}" aria-label="移除此指定角色"`)}</div>${narrativeSwitch(character.id, `${character.name || '此角色'}的自述每轮注入`, character.inject, 'toggle-narrative-injection')}</section>`).join('')}${button('＋ 添加角色', 'add-narrative-character', '', 'secondary')}</section>` : ''}<section class="card"><div class="two-cols"><label class="ui-field"><span>材料预算（token）</span><input class="ui-input" name="budget" type="number" min="1" step="1" inputmode="numeric" required value="${esc(draft.budget)}"></label><label class="ui-field"><span>注入深度</span><input class="ui-input" name="depth" type="number" min="0" max="10000" step="1" inputmode="numeric" required value="${esc(draft.depth)}"></label></div><p class="meta">材料预算合计背景、已有结果、记忆与原文，提示词与输出另留空间。优先保留本批必要材料，再由近到远选择历史记忆；必要材料超限会报错，请调整预算或材料。</p><p class="meta">有宿主 tokenizer 时按其计数，否则明确显示估算。同一位置先注入故事大纲，再注入角色自述。</p></section><section class="card"><label class="ui-field"><span>${TABS[state.tab]}内容提示词</span><textarea class="lt-textarea" name="prompt" rows="12" maxlength="20000" required>${esc(draft.prompt)}</textarea></label><p class="meta">可以修改内容要求；输出结构、历史前缀保护与来源校验由插件固定。</p><div class="actions">${button('恢复默认提示词', 'default-narrative-prompt')}</div></section>${formActions()}</form>`;
+  }
+  function narrativeEditor() {
+    return `<form id="benmo-edit-form" class="section"><p class="summary-origin">来源：${esc(rangesText(draft.sources))}</p><label class="ui-field"><span>${TABS[state.tab]}正文</span><textarea class="lt-textarea" name="text" rows="10" required>${esc(draft.text)}</textarea></label><p class="meta">手动修改保存到当前聊天；自动生成仍只允许更新末两条或追加。</p>${formActions()}</form>`;
+  }
+  function narrativeSettingsDraft(preferences, kind = state.tab) {
+    const next = {...preferences, readMemory: preferences.readMemory !== false, readOriginal: preferences.readOriginal !== false, background: preferences.background ?? '', budget: String(preferences.budget ?? 30000), depth: String(preferences.depth ?? 9999), prompt: preferences.prompt || controller.defaultNarrativePrompts?.[kind] || ''};
+    if (kind === 'self') { next.readCard = preferences.readCard !== false; next.characters = clone(preferences.characters ?? []); }
+    return next;
+  }
+  function startNarrativeSettings() {
+    remember(); epoch++; returnRoute = 'list'; original = clone(narrativePreferences());
+    draft = narrativeSettingsDraft(original); baseline = clone(draft); narrativeRecovery = null; narrativeDraftTarget = clone(value.target ?? null);
+    state.route = 'narrative-settings'; error = ''; state.scrolls[context()] = 0; render();
+  }
+  // Reload refreshes source authority without losing unsaved changes. Rebase
+  // only after comparing base/local/current, never turn a stale full result
+  // array into an unconditional replacement for a background update.
+  function recoverNarrativeDraft() {
+    if (!draft || !['narrative-settings', 'narrative-edit'].includes(state.route)) return;
+    if (narrativeDraftTarget && value.target && (narrativeDraftTarget.chatId !== value.target.chatId || narrativeDraftTarget.rootId !== value.target.rootId)) {
+      narrativeRecovery = {type: 'target'};
+      error = '聊天已切换，不能将原聊天草稿保存到新聊天。草稿仍保留在下方，请复制后返回列表重新打开。';
+      return;
+    }
+    const local = clone(draft), base = clone(baseline), kind = state.tab, route = state.route, ticket = epoch;
+    const latest = clone(route === 'narrative-settings' ? narrativePreferences(kind) : narrativeResults(kind));
+    let currentDraft;
+    if (route === 'narrative-settings') currentDraft = narrativeSettingsDraft(latest, kind);
+    else {
+      const find = rows => kind === 'self' ? rows.flatMap(character => character.entries.map(entry => ({owner: character.id, entry}))).find(row => row.entry.id === local.id) : rows.map(entry => ({owner: null, entry})).find(row => row.entry.id === local.id);
+      const current = find(latest), before = find(original);
+      if (!current || !before || current.owner !== before.owner) {
+        narrativeRecovery = {type: 'missing'};
+        error = '原条目已删除、合并或移到其他角色，无法直接覆盖。草稿仍保留在下方，请复制后返回列表，重新选择要编辑的条目。';
+        return;
+      }
+      currentDraft = clone(current.entry);
+    }
+    const keys = route === 'narrative-edit' ? ['text'] : Object.keys(currentDraft);
+    const changed = keys.filter(key => !same(local[key], base[key]));
+    const conflicts = changed.filter(key => !same(currentDraft[key], base[key]) && !same(currentDraft[key], local[key]));
+    const labels = {text:'正文',readMemory:'读取记忆',readOriginal:'读取本批原文',readCard:'读取角色卡',background:'补充背景',budget:'材料预算',depth:'注入深度',prompt:'内容提示词',characters:'指定角色与注入'};
+    const describe = value => typeof value === 'boolean' ? value ? '开启' : '关闭' : Array.isArray(value) ? value.map(row => `${row.name}（${row.inject ? '注入' : '不注入'}）`).join('、') || '未指定角色' : String(value ?? '');
+    const accept = chosenLocal => {
+      if (disposed || suspended || epoch !== ticket || state.route !== route || !draft) return;
+      const merged = clone(currentDraft);
+      for (const key of changed) if (chosenLocal.has(key) || !conflicts.includes(key)) merged[key] = clone(local[key]);
+      original = clone(latest); baseline = clone(currentDraft); draft = merged;
+      narrativeRecovery = null; dialog = null; error = '';
+    };
+    if (!conflicts.length) { accept(new Set()); return; }
+    narrativeRecovery = {type: 'conflict'};
+    error = '最新内容与草稿修改了相同字段，草稿已保留。请重新读取并选择如何处理，再保存。';
+    const chosenLocal = new Set(); let index = 0;
+    const choose = useLocal => {
+      if (useLocal) chosenLocal.add(conflicts[index]);
+      if (++index === conflicts.length) accept(chosenLocal); else showConflict();
+    };
+    const showConflict = () => {
+      const key = conflicts[index];
+      dialog = {text: `第 ${index + 1}／${conflicts.length} 项冲突：${labels[key] ?? key}。请选择保留哪份修改；其他字段的新内容与草稿会保留。选择完后仍需点击保存。`, pending: false,
+        details: [{label: labels[key] ?? key, latest: describe(currentDraft[key]), local: describe(local[key])}],
+        confirmLabel: '采用草稿修改', cancelLabel: '保留后台新内容', action: () => choose(true), cancelAction: () => choose(false)};
+    };
+    showConflict();
+  }
+  function startNarrativeEdit(id) {
+    const entry = narrativeEntry(id); if (!entry) return;
+    remember(); epoch++; returnRoute = 'list'; original = clone(narrativeResults()); draft = clone(entry); baseline = clone(draft); narrativeRecovery = null; narrativeDraftTarget = clone(value.target ?? null);
+    state.selected = id; state.route = 'narrative-edit'; error = ''; state.scrolls[context()] = 0; render();
+  }
+  async function saveNarrative() {
+    readDraft(); const submitted = clone(draft), previous = clone(original), operationEpoch = epoch, route = state.route, kind = state.tab;
+    let next;
+    if (route === 'narrative-settings') {
+      if (!submitted.readMemory && !submitted.readOriginal) throw new Error('读取记忆与读取原文至少选择一项');
+      const budget = Number(submitted.budget), depth = Number(submitted.depth);
+      if (!String(submitted.budget).trim() || !Number.isSafeInteger(budget) || budget < 1) throw new Error('请填写大于 0 的整数材料预算');
+      if (!String(submitted.depth).trim() || !Number.isSafeInteger(depth) || depth < 0 || depth > 10000) throw new Error('请填写 0—10000 的整数注入深度');
+      if (!submitted.prompt.trim() || submitted.prompt.length > 20000) throw new Error('请填写有效的内容提示词（最多 20000 字）');
+      const payload = {...submitted, budget, depth};
+      if (kind === 'self') {
+        payload.characters = submitted.characters.map(row => ({...row, name: row.name.trim()}));
+        if (payload.characters.some(row => !row.name) || new Set(payload.characters.map(row => row.name)).size !== payload.characters.length) throw new Error('请填写不重复的角色姓名');
+      }
+      next = await controller.saveNarrativePreferences(kind, payload, {original: previous});
+    } else {
+      if (!submitted.text.trim()) throw new Error('请填写正文');
+      const replace = entries => entries.map(entry => entry.id === submitted.id ? {...entry, text: submitted.text} : entry);
+      const entries = kind === 'self' ? previous.map(character => ({...character, entries: replace(character.entries)})) : replace(previous);
+      next = await controller.saveNarrativeEntries(kind, entries, {original: previous});
+    }
+    if (disposed) return;
+    apply(next);
+    if (epoch !== operationEpoch || suspended || !draft) return;
+    remember(); const newer = clone(draft);
+    if (!same(newer, submitted)) {
+      baseline = clone(submitted); draft = newer;
+      original = clone(route === 'narrative-settings' ? narrativePreferences(kind) : narrativeResults(kind));
+      acting = false; render(); toast('已保存提交内容；新修改尚未保存');
+    } else { state.route = returnRoute; clearDraft(); acting = false; render(); toast('已保存'); }
+  }
+  async function generateNarrative() {
+    const kind = state.tab;
+    if (!NARRATIVES.includes(kind) || blocked() || narrativeJobs.has(kind) || narrativeStatus().status === 'running') return;
+    const operationEpoch = epoch, token = {}; narrativeJobs.set(kind, token); remember(); render();
+    try { const next = await controller.generateNarrative(kind); if (!disposed && narrativeJobs.get(kind) === token) apply(next); }
+    catch (failure) { if (!disposed && !suspended && epoch === operationEpoch && narrativeJobs.get(kind) === token) error = failure.message || '生成未完成，请重试'; }
+    finally { if (narrativeJobs.get(kind) === token) narrativeJobs.delete(kind); if (!disposed && !suspended && epoch === operationEpoch) { remember(); render(); } }
+  }
   function content() {
+    if (state.route === 'narrative-settings') return narrativeSettings();
+    if (state.route === 'narrative-edit') return narrativeEditor();
     if (state.route === 'tracking-settings') return trackingSettings();
     if (state.route === 'summary-settings') return summarySettings();
     if (state.route === 'edit') return editor();
     if (state.route === 'detail') return detail();
-    if (state.tab !== 'records') return `<section class="section future"><div class="row"><h2>${TABS[state.tab]}</h2><span class="meta">功能待设计</span></div><p class="reading">${state.tab === 'self' ? '从角色自己的视角，回望经历与变化。' : '梳理故事的来龙去脉，留住重要转折。'}</p><p class="meta">内容与操作尚未确定。</p></section>`;
+    if (state.tab !== 'records') return narrativeView();
     return `<nav class="subtabs lt-view-switch ui-segment-group" role="group" aria-label="兰台记录功能">${enabledKinds().map(id => selectButton(id, KINDS[id], state.kind, 'kind')).join('')}</nav>${state.kind === 'summary' ? summaryView() : trackingList()}`;
   }
   function pageTitle() {
+    if (state.route === 'narrative-settings') return `${TABS[state.tab]}设置`;
+    if (state.route === 'narrative-edit') return `编辑${TABS[state.tab]}`;
     if (state.route === 'tracking-settings') return `${KINDS[state.kind]}设置`;
     if (state.route === 'summary-settings') return '最新摘要设置';
     if (state.route === 'detail') return state.kind === 'item' ? '物品详情' : '角色详情';
@@ -183,7 +334,7 @@ export async function mountBenmoView({container: app, controller, availability =
     const focused = app.getRootNode().activeElement;
     const focusName = focused?.name, focusValue = focused?.value, focusData = focused?.dataset ? JSON.stringify({...focused.dataset}) : null;
     const subpage = state.route !== 'list';
-    app.innerHTML = `<section class="lantai workshop benmo ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}">${subpage ? `<header class="lt-header ui-header subpage-header">${icon(draft && returnRoute === 'detail' ? '返回记录详情' : `返回${KINDS[state.kind]}`, 'back', 'back')}<h1 class="ui-page-title">${pageTitle()}</h1>${icon('关闭兰台', 'close', 'close')}</header>` : `<header class="lt-header lt-header--root ui-header"><div class="lt-root-top"><h1 class="ui-page-title">本末</h1>${icon('关闭兰台', 'close', 'close')}</div><nav class="ui-tablist" aria-label="本末分区">${Object.entries(TABS).map(([id, label]) => selectButton(id, label, state.tab, 'tab')).join('')}</nav></header>`}<main class="lt-main ui-main" tabindex="-1">${error || value.error ? `<p class="lt-error" role="alert">${esc(error || value.error)}</p>${button('重新读取', 'reload')}` : ''}${content()}</main><footer class="lt-footer">${mainNavigation({policy: policy(), current: 'benmo', actions: {memory: 'area', time: 'area', workshop: 'area', benmo: 'area', settings: 'area'}, attributes: Object.fromEntries(['memory', 'time', 'workshop', 'benmo', 'settings'].map(area => [area, `data-id="${area}"`]))})}</footer>${dialog ? `<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending ? '正在处理，请稍候…' : dialog.text)}</p><div class="wk-dialog-actions">${button('取消', 'cancel-dialog', dialog.pending ? 'disabled' : '')}${button(dialog.pending ? '处理中…' : '确认', 'confirm-dialog', dialog.pending ? 'disabled aria-busy="true"' : '', 'primary')}</div></div></div>` : ''}</section>`;
+    app.innerHTML = `<section class="lantai workshop benmo ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}">${subpage ? `<header class="lt-header ui-header subpage-header">${icon(draft && returnRoute === 'detail' ? '返回记录详情' : `返回${state.tab === 'records' ? KINDS[state.kind] : TABS[state.tab]}`, 'back', 'back')}<h1 class="ui-page-title">${pageTitle()}</h1>${icon('关闭兰台', 'close', 'close')}</header>` : `<header class="lt-header lt-header--root ui-header"><div class="lt-root-top"><h1 class="ui-page-title">本末</h1>${icon('关闭兰台', 'close', 'close')}</div><nav class="ui-tablist" aria-label="本末分区">${enabledTabs().map(id => selectButton(id, TABS[id], state.tab, 'tab')).join('')}</nav></header>`}<main class="lt-main ui-main" tabindex="-1">${error || value.error ? `<p class="lt-error" role="alert">${esc(error || value.error)}</p>${button('重新读取', 'reload')}` : ''}${content()}</main><footer class="lt-footer">${mainNavigation({policy: policy(), current: 'benmo', actions: {memory: 'area', time: 'area', workshop: 'area', benmo: 'area', settings: 'area'}, attributes: Object.fromEntries(['memory', 'time', 'workshop', 'benmo', 'settings'].map(area => [area, `data-id="${area}"`]))})}</footer>${dialog ? `<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending ? '正在处理，请稍候…' : dialog.text)}</p>${(dialog.details ?? []).map(item => `<section class="section"><label class="ui-field"><span>后台新内容</span><textarea class="lt-textarea" rows="3" readonly aria-label="后台${esc(item.label)}">${esc(item.latest)}</textarea></label><label class="ui-field"><span>你的草稿</span><textarea class="lt-textarea" rows="3" readonly aria-label="草稿${esc(item.label)}">${esc(item.local)}</textarea></label></section>`).join('')}<div class="wk-dialog-actions">${button(dialog.cancelLabel ?? '取消', 'cancel-dialog', dialog.pending ? 'disabled' : '')}${button(dialog.pending ? '处理中…' : dialog.confirmLabel ?? '确认', 'confirm-dialog', dialog.pending ? 'disabled aria-busy="true"' : '', 'primary')}</div></div></div>` : ''}</section>`;
     const main = app.querySelector('.lt-main');
     if (main) main.scrollTop = state.scrolls[context()] ?? 0;
     if (dialog) {
@@ -196,7 +347,7 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   function confirm(text, action) { remember(); dialog = {text, action, pending: false}; render(); }
   function leave(action) { if (dirty()) confirm('放弃未保存的修改？', action); else action(); }
-  function clearDraft() { draft = baseline = original = null; }
+  function clearDraft() { draft = baseline = original = null; narrativeRecovery = narrativeDraftTarget = null; }
   function goBack() {
     remember(); epoch++; dialog = null;
     if (draft) { state.route = returnRoute; if (returnRoute === 'list') state.selected = state.selections[state.kind] ?? null; clearDraft(); }
@@ -225,6 +376,7 @@ export async function mountBenmoView({container: app, controller, availability =
   const apply = next => { value = next ?? controller.snapshot?.() ?? value; error = ''; };
   async function save() {
     if (!draft || blocked() || composing || !app.querySelector('form')?.reportValidity()) return;
+    if (['narrative-settings', 'narrative-edit'].includes(state.route)) return saveNarrative();
     readDraft(); const submitted = clone(draft), operationEpoch = epoch, route = state.route, kind = state.kind;
     let payload = submitted;
     if (route === 'tracking-settings') {
@@ -285,11 +437,11 @@ export async function mountBenmoView({container: app, controller, availability =
     const action = control.dataset.action, id = control.dataset.id;
     if (dialog && !['cancel-dialog', 'confirm-dialog'].includes(action)) return;
     if (acting && !['back', 'cancel', 'close', 'area', 'cancel-dialog', 'confirm-dialog'].includes(action)) return;
-    if (composing && ['save', 'add-field', 'remove-field', 'default-prompt', 'default-tracking-prompt'].includes(action)) return;
+    if (composing && ['save', 'add-field', 'remove-field', 'default-prompt', 'default-tracking-prompt', 'default-narrative-prompt', 'add-narrative-character', 'remove-narrative-character', 'toggle-narrative-setting', 'toggle-narrative-injection'].includes(action)) return;
     let ownsAction = false;
     const actionEpoch = epoch;
     try {
-      if (action === 'cancel-dialog') { if (!dialog?.pending) { dialog = null; render(); } return; }
+      if (action === 'cancel-dialog') { if (dialog && !dialog.pending) { const pending = dialog; pending.cancelAction?.(); if (dialog === pending) dialog = null; render(); } return; }
       if (action === 'confirm-dialog') {
         if (!dialog || dialog.pending) return;
         const pending = dialog; pending.pending = true; acting = ownsAction = true; render();
@@ -298,9 +450,21 @@ export async function mountBenmoView({container: app, controller, availability =
       if (action === 'back' || action === 'cancel') { if (action === 'cancel') leave(goBack); else back(); return; }
       if (action === 'close') { leave(() => { epoch++; clearDraft(); dialog = null; onClose(); }); return; }
       if (action === 'area') { leave(() => navigate(id)); return; }
-      if (action === 'reload') { acting = ownsAction = true; remember(); const token = epoch; const next = await controller.load({refresh: true}); if (!disposed && token === epoch) { apply(next); invalidated = false; render(); } return; }
-      if (action === 'tab' && Object.hasOwn(TABS, id)) { leave(() => { remember(); epoch++; state.tab = id; state.route = 'list'; clearDraft(); render(); }); return; }
+      if (action === 'reload') { acting = ownsAction = true; remember(); const token = epoch; const next = await controller.load({refresh: true}); if (!disposed && token === epoch) { remember(); apply(next); invalidated = false; recoverNarrativeDraft(); render(); } return; }
+      if (action === 'tab' && enabledTabs().includes(id)) { leave(() => { remember(); epoch++; state.tab = id; state.route = 'list'; clearDraft(); render(); }); return; }
       if (action === 'kind' && enabledKinds().includes(id)) { leave(() => { remember(); epoch++; state.kind = id; state.route = 'list'; state.selected = state.selections[id] ?? null; clearDraft(); render(); }); return; }
+      if (action === 'settings-narrative' && NARRATIVES.includes(state.tab)) { startNarrativeSettings(); return; }
+      if (action === 'edit-narrative' && NARRATIVES.includes(state.tab)) { startNarrativeEdit(id); return; }
+      if (action === 'generate-narrative') { await generateNarrative(); return; }
+      if (action === 'cancel-narrative' && NARRATIVES.includes(state.tab)) {
+        const kind = state.tab, token = epoch; const next = await controller.cancelNarrative(kind); narrativeJobs.delete(kind);
+        if (!disposed) { apply(next); if (!suspended && epoch === token) { remember(); render(); } } return;
+      }
+      if (action === 'default-narrative-prompt' && state.route === 'narrative-settings') { remember(); draft.prompt = controller.defaultNarrativePrompts?.[state.tab] ?? ''; render(); return; }
+      if (action === 'toggle-narrative-setting' && state.route === 'narrative-settings' && ['readMemory', 'readOriginal', 'readCard'].includes(id)) { remember(); draft[id] = !draft[id]; render(); return; }
+      if (action === 'toggle-narrative-injection' && state.route === 'narrative-settings') { remember(); const character = draft.characters?.find(row => row.id === id); if (character) { character.inject = !character.inject; render(); } return; }
+      if (action === 'add-narrative-character' && state.route === 'narrative-settings' && state.tab === 'self') { remember(); draft.characters.push({id: crypto.randomUUID(), name: '', inject: true}); render(); return; }
+      if (action === 'remove-narrative-character' && state.route === 'narrative-settings' && state.tab === 'self') { remember(); draft.characters = draft.characters.filter(row => row.id !== id); render(); return; }
       if (action === 'settings-tracking' && FIELDS[state.kind]) { startEdit(null, 'list', 'tracking-settings'); return; }
       if (action === 'default-tracking-prompt' && state.route === 'tracking-settings') { remember(); draft.prompt = controller.defaultTrackingPrompts?.[state.kind] ?? ''; render(); return; }
       if (action === 'settings-summary' && state.kind === 'summary') { startEdit(null, 'list', 'summary-settings'); return; }
@@ -338,7 +502,7 @@ export async function mountBenmoView({container: app, controller, availability =
     if (!dialog || composing || event.isComposing) return;
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!dialog.pending) { dialog = null; render(); } }
     if (event.key === 'Tab') {
-      const controls = [...app.querySelectorAll('.wk-dialog button')].filter(node => !node.disabled);
+      const controls = [...app.querySelectorAll('.wk-dialog button,.wk-dialog textarea')].filter(node => !node.disabled);
       if (!controls.length) return;
       event.preventDefault(); const index = controls.indexOf(app.getRootNode().activeElement);
       controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length].focus();
