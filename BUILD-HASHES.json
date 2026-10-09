@@ -1,7 +1,7 @@
 [
   {
     "path": "README.md",
-    "sha256": "a4074cbc797c7620a0014f856cf20e69aabca06eaa8a383303657f2c7a6f2a9a"
+    "sha256": "7fee61d077d14b1d17a91260232ed94ce0f56014b741d32850efe6614e9d61e8"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -29,7 +29,7 @@
   },
   {
     "path": "dist/app/benmo-controller.js",
-    "sha256": "48a4a62d9f96a0bec54098a90a3919014854527736cb1162b560a6aa7828d265"
+    "sha256": "0f34b62df995a7e804e39c5790223f0aa5ef6a9380113cf9cd6c415cca149e04"
   },
   {
     "path": "dist/app/benmo-view.css",
@@ -37,7 +37,7 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "a4f2cd6f319aef17c404509de7b4d551ae5dddaf7ed99e36b2d10b3b535f8d97"
+    "sha256": "7b023cdba0440ad9ae4f9b82f0d094cfd10b51101ec43da71fd4b42d16feca4c"
   },
   {
     "path": "dist/app/control-session.js",
@@ -269,7 +269,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "08541d8dbfd61d1a18d2031d4b5bc80ba7446eb987224ebc9be5dd438076e26b"
+    "sha256": "41e97a5492603d5107dc6851f7cdbbace2b9033aab9c819ff95e9137b956e2bf"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -665,7 +665,7 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "sha256": "fce37abbee4151e7fb242a019d3c1ddff823214cd5436c08afb7cac7f704bbf3"
+    "sha256": "95ef1e7d1863100872f321b39d9c1e7d54f9b39fe717af39dc8955775f062136"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -689,7 +689,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "f0175030044ac6114b4733e1152823efe134e66fdc2aea249d47a0056e9d434f"
+    "sha256": "08b5751b38078c08c52235fa7e35fbb66d4c52541ce6be45ce43a119bce3ffff"
   },
   {
     "path": "dist/platform/sillytavern/pending-settings-saves.js",
@@ -825,10 +825,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "921785edbf63542d0ca431b5cb3a0517360990c29a7c7686f53736618cc2a8f7"
+    "sha256": "30a505c5f4cc04d16fd1d840edee434207a09bd36e78075f97395e1ec123f559"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "4c27d3d7de4a1ec4179a136a068ba008a6e251676a822e0450e756ae29217bdf"
+    "sha256": "171192d3733edc87c7f804211ad73aa7d273ee44fbe6ffdb05c065f77dd2a43c"
   }
 ]

@@ -100,19 +100,20 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     if(!current(t)||ticket!==serial)throw new Error('聊天已变化，请重新读取');
     selection=saved.selection;state={...selection.latest,status:'ready',error:'',floorStates:{}};publish();return inspect();
   }
-  async function generate(floor,{automatic=false,expectedMessage=null,workshopOnly=false,taskId}={}){
+  async function generate(floor,{automatic=false,expectedMessage=null,workshopOnly=false,taskId,automaticSummaryProof=null,automaticMasterProof=null}={}){
     const ticket=serial,controller=new AbortController();jobs.add(controller);let key=String(floor),t,latestTask=false,plan=null,trackingPlan=null;
     const markTracking=(status,error='')=>{trackingFloorStates[key]={status,error};};
     const markWorkshop=(task,status,error='')=>{workshopFloorStates[key]??={};workshopFloorStates[key][task.module.id]={status,error};};
     try{
       t=await adapter.prepare();if(!allowed()||ticket!==serial||!current(t))return false;
       if(expectedMessage&&getContext().chat?.[floor]!==expectedMessage)return false;
+      if(automatic&&getControls?.()?.matches(automaticMasterProof)!==true)return false;
       await refresh();if(!allowed()||ticket!==serial||!current(t))return false;
-      const captured=await repository.captureLatest(t),preferences=captured.latest.preferences,summaryEpoch=latestEpoch,summaryProof=getControls?.()?.capture('summary'),masterProof=getControls?.()?.capture('enabled');
+      const captured=await repository.captureLatest(t),preferences=captured.latest.preferences,summaryEpoch=latestEpoch,summaryProof=automatic?automaticSummaryProof:getControls?.()?.capture('summary'),masterProof=automatic?automaticMasterProof:getControls?.()?.capture('enabled');
       const generation=getGenerationSettings(),rawSource=raw(t);key=rawSource.messages.find(row=>row.floor===floor)?.replyId??key;
-      latestTask=!workshopOnly&&summaryAllowed();
+      latestTask=!workshopOnly&&summaryMatches(summaryProof);
       const source=prepareLatestSource(rawSource,{floor,rules:generation.summaryCleaning.rules});
-      latestTask=!workshopOnly&&summaryAllowed()&&(!automatic||!captured.latest.records.some(record=>record.sourceSnapshot.replyId===key&&matchesStoredLatestSource(record.sourceSnapshot,raw(t))));
+      latestTask=!workshopOnly&&summaryMatches(summaryProof)&&(!automatic||!captured.latest.records.some(record=>record.sourceSnapshot.replyId===key&&matchesStoredLatestSource(record.sourceSnapshot,raw(t))));
       // Summary-only buttons retain their scope; completed replies share all
       // enabled tasks, while workshop retries can target one failed segment.
       plan=automatic||workshopOnly?await workshopRuntime?.prepareBackground(t,source,{automatic,taskId}):null;
@@ -294,16 +295,18 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     if(!processor||Number.isSafeInteger(processor.messageId)&&processor.messageId!==floor)return true;
     return processor.isFinished===true&&processor.isStopped!==true&&!processor.abortController?.signal?.aborted&&!(processor.toolCalls?.length);
   }
+  // A queued automatic task keeps the authorization at reply receipt; a later
+  // toggle must not backfill replies received while the feature was disabled.
   function flushReceipt(){
     const complete=receipt;if(!complete||!foregroundEnded||foregroundStopped||!completedStream(complete.floor))return;
-    receipt=null;if(current(complete.target))void enqueueGeneration(complete.floor,{automatic:true,expectedMessage:complete.message});
+    receipt=null;if(current(complete.target))void enqueueGeneration(complete.floor,{automatic:true,expectedMessage:complete.message,automaticSummaryProof:complete.summaryProof,automaticMasterProof:complete.masterProof});
   }
   on('GENERATION_STARTED',(type,_options,dryRun)=>{if(supported.has(type)&&!dryRun){cancel();foregroundStopped=false;foregroundType=type;}});
   on('GENERATION_STOPPED',()=>{foregroundStopped=true;cancel();});
   on('MESSAGE_RECEIVED',(floor,type)=>{
     const normalized=type==='appendFinal'&&foregroundType==='continue'?'continue':type;
     if(foregroundStopped||!supported.has(normalized)||!Number.isSafeInteger(floor)||!completedStream(floor))return;
-    try{const message=getContext().chat?.[floor];if(message?.is_user===false&&!message.is_system){receipt={floor,message,target:repository.captureTarget()};flushReceipt();}}catch{/* no chat */}
+    try{const message=getContext().chat?.[floor];if(message?.is_user===false&&!message.is_system){receipt={floor,message,target:repository.captureTarget(),summaryProof:summaryAllowed()?getControls?.()?.capture('summary'):null,masterProof:allowed()?getControls?.()?.capture('enabled'):null};flushReceipt();}}catch{/* no chat */}
   });
   // ST streaming ends its UI before MESSAGE_RECEIVED; non-streaming reverses
   // this order. Both receipts are required, with successful-stream evidence.

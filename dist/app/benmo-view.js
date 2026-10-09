@@ -18,7 +18,7 @@ const aliases = value => [...new Set((Array.isArray(value) ? value : String(valu
 export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, initialState = {}} = {}) {
   initialState ??= {};
   const lifetime = new AbortController();
-  let value = await controller.load();
+  let value = await (controller.ensure ? controller.ensure() : controller.load());
   let disposed = false, suspended = false, acting = false, composing = false;
   let error = '', dialog = null, draft = null, baseline = null, original = null, invalidated = false, renderedPolicy = '';
   let returnRoute = 'list', epoch = 0, toastTimer, redirectTimer;

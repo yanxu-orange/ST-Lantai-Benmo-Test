@@ -68,7 +68,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   let controls,controlSubscription,previousPolicy=null,settingsRootView,settingsOpen=false;
   const allowed=key=>['benmo','summary','item','npc'].includes(key)?availability()[key]===true:!!controls?.allowed(key);
   const availability=()=>{
-    const global=controls?.inspect(),local=benmoController?.snapshot(),master=controls?.allowed('enabled')===true;
+    const global=controls?.inspect(),local=benmoController?.availability(),master=controls?.allowed('enabled')===true;
     let localCurrent=false;try{localCurrent=!!local?.target&&sameTarget(local.target,repository.captureTarget());}catch{/* Preparing a new chat. */}
     return {...global?.policy,...Object.fromEntries(['summary','item','npc','benmo'].map(key=>[key,master&&local?.policy?.[key]===true])),memory:!!controls?.allowed('memory'),settings:true,transient:global?.status!=='ready'||local?.status==='loading'||!localCurrent};
   };
@@ -166,7 +166,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         trackingRuntime=createTrackingRuntime({repository,adapter,settings:runtime.settings,getContext,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t),onChange:()=>{void latestRuntime.refresh().catch(()=>{});}});
         latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime});
         benmoController=createBenmoController({latestRuntime,trackingRuntime,repository,adapter,getContext,getControls:()=>controls});
-        benmoSubscription=benmoController.subscribe(syncBenmoAvailability);
+        benmoSubscription=benmoController.subscribeAvailability(syncBenmoAvailability);
         await benmoController.load().catch(()=>{});
         latestDisplay=mountLatestSummaryDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer});
         workshopBackgroundDisplay=mountWorkshopBackgroundDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer});
@@ -258,7 +258,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     // calling setEnabled or loading from this subscription would recurse.
     settingsRootView?.refreshAvailability?.();
     if(!panel)return;
-    if(!settingsOpen&&benmoView&&!next.benmo&&!next.transient&&benmoController?.snapshot().status==='ready'){openSettings();return;}
+    if(!settingsOpen&&benmoView&&!next.benmo&&!next.transient&&benmoController?.availability().status==='ready'){openSettings();return;}
     if(!next.transient)benmoView?.refreshAvailability?.();
     if(app&&!memoryContent.hidden)void app.refreshAvailability();
     if(timeView&&!summaryContent.hidden)timeView.refresh?.();
