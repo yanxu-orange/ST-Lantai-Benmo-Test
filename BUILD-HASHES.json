@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "dafc8719d82e5b09639324481e28cb91a965fd17df818f21b5bdde9006699d08"
+    "sha256": "2981dcdbc8a4d46ac8d1e23764bb7e5ceff184045cbf9ce561ed181f6120d005"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -61,7 +61,7 @@
   },
   {
     "path": "dist/app/cumulative-settings-view.js",
-    "sha256": "d0ab96897181c3f0dbc95639f9440b4df12460700d0d2d2db7cc0b0c44fec1ac"
+    "sha256": "c1c84169762b9f2b8be810e06acfb3970f74eb26c4a8ebfa9f044c91652f6058"
   },
   {
     "path": "dist/app/cumulative-view.js",
@@ -129,7 +129,7 @@
   },
   {
     "path": "dist/app/memory-app.js",
-    "sha256": "5ea28e3752140b4ecacf52d9186458e63cb3f3a067ef5e0e6001db387b1c5404"
+    "sha256": "1fe15ea6df37625876a9030d402b93d2da76b3baa260a930c129903714045413"
   },
   {
     "path": "dist/app/memory-card-time.js",
@@ -209,7 +209,27 @@
   },
   {
     "path": "dist/app/source-deletion-dialog.js",
-    "sha256": "b9a32e8c43709b2c0a6fadf72c0c43616983d9887f656dea4391026b93c844d7"
+    "sha256": "2e272bfac72ddd56f8e618f0a997d6f19fac927f7f24b9bb044b6f7391b63204"
+  },
+  {
+    "path": "dist/app/spring/assets/cherry-blossoms.webp",
+    "sha256": "70506b144fbaa3badd4b33f4af34ef09a86e810e7c8f595e03e7f720a46e3add"
+  },
+  {
+    "path": "dist/app/spring/assets/prompt-flower.svg",
+    "sha256": "6f84707265728c5bcbebfad4f28ecba25bc1e5a4bf4d1d14df3b71bb69ead13e"
+  },
+  {
+    "path": "dist/app/spring/manifest.json",
+    "sha256": "8575168d234d1eabc2d9fadd5bed7b2804dd09015e6df6e3c221d92dde0563c5"
+  },
+  {
+    "path": "dist/app/spring/memory.css",
+    "sha256": "867d7f1b31ccaff36c9f90ddd049fd58b9eb7687dc1bba7591ee642bade56de5"
+  },
+  {
+    "path": "dist/app/spring/theme.css",
+    "sha256": "7de38101f120a4e3eca2e5aa227e638a4c0699022b13c05d7c0bc03dc9fa470e"
   },
   {
     "path": "dist/app/styles/mobile.css",
@@ -221,11 +241,11 @@
   },
   {
     "path": "dist/app/styles/style-entries.js",
-    "sha256": "156f38e18d9a0098aaa88b182224c607bf823f40cadeae15a271e3e43aae1c51"
+    "sha256": "beab6d590d40eff6913554062c44863145ea5645233bd06bb160a065bb120446"
   },
   {
     "path": "dist/app/styles/theme.js",
-    "sha256": "45d09f7ace5cfc1101c3de0d123af9187126f5e613c226910e41e77d4b6e8d03"
+    "sha256": "ed896563cc698eda802920ac4c25feaeb8eaa19e6aaab5462d97475af747f337"
   },
   {
     "path": "dist/app/summary-controller.js",
@@ -237,7 +257,7 @@
   },
   {
     "path": "dist/app/summary-settings-view.js",
-    "sha256": "101c475177b3248fe36153791abdf3f73531b55737eded834044c807f7105407"
+    "sha256": "069a6926724e3c08ee6a9a8024f360b2ba6156cf7b390a7a87a6fd74cfb14301"
   },
   {
     "path": "dist/app/summary-settings.css",
@@ -277,7 +297,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "c33de3ac062c363dc3c089e681a21a5e1d8dd07391fdde6b19ea4287f5b55d5f"
+    "sha256": "083f0c8926884e5e98e0ad032b990237b9852f4799e38d92628d1d3c04cc34e6"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -697,7 +717,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "965beb9979d27cf823d225b7b6ba3e729ef1b59ea334d32b216f682d49f8e535"
+    "sha256": "cc94ebe864e2481a41f8821e6578d0e1bdeba456f8104321407bb8653da9e0e0"
   },
   {
     "path": "dist/platform/sillytavern/narrative-runtime.js",
@@ -837,10 +857,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "d766593706da948d41e7d6184c1864596f3ade7c933cd30a9651e97de8f51fad"
+    "sha256": "e4806aa02aeb1a9602cba436fef25adf33c559d1895af3c7b9174a6dbd283ada"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "c40043402cb69cbb9756e03b9b0b0560560b290c3e114ab6c5c8cb1415c424af"
+    "sha256": "7d404951a34b351900c06a6f45fdb4ddeaeee5f1ffd1a1e2d1b057cf7d9f31d3"
   }
 ]

@@ -29,3 +29,9 @@ export const MEMPHIS_STYLE_ENTRIES=Object.freeze([
 export const SNOW_ERMINE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../snow-ermine/theme.css'),
 ]);
+
+// Spring keeps its common mapping separate from the approved memory detail.
+export const SPRING_STYLE_ENTRIES=Object.freeze([
+  entry('shared','../spring/theme.css'),
+  entry('shared','../spring/memory.css'),
+]);

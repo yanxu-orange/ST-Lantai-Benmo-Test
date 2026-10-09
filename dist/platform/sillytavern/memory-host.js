@@ -42,7 +42,7 @@ import {mountCumulativeView} from '../../app/cumulative-view.js';
 import {createCumulativeSettingsController} from '../../app/cumulative-settings-controller.js';
 import {mountCumulativeSettingsView} from '../../app/cumulative-settings-view.js';
 import '../../app/memphis/compact-group-candidate.js';
-import {BASE_STYLE_ENTRIES,MEMPHIS_STYLE_ENTRIES,SNOW_ERMINE_STYLE_ENTRIES} from '../../app/styles/style-entries.js';
+import {BASE_STYLE_ENTRIES,MEMPHIS_STYLE_ENTRIES,SNOW_ERMINE_STYLE_ENTRIES,SPRING_STYLE_ENTRIES} from '../../app/styles/style-entries.js';
 
 import { DEFAULT_THEME, applyTheme, resolveStyleAssets } from '../../app/styles/theme.js';
 import { createAppearanceAdapter } from './appearance-adapter.js';
@@ -56,9 +56,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, stylePromise,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryHistory,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
-    memphisStyle,memphisObserver,memphisStylePromise,snowStyle,snowStylePromise,snowCss;
+    memphisStyle,memphisObserver,memphisStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
   const storybarTheme=mountStorybarTheme({document:doc});
-  const appearance = createAppearanceSession({ adapter: createAppearanceAdapter({ getContext, fetchImpl: request, ...appearanceOptions }), prepareTheme: async theme => { if (theme === 'snow-ermine') await snowStyles(); }, canSave: () => {
+  const appearance = createAppearanceSession({ adapter: createAppearanceAdapter({ getContext, fetchImpl: request, ...appearanceOptions }), prepareTheme: async theme => { if (theme === 'snow-ermine') await snowStyles(); if (theme === 'spring') await springStyles(); }, canSave: () => {
     try { if(controls?.inspect().busy)return false;if (apiSession && !['ready','saved'].includes(apiSession.inspect().status)) return false; runtime.settings.getEpoch(); return true; } catch { return false; }
   } });
   const unsubscribeAppearance = appearance.subscribe(() => syncMemphis());
@@ -212,7 +212,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       for(const page of Object.values(areaPages)){cleanup(()=>page.unmount({preserve:false}));page.settingsReturn=false;}
       benmoNavigation=null;cleanup(()=>timeController?.dispose());timeController=null;
       const currentApp=app;app=null;cleanup(()=>currentApp?.dispose());
-      const currentObserver=memphisObserver;memphisObserver=null;memphisStyle=null;snowStyle=null;
+      const currentObserver=memphisObserver;memphisObserver=null;memphisStyle=null;snowStyle=null;springStyle=null;
       cleanup(()=>currentObserver?.disconnect());
     } finally {
       const currentPanel=panel;panel=null;content=memoryContent=benmoContent=settingsContent=summaryContent=null;
@@ -511,10 +511,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
 
   async function notificationStyles() {
     const css = await styles();
-    if ((appearance.inspect().previewTheme ?? appearance.inspect().theme) !== 'snow-ermine') return css;
+    const theme = appearance.inspect().previewTheme ?? appearance.inspect().theme;
     // Notices live in separate short-lived shadows. Snapshot the current
     // presentation roles without making their business lifecycle theme-aware.
-    return css + '\n' + (await snowStyles()).replaceAll(':host([data-ui-theme="snow-ermine"])', ':host');
+    if (theme === 'spring') return css + '\n' + (await springStyles()).replaceAll(':host([data-ui-theme="spring"])', ':host');
+    if (theme === 'snow-ermine') return css + '\n' + (await snowStyles()).replaceAll(':host([data-ui-theme="snow-ermine"])', ':host');
+    return css;
   }
   async function styles() {
     if (!stylePromise) stylePromise = Promise.all(BASE_STYLE_ENTRIES.map(async ({url}) => {
@@ -606,9 +608,21 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     });
     return snowStylePromise;
   }
+  async function springStyles() {
+    if (!springStylePromise) springStylePromise = Promise.all(SPRING_STYLE_ENTRIES.map(async ({url}) => {
+      const response = await request(url);
+      if (!response.ok) throw new Error();
+      return resolveStyleAssets(await response.text(), url).replace(/:root\b/g, ':host');
+    })).then(parts => { springCss = parts.join('\n'); return springCss; }).catch(() => {
+      springStylePromise = null;
+      throw Object.assign(new Error('皮肤资源未能加载'), { code: 'APPEARANCE_STYLE_UNAVAILABLE' });
+    });
+    return springStylePromise;
+  }
   function syncMemphis() {
     if (!panel || !memphisStyle) return;
-    const theme = (appearance.inspect().previewTheme ?? appearance.inspect().theme) === 'snow-ermine' && snowCss ? 'snow-ermine' : DEFAULT_THEME;
+    const requested = appearance.inspect().previewTheme ?? appearance.inspect().theme;
+    const theme = requested === 'spring' && springCss ? 'spring' : requested === 'snow-ermine' && snowCss ? 'snow-ermine' : DEFAULT_THEME;
     if(panel.getAttribute('data-ui-theme')!==theme)panel.setAttribute('data-ui-theme', theme);
     applyTheme(content, theme);
     let active = false;
@@ -620,12 +634,16 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if (themed && !page.hidden) active = true;
     }
     // The complete fixed candidate contains shared choice/hit-area semantics.
-    // Its Memphis visuals are scoped; both themes retain that shared layer.
+    // Its Memphis visuals are scoped; all themes retain that shared layer.
     const media=active?'all':'not all';if(memphisStyle.media!==media)memphisStyle.media=media;
     if (theme === 'snow-ermine' && !snowStyle) {
       snowStyle = doc.createElement('style'); snowStyle.textContent = snowCss; panel.shadowRoot.append(snowStyle);
     }
     if(snowStyle){const snowMedia=active&&theme==='snow-ermine'?'all':'not all';if(snowStyle.media!==snowMedia)snowStyle.media=snowMedia;}
+    if (theme === 'spring' && !springStyle) {
+      springStyle = doc.createElement('style'); springStyle.textContent = springCss; panel.shadowRoot.append(springStyle);
+    }
+    if(springStyle){const springMedia=active&&theme==='spring'?'all':'not all';if(springStyle.media!==springMedia)springStyle.media=springMedia;}
     if (active && typeof globalThis.getComputedStyle === 'function') globalThis.UICompactGroupCandidate.sync(panel.shadowRoot);
   }
   function errorView(error) {

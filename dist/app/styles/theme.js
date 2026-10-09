@@ -3,6 +3,7 @@ export const DEFAULT_THEME = 'memphis';
 export const THEMES = Object.freeze([
   Object.freeze({ id: DEFAULT_THEME, label: '孟菲斯' }),
   Object.freeze({ id: 'snow-ermine', label: '雪山白鼬' }),
+  Object.freeze({ id: 'spring', label: '春日' }),
 ]);
 export const isTheme = value => THEMES.some(theme => theme.id === value);
 export const normalizeTheme = value => isTheme(value) ? value : DEFAULT_THEME;

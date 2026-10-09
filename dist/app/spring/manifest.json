@@ -1,0 +1,25 @@
+{
+  "id": "spring",
+  "label": "春日",
+  "ownership": "consumer",
+  "reference": {
+    "name": "lantai_spring_memory_summary_recall_round2_1(1).html",
+    "scope": "Common appearance and memory only",
+    "date": "2026-10-09",
+    "scriptsExecuted": false
+  },
+  "assets": [
+    {
+      "file": "assets/cherry-blossoms.webp",
+      "source": "Embedded WebP from the supplied reference, extracted without modification",
+      "bytes": 31760,
+      "sha256": "70506b144fbaa3badd4b33f4af34ef09a86e810e7c8f595e03e7f720a46e3add"
+    },
+    {
+      "file": "assets/prompt-flower.svg",
+      "source": "Original static line-flower SVG for the three user-approved quality-summary/index/merge headings",
+      "bytes": 281,
+      "sha256": "6f84707265728c5bcbebfad4f28ecba25bc1e5a4bf4d1d14df3b71bb69ead13e"
+    }
+  ]
+}
