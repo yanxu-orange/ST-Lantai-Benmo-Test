@@ -25,9 +25,9 @@
   --lt-spring-time-blossom-fill: #f7e8eb;
 }
 
-/* Root and focused headers share the reference image without changing chrome
-   geometry or reducing the existing native 44px control hit areas. */
-.lantai[data-ui-theme="spring"].lt-time :is(.lt-root-top,.lt-header:not(.lt-header--root)) {
+/* Focused headers keep their compact treatment; root photography is shared
+   across all five areas by spring/theme.css. */
+.lantai[data-ui-theme="spring"].lt-time .lt-header:not(.lt-header--root) {
   background-color: #f5f8f0;
   background-image: linear-gradient(90deg, rgb(253 254 250 / 77%) 0%, rgb(251 252 249 / 49%) 55%, rgb(248 251 245 / 15%) 100%), var(--lt-spring-time-header-photo);
   background-position: center 34%;

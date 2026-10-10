@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "b282913e636624f9278a240c0016710613dce99603d1cd5cadc2c5b04279790c"
+    "sha256": "dc29929a22905b78ca9a96d747ce6174c299e0a8aed77aa479031ff7e306c748"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -41,7 +41,7 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "4d42b720815ddd8abe329de49091587ba172296cd4cb0c24ecf8747ae7b1b05f"
+    "sha256": "dc83c9248a2a12ccde4abc57bb0d56707ac60ee72b9df428e98bfdcae0221d94"
   },
   {
     "path": "dist/app/control-session.js",
@@ -192,16 +192,36 @@
     "sha256": "b6960e15e58b6029848daba2d32f1ca7ff612831f9c26a933ad999eb9cecd098"
   },
   {
+    "path": "dist/app/snow-ermine/assets/snow-crystal.svg",
+    "sha256": "ac397db1946dad82081c73903e6a7814b0ecfe3ea090bb6ee3643349b6353765"
+  },
+  {
     "path": "dist/app/snow-ermine/assets/snow-ermine-header.png",
     "sha256": "674ff57c3841bb1ab22f786c00a2f9ac86adedb93f5149512923a77868460fb8"
   },
   {
+    "path": "dist/app/snow-ermine/benmo.css",
+    "sha256": "e8d8e518a0b5ad5d80600eb59bfebd2cc9ff801c4dc32b64a3d1c4d5e7637cc3"
+  },
+  {
     "path": "dist/app/snow-ermine/manifest.json",
-    "sha256": "6aaa9237a307538b277e850ab3950c60d6bee0696f9e09c2529d68e0622af21d"
+    "sha256": "a5439b1e0442325eb9c2da12688c967e64854ed6f76b4ce8804e425b51b7e866"
+  },
+  {
+    "path": "dist/app/snow-ermine/memory.css",
+    "sha256": "c0eb9f4dd22e40e3a011be8cf8dff396b643218a7a1ca10a412f797ad9d5432b"
+  },
+  {
+    "path": "dist/app/snow-ermine/secondary.css",
+    "sha256": "c4960c530ac47b350dc0999e47ed366ea8fb4be561385e0963fbd884346e1e09"
   },
   {
     "path": "dist/app/snow-ermine/theme.css",
-    "sha256": "95c33597a57295eecbc800aa7ea0968105a49285dfac99764eda46cce56e42ef"
+    "sha256": "5aa7fafc4c5d8c247795d5357dacc2c88f117c90f680ee9f8dea63d238d8caff"
+  },
+  {
+    "path": "dist/app/snow-ermine/time.css",
+    "sha256": "b4d96edbac8eb083e662a544d2ce6cd98b9f7c161e42b3374e51f0376a9dbb82"
   },
   {
     "path": "dist/app/source-deletion-dialog.js",
@@ -265,7 +285,7 @@
   },
   {
     "path": "dist/app/spring/benmo.css",
-    "sha256": "741ae2476f166c543f13a84b98c858a22a47a3127ce76ed822587d4610b87382"
+    "sha256": "59d03eedfc414b86245634ac99728189578a9b7ec72b75785e3e5596767bc9cc"
   },
   {
     "path": "dist/app/spring/manifest.json",
@@ -285,11 +305,15 @@
   },
   {
     "path": "dist/app/spring/time.css",
-    "sha256": "31ffccd5d35ebebe78ca1fa3c72603983d5dfba99ba273c9e8bf1836dfa7bad0"
+    "sha256": "38ae5157a55b7795bb490a3f18b2eca3509520a7266bca567de49a0072a2ae9a"
   },
   {
     "path": "dist/app/spring/workshop.css",
     "sha256": "4795528da65df1bbd0873a86f4e2c07fe91f19abe0a2f76506b04c0af0f0ac0f"
+  },
+  {
+    "path": "dist/app/stable-surface.js",
+    "sha256": "ace47268f4f21f1620466a83e2ab083498065d614ae3e9fec89aac1d28107dc5"
   },
   {
     "path": "dist/app/styles/mobile.css",
@@ -301,7 +325,7 @@
   },
   {
     "path": "dist/app/styles/style-entries.js",
-    "sha256": "9a635108e8bb2c8c8cb871985e707ff67b83ca87e8de197a70e396f86bad5a71"
+    "sha256": "618fc2d2918c082520b7fd37531e9f3034020a89a6962586b5aadc9726b99b9a"
   },
   {
     "path": "dist/app/styles/theme.js",
@@ -345,7 +369,7 @@
   },
   {
     "path": "dist/app/time-view.js",
-    "sha256": "8ef986fcd34ca48437cbf18fbf64786f6660b0e80585132e6a8644530c812f9b"
+    "sha256": "ec612c72fd1426bd9ef792ef4914259435b14f5088b1e6b8672137e6254a3219"
   },
   {
     "path": "dist/app/tracking-controller.js",
@@ -357,7 +381,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "459a6befd6d26390b20f2ab14b8652cf67213edbdc67948550288d2ae2937790"
+    "sha256": "a65c13d007cf23a8fb4030e359f933af0916807f77242988f8f6f5b58a4cb4f8"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -777,7 +801,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "d389886b32c75d8af7ae1863266dbc9356e4241c2924a514a9564074c844905d"
+    "sha256": "59579d7d4d8f36da650368543ec849062efab841aaa663ef896cbfd0b287f322"
   },
   {
     "path": "dist/platform/sillytavern/narrative-runtime.js",
@@ -917,10 +941,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "0ab7732f4edf4e60e8dfeaf5d64faa50b2e67724c64a002e7dd39e3a922ccc41"
+    "sha256": "9959802e7dd627a9de43a98850a27ce90609d9cf341c6dc3d347985e648dacc5"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "ab87a8a3a4fdf5b203378f036124fe21dc3fa1fec286c42a195c52143f57d32c"
+    "sha256": "4c3acd87ccc109f2c79133671cd63d30bbeb72618328c76f06b2f3c3c9410bd4"
   }
 ]

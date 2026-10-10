@@ -1,3 +1,4 @@
+import {replaceSurfaceMarkup} from './stable-surface.js';
 import {mainNavigation} from './navigation.js';
 import {surfaceTheme} from './styles/theme.js';
 
@@ -17,10 +18,11 @@ const aliases = value => [...new Set((Array.isArray(value) ? value : String(valu
 
 /** The Benmo surface owns only navigation/drafts. The controller owns source
  * eligibility, runtime jobs, feature policy and acknowledged persistence. */
-export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, initialState = {}} = {}) {
+export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, isCurrent = () => true, initialState = {}} = {}) {
   initialState ??= {};
   const lifetime = new AbortController();
   let value = await (controller.ensure ? controller.ensure() : controller.load());
+  if (!isCurrent()) return null;
   let disposed = false, suspended = false, acting = false, composing = false;
   let error = '', dialog = null, draft = null, baseline = null, original = null, narrativeRecovery = null, narrativeDraftTarget = null, invalidated = false, renderedPolicy = '';
   let returnRoute = 'list', epoch = 0, toastTimer, redirectTimer;
@@ -385,16 +387,19 @@ export async function mountBenmoView({container: app, controller, availability =
     if (state.route === 'edit') return state.kind === 'summary' ? draft?.id ? '编辑最新摘要' : '手动补录摘要' : `${returnRoute === 'list' && !original ? '新建' : '编辑'}${state.kind === 'item' ? '物品' : '角色'}`;
     return '本末';
   }
+  let renderedMarkup = null;
   function render() {
     if (disposed || suspended) return;
     if (externalPolicy().transient) { syncWriteControls(); return; }
     renderedPolicy = JSON.stringify(policy());
-    if (!normalize()) { stopSummaryVisibility(); app.innerHTML = ''; redirectToSettings(); return; }
+    if (!normalize()) { stopSummaryVisibility(); app.innerHTML = ''; renderedMarkup = null; redirectToSettings(); return; }
     if (state.tab === 'records' && state.kind === 'summary') startSummaryVisibility(); else stopSummaryVisibility();
     const focused = app.getRootNode().activeElement;
     const focusName = focused?.name, focusValue = focused?.value, focusData = focused?.dataset ? JSON.stringify({...focused.dataset}) : null;
     const subpage = state.route !== 'list';
-    app.innerHTML = `<section class="lantai workshop benmo ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}" data-benmo-route="${state.route}" data-benmo-tab="${state.tab}" data-benmo-kind="${state.kind}">${subpage ? `<header class="lt-header ui-header subpage-header">${icon(draft && returnRoute === 'detail' ? '返回记录详情' : `返回${state.tab === 'records' ? KINDS[state.kind] : TABS[state.tab]}`, 'back', 'back')}<h1 class="ui-page-title">${pageTitle()}</h1>${icon('关闭兰台', 'close', 'close')}</header>` : `<header class="lt-header lt-header--root ui-header"><div class="lt-root-top"><h1 class="ui-page-title">本末</h1>${icon('关闭兰台', 'close', 'close')}</div><nav class="ui-tablist" aria-label="本末分区">${enabledTabs().map(id => selectButton(id, TABS[id], state.tab, 'tab')).join('')}</nav></header>`}<main class="lt-main ui-main" tabindex="-1">${error || value.error ? `<p class="lt-error" role="alert">${esc(error || value.error)}</p>${button('重新读取', 'reload')}` : ''}${content()}</main><footer class="lt-footer">${mainNavigation({policy: policy(), current: 'benmo', actions: {memory: 'area', time: 'area', workshop: 'area', benmo: 'area', settings: 'area'}, attributes: Object.fromEntries(['memory', 'time', 'workshop', 'benmo', 'settings'].map(area => [area, `data-id="${area}"`]))})}</footer>${dialog ? `<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending ? '正在处理，请稍候…' : dialog.text)}</p>${(dialog.details ?? []).map(item => `<section class="section"><label class="ui-field"><span>后台新内容</span><textarea class="lt-textarea" rows="3" readonly aria-label="后台${esc(item.label)}">${esc(item.latest)}</textarea></label><label class="ui-field"><span>你的草稿</span><textarea class="lt-textarea" rows="3" readonly aria-label="草稿${esc(item.label)}">${esc(item.local)}</textarea></label></section>`).join('')}<div class="wk-dialog-actions">${button(dialog.cancelLabel ?? '取消', 'cancel-dialog', dialog.pending ? 'disabled' : '')}${button(dialog.pending ? '处理中…' : dialog.confirmLabel ?? '确认', 'confirm-dialog', dialog.pending ? 'disabled aria-busy="true"' : '', 'primary')}</div></div></div>` : ''}</section>`;
+    const markup = `<section class="lantai workshop benmo ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}" data-benmo-route="${state.route}" data-benmo-tab="${state.tab}" data-benmo-kind="${state.kind}">${subpage ? `<header class="lt-header ui-header subpage-header">${icon(draft && returnRoute === 'detail' ? '返回记录详情' : `返回${state.tab === 'records' ? KINDS[state.kind] : TABS[state.tab]}`, 'back', 'back')}<h1 class="ui-page-title">${pageTitle()}</h1>${icon('关闭兰台', 'close', 'close')}</header>` : `<header class="lt-header lt-header--root ui-header"><div class="lt-root-top"><h1 class="ui-page-title">本末</h1>${icon('关闭兰台', 'close', 'close')}</div><nav class="ui-tablist" aria-label="本末分区">${enabledTabs().map(id => selectButton(id, TABS[id], state.tab, 'tab')).join('')}</nav></header>`}<main class="lt-main ui-main" tabindex="-1">${error || value.error ? `<p class="lt-error" role="alert">${esc(error || value.error)}</p>${button('重新读取', 'reload')}` : ''}${content()}</main><footer class="lt-footer">${mainNavigation({policy: policy(), current: 'benmo', actions: {memory: 'area', time: 'area', workshop: 'area', benmo: 'area', settings: 'area'}, attributes: Object.fromEntries(['memory', 'time', 'workshop', 'benmo', 'settings'].map(area => [area, `data-id="${area}"`]))})}</footer>${dialog ? `<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending ? '正在处理，请稍候…' : dialog.text)}</p>${(dialog.details ?? []).map(item => `<section class="section"><label class="ui-field"><span>后台新内容</span><textarea class="lt-textarea" rows="3" readonly aria-label="后台${esc(item.label)}">${esc(item.latest)}</textarea></label><label class="ui-field"><span>你的草稿</span><textarea class="lt-textarea" rows="3" readonly aria-label="草稿${esc(item.label)}">${esc(item.local)}</textarea></label></section>`).join('')}<div class="wk-dialog-actions">${button(dialog.cancelLabel ?? '取消', 'cancel-dialog', dialog.pending ? 'disabled' : '')}${button(dialog.pending ? '处理中…' : dialog.confirmLabel ?? '确认', 'confirm-dialog', dialog.pending ? 'disabled aria-busy="true"' : '', 'primary')}</div></div></div>` : ''}</section>`;
+  // Repeated runtime receipts must not replace an unchanged surface.
+  if (markup !== renderedMarkup) { replaceSurfaceMarkup(app, markup, renderedMarkup); renderedMarkup = markup; }
     const main = app.querySelector('.lt-main');
     if (main) main.scrollTop = state.scrolls[context()] ?? 0;
     if (dialog) {

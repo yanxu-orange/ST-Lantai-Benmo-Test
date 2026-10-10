@@ -339,21 +339,36 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(!allowed('benmo')||!benmoController||!panel||settingsOpen)return false;
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
     if(benmoView&&!benmoContent.hidden&&!kind)return true;
-    unmountPages();app?.suspendCumulative();
-    memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=true;summaryContent.inert=false;benmoContent.hidden=false;benmoContent.inert=false;
-    if(benmoTarget&&!sameTarget(benmoTarget,target))benmoNavigation=null;
-    benmoTarget=target;
-    const initialState=kind?{...(benmoNavigation??{}),tab:'records',kind,route:'list'}:benmoNavigation;
-    const benmoContainer=doc.createElement('div');benmoContainer.className='benmo-mount';benmoContent.replaceChildren(benmoContainer);
-    const loading=mountWorkshopLoading(benmoContainer,{titleText:'本末',messageText:'正在读取本末记录…',onBack:()=>void returnFromSummary(),onClose:close,onRetry:()=>void openBenmo({kind})});
-    try{const view=await mountBenmoView({container:benmoContainer,controller:benmoController,availability,initialState:initialState??{},onClose:close,onNavigate:(area,snapshot)=>{
+    const valid=()=>!!panel&&serial===ticket&&request===pageRequest&&!settingsOpen&&sameTarget(target,repository.captureTarget());
+    const navigation=benmoView?.snapshotNavigation()??benmoNavigation;
+    const previous=benmoTarget&&!sameTarget(benmoTarget,target)?null:navigation;
+    const initialState=kind?{...(previous??{}),tab:'records',kind,route:'list'}:previous;
+    const benmoContainer=doc.createElement('div');benmoContainer.className='benmo-mount';
+    // A detached warm mount still inherits the selected appearance synchronously.
+    benmoContainer.setAttribute('data-ui-theme',panel.getAttribute('data-ui-theme')??DEFAULT_THEME);
+    let activated=false,settled=false,loading=null;
+    const activate=()=>{
+      if(activated||!valid())return;
+      unmountPages();app?.suspendCumulative();
+      memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=true;summaryContent.inert=false;benmoContent.hidden=false;benmoContent.inert=false;
+      benmoTarget=target;benmoContent.replaceChildren(benmoContainer);activated=true;
+    };
+    const showLoading=()=>{
+      if(!valid())return null;activate();
+      return loading??=mountWorkshopLoading(benmoContainer,{titleText:'本末',messageText:'正在读取本末记录…',onBack:()=>void returnFromSummary(),onClose:close,onRetry:()=>void openBenmo({kind})});
+    };
+    // Keep the current page until a real wait is established. A proof-checked
+    // cached ensure finishes in microtasks and never paints a loading page.
+    afterPageFrame(()=>{if(!settled&&valid())showLoading();});
+    try{const view=await mountBenmoView({container:benmoContainer,controller:benmoController,availability,isCurrent:valid,initialState:initialState??{},onClose:close,onNavigate:(area,snapshot)=>{
       benmoNavigation=snapshot;
       if(area==='settings'){openSettings();return;}
       if(area==='memory')void returnFromSummary();else if(area==='time')void openTime();else if(area==='workshop')void openWorkshop();
     }});
-    if(!panel||serial!==ticket||request!==pageRequest||!sameTarget(target,repository.captureTarget())){view.dispose();return false;}
-    benmoView=view;syncAppearance();return true;
-    }catch(error){if(panel&&serial===ticket&&request===pageRequest&&sameTarget(target,repository.captureTarget()))loading.fail(error);return false;}
+    settled=true;
+    if(!view||!valid()){view?.dispose();return false;}
+    activate();benmoView=view;syncAppearance();return true;
+    }catch(error){settled=true;if(valid())showLoading()?.fail(error);return false;}
   }
   const openLatestSummary=()=>openBenmo({kind:'summary'});
   async function openSummarySettings(fromMemory=true) {

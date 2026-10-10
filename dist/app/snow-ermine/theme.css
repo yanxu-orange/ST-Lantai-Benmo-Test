@@ -1,21 +1,21 @@
 /* Consumer-owned Snow Ermine mapping. The shared app owns structure, data,
-   responsive arrangement and behavior. Reference: solid preview v3 (2026-10-04).
+   responsive arrangement and behavior. Reference: approved 3.3 layout candidate, Library v2 (2026-10-10).
    Load after the shared component bundle and app sheets. No supplier edits. */
 [data-ui-theme="snow-ermine"],
 :host([data-ui-theme="snow-ermine"]) {
   color-scheme: light;
 
   --ui-color-canvas: #f8fbfe;
-  --ui-color-workspace: #fafcfe;
+  --ui-color-workspace: #f8fbfe;
   --ui-color-surface-base: #fff;
   --ui-color-surface-raised: #fff;
-  --ui-color-surface-subtle: #f7fafc;
-  --ui-color-text-primary: #2a333b;
-  --ui-color-text-secondary: #5f6b74;
+  --ui-color-surface-subtle: #eef5fa;
+  --ui-color-text-primary: #324f64;
+  --ui-color-text-secondary: #455969;
   --ui-color-text-meta: #697580;
   --ui-color-text-disabled: #8a959e;
   --ui-color-border-subtle: #e2eaf0;
-  --ui-color-border-default: #d7e2ea;
+  --ui-color-border-default: #dbe7ef;
   --ui-color-border-strong: #b3c8d7;
   --ui-color-field-background: #fff;
   --ui-color-field-border: #c5d4df;
@@ -25,14 +25,14 @@
   --ui-color-feedback-error-text: #aa4945;
 
   /* Actions are separate from selection: opening manual summary is ordinary. */
-  --ui-color-action-primary-background: #e2edf5;
-  --ui-color-action-primary-text: #2a333b;
+  --ui-color-action-primary-background: #d4ebfa;
+  --ui-color-action-primary-text: #285c7e;
   --ui-color-action-secondary-background: #fff;
-  --ui-color-action-secondary-text: #2a333b;
+  --ui-color-action-secondary-text: #3c6e8e;
   --ui-color-action-tertiary-text: #405666;
-  --ui-color-selected-background: #287DA8;
-  --ui-color-selected-text: #fff;
-  --ui-color-selected-border: #287DA8;
+  --ui-color-selected-background: #dceefa;
+  --ui-color-selected-text: #2d688e;
+  --ui-color-selected-border: #b5d7e9;
   --ui-color-active-background: var(--ui-color-selected-background);
   --ui-color-active-text: var(--ui-color-selected-text);
 
@@ -59,9 +59,9 @@
   --ui-type-ui-section-title-weight: 650;
   --ui-type-ui-object-title-weight: 400;
   --ui-type-ui-control-weight: 400;
-  --ui-type-reading-body-size: .9375rem;
+  --ui-type-reading-body-size: .875rem;
   --ui-type-reading-body-weight: 400;
-  --ui-type-reading-body-line: 1.68;
+  --ui-type-reading-body-line: 1.82;
 
   --ui-shape-surface-radius: 5px;
   --ui-shape-control-radius: 4px;
@@ -81,12 +81,15 @@
 
   /* These are visual product roles, deliberately independent of selection. */
   --lt-snow-page-pad: 16px;
+  --lt-snow-crystal: url("./assets/snow-crystal.svg");
+  --lt-snow-check-fill: #287da8;
+  --lt-snow-check-ink: #fff;
   --lt-snow-header-ink: #fff;
   --lt-snow-header-fallback: #356990;
-  --lt-snow-header-nav-text: #405d72;
-  --lt-snow-header-nav-current-text: #244d70;
-  --lt-snow-header-nav-current-line: #669fc3;
-  --lt-snow-header-nav-background: rgb(243 249 254 / 90%);
+  --lt-snow-header-nav-text: #587184;
+  --lt-snow-header-nav-current-text: #275373;
+  --lt-snow-header-nav-current-line: #6a9fc0;
+  --lt-snow-header-nav-background: rgb(237 246 252 / 92%);
   --lt-snow-card-shadow: 0 1px 3px rgb(42 70 91 / 9%);
   --lt-snow-card-hover-shadow: 0 2px 6px rgb(42 70 91 / 11%);
   --lt-snow-hover-background: #edf5fb;
@@ -130,8 +133,8 @@
   min-inline-size: max(44px, var(--ui-interaction-target-min));
 }
 .lantai[data-ui-theme="snow-ermine"] .ui-button--primary {
-  border-color: var(--ui-color-border-strong);
-  font-weight: 600;
+  border-color: #a9cfe7;
+  font-weight: 700;
 }
 .lantai[data-ui-theme="snow-ermine"] :is(.ui-button,.ui-icon-button,.ui-segment):hover:enabled:not(:where([aria-pressed="true"],[aria-current="page"],[data-selected="true"])) {
   background: var(--lt-snow-hover-background);
@@ -148,7 +151,7 @@
 .lantai[data-ui-theme="snow-ermine"] .lt-header {
   position: relative;
   isolation: isolate;
-  min-height: 52px;
+  min-height: 64px;
   padding: 4px var(--lt-snow-page-pad);
   gap: var(--ui-space-control);
   border-bottom-color: var(--ui-color-border-subtle);
@@ -216,12 +219,13 @@
 }
 .lantai[data-ui-theme="snow-ermine"] .lt-root-top {
   padding: 4px var(--lt-snow-page-pad);
-  min-height: 52px;
+  min-height: 83px;
   background: linear-gradient(90deg, rgb(19 54 96 / 89%), rgb(24 68 112 / 62%) 51%, rgb(23 69 113 / 6%) 90%);
 }
 .lantai[data-ui-theme="snow-ermine"] .lt-header--root .ui-tablist {
   gap: 0;
-  padding-inline: var(--lt-snow-page-pad);
+  padding-inline: 0;
+  min-height: 53px;
   background: var(--lt-snow-header-nav-background);
   box-shadow: 0 2px 5px rgb(45 80 110 / 6%);
 }
@@ -232,7 +236,7 @@
   padding-inline: 2px;
   background: transparent;
   color: var(--lt-snow-header-nav-text);
-  font-size: var(--ui-type-ui-control-size);
+  font-size: 15px;
   font-weight: 400;
 }
 .lantai[data-ui-theme="snow-ermine"] .lt-header--root .lt-type[aria-current="page"] {
@@ -307,14 +311,14 @@
   box-shadow: none;
 }
 .lantai[data-ui-theme="snow-ermine"] .lt-list-icons > .ui-button[aria-pressed="true"] .lt-icon {
-  filter: brightness(0) invert(1);
+  filter: brightness(0) saturate(100%) invert(36%) sepia(22%) saturate(1074%) hue-rotate(159deg);
 }
 .lantai[data-ui-theme="snow-ermine"] :is(.lt-mode input,.lt-selection-row input,.lt-summary-word-heading input) {
-  accent-color: var(--ui-color-selected-background);
+  accent-color: var(--lt-snow-check-fill);
 }
 .lantai[data-ui-theme="snow-ermine"] .lt-mode:has(:checked) input,
 .lantai[data-ui-theme="snow-ermine"] .lt-selection-row[data-selected="true"] input {
-  accent-color: var(--ui-color-selected-text);
+  accent-color: var(--lt-snow-check-fill);
 }
 .lantai[data-ui-theme="snow-ermine"] :is(.ui-button,.ui-icon-button,.ui-segment):disabled,
 .lantai[data-ui-theme="snow-ermine"] .lt-mode:has(:disabled) {
@@ -489,9 +493,9 @@
   border-color: var(--lt-snow-choice-unchecked-border);
 }
 .lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only input[type="checkbox"]:is(:checked,:indeterminate) {
-  background: var(--ui-color-selected-background);
-  color: var(--ui-color-selected-text);
-  border-color: var(--ui-color-selected-border);
+  background: var(--lt-snow-check-fill);
+  color: var(--lt-snow-check-ink);
+  border-color: var(--lt-snow-check-fill);
 }
 .lantai[data-ui-theme="snow-ermine"].lt-summary-workspace .ui-choice--control-only:has(input:disabled) {
   color: var(--ui-color-text-disabled);
@@ -551,6 +555,51 @@
   [data-ui-theme="snow-ermine"], :host([data-ui-theme="snow-ermine"]) { --lt-snow-page-pad: 13px; }
 }
 
+/* Candidate 3.3 common paint; production geometry and control ownership remain shared. */
+.lantai[data-ui-theme="snow-ermine"] .lt-header--root h1 {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: .045em;
+  text-shadow: 0 2px 7px rgb(19 48 76 / 42%);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header .ui-icon-button {
+  border: 1px solid rgb(244 250 255 / 55%);
+  background: rgb(244 251 255 / 18%);
+  border-radius: 4px;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-header .ui-icon-button:hover:enabled {
+  background: rgb(255 255 255 / 27%);
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-footer {
+  background: #f3f8fb;
+  border-top-color: #d7e5ed;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-footer .ui-nav-item {
+  color: #627b8e;
+  font-size: 13px;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-footer .ui-nav-item[aria-current="page"] {
+  background: var(--ui-color-selected-background);
+  color: var(--ui-color-selected-text);
+  font-weight: 700;
+}
+.lantai[data-ui-theme="snow-ermine"] .ui-button--primary:hover:enabled {
+  background: #c9e4f6;
+  border-color: #9ec9e2;
+}
+.lantai[data-ui-theme="snow-ermine"] .lt-main { scrollbar-color: #bfd5e4 transparent; }
+.lantai[data-ui-theme="snow-ermine"] :is(.ui-input,.lt-textarea,select) { min-width: 0; max-width: 100%; }
+.lantai[data-ui-theme="snow-ermine"] :is(.lt-footer,.lt-footer .ui-button) { min-width: 0; }
+.lantai[data-ui-theme="snow-ermine"] .lt-footer .ui-button { white-space: normal; overflow-wrap: anywhere; }
+.lantai[data-ui-theme="snow-ermine"] .ui-switch {
+  --ui-color-selected-background: var(--lt-snow-check-fill);
+  --ui-color-selected-text: var(--lt-snow-check-ink);
+}
+@media (max-height: 480px) {
+  .lantai[data-ui-theme="snow-ermine"] .lt-root-top { min-height: 60px; }
+  .lantai[data-ui-theme="snow-ermine"] .lt-header:not(.lt-header--root) { min-height: 52px; }
+}
+
 /* High-contrast mode keeps native control painting, visible selected boundaries,
    and readable header glyphs; image washes must never obscure system colors. */
 @media (forced-colors: active) {
@@ -580,6 +629,8 @@
     --ui-color-selected-border: Highlight;
     --ui-color-focus-ring: Highlight;
     --ui-color-disabled-background: Canvas;
+    --lt-snow-check-fill: Highlight;
+    --lt-snow-check-ink: HighlightText;
     --lt-snow-header-ink: CanvasText;
     --lt-snow-header-fallback: Canvas;
     --lt-snow-header-nav-text: CanvasText;
@@ -589,7 +640,20 @@
     --lt-snow-hover-background: ButtonFace;
   }
   .lantai[data-ui-theme="snow-ermine"] .lt-header--root,
-  .lantai[data-ui-theme="snow-ermine"] .lt-root-top { background: Canvas; }
+  .lantai[data-ui-theme="snow-ermine"] .lt-root-top,
+  .lantai[data-ui-theme="snow-ermine"] .lt-footer { background: Canvas; }
+  .lantai[data-ui-theme="snow-ermine"] .lt-header .ui-icon-button,
+  .lantai[data-ui-theme="snow-ermine"] .lt-header .ui-icon-button:hover:enabled,
+  .lantai[data-ui-theme="snow-ermine"] .ui-button--primary:hover:enabled {
+    background: ButtonFace;
+    color: ButtonText;
+    border-color: ButtonText;
+  }
+  .lantai[data-ui-theme="snow-ermine"] .lt-footer .ui-nav-item { color: ButtonText; }
+  .lantai[data-ui-theme="snow-ermine"] .lt-footer .ui-nav-item[aria-current="page"] {
+    background: Highlight;
+    color: HighlightText;
+  }
   .lantai[data-ui-theme="snow-ermine"] .lt-header:not(.lt-header--root)::before,
   .lantai[data-ui-theme="snow-ermine"] .lt-header:not(.lt-header--root)::after { content: none; }
   .lantai[data-ui-theme="snow-ermine"] .lt-icon,

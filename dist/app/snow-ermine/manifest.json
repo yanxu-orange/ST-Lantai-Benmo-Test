@@ -2,9 +2,12 @@
   "theme": "snow-ermine",
   "ownership": "consumer",
   "reference": {
-    "file": "lantai-snow-ermine-solid-preview.html",
-    "version": 3,
-    "handoffDate": "2026-10-04"
+    "file": "Lantai-Snow-Ermine-3.3-Layout-Fix-Candidate.html",
+    "version": "3.3",
+    "libraryFileId": "libfile_86a9a523e53c819198a406c785d1c3b0",
+    "libraryVersion": 2,
+    "handoffDate": "2026-10-10",
+    "scriptsExecuted": false
   },
   "stylesheet": "theme.css",
   "assets": [
@@ -25,6 +28,12 @@
       "source": "src/app/icons/close.svg",
       "role": "Consumer-only header glyph derivative; same path, white stroke with a thin dark outline",
       "sha256": "dd2134624d963a57de0a3b702c0747a1df3c2dfd200e7d215cb3d0e2bc8b3318"
+    },
+    {
+      "file": "assets/snow-crystal.svg",
+      "source": "Exact twelve paths and round stroke from approved candidate v2",
+      "role": "Memory card decoration only; no business semantics",
+      "sha256": "ac397db1946dad82081c73903e6a7814b0ecfe3ea090bb6ee3643349b6353765"
     }
   ],
   "notes": [
@@ -32,5 +41,12 @@
     "Only the root and subpage headers use scenic images; the body is an opaque cool-white/light-ice workspace. The panoramic lake backdrop is not included.",
     "No font is embedded or downloaded. SimSun/Songti is a regular-400 reading fallback; actual availability depends on the user device.",
     "Theme CSS does not own business data, routing, timestamps or phone/PC page structure."
+  ],
+  "stylesheets": [
+    "theme.css",
+    "memory.css",
+    "time.css",
+    "benmo.css",
+    "secondary.css"
   ]
 }

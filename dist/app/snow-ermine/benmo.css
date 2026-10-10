@@ -1,0 +1,68 @@
+/* Snow Ermine 3.3 BENMO mapping. The candidate defines records and tracking
+   roots; production-only editors and material reports retain their real layout.
+   No sample data, speculative narrative layout, or hidden production status. */
+.lantai.benmo[data-ui-theme="snow-ermine"] {
+  --lt-snow-benmo-segment: #eaeff3;
+  --lt-snow-benmo-segment-ink: #326e97;
+  --lt-snow-benmo-reading-ink: #344d60;
+}
+.lantai.benmo[data-ui-theme="snow-ermine"] .lt-main { padding-block: 17px 23px; gap: 14px; overscroll-behavior: contain; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .subtabs { top: -17px; gap: 3px; padding: 3px; border: 0; border-radius: 4px; background: var(--lt-snow-benmo-segment); }
+.lantai.benmo[data-ui-theme="snow-ermine"] .subtabs > .ui-button { min-width: 0; padding-inline: 5px; border: 0; border-radius: 4px; font-size: 12px; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .subtabs > .ui-button:enabled { background: transparent; color: var(--ui-color-text-meta); font-weight: 400; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .subtabs > .ui-button[aria-pressed="true"]:enabled { background: var(--ui-color-surface-base); color: var(--lt-snow-benmo-segment-ink); font-weight: 700; box-shadow: 0 1px 4px rgb(42 88 119 / 7%); }
+.lantai.benmo[data-ui-theme="snow-ermine"] .section { gap: 12px; }
+.lantai.benmo[data-ui-theme="snow-ermine"] :is(.card,.record) { min-width: 0; padding: 14px; gap: 10px; border: 1px solid var(--ui-color-border-subtle); border-radius: 5px; background: var(--ui-color-surface-base); box-shadow: 0 2px 7px rgb(65 87 110 / 3%); }
+.lantai.benmo[data-ui-theme="snow-ermine"] .record.selected { border-color: var(--ui-color-border-strong); }
+.lantai.benmo[data-ui-theme="snow-ermine"] .reading { color: var(--lt-snow-benmo-reading-ink); font-family: var(--ui-type-reading-family); line-height: 1.85; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .meta { color: var(--ui-color-text-meta); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.lantai.benmo[data-ui-theme="snow-ermine"] :is(.summary-toolbar-main,.pending-strip) { flex-wrap: wrap; }
+.lantai.benmo[data-ui-theme="snow-ermine"] :is(.summary-toolbar-main,.pending-strip) > .meta { flex: 1 1 120px; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .summary-card-header { gap: 9px; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .summary-card-actions { gap: 4px; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .summary-card-actions .ui-icon-button { border-color: transparent; background: transparent; box-shadow: none; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .summary-card > .benmo-text-entry { justify-self: end; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .benmo-text-entry { color: var(--ui-color-action-tertiary-text); }
+.lantai.benmo[data-ui-theme="snow-ermine"] .benmo-text-entry:hover:enabled { background: transparent; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .record-open strong { color: var(--ui-color-text-primary); font-size: 15px; font-weight: 700; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .record > p:not(.reading) { color: var(--ui-color-text-secondary); font-size: 13px; line-height: 1.75; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .record > p.meta { color: var(--ui-color-text-meta); font-size: 12px; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .tag { padding: 3px 7px; border-radius: 4px; background: var(--ui-color-surface-subtle); color: var(--ui-color-text-secondary); }
+/* Status tags retain their label and semantics even in the quiet palette. */
+.lantai.benmo[data-ui-theme="snow-ermine"] [data-tracking-excluded="true"] :is(.record-open,.row) .tag { background: var(--ui-color-warning-background); color: var(--ui-color-warning-text); }
+.lantai.benmo[data-ui-theme="snow-ermine"] :is(.section,.record) h2 { color: var(--ui-color-text-primary); font-size: 16px; font-weight: 650; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .detail-field dd { color: var(--ui-color-text-primary); }
+.lantai.benmo[data-ui-theme="snow-ermine"] .detail-field .detail-field-empty { color: var(--ui-color-text-meta); }
+.lantai.benmo[data-ui-theme="snow-ermine"] .ui-field > span { color: var(--ui-color-text-secondary); font-size: 12px; font-weight: 650; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .form-actions { bottom: -23px; background: var(--ui-color-workspace); }
+.lantai.benmo[data-ui-theme="snow-ermine"] .detail-actions { position: static; }
+.lantai.benmo[data-ui-theme="snow-ermine"] [data-action="delete-record"]:enabled { background: transparent; color: var(--ui-color-danger-text); border-color: transparent; }
+.lantai.benmo[data-ui-theme="snow-ermine"] .benmo-summary-history > .record-open { padding: 10px 14px; border: 1px solid var(--ui-color-border-subtle); border-radius: 5px; background: var(--ui-color-surface-base); }
+.lantai.benmo[data-ui-theme="snow-ermine"] .empty { color: var(--ui-color-text-secondary); }
+
+/* Running jobs, missing floors, source/material warnings, validation errors and
+   recovery controls are styled by their existing semantic tokens, never hidden. */
+.lantai.benmo[data-ui-theme="snow-ermine"] :is(.ui-button,.ui-icon-button):disabled {
+  background: var(--ui-color-disabled-background);
+  color: var(--ui-color-text-disabled);
+  border-color: var(--ui-color-border-subtle);
+  box-shadow: none;
+}
+.lantai.benmo[data-ui-theme="snow-ermine"] .benmo-text-entry:disabled { color: var(--ui-color-text-disabled); cursor: not-allowed; text-decoration: none; }
+.lantai.benmo[data-ui-theme="snow-ermine"] :is(.ui-input,.lt-textarea):disabled { color: var(--ui-color-text-disabled); background: var(--ui-color-disabled-background); }
+.lantai.benmo[data-ui-theme="snow-ermine"] :is(.ui-input,.lt-textarea)[aria-invalid="true"] { border-color: var(--ui-color-field-invalid-border); }
+@media (max-width: 390px) {
+  .lantai.benmo[data-ui-theme="snow-ermine"] .lt-main { padding-block: 13px 21px; }
+  .lantai.benmo[data-ui-theme="snow-ermine"] .subtabs { top: -13px; }
+  .lantai.benmo[data-ui-theme="snow-ermine"] .form-actions { bottom: -21px; }
+}
+@media (forced-colors: active) {
+  .lantai.benmo[data-ui-theme="snow-ermine"] {
+    --lt-snow-benmo-segment: Canvas;
+    --lt-snow-benmo-segment-ink: HighlightText;
+    --lt-snow-benmo-reading-ink: CanvasText;
+  }
+  .lantai.benmo[data-ui-theme="snow-ermine"] .subtabs > .ui-button[aria-pressed="true"]:enabled { background: Highlight; color: HighlightText; forced-color-adjust: none; }
+  .lantai.benmo[data-ui-theme="snow-ermine"] :is(.card,.record) { box-shadow: none; }
+  .lantai.benmo[data-ui-theme="snow-ermine"] .benmo-text-entry:enabled { color: LinkText; }
+}

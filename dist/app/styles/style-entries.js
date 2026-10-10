@@ -27,6 +27,10 @@ export const SHARED_STYLE_ENTRIES=Object.freeze([
 // Product-owned appearance, after the preserved shared component layer.
 export const SNOW_ERMINE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../snow-ermine/theme.css'),
+  entry('shared','../snow-ermine/memory.css'),
+  entry('shared','../snow-ermine/time.css'),
+  entry('shared','../snow-ermine/benmo.css'),
+  entry('shared','../snow-ermine/secondary.css'),
 ]);
 
 // Spring keeps common mapping and each approved page grammar independently scoped.

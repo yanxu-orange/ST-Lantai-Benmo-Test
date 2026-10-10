@@ -1,0 +1,42 @@
+/* The candidate has only broad workshop/settings examples. Keep the existing
+   production layout and map its surfaces to Snow; no prototype-only controls. */
+.lantai[data-ui-theme="snow-ermine"].workshop .wk-row {
+  border: 1px solid var(--ui-color-border-default);
+  border-radius: var(--ui-shape-surface-radius);
+  background: var(--ui-color-surface-base);
+  box-shadow: 0 1px 5px rgb(54 93 119 / 3.5%);
+}
+.lantai[data-ui-theme="snow-ermine"].workshop :is(.wk-group-label,.wk-result-title) {
+  color: var(--ui-color-text-primary);
+}
+.lantai[data-ui-theme="snow-ermine"].workshop :is(.wk-dialog,.wk-directory-dialog) {
+  background: var(--ui-color-scrim);
+}
+.lantai[data-ui-theme="snow-ermine"].lt-settings .lt-settings-group {
+  border: 1px solid var(--ui-color-border-default);
+  border-radius: var(--ui-shape-surface-radius);
+  background: var(--ui-color-surface-base);
+  padding: 13px;
+}
+.lantai[data-ui-theme="snow-ermine"].lt-settings .lt-settings-group > h2 {
+  color: var(--ui-color-text-primary);
+  font-size: 15px;
+}
+.lantai[data-ui-theme="snow-ermine"].lt-settings :is(.lt-settings-row,.lt-settings-entry) {
+  min-width: 0;
+  min-height: 44px;
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.lt-settings,.lt-api-settings,.workshop) .ui-button--danger {
+  color: var(--ui-color-danger-text);
+  background: var(--ui-color-danger-background);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.lt-settings,.lt-api-settings,.workshop) .ui-button:disabled {
+  color: var(--ui-color-text-disabled);
+  background: var(--ui-color-disabled-background);
+}
+@media (forced-colors: active) {
+  .lantai[data-ui-theme="snow-ermine"]:is(.lt-settings,.workshop) :is(.lt-settings-group,.wk-row) {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+}
