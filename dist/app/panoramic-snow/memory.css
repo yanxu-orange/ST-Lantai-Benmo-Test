@@ -154,7 +154,7 @@
 /* Search/filter, recall navigation and scroll controls borrow the existing
    control material without repainting individual stateful control owners. */
 .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog)[data-memory-type] :is(#lt-search-panel,#lt-filter-panel),
-.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall :is(.lt-recall-domains,.lt-recall-scroll) {
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall .lt-recall-domains {
   background: var(--lt-panoramic-control-surface);
   border-color: var(--lt-panoramic-reading-edge);
 }

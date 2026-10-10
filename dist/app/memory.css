@@ -159,3 +159,6 @@ details.lt-section:not([open]) { display:block; }
 .lantai .lt-management-compare { display:grid; gap:var(--ui-space-group); min-width:0; }
 .lantai .lt-management-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(0,1fr)); gap:var(--ui-space-control); }
 .lantai .lt-management-actions button { min-width:0; white-space:normal; }
+
+/* Decorative book titles are opt-in; other themes keep the native heading. */
+.lt-book-title { display: none; }

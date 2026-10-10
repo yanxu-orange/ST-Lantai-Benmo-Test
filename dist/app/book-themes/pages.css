@@ -1,0 +1,210 @@
+/* Final reference-to-production page mappings. This sheet deliberately names
+   the actual owners; generic components do not decide every group material. */
+/* Editable tags are one label + a transparent, reserved 44px delete target.
+   Anonymous text occupies the first grid cell and may wrap without ellipsis;
+   the delete target never overlays the name or an adjacent tag. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor [data-tags] > .ui-tag {
+  display: inline-grid; grid-template-columns: minmax(0,1fr) 44px; align-items: center;
+  max-width: 100%; min-width: 0; min-height: 44px; padding: 0 0 0 8px; gap: 4px;
+  white-space: normal; overflow-wrap: anywhere; overflow: visible;
+  background: var(--lt-book-tag); color: var(--lt-book-secondary); border-color: var(--lt-book-edge);
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor [data-tags="eventWords"] > .ui-tag {
+  background: var(--lt-book-editor-event-bg); color: var(--lt-book-editor-event-ink); border-color: var(--lt-book-editor-edge);
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor :is([data-remove],[data-delete-term]),
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor :is([data-remove],[data-delete-term]):enabled:hover {
+  width: 44px; min-width: 44px; min-height: 44px; padding: 0; flex: none;
+  background: transparent; border: 0; box-shadow: none; color: var(--lt-book-muted);
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor :is([data-remove],[data-delete-term]) > .lt-icon {
+  width: 15px; height: 15px;
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor .lt-term-head > [data-term],
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor .lt-term-head > [data-term]:enabled:hover {
+  background: transparent; border: 0; padding-inline: 8px; color: var(--lt-book-secondary);
+}
+/* Book chapter divider from the approved editor: a 2px ink stroke and an
+   explicit disclosure chevron, keeping the native details/summary behavior. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]):is(.lt-memory-editor,.lt-summary-workspace) .lt-editor > details.lt-section > summary {
+  display: flex; align-items: center; gap: 8px; list-style: none; padding: 13px 14px;
+  background: var(--lt-book-editor-heading); color: var(--lt-book-secondary); font-size: 15px; font-weight: 600;
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]):is(.lt-memory-editor,.lt-summary-workspace) .lt-editor > details.lt-section > summary::-webkit-details-marker { display: none; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]):is(.lt-memory-editor,.lt-summary-workspace) .lt-editor > details.lt-section > summary::before {
+  content: ''; width: 2px; height: 17px; flex: none; background: var(--lt-book-editor-stroke);
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]):is(.lt-memory-editor,.lt-summary-workspace) .lt-editor > details.lt-section > summary::after { content: '›'; margin-inline-start: auto; color: var(--lt-book-muted); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]):is(.lt-memory-editor,.lt-summary-workspace) .lt-editor > details.lt-section[open] > summary::after { content: '⌄'; }
+
+/* Reference reconciliation: bounded book-page owners, never mock logic. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]):is(.lt-memory-editor,.lt-summary-workspace) .lt-editor > details.lt-section { border: 1px solid var(--lt-book-editor-edge); padding: 0; gap: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]):is(.lt-memory-editor,.lt-summary-workspace) .lt-editor > details.lt-section > .lt-stack { padding: 13px 13px 15px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]):is(.lt-memory-editor,.lt-summary-workspace) .lt-editor > details.lt-section[open] > summary { background: var(--lt-book-editor-heading-open); border-bottom: 1px solid var(--lt-book-editor-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"])[data-memory-type="event"] .lt-copy { -webkit-line-clamp: 4; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) [data-memory-mode="resident"] { background: var(--lt-book-resident-bg); color: var(--lt-book-resident-ink); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) [data-memory-mode="trigger"] { background: var(--lt-book-trigger-bg); color: var(--lt-book-trigger-ink); }
+/* Calendar is a printed table, not a generic reading card. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-section.time-month-calendar { border-inline: 0; border-block: 1px solid var(--lt-book-edge); padding: 19px 8px 18px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-calendar-toolbar h2 { font-size: 18px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-story-date { display: grid; grid-template-columns: minmax(0,1fr) auto; row-gap: 4px; padding: 15px 16px; border-left: 3px solid var(--lt-book-strong); background: var(--lt-book-subtle); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-story-date > span:nth-child(1) { grid-column: 1; grid-row: 1; font-size: 12px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-story-date > span:nth-child(2) { grid-column: 1; grid-row: 2; font-size: 16px; font-family: var(--ui-type-reading-family); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-story-date > span:nth-child(3) { grid-column: 2; grid-row: 1 / 3; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-marker--anniversary { color: var(--lt-book-marker-anniversary); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-marker--schedule { color: var(--lt-book-marker-schedule); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-marker--holiday { color: var(--lt-book-marker-holiday); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-marker--term { color: var(--lt-book-marker-term); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-state-tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; padding: 0; background: transparent; border: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-state-tabs > .ui-button { box-shadow: none; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-state-tabs > .ui-button::after { content: none; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time [data-time-action="new"]:is(.ui-button,.ui-icon-button):enabled { background: var(--lt-book-selected); color: var(--lt-book-accentInk); border-color: var(--lt-book-strong); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-day-list .time-day-item { background: var(--lt-book-subtle); border: 0; border-left: 2px solid var(--lt-book-strong); padding: 13px 15px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-record { border: 0; border-left: 2px solid var(--lt-book-strong); border-bottom: 1px solid var(--lt-book-edge); padding: 15px 14px; min-height: 69px; background: var(--lt-book-surface); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time[data-time-route="manage"] .time-stack > .time-prompt-group { border: 1px solid var(--lt-book-edge); padding: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time[data-time-route="manage"] .time-group-heading { padding: 12px 15px; border-bottom: 1px solid var(--lt-book-edge); font-size: 15px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time[data-time-route="manage"] .time-management-row { padding: 14px 15px; min-height: 56px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time:not([data-time-route="home"]):not([data-time-route="manage"]) .time-section { border: 1px solid var(--lt-book-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time:not([data-time-route="home"]):not([data-time-route="manage"]) .time-section > h2 { font-size: 15px; border-bottom: 1px solid var(--lt-book-edge); padding-bottom: 10px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time:not([data-time-route="home"]):not([data-time-route="manage"]) .time-section > h2::before { content: ''; display: inline-block; width: 2px; height: 14px; margin-inline-end: 8px; background: var(--lt-book-editor-stroke); vertical-align: -.1em; }
+
+/* The same removable-tag grammar also serves real review and floor exclusion. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is([data-management-tags] > .ui-tag,.lt-summary-floor,.ui-tag:has(>[data-summary-remove-word])) {
+  display: inline-grid; grid-template-columns: minmax(0,1fr) 44px; align-items: center;
+  max-width: 100%; min-width: 0; min-height: 44px; padding: 0 0 0 8px; gap: 4px;
+  white-space: normal; overflow-wrap: anywhere; overflow: visible;
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is([data-management-remove],.lt-summary-floor > .ui-icon-button,[data-summary-remove-word],[data-summary-action^="term-remove:"]),
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is([data-management-remove],.lt-summary-floor > .ui-icon-button,[data-summary-remove-word],[data-summary-action^="term-remove:"]):enabled:hover {
+  width: 44px; min-width: 44px; min-height: 44px; padding: 0; flex: none; background: transparent; border: 0; box-shadow: none;
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is([data-management-remove],.lt-summary-floor > .ui-icon-button,[data-summary-remove-word],[data-summary-action^="term-remove:"]) > .lt-icon { width: 15px; height: 15px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"])[data-memory-type="cumulative"] .ui-reading { color: var(--lt-book-secondary); font-family: var(--ui-type-reading-family); font-size: 14px; line-height: 1.85; }
+/* Real workshop owners, deliberately excluding Benmo's reused root class. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-toolbar { border-bottom: 1px solid var(--lt-book-edge); padding-bottom: 16px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-toolbar > .ui-button { min-width: 92px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-toolbar > [data-action="new"]:enabled { background: var(--lt-book-selected); color: var(--lt-book-accentInk); border-color: var(--lt-book-editor-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-group-label { font-size: 15px; font-weight: 700; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-group-title { justify-content: start; gap: 10px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-group-label::before { content: none; display: none; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-group-title > .lt-meta { margin-inline-start: auto; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-group-title::before { width: 27px; flex: none; color: var(--lt-book-accentInk); font: 13px Georgia,serif; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-group[data-scope="global"] > .wk-group-title::before { content: '01'; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-group[data-scope="character"] > .wk-group-title::before { content: '02'; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-group[data-scope="chat"] > .wk-group-title::before { content: '03'; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-row { padding: 13px 14px 13px 16px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-link { grid-column: 1 / -1; width: 100%; color: var(--lt-book-accentInk); border-top: 1px solid var(--lt-book-edge); margin-top: 10px; padding-top: 8px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-panel { background: var(--lt-book-surface); border-block: 1px solid var(--lt-book-edge); padding: 12px 14px 20px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-panel > .wk-result { background: transparent; border: 0; padding: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-meta { border-bottom: 1px solid var(--lt-book-edge); padding-bottom: 13px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-history { border: 0; border-bottom: 1px solid var(--lt-book-edge); background: transparent; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-history > summary { background: transparent; padding: 13px 4px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-form-section { border-bottom: 1px solid var(--lt-book-edge); padding: 6px 0 8px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-form .ui-field__label { font-weight: 650; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-directory-title { font: 700 14px/1.5 var(--ui-type-reading-family); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-directory-preview { font: 13px/1.6 var(--ui-type-reading-family); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-directory-shortcuts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+/* Settings root switches retain a chapter edge. Service links and feature
+   indexes instead use top/bottom rules, matching their distinct reference role. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group { background: var(--lt-book-surface); border: 0; border-left: 2px solid var(--lt-book-strong); border-bottom: 1px solid var(--lt-book-edge); padding: 14px 16px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group:has(> .lt-settings-entry):not(:has(> .lt-settings-row)),
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings:not(:has(> .lt-header--root)) .lt-settings-group { border-inline: 0; border-block: 1px solid var(--lt-book-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-api-settings .lt-editor > .lt-stack { background: var(--lt-book-surface); border-block: 1px solid var(--lt-book-edge); padding: 16px 14px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-api-settings .lt-delete-confirmation { background: var(--lt-book-danger); color: var(--lt-book-dangerInk); padding: 12px; font-size: 13px; }
+/* Four semantic root groups reuse the same live controls and entry renderers. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-section { min-width: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-section > h2 { position: relative; margin: 0 0 12px; padding: 10px 0; border-bottom: 1px solid var(--lt-book-edge); font-family: var(--lt-book-section-family); font-size: var(--lt-book-section-size); font-weight: var(--lt-book-section-weight); line-height: var(--lt-book-section-line); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-section > h2::before { content: attr(data-section-number); display: inline-block; width: 27px; margin-inline-end: 0; color: var(--lt-book-accentInk); font: 13px Georgia,serif; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-section > h2::after { content: ''; position: absolute; bottom: -1px; left: 0; width: 30px; height: 1px; background: var(--lt-book-strong); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material]:not([data-settings-material="plugin"]) { border-inline: 0; border-block: 1px solid var(--lt-book-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material="services"] { padding: 0 12px; gap: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material="services"] > .lt-settings-entry { border: 0; padding: 14px 0; min-height: 56px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material="services"] > .lt-settings-entry + .lt-settings-entry { border-top: 1px solid var(--lt-book-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-section :is(.lt-settings-row > span,.lt-settings-entry > span:first-child,.ui-field__label) { font-family: var(--lt-book-field-family); font-size: var(--lt-book-field-size); font-weight: var(--lt-book-field-weight); line-height: var(--lt-book-field-line); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material="about"] { background: var(--lt-book-about-background); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material="about"] .lt-settings-brand { padding: 0; }
+/* Benmo keeps its real complete functionality; only the reference's chapter
+   hierarchy is transferred, not its simulated inline detail/delete flows. */
+/* Quiet floor labels and text actions match the approved reading-card reference.
+   The 44px controls remain native targets; only their visible material is light. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-card { padding: 10px 14px 0; gap: 4px; border-left-color: var(--lt-book-summary-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-card-header > .meta { justify-self: start; padding: 2px 7px; background: var(--lt-book-tag); color: var(--lt-book-secondary); font-size: 12px; line-height: 1.5; font-weight: 600; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-card-actions { gap: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-card-actions > .benmo-text-entry { padding-inline: 6px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-card > .benmo-text-entry { justify-self: end; align-items: flex-start; padding: 4px 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-card:not(:has(> .reading)) { padding-bottom: 10px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .record:not(.summary-card) { border-left-color: var(--lt-book-record-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .subtabs { border: 1px solid var(--lt-book-edge); padding: 4px; gap: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .subtabs > .ui-button:enabled { border: 0; background: var(--lt-book-stamp-paper); box-shadow: none; font-weight: var(--lt-book-button-weight); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .subtabs > .ui-button[aria-pressed="true"]:enabled { background: var(--lt-book-stamp-selected); color: var(--lt-book-stamp-ink); box-shadow: none; font-weight: var(--lt-book-selected-weight); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .subtabs > .ui-button[aria-pressed="true"]::before { content: ''; position: absolute; inset: 4px; border: 1px solid var(--lt-book-stamp-edge); pointer-events: none; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo[data-benmo-route="list"] .row > .actions > .ui-button[data-action="new"]:enabled { background: var(--lt-book-add-bg); border-color: var(--lt-book-add-edge); color: var(--lt-book-add-ink); font-weight: var(--lt-book-button-weight); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo[data-benmo-route="list"] .row > .actions > .ui-button[data-action="new"]:enabled:hover { background: var(--lt-book-add-bg); border-color: var(--lt-book-add-ink); color: var(--lt-book-add-ink); }
+
+/* One responsive work region for counts, setup and backfill. Status receipts
+   stay in the same region below the controls instead of being hidden by it. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-toolbar--compact { gap: 4px; min-width: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-toolbar--compact > .summary-toolbar-main { flex-wrap: wrap; gap: 0 8px; min-width: 0; border: 0; padding: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-toolbar--compact > .summary-toolbar-main > .meta { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-toolbar-actions { justify-content: flex-end; flex-wrap: wrap; gap: 4px; margin-inline-start: auto; min-width: 0; max-width: 100%; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-toolbar--compact > :is(.meta,.lt-error) { min-width: 0; overflow-wrap: anywhere; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-toolbar-actions > [data-action="start-backfill"]:enabled { background: var(--lt-book-add-bg); border-color: var(--lt-book-add-edge); color: var(--lt-book-add-ink); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-toolbar-actions > [data-action="start-backfill"]:enabled:hover { background: var(--lt-book-add-bg); border-color: var(--lt-book-add-ink); color: var(--lt-book-add-ink); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .benmo-summary-history > .record-open { border-bottom: 1px solid var(--lt-book-edge); padding-bottom: 12px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .benmo-summary-history > .record-open strong { font-size: 15px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).benmo .summary-origin { color: var(--lt-book-accentInk); font-size: 13px; padding-bottom: 12px; border-bottom: 1px solid var(--lt-book-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time[data-time-route="manage"] .time-group-heading::before { display: inline-block; width: 27px; margin-inline-end: 8px; color: var(--lt-book-accentInk); font: 13px Georgia,serif; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time[data-time-route="manage"] .time-prompt-group:nth-child(1) > .time-group-heading::before { content: '01'; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time[data-time-route="manage"] .time-prompt-group:nth-child(2) > .time-group-heading { background: var(--lt-book-selected); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time[data-time-route="manage"] .time-prompt-group:nth-child(2) > .time-group-heading::before { content: '02'; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"])[data-memory-settings="cumulative"] .ui-tag:has(> [data-cu-action^="remove-floor:"]) { display: inline-grid; grid-template-columns: minmax(0,1fr) 44px; align-items: center; max-width: 100%; min-height: 44px; padding: 0 0 0 8px; gap: 4px; white-space: normal; overflow-wrap: anywhere; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"])[data-memory-settings="cumulative"] [data-cu-action^="remove-floor:"],
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"])[data-memory-settings="cumulative"] [data-cu-action^="remove-floor:"]:enabled:hover { width: 44px; min-width: 44px; min-height: 44px; padding: 0; background: transparent; border: 0; box-shadow: none; color: var(--lt-book-muted); font-size: 15px; }
+/* Event sheets have a quiet full-height rule and a short decorative ink stroke. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"])[data-memory-type="event"] .lt-row { position: relative; border-left-width: 1px; border-left-color: var(--lt-book-edge); padding: 18px 18px 19px 21px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"])[data-memory-type="event"] .lt-row::before { content: ''; position: absolute; inset-inline-start: -1px; inset-block-start: 18px; width: 2px; height: 38px; background: var(--lt-book-strong); pointer-events: none; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"])[data-memory-type="event"] .lt-copy { white-space: pre-line; }
+/* The real settings groups combine switches and services. Keep that structure,
+   but give service rows their reference directory rules instead of new cards. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-main { counter-reset: book-section; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group { counter-increment: book-section; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group > h2 { font-size: 15px; border-bottom: 1px solid var(--lt-book-edge); padding-bottom: 12px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group > h2::before { content: counter(book-section,decimal-leading-zero); display: inline-block; width: 27px; margin-inline-end: 8px; color: var(--lt-book-accentInk); font: 13px Georgia,serif; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-entry { border-block: 1px solid var(--lt-book-edge); padding: 13px 12px; min-height: 70px; background: var(--lt-book-surface); }
+
+/* Final owner-specific states, including the native generated-result editor. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-tag:has(>[data-summary-remove-word="eventWords"]) { background: var(--lt-book-editor-event-bg); color: var(--lt-book-editor-event-ink); border-color: var(--lt-book-editor-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-summary-workspace [data-summary-open-term],
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-summary-workspace [data-summary-open-term]:enabled:hover { background: transparent; border: 0; color: var(--lt-book-secondary); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time[data-time-route="manage"] .time-group-body { padding-inline: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-meta .ui-button:enabled { background: transparent; border: 0; color: var(--lt-book-accentInk); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-api-settings [data-api-action="confirm-delete"]:enabled { background: var(--lt-book-danger); color: var(--lt-book-dangerInk); border-color: var(--lt-book-dangerInk); }
+
+/* Persistent editor add affordances use the reference's quiet action material. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor :is([data-add],[data-action="add-source"]) {
+  background: var(--lt-book-add-bg); color: var(--lt-book-add-ink); border: 1px solid var(--lt-book-add-edge); box-shadow: none;
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor :is([data-add],[data-action="add-source"]):enabled:hover { background: var(--lt-book-add-bg); color: var(--lt-book-add-ink); border-color: var(--lt-book-add-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor :is([data-add],[data-action="add-source"]):enabled:active { background: var(--lt-book-add-active); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor [data-action="add-source"] { width: 100%; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-memory-editor [data-action="add-source"]::before { content: '+'; margin-inline-end: 6px; font-size: 14px; }
+
+/* Event library: the one real name editor replaces the closed title in place. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-word-heading > [data-ss-action="open-word"],
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-word-heading > [data-ss-action="open-word"]:enabled:hover { background: transparent; border: 0; box-shadow: none; color: var(--lt-book-secondary); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-word-heading > .lt-summary-word-collapse { flex: 0 0 44px; padding: 0; display: flex; gap: 5px; justify-content: center; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-word-heading > .lt-summary-word-name { flex: 1 1 0; width: 0; min-width: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-library-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-library-heading { gap: 6px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-library-heading > h2 { flex: none; margin: 0; white-space: nowrap; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-library-tools > .ui-button { padding-inline: 7px; min-width: 44px; font-size: var(--lt-book-button-size); white-space: nowrap; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-word-editor > .lt-summary-editor-actions { justify-content: flex-end; gap: 6px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-word-editor > .lt-summary-editor-actions > .ui-button:first-child { margin-inline-end: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) [data-ss-word-definition] { min-height: 6rem; max-height: 14rem; height: auto; overflow-y: auto; resize: vertical; }
+@media (max-width: 340px) {
+ .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-library-heading > .lt-summary-library-tools { flex-basis: 100%; }
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-summary-word .ui-switch[aria-checked="true"]:not(:disabled) .ui-switch__track { background: var(--lt-book-library-switch); border-color: transparent; }
+/* Only semantic back actions lose the frame. Close retains its square control. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header > :is([data-ss-action="back"],[data-action="back"],[data-time-action="back"],[data-api-action="back"],[data-recall-action="back"],[data-cu-action="back"],[data-management-action="back"],[data-settings-action="back"],[data-summary-action="back"],.ui-icon-button:has(>img[src$="/back.svg"])):enabled,
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header > :is([data-ss-action="back"],[data-action="back"],[data-time-action="back"],[data-api-action="back"],[data-recall-action="back"],[data-cu-action="back"],[data-management-action="back"],[data-settings-action="back"],[data-summary-action="back"],.ui-icon-button:has(>img[src$="/back.svg"])):enabled:hover { background: transparent; border-color: transparent; box-shadow: none; }

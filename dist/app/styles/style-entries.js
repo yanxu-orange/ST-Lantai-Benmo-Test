@@ -68,3 +68,19 @@ export const SPRING_STYLE_ENTRIES=Object.freeze([
   entry('shared','../spring/workshop.css'),
   entry('shared','../spring/settings.css'),
 ]);
+
+// Book themes share attribute-scoped tokens/components, never an existing theme's
+// palette. Keep named entries so each identity participates in the same loaders.
+export const PAPER_LETTER_STYLE_ENTRIES=Object.freeze([
+  entry('shared','../book-themes/tokens.css'),
+  ...APPEARANCE_FORMAT_STYLE_ENTRIES,
+  entry('shared','../book-themes/components.css'),
+  entry('shared','../book-themes/pages.css'),
+  entry('shared','../book-themes/memory.css'),
+  entry('shared','../book-themes/time-details.css'),
+]);
+export const PURPLE_GLOW_STYLE_ENTRIES=Object.freeze([...PAPER_LETTER_STYLE_ENTRIES]);
+export const BOOK_THEME_STYLE_ENTRIES=Object.freeze({
+  'paper-letter':PAPER_LETTER_STYLE_ENTRIES,
+  'purple-glow':PURPLE_GLOW_STYLE_ENTRIES,
+});

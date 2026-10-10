@@ -1,5 +1,6 @@
+import { ensureBookThemeFont } from './styles/book-font.js';
 import { DEFAULT_THEME, normalizeTheme, resolveStyleAssets } from './styles/theme.js';
-import { BASE_STYLE_ENTRIES, SHARED_STYLE_ENTRIES, SNOW_ERMINE_STYLE_ENTRIES, SPRING_STYLE_ENTRIES } from './styles/style-entries.js';
+import { BASE_STYLE_ENTRIES, SHARED_STYLE_ENTRIES, SNOW_ERMINE_STYLE_ENTRIES, SPRING_STYLE_ENTRIES, BOOK_THEME_STYLE_ENTRIES } from './styles/style-entries.js';
 
 // This foreground confirmation shares the existing component/theme styles, but
 // owns only its compact placement. It never reads or writes memory data.
@@ -46,7 +47,7 @@ dialog.lantai.lt-source-deletion {
 
 // Reuse the production theme bundles, with no dependency on the plugin being
 // open. Only the base tokens/components and theme mappings are needed here.
-function createStyleLoader(request) {
+function createStyleLoader(request,document) {
   const cached = new Map();
   const load = entry => {
     const key = entry.url.href;
@@ -61,7 +62,9 @@ function createStyleLoader(request) {
     const entries = [...BASE_STYLE_ENTRIES.slice(0,2),...SHARED_STYLE_ENTRIES];
     if (theme === 'snow-ermine') entries.push(...SNOW_ERMINE_STYLE_ENTRIES);
     if (theme === 'spring') entries.push(...SPRING_STYLE_ENTRIES);
-    return (await Promise.all(entries.map(load))).join('\n');
+    if (Object.hasOwn(BOOK_THEME_STYLE_ENTRIES,theme)) entries.push(...BOOK_THEME_STYLE_ENTRIES[theme]);
+    const [parts] = await Promise.all([Promise.all(entries.map(load)),ensureBookThemeFont(document,theme)]);
+    return parts.join('\n');
   };
 }
 
@@ -95,7 +98,7 @@ function activeElement(doc) {
  * for keep, close, replacement, abort or disposal. Loading/mount errors reject.
  */
 export function createSourceDeletionDialog({ document:doc = globalThis.document, styles, getTheme = () => DEFAULT_THEME, fetch:request = globalThis.fetch } = {}) {
-  const loadStyles = styles ?? createStyleLoader(request);
+  const loadStyles = styles ?? createStyleLoader(request,doc);
   let disposed = false, current = null;
 
   function show({proposal, signal} = {}) {

@@ -7,10 +7,10 @@
    choice controls, sliders, colour/file pickers and input buttons untouched.
    Selects retain their existing control typography. Do not use the font
    shorthand here: reading/UI families, weights and line heights stay local. */
-.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]) {
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"],[data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) {
   --lt-format-field-text-size: .875rem;
 }
-.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]) :is(
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"],[data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(
   input:not(:where([type="checkbox"],[type="radio"],[type="range"],[type="color"],[type="file"],[type="button"],[type="submit"],[type="reset"],[type="image"],[type="hidden"])),
   textarea
 ) { font-size: var(--lt-format-field-text-size); }

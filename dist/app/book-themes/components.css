@@ -1,0 +1,157 @@
+/* One book grammar, two semantic palettes. Native templates, lifecycle and
+   shared layout remain authoritative; no prototype markup or business JS. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) {
+  background: var(--lt-book-canvas);
+  color: var(--lt-book-ink);
+  border: 1px solid var(--lt-book-edge);
+  border-radius: 0;
+  box-shadow: 0 16px 45px rgb(20 16 20 / 12%);
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) > .lt-main { background: var(--lt-book-canvas); padding-inline: 20px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header { background: var(--lt-book-header); color: var(--lt-book-ink); border-color: var(--lt-book-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header:not(.lt-header--root) { min-height: 64px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header h1 { color: var(--lt-book-ink); font-family: var(--lt-book-page-family); font-size: var(--lt-book-page-size); font-weight: var(--lt-book-page-weight); line-height: var(--lt-book-page-line); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-root-top { position: relative; min-height: var(--lt-book-root-header-height); background: var(--lt-book-headerImage),var(--lt-book-header); padding: 12px 16px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-root-top h1 { flex: 1; text-align: center; padding-inline: 44px; margin: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-root-top > .ui-icon-button { position: absolute; inset-inline-end: 16px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header .ui-icon-button { background: var(--lt-book-surface); color: var(--lt-book-secondary); border: 1px solid var(--lt-book-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-book-title { display: block; font-family: 'Lantai Pinyon Script',Georgia,'Times New Roman',serif; font-size: 28px; font-weight: 400; font-style: italic; font-synthesis: none; line-height: 1.35; letter-spacing: 0; color: var(--lt-book-heading); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]):is(.benmo,.workshop) .lt-book-title { font-size: 26px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-root-top .lt-title-native { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header--root nav { background: var(--lt-book-header); padding-inline: 20px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-type { border: 0; border-bottom: 2px solid transparent; background: transparent; min-height: 48px; color: var(--lt-book-secondary); font-size: 14px; font-weight: 500; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-type[aria-current="page"] { color: var(--lt-book-accentInk); border-bottom-color: var(--lt-book-accent); background-image: var(--lt-book-glaze); font-weight: 650; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) > .lt-footer { background: var(--lt-book-header); border-color: var(--lt-book-edge); padding-inline: 0; box-shadow: none; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-footer nav { gap: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-footer .ui-nav-item { position: relative; border: 0; border-top: 0; background: transparent; color: var(--lt-book-muted); min-height: 48px; font-size: 13px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-footer .ui-nav-item + .ui-nav-item { border-left: 1px solid var(--lt-book-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-footer .ui-nav-item[aria-current="page"] { background: var(--lt-book-glaze),var(--lt-book-selected); color: var(--lt-book-selectedInk); font-weight: 700; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-footer:not(:has(nav)) { padding-inline: 16px; }
+/* Square controls and reserved state paint. No new interaction handlers. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.ui-button,.ui-icon-button,.ui-input,.lt-textarea,.time-textarea,.ui-tag,.tag,.lt-section,.lt-row,.card,.record,.time-section,.wk-row,.wk-dialog-box,.time-confirm) { border-radius: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.ui-button,.ui-icon-button,.ui-nav-item,.ui-segment,.ui-choice,.ui-switch) { min-height: 44px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.ui-button,.ui-icon-button):enabled:not(:where(.lt-type,.ui-nav-item)) { color: var(--lt-book-secondary); background: var(--lt-book-surface); border-color: var(--lt-book-edge); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.ui-button,.ui-icon-button):enabled:hover:not(:where(.lt-type,.ui-nav-item)) { background: var(--lt-book-subtle); border-color: var(--lt-book-strong); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-button--primary:enabled { background: var(--lt-book-primary); color: var(--lt-book-primaryInk); border-color: var(--lt-book-primary); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-button--primary:enabled:hover { background: var(--lt-book-primary); color: var(--lt-book-primaryInk); border-color: var(--lt-book-primary); filter: brightness(1.08); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.ui-button,.ui-icon-button,.ui-segment)[aria-pressed="true"]:enabled,
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.ui-button,.ui-icon-button)[aria-current="true"]:enabled { background: var(--lt-book-glaze),var(--lt-book-selected); border-color: var(--lt-book-strong); color: var(--lt-book-selectedInk); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-button--danger:enabled { background: var(--lt-book-danger); color: var(--lt-book-dangerInk); border-color: var(--lt-book-dangerInk); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-button--danger:enabled:hover { background: var(--lt-book-danger); filter: brightness(1.08); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(button,input,textarea,select):disabled { color: var(--lt-book-disabledInk); opacity: .5; cursor: not-allowed; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(button,a,input,textarea,select,summary):focus-visible { outline: 2px solid var(--lt-book-strong); outline-offset: 2px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(input:not(:where([type="checkbox"],[type="radio"],[type="range"],[type="color"],[type="file"],[type="button"],[type="submit"],[type="reset"],[type="image"],[type="hidden"])),textarea,select) { background: var(--lt-book-field); color: var(--lt-book-ink); border-color: var(--lt-book-edge); caret-color: var(--lt-book-accent); border-radius: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(input,textarea)::placeholder { color: var(--lt-book-placeholder); opacity: 1; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(input,textarea,select):focus { border-color: var(--lt-book-strong); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(input,textarea,select)[aria-invalid="true"] { border-color: var(--lt-book-dangerInk); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(input[type="checkbox"],input[type="radio"]) { accent-color: var(--lt-book-accent); }
+/* Graphic choices may also carry ui-input. Reset text-field geometry only;
+   their label/hit-area remains the 44px target and native states keep painting. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) input:is([type="checkbox"],[type="radio"]) { box-sizing: border-box; width: 1.25rem; height: 1.25rem; inline-size: 1.25rem; block-size: 1.25rem; min-width: 0; min-height: 0; min-inline-size: 0; min-block-size: 0; padding: 0; flex: 0 0 auto; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) input[type="radio"] { border-radius: 50%; }
+
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-warning,.lt-management-warning) { background: var(--lt-book-warning); color: var(--lt-book-warningInk); }
+/* Reading sheets: straight ink edge, quiet bottom rule; all page owners share
+   this material, but their existing grids and field layouts are unchanged. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-row,.card,.record,.wk-row) {
+  background: var(--lt-book-surface); color: var(--lt-book-ink);
+  border: 0; border-left: 2px solid var(--lt-book-strong); border-bottom: 1px solid var(--lt-book-edge);
+  border-radius: 0; box-shadow: none;
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-row { padding: 14px 16px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-row:hover { background: var(--lt-book-surface); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-title,.record h2,.record-open strong,.wk-row-name,.time-title) { font-family: var(--ui-type-reading-family); font-size: 16px; font-weight: 650; line-height: 1.5; color: var(--lt-book-ink); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-copy,.reading,.wk-result,.lt-recall-detail-body,.lt-recall-memory-body,.lt-summary-preview,.lt-summary-readonly,.record p) { font-family: var(--lt-book-body-family); font-size: var(--lt-book-body-size); font-weight: var(--lt-book-body-weight); line-height: var(--lt-book-body-line); color: var(--lt-book-secondary); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-meta,.meta,.wk-row-meta,.lt-status) { font-size: 12px; color: var(--lt-book-muted); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-main h2,.lt-timeline-year > h2,.time-group-heading,.wk-group-title) { font-family: var(--ui-type-reading-family); font-size: 16px; font-weight: 650; color: var(--lt-book-ink); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.ui-tag,.tag):not(:where(.lt-tag--event,.lt-tag--detail,[data-memory-mode])) { background: var(--lt-book-tag); border-color: var(--lt-book-edge); color: var(--lt-book-secondary); font-size: 12px; font-weight: 400; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) [data-memory-mode] { background: var(--lt-book-selected); color: var(--lt-book-accentInk); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-row[data-selected="true"],
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-row[data-selected="true"]:hover,
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .record.selected { background: var(--lt-book-glaze),var(--lt-book-selected); border-color: var(--lt-book-strong); box-shadow: inset 0 0 0 1px var(--lt-book-strong); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-selection-row:focus-within { outline: 2px solid var(--lt-book-strong); outline-offset: 2px; }
+/* Quiet square stamp selection, shared by list/timeline and Benmo subtabs. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-view-switch,.subtabs,.lt-modes,.lt-recall-tabs) { border-radius: 0; background: var(--lt-book-subtle); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-view-switch,.subtabs) > .ui-button[aria-pressed="true"] { box-shadow: inset 0 0 0 3px var(--lt-book-selected), inset 0 0 0 4px var(--lt-book-strong); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-section,.lt-summary-content-panel,.lt-summary-prompt-body,.lt-appearance-settings) { background: var(--lt-book-surface); border-color: var(--lt-book-edge); border-radius: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-textarea,.lt-prompt-editor,.time-textarea,#benmo-edit-form textarea) { font-family: var(--ui-type-reading-family); line-height: 1.85; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-summary-prompt > summary,.lt-summary-history > summary,.wk-history > summary) { color: var(--lt-book-secondary); background: var(--lt-book-subtle); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-summary-prompt-group > h3,.time-group-heading) { color: var(--lt-book-accentInk); background: var(--lt-book-subtle); border-color: var(--lt-book-edge); }
+/* Calendar day shape remains a circle, distinct from the square paper sheets. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .time-day { background: transparent; color: var(--lt-book-ink); outline: none; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .time-day > span:first-child { border-radius: 50%; border: 1px solid transparent; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .time-day--today > span:first-child { background: transparent; border-color: var(--lt-book-strong); color: var(--lt-book-ink); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .time-day[aria-pressed="true"] > span:first-child { background: var(--lt-book-calendar-selected); color: var(--lt-book-calendar-selected-ink); border-color: var(--lt-book-strong); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .time-day:focus-visible { outline: 2px solid var(--lt-book-strong); outline-offset: -2px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .time-marker { background: transparent; border: 1px solid currentColor; color: var(--lt-book-accent); inline-size: 6px; block-size: 6px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .time-marker--term { border-radius: 6px 0; transform: rotate(-25deg); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.time-day-item,.time-category,.time-management-row) { border-color: var(--lt-book-edge); }
+/* Native switch children, including the repaired Benmo controls. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-switch { --component-switch-track-width: 42px; --component-switch-track-height: 26px; --component-switch-knob-size: 20px; --component-switch-track-inset: 2px; background: transparent; border: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-switch__track { padding: 2px; width: 42px; height: 26px; border-radius: 16px; background: var(--lt-book-switchOff); border: 1px solid transparent; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-switch__knob { width: 20px; height: 20px; top: 2px; left: 2px; border-radius: 50%; background: var(--lt-book-knob); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-switch[aria-checked="true"] .ui-switch__track { background: var(--lt-book-glaze),var(--lt-book-switchOn); border-color: var(--lt-book-strong); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-switch[aria-checked="true"] .ui-switch__knob { transform: translateX(16px); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-switch:disabled .ui-switch__track { background: var(--lt-book-disabled); }
+/* Workshop and settings are indexed rows, not separate visual frameworks. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .wk-group-title { border-bottom: 1px solid var(--lt-book-edge); padding-block: 12px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.wk-row-main,.wk-result-link,.wk-result-title,.wk-directory-title) { color: var(--lt-book-ink); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.wk-result-meta,.wk-directory-preview,.lt-settings-brand) { color: var(--lt-book-muted); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .wk-directory-item { background: var(--lt-book-surface); border-color: var(--lt-book-edge); border-left: 2px solid var(--lt-book-strong); border-radius: 0; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .wk-directory-item[aria-current="true"] { background: var(--lt-book-glaze),var(--lt-book-selected); color: var(--lt-book-selectedInk); border-color: var(--lt-book-strong); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-settings-row + .lt-settings-row,
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-settings-entry + .lt-settings-entry { border-top: 1px solid var(--lt-book-edge); padding-block: 10px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.form-actions,.subtabs) { background: var(--lt-book-canvas); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.wk-dialog,.lt-overlay) { background: var(--lt-book-scrim); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.wk-dialog-box,.time-confirm,.lt-source-deletion) { background: var(--lt-book-surface); color: var(--lt-book-ink); border-color: var(--lt-book-strong); border-radius: 0; }
+@media(max-width:390px) {
+  .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) > .lt-main { padding-inline: 14px; }
+  .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]):is(.benmo,.workshop) .lt-book-title { font-size: 25px; }
+}
+@media(prefers-reduced-motion:reduce) { .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) * { animation: none; transition: none; } }
+@media(forced-colors:active) {
+  .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) { box-shadow: none; }
+  .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-button--primary:enabled:hover, .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-button--danger:enabled:hover { filter: none; }
+}
+/* Independent summary actions are peers; only actual exclusive selectors use
+   stamp decoration. Perforations are decorative and do not own pointer input. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-work-actions > .ui-button:enabled {
+  background: var(--lt-book-surface); color: var(--lt-book-secondary); border-color: var(--lt-book-edge);
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-view-switch,.subtabs) > .ui-button { position: relative; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-view-switch,.subtabs) > .ui-button:not(:last-child)::after {
+  content: ''; position: absolute; inset-block-start: 50%; inset-inline-end: -3px; width: 6px; height: 36px; transform: translateY(-50%);
+  background: radial-gradient(circle,var(--lt-book-stamp-hole) 0 1.6px,var(--lt-book-stamp-hole-edge) 1.7px 2px,transparent 2.15px) center top / 6px 9px repeat-y;
+  pointer-events: none; z-index: 1;
+}
+
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-icon { filter: var(--lt-book-icon-filter); }
+/* The independent native deletion dialog is itself the themed owner. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-source-deletion {
+  background: var(--lt-book-surface); color: var(--lt-book-ink); border-color: var(--lt-book-strong);
+}
+/* ui-row's supplier flex layout is not the memory card grammar. All normal,
+   timeline and native multi-select cards restore the shared vertical grid. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"])[data-memory-type] .lt-row {
+  display: grid; gap: 12px; align-items: start;
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"])[data-memory-type] .lt-card-head {
+  display: grid; gap: 6px; min-width: 0;
+}
+
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-error,.error,[role="alert"]:not(:where(.lt-warning,.lt-management-warning))) { color: var(--lt-book-dangerInk); }
+
+/* Inner memory tools use complete light frames, not reading-card ink edges. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-summary-candidate,.lt-summary-panel,.lt-summary-word,.lt-summary-rule,.lt-recall-surface,.lt-recall-input,.lt-recall-card) { background: var(--lt-book-surface); color: var(--lt-book-ink); border: 1px solid var(--lt-book-edge); border-radius: 0; box-shadow: none; padding: 14px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.lt-summary-section,.lt-summary-panel,.lt-summary-candidate,.lt-summary-prompt-group,.lt-recall-surface,.lt-recall-card,.lt-recall-detail) > :is(h2,h3) { font-size: 15px; }
+
+/* Text fields use their existing single border as focus indication. Text entry
+   also matches :focus-visible after a pointer click; never add a second ring. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(input:not(:where([type="checkbox"],[type="radio"],[type="range"],[type="color"],[type="file"],[type="button"],[type="submit"],[type="reset"])),textarea,select):focus {
+  border-color: var(--lt-book-field-focus-edge); outline: none; outline-offset: 0; box-shadow: none;
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(input:not(:where([type="checkbox"],[type="radio"],[type="range"],[type="color"],[type="file"],[type="button"],[type="submit"],[type="reset"])),textarea,select):focus-visible { border-color: var(--lt-book-strong); outline: none; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(input,textarea,select)[aria-invalid="true"]:focus { border-color: var(--lt-book-dangerInk); }
+@media (forced-colors: active) {
+ .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(input,textarea,select):focus-visible { outline: 2px solid Highlight; outline-color: Highlight; outline-offset: 2px; }
+}

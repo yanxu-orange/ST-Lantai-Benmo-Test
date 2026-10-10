@@ -537,10 +537,6 @@
 .lantai[data-ui-theme="snow-ermine"] .lt-recall-domains {
   background: var(--ui-color-surface-base);
 }
-.lantai[data-ui-theme="snow-ermine"] .lt-recall-scroll {
-  background: var(--ui-color-surface-base);
-  border-color: var(--ui-color-border-subtle);
-}
 
 /* Candidate 3.3 common paint; production geometry and control ownership remain shared. */
 .lantai[data-ui-theme="snow-ermine"] .lt-header--root h1 {

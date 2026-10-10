@@ -1,3 +1,4 @@
+import { ensureBookThemeFont } from '../../app/styles/book-font.js';
 import {createNarrativeRuntime} from './narrative-runtime.js';
 import {mountWorkshopBackgroundDisplay} from './workshop-background-display.js';
 import {createLatestSummaryRuntime} from './latest-summary-runtime.js';
@@ -42,7 +43,7 @@ import {mountCumulativeView} from '../../app/cumulative-view.js';
 import {createCumulativeSettingsController} from '../../app/cumulative-settings-controller.js';
 import {mountCumulativeSettingsView} from '../../app/cumulative-settings-view.js';
 import '../../app/shared-ui/compact-group-candidate.js';
-import {BASE_STYLE_ENTRIES,SHARED_STYLE_ENTRIES,SNOW_ERMINE_STYLE_ENTRIES,SPRING_STYLE_ENTRIES} from '../../app/styles/style-entries.js';
+import {BASE_STYLE_ENTRIES,SHARED_STYLE_ENTRIES,SNOW_ERMINE_STYLE_ENTRIES,SPRING_STYLE_ENTRIES,BOOK_THEME_STYLE_ENTRIES} from '../../app/styles/style-entries.js';
 
 import { DEFAULT_THEME, applyTheme, resolveStyleAssets } from '../../app/styles/theme.js';
 import { createAppearanceAdapter } from './appearance-adapter.js';
@@ -57,8 +58,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryHistory,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
+  const bookStylesByTheme = new Map();
   const storybarTheme=mountStorybarTheme({document:doc});
-  const appearance = createAppearanceSession({ adapter: createAppearanceAdapter({ getContext, fetchImpl: request, ...appearanceOptions }), prepareTheme: async theme => { if (theme === 'snow-ermine') await snowStyles(); if (theme === 'spring') await springStyles(); }, canSave: () => {
+  const appearance = createAppearanceSession({ adapter: createAppearanceAdapter({ getContext, fetchImpl: request, ...appearanceOptions }), prepareTheme: async theme => { if (theme === 'snow-ermine') await snowStyles(); if (theme === 'spring') await springStyles(); if (Object.hasOwn(BOOK_THEME_STYLE_ENTRIES,theme)) await bookStyles(theme); }, canSave: () => {
     try { if(controls?.inspect().busy)return false;if (apiSession && !['ready','saved'].includes(apiSession.inspect().status)) return false; runtime.settings.getEpoch(); return true; } catch { return false; }
   } });
   const unsubscribeAppearance = appearance.subscribe(() => syncAppearance());
@@ -213,6 +215,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       benmoNavigation=null;cleanup(()=>timeController?.dispose());timeController=null;
       const currentApp=app;app=null;cleanup(()=>currentApp?.dispose());
       const currentObserver=sharedObserver;sharedObserver=null;sharedStyle=null;snowStyle=null;springStyle=null;
+      for (const bundle of bookStylesByTheme.values()) bundle.style=null;
       cleanup(()=>currentObserver?.disconnect());
     } finally {
       const currentPanel=panel;panel=null;content=memoryContent=benmoContent=settingsContent=summaryContent=null;
@@ -531,6 +534,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     // presentation roles without making their business lifecycle theme-aware.
     if (theme === 'spring') return css + '\n' + (await springStyles()).replaceAll(':host([data-ui-theme="spring"])', ':host');
     if (theme === 'snow-ermine') return css + '\n' + (await snowStyles()).replaceAll(':host([data-ui-theme="snow-ermine"])', ':host');
+    if (Object.hasOwn(BOOK_THEME_STYLE_ENTRIES,theme)) return css + '\n' + (await bookStyles(theme)).replaceAll(`:host([data-ui-theme="${theme}"])`, ':host');
     return css;
   }
   async function styles() {
@@ -634,10 +638,25 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     });
     return springStylePromise;
   }
+  async function bookStyles(theme) {
+    const font = ensureBookThemeFont(doc,theme);
+    let bundle = bookStylesByTheme.get(theme);
+    if (!bundle) { bundle = {promise:null,css:null,style:null};bookStylesByTheme.set(theme,bundle); }
+    if (!bundle.promise) bundle.promise = Promise.all(BOOK_THEME_STYLE_ENTRIES[theme].map(async ({url}) => {
+      const response = await request(url);
+      if (!response.ok) throw new Error();
+      return resolveStyleAssets(await response.text(),url).replace(/:root\b/g,':host');
+    })).then(parts => { bundle.css = parts.join('\n');return bundle.css; }).catch(() => {
+      bundle.promise = null;
+      throw Object.assign(new Error('皮肤资源未能加载'),{code:'APPEARANCE_STYLE_UNAVAILABLE'});
+    });
+    const [css] = await Promise.all([bundle.promise,font]);
+    return css;
+  }
   function syncAppearance() {
     if (!panel || !sharedStyle) return;
     const requested = appearance.inspect().previewTheme ?? appearance.inspect().theme;
-    const theme = requested === 'spring' && springCss ? 'spring' : requested === 'snow-ermine' && snowCss ? 'snow-ermine' : DEFAULT_THEME;
+    const theme = requested === 'spring' && springCss ? 'spring' : requested === 'snow-ermine' && snowCss ? 'snow-ermine' : bookStylesByTheme.get(requested)?.css ? requested : DEFAULT_THEME;
     if(panel.getAttribute('data-ui-theme')!==theme)panel.setAttribute('data-ui-theme', theme);
     applyTheme(content, theme);
     let active = false;
@@ -659,6 +678,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       springStyle = doc.createElement('style'); springStyle.textContent = springCss; panel.shadowRoot.append(springStyle);
     }
     if(springStyle){const springMedia=active&&theme==='spring'?'all':'not all';if(springStyle.media!==springMedia)springStyle.media=springMedia;}
+    for (const [identity,bundle] of bookStylesByTheme) {
+      if (theme === identity && bundle.css && !bundle.style) {
+        bundle.style = doc.createElement('style');bundle.style.textContent = bundle.css;panel.shadowRoot.append(bundle.style);
+      }
+      if (bundle.style) { const bookMedia=active&&theme===identity?'all':'not all';if(bundle.style.media!==bookMedia)bundle.style.media=bookMedia; }
+    }
     if (active && typeof globalThis.getComputedStyle === 'function') globalThis.UICompactGroupCandidate.sync(panel.shadowRoot);
   }
   function errorView(error) {
