@@ -14,7 +14,7 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&
 const icon = (name,label,action,disabled=false) => `<button type="button" class="ui-icon-button${['back','close','cancel-delete'].includes(action)?' ui-button--tertiary':''}" data-action="${action}" aria-label="${label}" ${disabled?'title="首片尚未实现"':''}><img class="lt-icon" src="${new URL(`./icons/${name}.svg`,import.meta.url)}" alt=""></button>`;
 const button = (label,action,disabled=false) => `<button type="button" class="ui-button ui-button--tertiary" data-action="${action}" ${disabled?'title="首片尚未实现"':''}>${label}</button>`;
 const hitArea = '<span class="ui-hit-area" aria-hidden="true"></span>';
-const rootIcon = (name,label,action,tone) => icon(name,label,action).replace('class="ui-icon-button','class="ui-button ui-icon-button ui-hit-owner').replace('data-action=',`data-ui-tone="${tone}" data-action=`).replace('</button>',`${hitArea}</button>`);
+const rootIcon = (name,label,action,tone) => icon(name,label,action).replace(/<img[^>]+>/, image => name === 'add' ? '<svg class="lt-icon" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>' : image).replace('class="ui-icon-button','class="ui-button ui-icon-button ui-hit-owner').replace('data-action=',`data-ui-tone="${tone}" data-action=`).replace('</button>',`${hitArea}</button>`);
 const stableHash = identity => {
   let hash=2166136261;
   for(const char of String(identity)){hash^=char.codePointAt(0);hash=Math.imul(hash,16777619);}

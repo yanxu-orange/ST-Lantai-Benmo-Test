@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "2981dcdbc8a4d46ac8d1e23764bb7e5ceff184045cbf9ce561ed181f6120d005"
+    "sha256": "f91577e36b9213f0f738fd6ff3b71c45080013805e9886acf49b43ededf08ecf"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -129,7 +129,7 @@
   },
   {
     "path": "dist/app/memory-app.js",
-    "sha256": "1fe15ea6df37625876a9030d402b93d2da76b3baa260a930c129903714045413"
+    "sha256": "b226b4ab61145853fe4f7465fc72b30caffe5a6e8fbdb6fbc315d70df7ac0a43"
   },
   {
     "path": "dist/app/memory-card-time.js",
@@ -225,7 +225,7 @@
   },
   {
     "path": "dist/app/spring/memory.css",
-    "sha256": "867d7f1b31ccaff36c9f90ddd049fd58b9eb7687dc1bba7591ee642bade56de5"
+    "sha256": "d3ac133056e31360969176e19af22ab3e627ea6502e42d4368f12bba52ec0b85"
   },
   {
     "path": "dist/app/spring/theme.css",
@@ -297,7 +297,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "083f0c8926884e5e98e0ad032b990237b9852f4799e38d92628d1d3c04cc34e6"
+    "sha256": "962388eab8221c79820915fd0d682ec2580718e6aa7947f136972c0b61d7c278"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -857,10 +857,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "e4806aa02aeb1a9602cba436fef25adf33c559d1895af3c7b9174a6dbd283ada"
+    "sha256": "5f7e472d300c2cec538b11d19e1b620f496deb788c1b0c9831c5c53824e351e4"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "7d404951a34b351900c06a6f45fdb4ddeaeee5f1ffd1a1e2d1b057cf7d9f31d3"
+    "sha256": "65f36149e2b4446c2e7be3218e7f8a3e5c156e119d16de71f8b4fa193c983a99"
   }
 ]
