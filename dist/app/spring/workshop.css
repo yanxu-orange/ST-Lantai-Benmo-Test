@@ -1,10 +1,6 @@
 /* Workshop reference styling, mapped onto production views and native states.
    Only this surface owns pink switches; navigation and actions stay sage. */
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] {
-  --wk-divider: #e1e8de;
-  --wk-reader-background: #fff;
-  --wk-directory-background: #e6f1e4;
-  --wk-directory-text: #486f51;
   --lt-spring-workshop-switch-on: #e7bbc9;
   --lt-spring-workshop-switch-border: #d9a6b8;
   --lt-spring-workshop-switch-off: #e8ece7;
@@ -18,29 +14,29 @@
   min-width: 100px;
 }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-toolbar [data-action="new"]:enabled {
-  background: #e0efdf;
+  background: var(--lt-format-page-primary-background);
   color: var(--ui-color-action-primary-text);
 }
 /* Map the reference's ordinary, primary and ghost buttons by their real action.
    A generic tertiary override would also repaint navigation and API controls. */
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button:is([data-action="edit-result"],[data-action="first-record"],[data-action="last-record"],[data-action="prev"],[data-action="next"]):enabled {
-  background: #f1f6f0;
-  color: #58775e;
-  border: 1px solid #dbe8da;
+  background: var(--lt-format-page-utility-background);
+  color: var(--lt-format-page-utility-ink);
+  border: 1px solid var(--lt-format-page-utility-border);
 }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button:is([data-action="edit-result"],[data-action="first-record"],[data-action="last-record"],[data-action="prev"],[data-action="next"]):hover:enabled { background: #e5efe4; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button:is([data-action="edit-result"],[data-action="first-record"],[data-action="last-record"],[data-action="prev"],[data-action="next"]):hover:enabled { background: var(--lt-format-page-utility-hover-background); }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button:is([data-action="save"],[data-action="confirm-dialog"],[data-action="load-more"]):enabled {
-  background: #e0efdf;
-  color: #426b4b;
-  border-color: #d0e4d0;
+  background: var(--lt-format-page-primary-background);
+  color: var(--lt-format-page-primary-ink);
+  border-color: var(--lt-format-page-primary-border);
 }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button[data-action="cancel-dialog"]:enabled { background: transparent; border-color: transparent; }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button[data-action="delete-module"]:enabled { background: #fff3f3; color: #b47978; border-color: #efdada; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button[data-action="delete-module"]:enabled { background: var(--lt-format-page-danger-background); color: var(--lt-format-page-danger-ink); border-color: var(--lt-format-page-danger-border); }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group-title {
   gap: 8px;
   padding: 3px 5px;
-  border-bottom: 1px solid #e7ede3;
-  color: #587561;
+  border-bottom: 1px solid var(--lt-format-workshop-group-border);
+  color: var(--lt-format-workshop-group-ink);
 }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group-title > .lt-meta { margin-inline-start: auto; }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group-title::after {
@@ -69,36 +65,36 @@
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-list { gap: 8px; }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row {
   padding: 10px 13px;
-  border: 1px solid #e0eade;
-  border-radius: 10px;
+  border: 1px solid var(--lt-format-workshop-row-border);
+  border-radius: var(--lt-format-workshop-row-radius);
   background: var(--ui-color-surface-base);
   box-shadow: var(--ui-elevation-low-shadow);
   column-gap: 8px;
 }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row:hover { border-color: #c9dccb; }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row-main { color: #44664b; font-size: 14px; font-weight: 700; }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row:has(.ui-switch[aria-checked="false"]) .wk-row-main { color: #8b9f8e; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row:hover { border-color: var(--lt-format-workshop-row-hover-border); }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row-main { color: var(--lt-format-workshop-row-ink); font-size: var(--lt-format-workshop-row-title-size); font-weight: 700; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row:has(.ui-switch[aria-checked="false"]) .wk-row-main { color: var(--lt-format-workshop-row-off-ink); }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row-actions { padding-top: 0; }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch {
-  --component-switch-track-width: 44px;
-  --component-switch-track-height: 25px;
-  --component-switch-knob-size: 19px;
-  --component-switch-track-inset: 2px;
+  --component-switch-track-width: var(--lt-format-switch-track-width);
+  --component-switch-track-height: var(--lt-format-switch-track-height);
+  --component-switch-knob-size: var(--lt-format-switch-knob-size);
+  --component-switch-track-inset: var(--lt-format-switch-track-inset);
   min-block-size: 44px;
   min-inline-size: 44px;
 }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch .ui-switch__track {
-  border: 1px solid var(--lt-spring-workshop-switch-off-border);
-  border-radius: 20px;
-  background: var(--lt-spring-workshop-switch-off);
+  border: 1px solid var(--lt-format-switch-off-border);
+  border-radius: var(--lt-format-switch-track-radius);
+  background: var(--lt-format-switch-off-background);
 }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch[aria-checked="true"] .ui-switch__track {
-  background: var(--lt-spring-workshop-switch-on);
-  border-color: var(--lt-spring-workshop-switch-border);
+  background: var(--lt-format-switch-on-background);
+  border-color: var(--lt-format-switch-on-border);
 }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch .ui-switch__knob {
-  background: var(--lt-spring-workshop-switch-knob);
-  box-shadow: 0 1px 2px #66836a24;
+  background: var(--lt-format-switch-knob-background);
+  box-shadow: var(--lt-format-switch-knob-shadow);
 }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch:disabled { opacity: .55; cursor: not-allowed; }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch[aria-busy="true"] { cursor: progress; }
@@ -106,45 +102,45 @@
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-form-section {
   padding: 15px;
   border: 1px solid var(--wk-divider);
-  border-radius: 11px;
+  border-radius: var(--lt-format-workshop-card-radius);
   background: var(--ui-color-surface-base);
   box-shadow: var(--ui-elevation-low-shadow);
   gap: 14px;
 }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result-title { color: #42644a; font-size: 16px; font-weight: 700; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result-title { color: var(--lt-format-workshop-result-title-ink); font-size: var(--lt-format-workshop-result-title-size); font-weight: 700; }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result-panel {
   padding: 14px;
-  border: 1px solid #e0e9dc;
-  border-radius: 11px;
+  border: 1px solid var(--lt-format-workshop-result-border);
+  border-radius: var(--lt-format-workshop-card-radius);
   background: var(--ui-color-surface-base);
   box-shadow: var(--ui-elevation-low-shadow);
 }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result-meta { border-bottom: 1px solid #ecf0e9; padding-bottom: 11px; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result-meta { border-bottom: 1px solid var(--lt-format-workshop-result-divider); padding-bottom: 11px; }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result {
   font-family: var(--ui-type-reading-family);
-  font-size: 14px;
-  line-height: 1.92;
-  color: #526b57;
+  font-size: var(--lt-format-workshop-reading-size);
+  line-height: var(--lt-format-workshop-reading-line);
+  color: var(--lt-format-workshop-reading-ink);
 }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result-panel > .wk-result { padding: 0; border: 0; background: transparent; }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] [data-action="delete-result"]:enabled {
-  background: #f9e9ed;
-  color: #a57887;
-  border-color: #f2e0e4;
+  background: var(--lt-format-page-delete-background);
+  color: var(--lt-format-page-delete-ink);
+  border-color: var(--lt-format-page-delete-border);
 }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-history { padding: 0; border: 1px solid var(--wk-divider); border-radius: 9px; background: #fff; }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-history summary { padding: 12px 13px; color: #65816a; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-history { padding: 0; border: 1px solid var(--wk-divider); border-radius: 9px; background: var(--lt-format-page-paper); }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-history summary { padding: 12px 13px; color: var(--lt-format-workshop-history-ink); }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-history .wk-result { margin: 0; padding: 13px; border-top: 1px solid var(--wk-divider); }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-empty {
   padding: 26px 16px;
-  border: 1px dashed #dce9da;
+  border: 1px dashed var(--lt-format-workshop-empty-border);
   border-radius: 11px;
-  background: #f6f9f4;
+  background: var(--lt-format-workshop-empty-background);
   color: var(--ui-color-text-meta);
 }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-directory-item { padding: 13px 14px; border-color: #e1eade; border-radius: 9px; }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-directory-item[aria-current="true"] { border-color: #bcd6bd; background: #f3f8f1; }
-.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-directory-title { color: #51705a; font-weight: 700; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-directory-item { padding: 13px 14px; border-color: var(--lt-format-workshop-directory-border); border-radius: 9px; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-directory-item[aria-current="true"] { border-color: var(--lt-format-workshop-directory-selected-border); background: var(--lt-format-workshop-directory-selected-background); }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-directory-title { color: var(--lt-format-workshop-directory-title-ink); font-weight: 700; }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-dialog { background: var(--ui-color-scrim); }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-dialog-box { border-radius: 13px; }
 .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-toast { max-width: calc(100% - 32px); overflow-wrap: anywhere; text-align: center; }

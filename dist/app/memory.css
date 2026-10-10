@@ -28,13 +28,12 @@
 .lt-range { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:var(--ui-space-control); }
 .lt-entry { display:flex; gap:var(--ui-space-control); }
 .lt-entry input { min-width:0; }
-.lt-textarea { width:100%; min-block-size:var(--ui-interaction-target-min); resize:vertical; padding:var(--ui-space-control); color:var(--ui-color-text-primary); background:var(--ui-color-field-background); border:var(--ui-border-default-width) solid var(--ui-color-field-border); border-radius:var(--ui-shape-control-radius); font-family:var(--ui-type-reading-family); font-size:var(--ui-type-reading-body-size); font-weight:var(--ui-type-reading-body-weight); line-height:var(--ui-type-reading-body-line); }
+.lt-textarea { width:100%; min-block-size:var(--ui-interaction-target-min); resize:vertical; padding:var(--ui-space-control); color:var(--ui-color-text-primary); background:var(--ui-color-field-background); border:var(--ui-border-default-width) solid var(--ui-color-field-border); border-radius:var(--ui-shape-control-radius); font-family:var(--ui-type-reading-family); font-size:var(--lt-format-field-text-size,var(--ui-type-reading-body-size)); font-weight:var(--ui-type-reading-body-weight); line-height:var(--ui-type-reading-body-line); }
 .lt-textarea:focus-visible { outline:max(var(--ui-focus-ring-width),var(--ui-interaction-focus-width-min)) solid var(--ui-color-focus-ring); outline-offset:var(--ui-focus-ring-offset); }
-/* Prompt editors alone use a compact reading size. Both terms scale with the
-   root font, and a larger reading token can still enlarge the editor. Keep the
-   theme's family, weight and line-height; ordinary textareas remain unchanged. */
+/* Fallback for appearances that have not opted into the shared field format.
+   Spring/Snow text entries all use --lt-format-field-text-size instead. */
 .lantai { --lt-prompt-editor-size:max(.9375rem,calc(var(--ui-type-reading-body-size) - .0625rem)); }
-.lantai textarea.lt-prompt-editor { font-size:var(--lt-prompt-editor-size); }
+.lantai textarea.lt-prompt-editor { font-size:var(--lt-format-field-text-size,var(--lt-prompt-editor-size)); }
 .lt-modes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--ui-space-control); border:0; padding:0; margin:0; }
 .lt-mode { display:flex; align-items:center; justify-content:center; gap:var(--ui-space-inline); min-block-size:max(var(--ui-density-control-height),var(--ui-interaction-target-min)); border:var(--ui-border-default-width) solid var(--ui-color-border-default); border-radius:var(--ui-shape-selection-radius); background:var(--ui-color-surface-base); }
 .lt-mode:has(:checked) { background:var(--ui-color-selected-background); color:var(--ui-color-selected-text); border-color:var(--ui-color-selected-border); }
@@ -47,7 +46,7 @@
 .lt-error { color:var(--ui-color-warning-text); background:var(--ui-color-warning-background); padding:var(--ui-space-control); margin:0; overflow-wrap:anywhere; }
 .lt-status { margin:0; color:var(--ui-color-text-meta); font-family:var(--ui-type-ui-family); font-size:var(--ui-type-ui-meta-size); font-weight:var(--ui-type-ui-meta-weight); line-height:var(--ui-type-ui-meta-line); }
 
-.lt-title-field { font-family:var(--ui-type-ui-family); font-size:var(--ui-type-ui-body-size); line-height:var(--ui-type-ui-body-line); font-weight:var(--ui-type-ui-body-weight); }
+.lt-title-field { font-family:var(--ui-type-ui-family); font-size:var(--lt-format-field-text-size,var(--ui-type-ui-body-size)); line-height:var(--ui-type-ui-body-line); font-weight:var(--ui-type-ui-body-weight); }
 
 .lt-main { display:flex; flex-direction:column; gap:var(--ui-space-group); }
 .lt-main > * { flex-shrink:0; }

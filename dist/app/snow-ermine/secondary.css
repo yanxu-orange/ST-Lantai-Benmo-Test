@@ -4,7 +4,7 @@
   border: 1px solid var(--ui-color-border-default);
   border-radius: var(--ui-shape-surface-radius);
   background: var(--ui-color-surface-base);
-  box-shadow: 0 1px 5px rgb(54 93 119 / 3.5%);
+  box-shadow: var(--lt-format-secondary-workshop-row-shadow);
 }
 .lantai[data-ui-theme="snow-ermine"].workshop :is(.wk-group-label,.wk-result-title) {
   color: var(--ui-color-text-primary);
@@ -20,7 +20,7 @@
 }
 .lantai[data-ui-theme="snow-ermine"].lt-settings .lt-settings-group > h2 {
   color: var(--ui-color-text-primary);
-  font-size: 15px;
+  font-size: var(--lt-format-secondary-settings-heading-size);
 }
 .lantai[data-ui-theme="snow-ermine"].lt-settings :is(.lt-settings-row,.lt-settings-entry) {
   min-width: 0;

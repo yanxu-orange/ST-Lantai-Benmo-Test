@@ -1,0 +1,144 @@
+/* Transparent Snow material for the real workshop and global settings views.
+   The production templates own their navigation, layout, switches and forms.
+   Existing cards own one material layer; exposed labels get fitted backing.
+   Benmo reuses workshop classes but has its own page sheet. */
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog):is(.workshop:not(.benmo),.lt-settings,.lt-api-settings) {
+  --lt-format-secondary-settings-heading-size: 16px;
+  --lt-format-secondary-workshop-row-shadow: var(--lt-panoramic-reading-shadow);
+}
+
+/* These two real button owners are outside .ui-button. The shared Snow touch
+   rule cannot reach them; give them the same 44px native target floor. */
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.wk-row-main,.wk-directory-item) {
+  min-block-size: max(44px, var(--ui-interaction-target-min));
+}
+
+/* Real outer reading owners, including record buttons and the existing API
+   form. No extra wrapper, main-wide blur or per-label frost is introduced. */
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.wk-row,.wk-result-panel > .wk-result,.wk-history,.wk-directory-item:enabled,.lt-section.wk-results),
+.lantai.lt-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-settings-group,
+.lantai.lt-api-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.lt-editor,.lt-appearance-settings) {
+  background: var(--lt-panoramic-reading-surface);
+  border-color: var(--lt-panoramic-reading-edge);
+  box-shadow: var(--lt-panoramic-reading-shadow);
+  -webkit-backdrop-filter: var(--lt-panoramic-reading-filter);
+  backdrop-filter: var(--lt-panoramic-reading-filter);
+}
+
+/* The unframed production disclosures/forms borrow the same small corner.
+   Their border widths, spacing, layout and open/closed heights are unchanged. */
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.wk-history,.lt-section.wk-results),
+.lantai.lt-api-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.lt-editor,.lt-appearance-settings) {
+  border-radius: var(--ui-shape-surface-radius);
+}
+
+/* Defensive nesting guard: a record reused in another record does not add
+   another scene filter. Current templates keep these cards as siblings. */
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.wk-row,.wk-history,.wk-directory-item,.lt-section.wk-results) :is(.wk-row,.wk-history,.wk-directory-item,.lt-section.wk-results,.wk-result-panel > .wk-result),
+.lantai.lt-api-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.lt-editor,.lt-appearance-settings) :is(.lt-editor,.lt-appearance-settings) {
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* A directory's current record remains visibly selected. Hover changes only
+   the idle record fill; focus/disabled and the real native button are intact. */
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .wk-directory-item[aria-current="true"]:enabled {
+  background: var(--ui-color-selected-background);
+  border-color: var(--ui-color-selected-border);
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .wk-directory-item:enabled:hover:not([aria-current="true"]) {
+  background: var(--lt-panoramic-reading-hover);
+}
+
+/* The reader footer has a more specific production fill than the general
+   footer rule. Its directory affordance stays distinct from previous/next. */
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .wk-reader-footer {
+  background: var(--lt-panoramic-chrome);
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .wk-reader-footer .wk-result-nav .ui-button[data-action="directory"]:enabled:not(:where(:hover,:active)) {
+  background: var(--lt-panoramic-control-surface);
+}
+
+/* Shared typography roles: page 18px, section/object 16px, reading/UI 14px.
+   The shared .875rem input rule and all reading/UI font families are retained. */
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.wk-row-name,.wk-group-label,.wk-result-title),
+.lantai.lt-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-settings-group > h2,
+.lantai.lt-api-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-settings-section-title {
+  color: var(--lt-format-memory-title-ink);
+  font-size: 16px;
+  font-weight: 500;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.wk-result,.wk-directory-preview) {
+  color: var(--ui-color-text-primary);
+  font-size: 14px;
+}
+
+/* Short labels sit directly over the scene on these existing editor routes.
+   Only their own grid/flex alignment changes the paint box. Never paint the
+   containing label: it also owns a full-width input or a 44px touch target. */
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .wk-form .ui-field__label,
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .wk-form-section > .ui-field > output,
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .wk-directory > .ui-field > .ui-field__label,
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.wk-toolbar,.wk-group-title,.wk-result-meta) > :is(span,.lt-meta),
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.wk-form,.wk-form-section,#wk-directory-body) > .lt-meta,
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main > :is(.wk-intro,p[role="status"]) {
+  background: var(--lt-panoramic-exposed-text-surface);
+  justify-self: start;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .wk-form > .lt-meta,
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main > :is(.wk-intro,p[role="status"]) {
+  align-self: flex-start;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.wk-results > .wk-result-heading,.wk-directory > .wk-result-title,.lt-main > .wk-result-title) {
+  background: var(--lt-panoramic-subheading-surface);
+  justify-self: start;
+  align-self: flex-start;
+}
+
+/* Tracking record metadata is already inside one material owner; no inner
+   white bands. Directory titles/previews and settings labels likewise inherit
+   their existing card, without new individual backgrounds. */
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-section.wk-results :is(.wk-result-title,.wk-result-meta > .lt-meta,.wk-result-meta > span) {
+  background: transparent;
+}
+
+/* Original crystal artwork appears only in the free end of short settings
+   headings. No icon, disclosure arrow, switch or action glyph is replaced. */
+.lantai.lt-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-settings-group > h2 {
+  background-image: var(--lt-snow-crystal);
+  background-position: right center;
+  background-size: 12px;
+  background-repeat: no-repeat;
+}
+.lantai.lt-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-settings-brand > div > span {
+  background: var(--lt-panoramic-exposed-text-surface);
+}
+.lantai.lt-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-settings-brand > p {
+  background: linear-gradient(90deg, var(--lt-panoramic-exposed-text-surface) 10em, transparent 12em);
+}
+
+/* Empty readers and confirmation boxes need steady contrast. They do not add
+   a frost layer over a filtered record, and status/error colors are untouched. */
+.lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.wk-empty,.wk-dialog-box) {
+  background: var(--lt-panoramic-editor-surface);
+  border-radius: var(--ui-shape-surface-radius);
+}
+
+@media (forced-colors: active) {
+  .lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .wk-directory-item[aria-current="true"]:enabled {
+    background: Highlight;
+    border-color: Highlight;
+  }
+  .lantai.workshop:not(.benmo)[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .wk-directory-item[aria-current="true"]:enabled :is(.wk-directory-title,.wk-directory-preview) {
+    color: HighlightText;
+  }
+  .lantai.lt-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-settings-group > h2 {
+    background-image: none;
+  }
+  .lantai.lt-settings[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-settings-brand > p {
+    background: Canvas;
+  }
+}

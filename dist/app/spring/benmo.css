@@ -2,10 +2,6 @@
    The existing view/controller own every record, draft and job. This sheet only
    maps their real states to the approved paper/leaf layout; no prototype data. */
 .lantai.benmo[data-ui-theme="spring"] {
-  --ui-color-workspace: #fbfcf8;
-  --ui-color-text-primary: #44594a;
-  --lt-benmo-line: #e1e8de;
-  --lt-benmo-paper-shadow: 0 4px 13px rgb(61 80 61 / 4.5%);
   --lt-benmo-leaf: url("./assets/benmo-leaf.svg");
 }
 /* Root photography inherits the shared five-area banner. */
@@ -28,25 +24,25 @@
   gap: 4px;
   padding: 4px;
   border: 0;
-  border-radius: 9px;
-  background: #f2f6ef;
+  border-radius: var(--lt-format-benmo-segment-radius);
+  background: var(--lt-format-benmo-segment-background);
 }
 .lantai.benmo[data-ui-theme="spring"] .subtabs > .ui-button {
   min-width: 0;
   padding-inline: 5px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--lt-format-benmo-segment-control-radius);
   font-size: 13px;
   white-space: nowrap;
 }
 .lantai.benmo[data-ui-theme="spring"] .subtabs > .ui-button:enabled {
   background: transparent;
-  color: #839487;
+  color: var(--lt-format-benmo-segment-ink);
   font-weight: 400;
 }
 .lantai.benmo[data-ui-theme="spring"] .subtabs > .ui-button[aria-pressed="true"]:enabled {
-  background: #e6f2e5;
-  color: #486f51;
+  background: var(--lt-format-benmo-segment-selected-background);
+  color: var(--lt-format-benmo-segment-selected-ink);
   font-weight: 700;
 }
 .lantai.benmo[data-ui-theme="spring"] .section { gap: 13px; }
@@ -55,12 +51,12 @@
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--lt-benmo-line);
-  border-radius: 11px;
-  background: #fff;
+  border-radius: var(--lt-format-benmo-card-radius);
+  background: var(--lt-format-page-paper);
   box-shadow: var(--lt-benmo-paper-shadow);
 }
 .lantai.benmo[data-ui-theme="spring"] .record.selected { border-color: var(--ui-color-selected-border); }
-.lantai.benmo[data-ui-theme="spring"] .reading { color: #526956; line-height: 1.87; }
+.lantai.benmo[data-ui-theme="spring"] .reading { color: var(--lt-format-benmo-reading-ink); line-height: var(--lt-format-benmo-reading-line); }
 .lantai.benmo[data-ui-theme="spring"] .meta { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .lantai.benmo[data-ui-theme="spring"] :is(.row,.summary-toolbar-main,.pending-strip) { flex-wrap: wrap; }
 .lantai.benmo[data-ui-theme="spring"] :is(.row,.summary-toolbar-main,.pending-strip) > .meta { flex: 1 1 120px; }
@@ -75,11 +71,11 @@
 .lantai.benmo[data-ui-theme="spring"] .summary-card-actions .ui-icon-button {
   border-color: transparent;
   background: transparent;
-  color: #6b9274;
+  color: var(--lt-format-benmo-icon-ink);
   box-shadow: none;
 }
 .lantai.benmo[data-ui-theme="spring"] .summary-card > .benmo-text-entry { justify-self: end; }
-.lantai.benmo[data-ui-theme="spring"] .benmo-text-entry { color: #58775e; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-text-entry { color: var(--lt-format-page-utility-ink); }
 .lantai.benmo[data-ui-theme="spring"] .benmo-text-entry:hover:enabled { background: transparent; text-decoration: none; }
 .lantai.benmo[data-ui-theme="spring"] .benmo-summary-history { gap: 0; padding-top: 6px; }
 .lantai.benmo[data-ui-theme="spring"] .benmo-summary-history > .record-open {
@@ -87,8 +83,8 @@
   padding: 10px 13px;
   border: 1px solid var(--lt-benmo-line);
   border-radius: 9px;
-  background: #fff;
-  color: #53715c;
+  background: var(--lt-format-page-paper);
+  color: var(--lt-format-benmo-history-ink);
   font-size: 13px;
 }
 .lantai.benmo[data-ui-theme="spring"] .benmo-summary-history > .record-open[aria-expanded="true"] {
@@ -100,7 +96,7 @@
   border: 1px solid var(--lt-benmo-line);
   border-top: 0;
   border-radius: 0 0 9px 9px;
-  background: #fff;
+  background: var(--lt-format-page-paper);
 }
 /* Added captions are decoration, not duplicate controls or accessible labels.
    The native hidden attribute keeps every other theme's layout unchanged. */
@@ -111,7 +107,7 @@
   align-items: center;
   gap: 9px;
   margin: 0;
-  color: #48664e;
+  color: var(--lt-format-benmo-heading-ink);
   font-family: var(--ui-type-ui-family);
   font-size: 17px;
   font-weight: 700;
@@ -137,13 +133,13 @@
   pointer-events: none;
 }
 .lantai.benmo[data-ui-theme="spring"] .benmo-spring-heading::before { margin-inline-end: 0; }
-.lantai.benmo[data-ui-theme="spring"] .record-open strong { color: #465e4b; font-size: 15px; font-weight: 700; }
-.lantai.benmo[data-ui-theme="spring"] .record > p:not(.reading) { color: #697c6b; font-size: 13px; line-height: 1.7; }
+.lantai.benmo[data-ui-theme="spring"] .record-open strong { color: var(--lt-format-benmo-record-title-ink); font-size: var(--lt-format-benmo-record-title-size); font-weight: var(--lt-format-benmo-record-title-weight); }
+.lantai.benmo[data-ui-theme="spring"] .record > p:not(.reading) { color: var(--lt-format-benmo-record-copy-ink); font-size: 13px; line-height: 1.7; }
 .lantai.benmo[data-ui-theme="spring"] .record > p.meta { color: var(--ui-color-text-meta); font-size: 12px; }
-.lantai.benmo[data-ui-theme="spring"] .tag { padding: 3px 7px; border-radius: 5px; background: #eef5ed; color: #62806a; }
-.lantai.benmo[data-ui-theme="spring"] [data-tracking-excluded="true"] :is(.record-open,.row) .tag { background: #f8eaf0; color: #a27a8b; }
+.lantai.benmo[data-ui-theme="spring"] .tag { padding: 3px 7px; border-radius: 5px; background: var(--lt-format-benmo-tag-background); color: var(--lt-format-benmo-tag-ink); }
+.lantai.benmo[data-ui-theme="spring"] [data-tracking-excluded="true"] :is(.record-open,.row) .tag { background: var(--lt-format-benmo-excluded-background); color: var(--lt-format-benmo-excluded-ink); }
 .lantai.benmo[data-ui-theme="spring"] .record-detail { gap: 12px; }
-.lantai.benmo[data-ui-theme="spring"] .record-detail > .row h2 { color: #48664e; font-size: 17px; }
+.lantai.benmo[data-ui-theme="spring"] .record-detail > .row h2 { color: var(--lt-format-benmo-heading-ink); font-size: 17px; }
 .lantai.benmo[data-ui-theme="spring"] .detail-fields { gap: 0; }
 .lantai.benmo[data-ui-theme="spring"] .detail-field {
   grid-template-columns: 105px minmax(0,1fr);
@@ -151,21 +147,21 @@
   padding: 11px 0;
   margin: 0;
   border-top: 0;
-  border-bottom: 1px solid #edf1e9;
+  border-bottom: 1px solid var(--lt-format-benmo-detail-border);
   font-size: 13px;
 }
 .lantai.benmo[data-ui-theme="spring"] .detail-field:last-child { border-bottom: 0; }
-.lantai.benmo[data-ui-theme="spring"] .detail-field dd { color: #4d6655; font-size: 13px; line-height: 1.7; }
+.lantai.benmo[data-ui-theme="spring"] .detail-field dd { color: var(--lt-format-benmo-detail-ink); font-size: 13px; line-height: 1.7; }
 .lantai.benmo[data-ui-theme="spring"] .detail-field--long { grid-template-columns: minmax(0,1fr); gap: 6px; }
-.lantai.benmo[data-ui-theme="spring"] .detail-field--long dt { color: #5f8067; font-weight: 700; }
+.lantai.benmo[data-ui-theme="spring"] .detail-field--long dt { color: var(--lt-format-benmo-detail-title-ink); font-weight: 700; }
 .lantai.benmo[data-ui-theme="spring"] .detail-field--long dd { font-family: var(--ui-type-reading-family); font-size: 14px; }
 .lantai.benmo[data-ui-theme="spring"] .detail-field .detail-field-empty { color: var(--ui-color-text-meta); }
 .lantai.benmo[data-ui-theme="spring"] .detail-actions { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
-.lantai.benmo[data-ui-theme="spring"] [data-action="delete-record"]:enabled { border-color: #efdada; background: #fff3f3; color: #b47978; }
+.lantai.benmo[data-ui-theme="spring"] [data-action="delete-record"]:enabled { border-color: var(--lt-format-page-danger-border); background: var(--lt-format-page-danger-background); color: var(--lt-format-page-danger-ink); }
 .lantai.benmo[data-ui-theme="spring"] :is([data-action="new"],[data-action="start-backfill"],[data-action="generate-narrative"],[data-action="save"],[data-action="edit"],[data-action="confirm-dialog"]):enabled {
-  border-color: #d0e4d0;
-  background: #e0efdf;
-  color: #426b4b;
+  border-color: var(--lt-format-page-primary-border);
+  background: var(--lt-format-page-primary-background);
+  color: var(--lt-format-page-primary-ink);
 }
 /* The reference explicitly marks these actions .btn.ghost. In particular,
    narrativeCard's edit is ghost, not the default pale-green utility button.
@@ -173,59 +169,77 @@
 .lantai.benmo[data-ui-theme="spring"] :is([data-action="edit-narrative"],[data-action="toggle-excluded"],[data-action="restore-excluded"],[data-action="default-prompt"],[data-action="default-tracking-prompt"],[data-action="default-narrative-prompt"],[data-action="add-field"],[data-action="add-narrative-character"],[data-action="remove-field"],[data-action="remove-narrative-character"],[data-action="cancel"],[data-action="cancel-dialog"]):enabled {
   border-color: transparent;
   background: transparent;
-  color: #58775e;
+  color: var(--lt-format-page-utility-ink);
 }
 /* Production-only recovery/stop actions remain visible. They use the prototype's
    ordinary .btn treatment rather than inheriting a generic white surface. */
 .lantai.benmo[data-ui-theme="spring"] :is([data-action="stop-backfill"],[data-action="cancel-narrative"],[data-action="reload"]):enabled {
-  border-color: #dbe8da;
-  background: #f1f6f0;
-  color: #58775e;
+  border-color: var(--lt-format-page-utility-border);
+  background: var(--lt-format-page-utility-background);
+  color: var(--lt-format-page-utility-ink);
 }
-.lantai.benmo[data-ui-theme="spring"] :is([data-action="stop-backfill"],[data-action="cancel-narrative"],[data-action="reload"]):hover:enabled { background: #e5efe4; }
+.lantai.benmo[data-ui-theme="spring"] :is([data-action="stop-backfill"],[data-action="cancel-narrative"],[data-action="reload"]):hover:enabled { background: var(--lt-format-page-utility-hover-background); }
 .lantai.benmo[data-ui-theme="spring"] .ui-field { gap: 7px; }
-.lantai.benmo[data-ui-theme="spring"] .ui-field > span { color: #55745e; font-size: 13px; font-weight: 700; }
+.lantai.benmo[data-ui-theme="spring"] .ui-field > span { color: var(--lt-format-benmo-field-label-ink); font-size: 13px; font-weight: 700; }
 .lantai.benmo[data-ui-theme="spring"] .benmo-basic-fields { gap: 13px; }
 .lantai.benmo[data-ui-theme="spring"] .lt-prompt-editor { min-height: 170px; line-height: 1.8; }
 .lantai.benmo[data-ui-theme="spring"] .summary-origin {
   padding: 9px 11px;
-  border-left: 3px solid #b6ceb6;
+  border-left: 3px solid var(--lt-format-benmo-origin-border);
   border-radius: 0 8px 8px 0;
-  background: #f2f7f0;
-  color: #6d826f;
+  background: var(--lt-format-benmo-origin-background);
+  color: var(--lt-format-benmo-origin-ink);
   line-height: 1.7;
 }
 .lantai.benmo[data-ui-theme="spring"] .form-actions { bottom: -24px; gap: 10px; margin-top: 0; padding-block: 12px; }
-.lantai.benmo[data-ui-theme="spring"] .lt-modes { padding: 12px 14px; border: 1px solid var(--lt-benmo-line); border-radius: 9px; background: #fff; }
-.lantai.benmo[data-ui-theme="spring"] .lt-modes > legend { padding-inline: 0 7px; color: #48664e; font-size: 17px; font-weight: 700; }
-.lantai.benmo[data-ui-theme="spring"] .lt-mode:not(:has(:disabled)) { gap: 7px; border-radius: 8px; border: 1px solid #dfe9de; background: #fff; color: #607964; }
-.lantai.benmo[data-ui-theme="spring"] .lt-mode:has(:checked):not(:has(:disabled)) { border-color: #cce3cd; background: #e9f4e8; color: #436f4e; }
+.lantai.benmo[data-ui-theme="spring"] .lt-modes { padding: 12px 14px; border: 1px solid var(--lt-benmo-line); border-radius: 9px; background: var(--lt-format-page-paper); }
+.lantai.benmo[data-ui-theme="spring"] .lt-modes > legend { padding-inline: 0 7px; color: var(--lt-format-benmo-heading-ink); font-size: 17px; font-weight: 700; }
+.lantai.benmo[data-ui-theme="spring"] .lt-mode:not(:has(:disabled)) { gap: 7px; border-radius: 8px; border: 1px solid var(--lt-format-benmo-choice-border); background: var(--lt-format-page-paper); color: var(--lt-format-benmo-choice-ink); }
+.lantai.benmo[data-ui-theme="spring"] .lt-mode:has(:checked):not(:has(:disabled)) { border-color: var(--lt-format-benmo-choice-selected-border); background: var(--lt-format-benmo-choice-selected-background); color: var(--lt-format-benmo-choice-selected-ink); }
 .lantai.benmo[data-ui-theme="spring"] .custom-field-row,
 .lantai.benmo[data-ui-theme="spring"][data-benmo-route="narrative-settings"] .card > .section {
   padding: 12px;
-  border: 1px solid #e4ece1;
+  border: 1px solid var(--lt-format-benmo-editor-border);
   border-radius: 9px;
-  background: #f5f9f3;
+  background: var(--lt-format-benmo-editor-background);
 }
 .lantai.benmo[data-ui-theme="spring"] .custom-field-heading { align-items: end; gap: 10px; }
-.lantai.benmo[data-ui-theme="spring"] .benmo-material-report { background: #f2f7f0; box-shadow: none; }
-.lantai.benmo[data-ui-theme="spring"] .benmo-material-report h2 { font-size: 14px; font-weight: 700; color: #5f8067; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-material-report { background: var(--lt-format-benmo-origin-background); box-shadow: none; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-material-report h2 { font-size: 14px; font-weight: 700; color: var(--lt-format-benmo-detail-title-ink); }
 .lantai.benmo[data-ui-theme="spring"] .benmo-narrative-entry { gap: 10px; }
 .lantai.benmo[data-ui-theme="spring"] .benmo-narrative-entry .reading { font-size: 14px; }
-.lantai.benmo[data-ui-theme="spring"][data-benmo-route="narrative-settings"] .card > h2 { color: #48664e; font-size: 17px; font-weight: 700; }
-/* The narrative view's native switch owns the full 44px target. Its decorative
-   track/knob are pseudo-elements, preserving the existing aria-checked state. */
+.lantai.benmo[data-ui-theme="spring"][data-benmo-route="narrative-settings"] .card > h2 { color: var(--lt-format-benmo-heading-ink); font-size: 17px; font-weight: 700; }
+/* Native Benmo switches use the shared track/knob markup. Retain Spring's
+   approved proportions and paint while the button owns focus and activation. */
+.lantai.benmo[data-ui-theme="spring"] .ui-switch {
+  --component-switch-track-width: var(--lt-format-switch-track-width);
+  --component-switch-track-height: var(--lt-format-switch-track-height);
+  --component-switch-knob-size: var(--lt-format-switch-knob-size);
+  --component-switch-track-inset: var(--lt-format-switch-track-inset);
+  flex: 0 0 44px;
+}
+.lantai.benmo[data-ui-theme="spring"] .ui-switch__track {
+  background: var(--lt-format-switch-off-background);
+  border-color: var(--lt-format-switch-off-border);
+  border-radius: var(--lt-format-switch-track-radius);
+}
+.lantai.benmo[data-ui-theme="spring"] .ui-switch[aria-checked="true"] .ui-switch__track { background: var(--lt-format-switch-on-background); border-color: var(--lt-format-switch-on-border); }
+.lantai.benmo[data-ui-theme="spring"] .ui-switch .ui-switch__knob { background: var(--lt-format-switch-knob-background); box-shadow: var(--lt-format-switch-knob-shadow); }
+.lantai.benmo[data-ui-theme="spring"] .ui-switch[aria-checked="true"] .ui-switch__knob { transform: translateX(calc(var(--lt-format-switch-knob-off-offset) - var(--lt-format-switch-knob-on-offset))); }
+.lantai.benmo[data-ui-theme="spring"] .ui-switch:disabled .ui-switch__track { background: var(--ui-color-disabled-background); border-color: var(--ui-color-border-subtle); }
+/* Compatibility for pre-existing empty Spring switch markup only. Current
+   Benmo renders the shared children above, so it never enters this route. */
 .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty { position: relative; flex: 0 0 44px; }
 .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty::before {
   content: "";
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 44px;
-  height: 25px;
-  border: 1px solid #c9d8ca;
-  border-radius: 20px;
-  background: #e8ece7;
+  width: var(--lt-format-switch-track-width);
+  height: var(--lt-format-switch-track-height);
+  border: 1px solid var(--lt-format-switch-off-border);
+  border-radius: var(--lt-format-switch-track-radius);
+  background: var(--lt-format-switch-off-background);
   transform: translate(-50%,-50%);
   pointer-events: none;
 }
@@ -233,20 +247,20 @@
   content: "";
   position: absolute;
   top: 50%;
-  left: calc(50% - 19px);
-  width: 19px;
-  height: 19px;
+  left: calc(50% - var(--lt-format-switch-knob-off-offset));
+  width: var(--lt-format-switch-knob-size);
+  height: var(--lt-format-switch-knob-size);
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px #66836a24;
+  background: var(--lt-format-switch-knob-background);
+  box-shadow: var(--lt-format-switch-knob-shadow);
   transform: translateY(-50%);
   pointer-events: none;
 }
-.lantai.benmo[data-ui-theme="spring"] .ui-switch:empty[aria-checked="true"]::before { background: #a3c6a7; border-color: #91b698; }
-.lantai.benmo[data-ui-theme="spring"] .ui-switch:empty[aria-checked="true"]::after { left: calc(50% - 1px); }
+.lantai.benmo[data-ui-theme="spring"] .ui-switch:empty[aria-checked="true"]::before { background: var(--lt-format-switch-on-background); border-color: var(--lt-format-switch-on-border); }
+.lantai.benmo[data-ui-theme="spring"] .ui-switch:empty[aria-checked="true"]::after { left: calc(50% - var(--lt-format-switch-knob-on-offset)); }
 .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty:disabled::before { background: var(--ui-color-disabled-background); border-color: var(--ui-color-border-subtle); }
-.lantai.benmo[data-ui-theme="spring"] .wk-dialog { background: rgb(40 60 48 / 58%); padding: 22px; }
-.lantai.benmo[data-ui-theme="spring"] .wk-dialog-box { max-width: 380px; padding: 20px; border: 1px solid #dbe6da; border-radius: 13px; box-shadow: 0 12px 36px #263d303b; }
+.lantai.benmo[data-ui-theme="spring"] .wk-dialog { background: var(--lt-format-benmo-dialog-scrim); padding: 22px; }
+.lantai.benmo[data-ui-theme="spring"] .wk-dialog-box { max-width: 380px; padding: 20px; border: 1px solid var(--lt-format-benmo-dialog-border); border-radius: 13px; box-shadow: var(--lt-format-benmo-dialog-shadow); }
 .lantai.benmo[data-ui-theme="spring"] .wk-dialog-box > .section { margin-top: 14px; }
 .lantai.benmo[data-ui-theme="spring"] .wk-dialog-actions { gap: 10px; }
 .lantai.benmo[data-ui-theme="spring"] .benmo-text-entry:disabled { color: var(--ui-color-text-disabled); cursor: not-allowed; text-decoration: none; }
@@ -263,6 +277,12 @@
   .lantai.benmo[data-ui-theme="spring"] { --ui-color-workspace: Canvas; --ui-color-text-primary: CanvasText; --ui-color-text-meta: CanvasText; --lt-benmo-line: CanvasText; --lt-benmo-paper-shadow: none; }
   .lantai.benmo[data-ui-theme="spring"] .lt-root-top { background: Canvas; }
   .lantai.benmo[data-ui-theme="spring"] :is(.card,.record,.benmo-basic-fields,.lt-modes,.lt-mode,.custom-field-row,.benmo-material-report,.summary-origin,.benmo-summary-history > .record-open,#benmo-summary-history) { background: Canvas; color: CanvasText; border-color: CanvasText; box-shadow: none; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch__track { background: ButtonFace; border-color: ButtonText; forced-color-adjust: none; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch[aria-checked="true"] .ui-switch__track { background: Highlight; border-color: Highlight; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch .ui-switch__knob { background: ButtonText; box-shadow: none; forced-color-adjust: none; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch[aria-checked="true"] .ui-switch__knob { background: HighlightText; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch:disabled .ui-switch__track { background: Canvas; border-color: GrayText; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch:disabled .ui-switch__knob { background: GrayText; }
   .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty::before { background: ButtonFace; border-color: ButtonText; forced-color-adjust: none; }
   .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty[aria-checked="true"]::before { background: Highlight; border-color: Highlight; }
   .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty::after { background: ButtonText; box-shadow: none; forced-color-adjust: none; }

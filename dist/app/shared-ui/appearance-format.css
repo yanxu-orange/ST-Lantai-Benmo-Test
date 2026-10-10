@@ -1,0 +1,62 @@
+/* Product-owned common appearance format, after each theme's base mapping and
+   before its page-specific detail. Only Spring/Snow currently opt in.
+   This is not the pinned supplier/candidate bundle and owns no business state.
+   Identical declarations share one owner; theme values live in *-tokens.css. */
+
+/* One product text-entry size for both appearances. Native type exclusions keep
+   choice controls, sliders, colour/file pickers and input buttons untouched.
+   Selects retain their existing control typography. Do not use the font
+   shorthand here: reading/UI families, weights and line heights stay local. */
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]) {
+  --lt-format-field-text-size: .875rem;
+}
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]) :is(
+  input:not(:where([type="checkbox"],[type="radio"],[type="range"],[type="color"],[type="file"],[type="button"],[type="submit"],[type="reset"],[type="image"],[type="hidden"])),
+  textarea
+) { font-size: var(--lt-format-field-text-size); }
+
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-work-actions { gap: 6px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type="cumulative"] .lt-work-actions { gap: 8px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-filter-options label { font-size: .75rem; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-row { gap: var(--lt-format-memory-card-gap); padding: var(--lt-format-memory-card-padding); background: var(--lt-format-memory-card-background); border: 1px solid var(--lt-format-memory-card-border); border-radius: var(--lt-format-memory-card-radius); box-shadow: var(--lt-format-memory-card-shadow); color: var(--lt-format-memory-card-ink); }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-row .lt-title { font-family: var(--ui-type-reading-family); font-size: var(--lt-format-memory-title-size); font-weight: var(--lt-format-memory-title-weight); line-height: 1.5; color: var(--lt-format-memory-title-ink); }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-row .lt-copy { font-family: var(--ui-type-reading-family); font-size: var(--lt-format-memory-copy-size); line-height: var(--lt-format-memory-copy-line); color: var(--lt-format-memory-copy-ink); -webkit-line-clamp: 4; white-space: pre-line; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-row .lt-meta { font-size: var(--lt-format-memory-meta-size); }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-row .lt-tags { gap: var(--lt-format-memory-tag-gap); }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-timeline-year { gap: 12px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-timeline-track { margin-inline-start: 7px; gap: 17px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-timeline-date > h3 { padding-inline-start: 14px; font-size: .75rem; color: var(--ui-color-text-meta); }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-timeline-entry { padding-inline-start: 14px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-timeline-entry::before { width: 8px; height: 8px; inset-inline-start: -5px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type] .lt-timeline-cards { gap: 10px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-memory-editor .lt-editor { gap: 13px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-memory-editor .lt-mode { font-size: .8125rem; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type="cumulative"] .lt-row .lt-copy { -webkit-line-clamp: 7; font-size: .875rem; line-height: 1.9; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type="cumulative"] .lt-summary-history > summary { padding: 12px 14px; font-size: .8125rem; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-type="cumulative"] .lt-summary-history .lt-row { border: 0; border-top: 1px solid var(--lt-format-memory-history-border); border-radius: 0; box-shadow: none; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-summary-workspace .lt-summary-main { gap: 22px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-summary-workspace .lt-summary-history { padding: 0 13px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-summary-workspace .lt-summary-access > div { padding: 12px 6px; gap: 7px; font-size: .75rem; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-summary-workspace .lt-summary-preview { padding: 10px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-summary-workspace .lt-summary-preview :is(pre,p) { font-family: var(--ui-type-reading-family); font-size: .75rem; line-height: 1.85; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-summary-workspace .lt-textarea { line-height: 1.85; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-summary-workspace .lt-summary-choices { display: grid; gap: 4px; background: var(--ui-color-surface-base); padding: 11px 13px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-summary-workspace .lt-summary-choices > .ui-choice { padding-inline: 0; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-summary-workspace .ui-choice { font-size: .8125rem; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-main { gap: 22px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-summary-section { gap: 14px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-summary-content-panel { padding: 13px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-summary-modes { gap: 10px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-summary-modes label { font-size: .75rem; padding-inline: 4px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-summary-prompt-group { --stage-fill: var(--lt-format-stage-merge-fill); --stage-edge: var(--lt-format-stage-merge-edge); --stage-ink: var(--lt-format-stage-merge-ink); border: 1px solid var(--stage-edge); background: var(--ui-color-surface-base); overflow: hidden; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-summary-prompt-group > h3 { position: relative; display: flex; justify-content: center; align-items: center; gap: 7px; margin: 0; min-height: 51px; padding: 14px 12px 13px; background: var(--stage-fill); color: var(--stage-ink); border-bottom: 1px solid var(--stage-edge); font-family: var(--ui-type-reading-family); font-size: .875rem; line-height: 1.5; letter-spacing: .055em; text-align: center; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-summary-prompt { background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-summary-prompt:last-child:not([open]) { padding-bottom: 0; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-summary-prompt > summary { min-height: 48px; padding: 14px 15px; font-size: .8125rem; line-height: 1.6; background: transparent; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-prompt-editor { min-height: 160px; line-height: 1.85; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"])[data-memory-settings] .lt-summary-chevron { width: 13px; height: 13px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-recall .lt-main { gap: 13px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-recall .lt-recall-domains { gap: 7px; padding: 8px 15px; background: var(--ui-color-surface-base); }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-recall .lt-recall-section { padding-block: 8px; gap: 11px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-recall .lt-recall-grid { gap: 11px; }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-recall :is(.lt-recall-detail-body,.lt-recall-memory-body,.lt-recall-item-title > span) { font-family: var(--ui-type-reading-family); font-size: .8125rem; line-height: 1.85; }

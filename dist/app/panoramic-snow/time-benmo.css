@@ -1,0 +1,139 @@
+/* Transparent Snow continuation for the real Time and Benmo renderers.
+   Original scene/header artwork and material fallback roles belong to the
+   shared material sheet. This sheet changes paint, not routes or layout.
+   Benmo also carries .workshop; all selectors name its actual owner explicitly. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time {
+  --lt-format-time-card-shadow: var(--lt-panoramic-reading-shadow);
+  --lt-format-time-group-shadow: var(--lt-panoramic-reading-shadow);
+  --lt-format-time-record-title-size: 16px;
+  --lt-format-time-record-title-weight: 500;
+  --lt-snow-time-group-fill: var(--lt-panoramic-inset-surface);
+  --lt-snow-time-items-fill: var(--lt-panoramic-inset-surface);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo {
+  --lt-format-benmo-card-shadow: var(--lt-panoramic-reading-shadow);
+  --lt-format-benmo-record-title-size: 16px;
+  --lt-format-benmo-record-title-weight: 500;
+  --lt-snow-benmo-reading-ink: var(--ui-color-text-primary);
+  --lt-snow-benmo-segment: var(--lt-format-segment-group-background);
+}
+
+/* Real reading owners: calendar, date/item editor sections, management groups,
+   selected-day records, Benmo records, detail and settings cards. The two plain
+   Benmo editor forms have no cards, so each form owns their single material. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time :is(.time-section,.time-prompt-group),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-day-list > .time-day-item,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo :is(.card,.record),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo:is([data-benmo-route="edit"],[data-benmo-route="narrative-edit"]) #benmo-edit-form {
+  background: var(--lt-panoramic-reading-surface);
+  border-color: var(--lt-panoramic-reading-edge);
+  box-shadow: var(--lt-panoramic-reading-shadow);
+  -webkit-backdrop-filter: var(--lt-panoramic-reading-filter);
+  backdrop-filter: var(--lt-panoramic-reading-filter);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo:is([data-benmo-route="edit"],[data-benmo-route="narrative-edit"]) #benmo-edit-form {
+  border-radius: var(--lt-format-benmo-card-radius);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .record.selected {
+  border-color: var(--ui-color-border-strong);
+}
+
+/* A reused inner component borrows its parent's material. Never stack filters
+   on fields, calendar cells, record rows, switches, glyphs or reading text. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time :is(.time-section,.time-prompt-group,.time-day-item) :is(.time-section,.time-prompt-group,.time-day-item),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo :is(.card,.record) :is(.card,.record),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo:is([data-benmo-route="edit"],[data-benmo-route="narrative-edit"]) #benmo-edit-form :is(.card,.record) {
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Preserve the existing 18px shared header role. Reading titles are 16/500,
+   body text 14; dates, counts and legend keys keep their small metadata role. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-prompt-group > .time-group-heading,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo :is(.section,.record,.card) h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .benmo-summary-history > .record-open strong {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--lt-format-memory-title-ink);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-item-main > p:not(.lt-meta),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time :is(.time-day,.time-recent-name,.time-reminder-row),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .record > p:not(.meta),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo :is(.reading,.detail-field dd) {
+  font-size: 14px;
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .ui-field__label,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .ui-field > span {
+  font-weight: 500;
+}
+
+/* Exposed navigation and status groups get one unfiltered backing. Existing
+   title/field rows inside a card remain clear: no per-label white stripes. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-story-date:enabled,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-state-tabs,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .summary-toolbar,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .benmo-summary-history > .record-open:enabled {
+  background: var(--lt-panoramic-control-surface);
+  border-color: var(--lt-panoramic-reading-edge);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-selected-heading > h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-upcoming > h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-stack > .time-field > .ui-field__label {
+  background: var(--lt-panoramic-exposed-text-surface);
+  justify-self: start;
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .lt-main > .row > .meta,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .benmo-narrative-group > .row > :is(h2,.meta) {
+  background: var(--lt-panoramic-exposed-text-surface);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-day-list > .lt-meta,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-stack > p.lt-meta,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .lt-main > p.meta,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .lt-main > .section > p.meta,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .benmo-narrative-group > p.meta {
+  background: var(--lt-panoramic-exposed-text-surface);
+  justify-self: start;
+  align-self: flex-start;
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-section :is(.time-field > .ui-field__label,.lt-summary-modes > legend),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo :is(.card,.record,#benmo-edit-form) :is(.ui-field__label,.ui-field > span,.summary-origin),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo:is([data-benmo-route="edit"],[data-benmo-route="narrative-edit"]) #benmo-edit-form > p.meta {
+  background: transparent;
+}
+
+/* Neutral resting controls borrow the same backing as memory tools. They do
+   not become frost owners. Colored creation, selected, hover/active, danger,
+   disabled and focus states remain owned by the existing production rules. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-calendar-toolbar > .ui-icon-button:enabled:not(:where(:hover,:active)),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time [data-time-action="edit"].ui-icon-button:enabled:not(:where(:hover,:active)),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .lt-main > .row .benmo-text-entry:enabled:not(:where(:hover,:active)) {
+  background: var(--lt-panoramic-control-surface);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-state-tabs > .ui-button[aria-pressed="true"]:enabled,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .subtabs > .ui-button[aria-pressed="true"]:enabled {
+  font-weight: 500;
+}
+
+/* Sticky actions and confirmations need steady plates, not extra blur. Inputs,
+   invalid borders, warning/error surfaces and disabled controls stay opaque on
+   their production roles, including read-only fields in conflict dialogs. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .form-actions {
+  background: var(--ui-color-workspace);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-confirm,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .wk-dialog-box {
+  background: #f9fcfe;
+  border-color: var(--lt-panoramic-reading-edge);
+}
+
+@media (forced-colors: active) {
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-confirm,
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .wk-dialog-box {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+}

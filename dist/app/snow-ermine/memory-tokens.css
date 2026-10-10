@@ -1,0 +1,53 @@
+/* Product memory appearance values. These preserve the published .4 mapping.
+   Shared format owns common rules; theme-specific motifs and states remain local. */
+.lantai[data-ui-theme="snow-ermine"] {
+  --lt-format-memory-history-border: #e4eef4;
+  --lt-format-memory-card-hover-border: #bed7e7;
+  --lt-format-memory-card-hover-background: #fff;
+  --lt-format-memory-card-hover-shadow: 0 1px 5px rgb(48 83 112 / 4.5%);
+  --lt-format-memory-card-selected-background: #e9f0f5;
+  --lt-format-memory-card-selected-border: #aebdc9;
+  --lt-format-memory-card-selected-ink: #344d60;
+  --lt-format-memory-card-selected-shadow: none;
+  --lt-format-memory-card-background: #fff;
+  --lt-format-memory-card-border: #dbe7ef;
+  --lt-format-memory-card-radius: 5px;
+  --lt-format-memory-card-shadow: 0 1px 5px rgb(48 83 112 / 4.5%);
+  --lt-format-memory-card-ink: #41596a;
+  --lt-format-memory-card-gap: 9px;
+  --lt-format-memory-card-padding: 14px 14px 13px;
+  --lt-format-memory-title-size: 1.0625rem;
+  --lt-format-memory-title-weight: 700;
+  --lt-format-memory-title-ink: #325b79;
+  --lt-format-memory-copy-size: .8125rem;
+  --lt-format-memory-copy-line: 1.8;
+  --lt-format-memory-copy-ink: #344d60;
+  --lt-format-memory-meta-size: .6875rem;
+  --lt-format-memory-tag-gap: 5px;
+  --lt-format-memory-tag-radius: 4px;
+  --lt-format-memory-tag-padding: 3px 7px;
+  --lt-tag-event-bg: #ddecf6;
+  --lt-tag-event-ink: #3d6680;
+  --lt-tag-event-border: transparent;
+  --lt-tag-detail-bg: #f7fafc;
+  --lt-tag-detail-ink: #6a7c89;
+  --lt-tag-detail-border: #d8e4eb;
+  --lt-tag-resident-bg: #eeeafa;
+  --lt-tag-resident-ink: #66629c;
+  --lt-tag-resident-border: #dbd5ef;
+  --lt-tag-trigger-bg: #e0f2fc;
+  --lt-tag-trigger-ink: #356f97;
+  --lt-tag-trigger-border: #c4dfef;
+  --lt-format-stage-1-fill: #e7f2fa;
+  --lt-format-stage-1-edge: #cfdfea;
+  --lt-format-stage-1-ink: #386f97;
+  --lt-format-stage-2-fill: #edf0fa;
+  --lt-format-stage-2-edge: #dbe0f3;
+  --lt-format-stage-2-ink: #6478a2;
+  --lt-format-stage-3-fill: #e7f3f6;
+  --lt-format-stage-3-edge: #cfe6eb;
+  --lt-format-stage-3-ink: #437b92;
+  --lt-format-stage-merge-fill: #f0f4f8;
+  --lt-format-stage-merge-edge: #dce5ee;
+  --lt-format-stage-merge-ink: #567790;
+}

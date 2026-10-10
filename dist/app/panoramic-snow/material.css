@@ -1,0 +1,266 @@
+/* Production Transparent Snow material, after the existing Snow appearance
+   grammar. The stored theme identity remains snow-ermine. No runtime opt-in,
+   observer, preview controller or new DOM attribute is required. Existing
+   workspace/dialog roles retain the accepted material-layer specificity.
+   All layout, hit targets, state, routing and shared field roles stay owned by
+   the existing components. Artwork is copied without re-encoding. */
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) {
+  --lt-panoramic-scene: url("./assets/lake-backdrop.png");
+  --lt-panoramic-scene-wash: rgb(246 251 254 / 42%);
+  --lt-panoramic-chrome: rgb(250 253 255 / 90%);
+  /* Opaque until backdrop-filter support is confirmed below. */
+  --lt-panoramic-reading-surface: #f9fcfe;
+  --lt-panoramic-reading-hover: #fff;
+  --lt-panoramic-reading-filter: none;
+  --lt-panoramic-reading-edge: rgb(204 222 233 / 92%);
+  --lt-panoramic-reading-shadow: 0 2px 7px rgb(43 77 101 / 6%);
+  --lt-panoramic-exposed-text-surface: rgb(255 255 255 / 90%);
+  --lt-panoramic-section-heading-surface: linear-gradient(90deg, var(--lt-panoramic-reading-surface) 4.5em, transparent 8em);
+  /* Controls borrow only the surface alpha, never the reading-card filter.
+     This also follows the existing opaque and system-color fallbacks. */
+  --lt-panoramic-control-surface: var(--lt-panoramic-reading-surface);
+  --ui-color-action-secondary-background: var(--lt-panoramic-control-surface);
+
+  /* Reuse the existing page, memory and semantic roles. */
+  --lt-format-root-header-image: url("../snow-ermine/assets/panoramic-snow-header.png");
+  --lt-format-root-header-position: center 30%;
+  --lt-format-child-header-position: var(--lt-format-root-header-position);
+  --lt-format-root-header-wash: linear-gradient(90deg, rgb(20 42 64 / 35%), rgb(20 42 64 / 12%) 64%, rgb(20 42 64 / 4%));
+  --lt-format-root-title-size: 18px;
+  --lt-format-root-title-weight: 500;
+  --lt-format-root-title-tracking: .025em;
+  --lt-format-root-title-shadow: 0 1px 2px rgb(18 35 49 / 42%);
+  --lt-format-child-title-size: 18px;
+  --lt-format-child-title-weight: 500;
+  --lt-snow-header-nav-background: rgb(245 251 255 / 86%);
+  --lt-snow-header-nav-text: #476173;
+  --lt-snow-header-nav-current-text: #285b7a;
+  --lt-snow-header-nav-current-line: #6a9fc0;
+  --lt-format-memory-card-background: var(--lt-panoramic-reading-surface);
+  --lt-format-memory-card-border: var(--lt-panoramic-reading-edge);
+  --lt-format-memory-card-shadow: var(--lt-panoramic-reading-shadow);
+  --lt-format-memory-card-hover-background: var(--lt-panoramic-reading-hover);
+  --lt-format-memory-card-hover-border: #abc7d9;
+  --lt-format-memory-card-hover-shadow: 0 3px 9px rgb(43 77 101 / 9%);
+  --lt-format-memory-title-size: 16px;
+  --lt-format-memory-title-weight: 500;
+  --lt-format-memory-title-ink: #29495b;
+  --lt-format-memory-copy-size: 14px;
+  --lt-format-memory-copy-ink: #2e3f4b;
+  --lt-format-memory-meta-size: 12px;
+  --lt-format-segment-group-background: rgb(247 251 254 / 88%);
+  --ui-type-ui-page-title-size: 18px;
+  --ui-type-ui-page-title-weight: 500;
+  --ui-type-ui-section-title-size: 16px;
+  --ui-type-ui-section-title-weight: 500;
+  --ui-type-ui-object-title-size: 16px;
+  --ui-type-ui-object-title-weight: 500;
+  --ui-type-ui-meta-size: 12px;
+  --ui-type-reading-body-size: 14px;
+  --ui-color-text-primary: #2e3f4b;
+  --ui-color-text-secondary: #405968;
+  --ui-color-text-meta: #4f6473;
+
+  /* One panel-owned scene: never the host, body, main, or a filtered wrapper.
+     The scrollable main reveals this stable image through the existing gaps. */
+  background-color: #f2f8fc;
+  background-image: linear-gradient(var(--lt-panoramic-scene-wash), var(--lt-panoramic-scene-wash)), var(--lt-panoramic-scene);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-color: #cfdee8;
+}
+
+/* Root artwork belongs to the actual title row, not the varying title+tabs
+   wrapper. A settings root without tabs now uses the same crop as other roots;
+   native title-row and navigation dimensions stay untouched. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-header--root {
+  background: transparent;
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-root-top {
+  background: var(--lt-format-root-header-wash), var(--lt-format-root-header-image) var(--lt-format-root-header-position) / cover no-repeat;
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) > .lt-main {
+  background: transparent;
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) > .lt-footer {
+  background: var(--lt-panoramic-chrome);
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-header--root .lt-type[aria-current="page"] {
+  font-weight: 500;
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-work-actions > .ui-button:enabled {
+  background: var(--lt-panoramic-control-surface);
+  font-weight: 400;
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-work-actions > .ui-button:first-child:enabled {
+  background: rgb(224 240 250 / 95%);
+  font-weight: 500;
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-view-switch > .ui-button[aria-pressed="true"]:enabled {
+  font-weight: 500;
+}
+
+/* Only the idle white backing changes. New remains violet; pressed/selected,
+   hover, active and disabled controls keep their production state owners.
+   The glyph, border, focus ring and native hit owner are untouched. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-list-icons > .ui-icon-button:enabled:not(:where(:first-child,[aria-pressed="true"],:hover,:active)) {
+  background: var(--lt-panoramic-control-surface);
+}
+
+/* A reading card is the sole frost owner. The ancient history
+   disclosure owns its material; its inner row never owns another filter. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root :is(.lt-row,.lt-summary-history) {
+  -webkit-backdrop-filter: var(--lt-panoramic-reading-filter);
+  backdrop-filter: var(--lt-panoramic-reading-filter);
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root .lt-summary-history {
+  background: var(--lt-panoramic-reading-surface);
+  border-color: var(--lt-panoramic-reading-edge);
+  box-shadow: var(--lt-panoramic-reading-shadow);
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root .lt-summary-history .lt-row {
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root .lt-summary-history > summary {
+  background: rgb(241 248 252 / 70%);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root .lt-row :is(.ui-meta-time,.ui-tag) {
+  font-size: 12px;
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root > .ui-section > h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-timeline-year > h2 {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--lt-format-memory-title-ink);
+}
+
+/* Labels that sit in scene gaps need their own small unfiltered backing.
+   Preserve each existing text owner's dimensions, padding and flow. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root > .ui-section > :is(h2,.lt-meta),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-timeline-year > h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-timeline-date > h3,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) #lt-memory-list > .lt-meta,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root > :is(.lt-meta,.lt-selection-heading) {
+  background: var(--lt-panoramic-exposed-text-surface);
+}
+
+/* The two short ancient headings need contrast under their four characters,
+   not a full-width white stripe. Fade the same reading material back into the
+   scene after the text, without changing the heading box, spacing or flow.
+   This is paint only; the heading does not become another frost owner. */
+.lantai[data-ui-theme="snow-ermine"][data-memory-type="cumulative"]:is(.ui-workspace,.ui-dialog) .lt-main--root > .ui-section > h2 {
+  background: var(--lt-panoramic-section-heading-surface);
+}
+
+/* Existing event editor uses a restrained, unfiltered high-coverage plate.
+   Native fields remain solid, with their shared 14px text rule unchanged. */
+.lantai.lt-memory-editor[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-editor > .lt-section:not(:first-child),
+.lantai.lt-memory-editor[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-editor > section.lt-section:first-child {
+  background: rgb(255 255 255 / 94%);
+  border-color: var(--lt-panoramic-reading-edge);
+}
+
+.lantai.lt-memory-editor[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-editor details.lt-section > summary {
+  font-weight: 500;
+}
+
+@supports ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) {
+    --lt-panoramic-reading-surface: rgb(252 254 255 / 82%);
+    --lt-panoramic-reading-hover: rgb(255 255 255 / 92%);
+    --lt-panoramic-reading-filter: blur(4px);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) {
+    --lt-panoramic-reading-surface: #f9fcfe;
+    --lt-panoramic-reading-hover: #fff;
+    --lt-panoramic-reading-filter: none;
+    --lt-panoramic-chrome: #f6fafe;
+    --lt-panoramic-exposed-text-surface: #f9fcfe;
+    --lt-panoramic-section-heading-surface: #f9fcfe;
+    --lt-snow-header-nav-background: #f3f9fd;
+    --lt-format-segment-group-background: #f3f8fc;
+  }
+
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-work-actions > .ui-button:first-child:enabled {
+    background: #e0f0fa;
+  }
+
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root .lt-summary-history > summary,
+  .lantai.lt-memory-editor[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-editor > .lt-section:not(:first-child),
+  .lantai.lt-memory-editor[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-editor > section.lt-section:first-child {
+    background: #f9fcfe;
+  }
+}
+
+@media (forced-colors: active) {
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) {
+    --ui-color-action-secondary-background: ButtonFace;
+    --lt-panoramic-reading-surface: Canvas;
+    --lt-panoramic-reading-hover: Canvas;
+    --lt-panoramic-reading-filter: none;
+    --lt-panoramic-reading-edge: CanvasText;
+    --lt-panoramic-reading-shadow: none;
+    --lt-panoramic-chrome: Canvas;
+    --lt-panoramic-exposed-text-surface: Canvas;
+    --lt-panoramic-section-heading-surface: Canvas;
+    --lt-snow-header-nav-background: Canvas;
+    --lt-snow-header-nav-text: CanvasText;
+    --lt-snow-header-nav-current-text: CanvasText;
+    --lt-snow-header-nav-current-line: Highlight;
+    --lt-format-segment-group-background: Canvas;
+    --lt-format-memory-card-ink: CanvasText;
+    --lt-format-memory-title-ink: CanvasText;
+    --lt-format-memory-copy-ink: CanvasText;
+    --lt-format-memory-card-selected-background: Highlight;
+    --lt-format-memory-card-selected-border: Highlight;
+    --lt-format-memory-card-selected-ink: HighlightText;
+    --lt-format-memory-card-hover-border: CanvasText;
+    --lt-format-memory-card-hover-shadow: none;
+    --ui-color-text-primary: CanvasText;
+    --ui-color-text-secondary: CanvasText;
+    --ui-color-text-meta: CanvasText;
+    background: Canvas;
+    border-color: CanvasText;
+  }
+
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-root-top {
+    background: Canvas;
+  }
+
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-work-actions > .ui-button:enabled,
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-work-actions > .ui-button:enabled:hover,
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-work-actions > .ui-button:first-child:enabled,
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-work-actions > .ui-button:first-child:enabled:hover,
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root .lt-summary-history > summary,
+  .lantai.lt-memory-editor[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-editor > .lt-section:not(:first-child),
+  .lantai.lt-memory-editor[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-editor > section.lt-section:first-child {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main--root .lt-row[data-selected="true"] :is(.lt-title,.lt-copy,.lt-meta,.ui-tag) {
+    color: HighlightText;
+  }
+}

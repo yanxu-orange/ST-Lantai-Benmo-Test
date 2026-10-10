@@ -34,7 +34,7 @@
 .benmo .record.selected{border-color:var(--ui-color-border-strong)}
 .benmo .ui-field{display:grid;gap:6px;min-width:0}
 .benmo input,.benmo textarea{width:100%;min-width:0}
-.benmo textarea{min-height:90px;font-size:16px}
+.benmo textarea{min-height:90px;font-size:var(--lt-format-field-text-size,16px)}
 .benmo input{font-size:16px}
 .benmo .empty{padding:20px 0;display:grid;gap:12px}
 .benmo .detail-heading{justify-content:start}

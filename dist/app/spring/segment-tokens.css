@@ -1,0 +1,25 @@
+/* Product segmented-control roles. Values preserve the published .4 contexts.
+   Root underlined navigation is independent. State selectors remain local. */
+.lantai[data-ui-theme="spring"] {
+  --lt-format-segment-idle-ink: #7f9986;
+  --lt-format-segment-view-base-background: #eff5ed;
+  --lt-format-segment-view-base-border-radius: 8px;
+  --lt-format-segment-view-base-font-size: .8125rem;
+  --lt-format-segment-view-selected-background: #fff;
+  --lt-format-segment-view-selected-color: #416c4c;
+  --lt-format-segment-view-selected-box-shadow: 0 1px 4px #49674f15;
+  --lt-format-segment-summary-base-font-size: .75rem;
+  --lt-format-segment-summary-selected-background: #fff;
+  --lt-format-segment-summary-selected-color: #4e815d;
+  --lt-format-segment-summary-selected-box-shadow: 0 1px 4px #c5d6c820;
+  --lt-format-segment-recall-base-border-radius: 7px;
+  --lt-format-segment-recall-base-font-size: .8125rem;
+  --lt-format-segment-recall-selected-background: #eaf3e9;
+  --lt-format-segment-recall-selected-color: #477552;
+  --lt-format-segment-recall-base-border: #e1ebe1;
+  --lt-format-segment-recall-group-radius: 9px;
+  --lt-format-segment-recall-base-background: #f1f6ee;
+  --lt-format-segment-recall-selected-surface: #fff;
+  --lt-format-segment-recall-selected-ink: #487754;
+  --lt-format-segment-recall-selected-box-shadow: 0 1px 4px #c5d6c820;
+}

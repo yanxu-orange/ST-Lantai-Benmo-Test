@@ -1,0 +1,194 @@
+/* Transparent Snow material for the real memory pages. Load after material.css.
+   No route, markup, layout or control-state ownership here. Existing Snow
+   component grammar consumes the shared aliases on real workspace owners. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) {
+  --lt-format-child-header-image: var(--lt-format-root-header-image);
+  --ui-type-ui-body-size: 14px;
+  --lt-panoramic-editor-surface: rgb(255 255 255 / 94%);
+  --lt-panoramic-inset-surface: rgb(241 248 252 / 70%);
+  --lt-panoramic-subheading-surface: var(--lt-panoramic-exposed-text-surface);
+  --lt-panoramic-title-label-surface: linear-gradient(90deg, var(--lt-panoramic-exposed-text-surface) 3em, transparent 5em);
+}
+
+/* Actual outer reading owners. Each tree has one 4px frost layer:
+   review candidate -> editor disclosures, connection -> preview disclosures,
+   prompt group -> prompt text, and recall card -> reason all stay unfiltered. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-summary-workspace :is(.lt-summary-history,.lt-summary-connection,.lt-summary-choices,.lt-summary-candidate),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-summary-workspace .lt-summary-main > .lt-summary-section:has(> .ui-choice),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog)[data-memory-settings] :is(.lt-summary-panel,.lt-summary-prompt-group,.lt-summary-word,.lt-summary-rule),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall :is(.lt-recall-surface,.lt-recall-input,.lt-recall-card,.lt-recall-detail),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall .lt-main > .lt-recall-section:has([data-recall-field="testInput"]),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-management-workspace .lt-management > .lt-section {
+  background: var(--lt-panoramic-reading-surface);
+  border-color: var(--lt-panoramic-reading-edge);
+  box-shadow: var(--lt-panoramic-reading-shadow);
+  -webkit-backdrop-filter: var(--lt-panoramic-reading-filter);
+  backdrop-filter: var(--lt-panoramic-reading-filter);
+}
+
+/* Only the actual unframed management/recollection disclosures need corners;
+   retain their existing border widths, padding, flow and open/closed geometry. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-management-workspace .lt-management > .lt-section,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-summary-workspace .lt-summary-main > .lt-summary-section:has(> .ui-choice),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall .lt-main > .lt-recall-section:has([data-recall-field="testInput"]),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall .lt-recall-detail {
+  border-radius: var(--ui-shape-surface-radius);
+}
+
+/* Defensive nested-owner guard: a component reused inside a reading card does
+   not become a second blur layer. Ordinary controls are never filter owners. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.lt-summary-history,.lt-summary-connection,.lt-summary-choices,.lt-summary-candidate,.lt-summary-panel,.lt-summary-prompt-group,.lt-summary-word,.lt-summary-rule,.lt-recall-surface,.lt-recall-input,.lt-recall-card,.lt-recall-detail) :is(.lt-summary-history,.lt-summary-connection,.lt-summary-choices,.lt-summary-candidate,.lt-summary-panel,.lt-summary-prompt-group,.lt-summary-word,.lt-summary-rule,.lt-recall-surface,.lt-recall-input,.lt-recall-card,.lt-recall-detail) {
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Existing editor masks do not blur. Text inputs retain their solid production
+   field backgrounds and the single shared 14px role, including read-only,
+   disabled, invalid, prompt and review fields. No generic surface token changes. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-summary-workspace .lt-editor .lt-section,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-management-workspace .lt-management-body > .lt-section,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog)[data-memory-settings] .lt-summary-prompt-body {
+  background: var(--lt-panoramic-editor-surface);
+  border-color: var(--lt-panoramic-reading-edge);
+}
+
+/* Read-only content borrows its containing card's material. A light inset wash
+   differentiates disclosures without adding filters to rows or buttons. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-summary-workspace .lt-summary-preview,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog)[data-memory-settings] .lt-summary-readonly {
+  background: transparent;
+  color: var(--ui-color-text-primary);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog):is(.lt-memory-editor,.lt-summary-workspace) .lt-editor details.lt-section > summary,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-summary-workspace .lt-summary-history > summary,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog)[data-memory-settings] .lt-summary-prompt[open] > summary {
+  background: var(--lt-panoramic-inset-surface);
+  color: var(--lt-format-memory-title-ink);
+  font-weight: 500;
+}
+
+/* Section/card titles are 16px; actual body/review text is 14px. The shared
+   title tokens already keep all child page titles at 18px. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog):is(.lt-summary-workspace,.lt-recall,[data-memory-settings],.lt-management-workspace) h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog)[data-memory-settings] .lt-summary-prompt-group > h3,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog):is(.lt-memory-editor,.lt-summary-workspace) .lt-editor details.lt-section > summary,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall .lt-recall-item-title > span {
+  font-size: 16px;
+  font-weight: 500;
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog):is(.lt-summary-workspace,.lt-recall,[data-memory-settings],.lt-management-workspace) h2 {
+  color: var(--lt-format-memory-title-ink);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-summary-workspace .lt-summary-preview :is(pre,p),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog)[data-memory-settings] :is(.lt-summary-prompt-body,.lt-summary-readonly),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall :is(.lt-recall-surface,.lt-recall-input,.lt-recall-card,.lt-recall-detail-body,.lt-recall-memory-body),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-management-workspace .lt-management-copy {
+  font-size: 14px;
+  color: var(--ui-color-text-primary);
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-summary-workspace .lt-summary-history > summary,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog)[data-memory-settings] .lt-summary-prompt > summary {
+  font-size: 13px;
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog)[data-memory-settings] .lt-summary-readonly-tag {
+  font-size: 12px;
+  color: var(--ui-color-text-meta);
+}
+
+/* Exposed short text gets a fitted, unfiltered backing. Self alignment changes
+   only the label's paint box: its field, control, grid tracks and hit owner keep
+   their existing size. Labels already inside a material card need no stripe. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-summary-section > h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-summary-heading > h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-recall-section > h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-recall-heading > :is(h2,h3),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-recall-cleaning-toolbar > h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-summary-modes > legend {
+  background: var(--lt-panoramic-subheading-surface);
+  justify-self: start;
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main > .lt-status,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.lt-summary-section,.lt-summary-modes,.lt-summary-heading,.lt-recall-section,.lt-recall-heading,.lt-recall-cards) > :is(.lt-meta,.lt-status),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-recall-counts > .lt-status,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-summary-workspace .lt-summary-section .ui-field > span,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.lt-summary-section,.lt-recall-section,[data-ss-form="rule"],[data-recall-rule-form]) :is(span,h3).ui-field__label,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-management-workspace .lt-management > :is(p,h2):not(.lt-error),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-management-workspace .lt-management-warning {
+  background: var(--lt-panoramic-exposed-text-surface);
+  justify-self: start;
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall .lt-main > p.lt-status {
+  align-self: flex-start;
+}
+
+/* The event editor's first section is deliberately unframed in production.
+   Keep the mode/title labels locally protected rather than painting the whole
+   unframed section as a white rectangle. Native radio/input states stay owned
+   by production; the following editor disclosures keep their existing mask. */
+.lantai.lt-memory-editor[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-editor > section.lt-section:first-child {
+  background: transparent;
+}
+.lantai.lt-memory-editor[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-editor > section.lt-section:first-child :is(span,legend).ui-field__label {
+  background: var(--lt-panoramic-exposed-text-surface);
+  justify-self: start;
+}
+.lantai.lt-memory-editor[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-editor > section.lt-section:first-child label.ui-field__label[for="lt-title"] {
+  background: var(--lt-panoramic-title-label-surface);
+}
+
+/* Auto event generation has direct choices, unlike the manual wrapper.
+   Recall testing likewise has one existing section for its field and notices.
+   Let those shared parents own the material instead of each line of text. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-main :is(.lt-summary-panel,.lt-summary-prompt-group,.lt-summary-word,.lt-summary-rule,.lt-summary-candidate,.lt-recall-surface,.lt-recall-input,.lt-recall-card,.lt-recall-detail) .ui-field__label,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-summary-workspace .lt-summary-main > .lt-summary-section:has(> .ui-choice) > h2,
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall .lt-main > .lt-recall-section:has([data-recall-field="testInput"]) :is(.ui-field__label,.lt-status) {
+  background: transparent;
+}
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-management-workspace .lt-management > [role="alert"]:not(.lt-error) {
+  color: var(--ui-color-warning-text);
+  background: var(--ui-color-warning-background);
+}
+
+/* Search/filter, recall navigation and scroll controls borrow the existing
+   control material without repainting individual stateful control owners. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog)[data-memory-type] :is(#lt-search-panel,#lt-filter-panel),
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall :is(.lt-recall-domains,.lt-recall-scroll) {
+  background: var(--lt-panoramic-control-surface);
+  border-color: var(--lt-panoramic-reading-edge);
+}
+
+/* Confirmation and operation content lives in the existing footer. A steady
+   high-coverage plate keeps destructive wording legible while danger/disabled/focus
+   colors, real actions, scrolling and focus restoration remain unchanged. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.lt-delete-confirmation,.lt-operation-menu) {
+  background: var(--lt-panoramic-editor-surface);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) {
+    --lt-panoramic-editor-surface: #f9fcfe;
+    --lt-panoramic-inset-surface: #f1f8fc;
+    --lt-panoramic-subheading-surface: #f9fcfe;
+    --lt-panoramic-title-label-surface: #f9fcfe;
+  }
+}
+
+@media (forced-colors: active) {
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) {
+    --lt-panoramic-editor-surface: Canvas;
+    --lt-panoramic-inset-surface: Canvas;
+    --lt-panoramic-subheading-surface: Canvas;
+    --lt-panoramic-title-label-surface: Canvas;
+  }
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.lt-summary-preview,.lt-summary-readonly,.lt-recall-item-title > span,.lt-recall-memory-reason,.lt-summary-rule-heading) {
+    color: CanvasText;
+  }
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) :is(.lt-recall-memory-reason,.lt-summary-rule-heading),
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-recall [data-recall-rule] > .lt-recall-heading:first-child,
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-management-workspace .lt-management > [role="alert"]:not(.lt-error) {
+    color: CanvasText;
+    background: Canvas;
+  }
+}

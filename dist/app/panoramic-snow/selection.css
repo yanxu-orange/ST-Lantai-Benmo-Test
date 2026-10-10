@@ -1,0 +1,129 @@
+/* Production selection and empty-result paint. The existing view supplies the
+   label, native checkbox, selected IDs, count and bulk actions unchanged.
+   No click/keyboard proxy: label activation and Space remain browser-owned. */
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row {
+  --lt-panoramic-selection-surface: #e2eff8;
+  --lt-panoramic-selection-edge: #83b2cf;
+  --lt-panoramic-selection-check: #326889;
+  grid-template-columns: minmax(0, 1fr);
+  min-block-size: 44px;
+  cursor: pointer;
+}
+
+/* Visually clipped, never hidden from the accessibility tree or tab order.
+   The enclosing label remains the full-card touch target. Positioning the
+   native field near the check also keeps keyboard scroll-to-focus local. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row > input[data-select] {
+  position: absolute;
+  inset-inline-end: 13px;
+  inset-block-start: 13px;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+
+/* Inset paint strengthens the existing 1px border without changing its
+   width, card dimensions or content position when checked. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row[data-selected="true"],
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row[data-selected="true"]:hover {
+  background: var(--lt-panoramic-selection-surface);
+  border-color: var(--lt-panoramic-selection-edge);
+  box-shadow: inset 0 0 0 1px var(--lt-panoramic-selection-edge);
+}
+
+/* Reuse the snowflake's decorative slot only while selected. A CSS stroke
+   avoids another image, visible text, or interactive child inside the label. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row[data-selected="true"]::after {
+  content: "";
+  inset-inline-end: 23px;
+  inset-block-start: 18px;
+  width: 7px;
+  height: 12px;
+  border: solid var(--lt-panoramic-selection-check);
+  border-width: 0 2px 2px 0;
+  border-radius: 0;
+  background: none;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+/* :focus-within provides a visible card focus fallback without requiring
+   :has support. It never changes the native checkbox's keyboard behavior. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row:focus-within {
+  outline: max(var(--ui-focus-ring-width), var(--ui-interaction-focus-width-min)) solid var(--ui-color-focus-ring);
+  outline-offset: var(--ui-focus-ring-offset);
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row:has(> input[data-select]:disabled) {
+  cursor: not-allowed;
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row:has(> input[data-select]:disabled):not([data-selected="true"]):hover {
+  background: var(--lt-format-memory-card-background);
+  border-color: var(--lt-format-memory-card-border);
+  box-shadow: var(--lt-format-memory-card-shadow);
+}
+
+/* The real no-results owner is this sole paragraph, not .lt-empty. Leave the
+   separate result count, card metadata and existing narrow-width layout alone. */
+.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) #lt-memory-list > p.lt-meta:only-child {
+  margin: 0;
+  padding: 20px 16px;
+  border: 1px solid var(--lt-panoramic-reading-edge);
+  border-radius: 5px;
+  background: var(--lt-panoramic-exposed-text-surface);
+  color: var(--ui-color-text-primary);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+/* Only supported frost uses translucent selection material. Reduced
+   transparency stays solid, without adding another filter owner. */
+@supports ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row {
+    --lt-panoramic-selection-surface: rgb(226 239 248 / 94%);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row {
+    --lt-panoramic-selection-surface: #e2eff8;
+  }
+}
+
+@media (forced-colors: active) {
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row {
+    --lt-panoramic-selection-surface: Highlight;
+    --lt-panoramic-selection-edge: Highlight;
+  }
+
+  /* Restore a visible system checkbox when decorative color is unavailable. */
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row > input[data-select] {
+    width: 18px;
+    height: 18px;
+    inset-inline-end: 17px;
+    inset-block-start: 17px;
+    clip-path: none;
+    overflow: visible;
+    appearance: auto;
+    accent-color: auto;
+  }
+
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row::after,
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row[data-selected="true"]::after {
+    content: none;
+  }
+
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row[data-selected="true"],
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row[data-selected="true"]:hover {
+    box-shadow: none;
+  }
+
+  .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog) .lt-selection-row:focus-within {
+    outline: 2px solid CanvasText;
+  }
+}

@@ -1,0 +1,15 @@
+/* Product segmented-control roles. Values preserve the published .4 contexts.
+   Root underlined navigation is independent. State selectors remain local. */
+.lantai[data-ui-theme="snow-ermine"] {
+  --lt-format-segment-group-border: #dceaf2;
+  --lt-format-segment-radius: 4px;
+  --lt-format-segment-group-background: #eaf3f8;
+  --lt-format-segment-compact-size: .75rem;
+  --lt-format-segment-idle-ink: #627e90;
+  --lt-format-segment-selected-background: #fff;
+  --lt-format-segment-selected-ink: #326e97;
+  --lt-format-segment-selected-shadow: 0 1px 4px rgb(42 88 119 / 7%);
+  --lt-format-segment-reading-size: .8125rem;
+  --lt-format-segment-domain-selected-background: #dceefa;
+  --lt-format-segment-domain-selected-ink: #2d688e;
+}

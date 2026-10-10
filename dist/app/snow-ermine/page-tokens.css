@@ -1,0 +1,48 @@
+/* Page appearance roles for the existing approved layout.
+   Structure, decorative motifs and state precedence remain in each page sheet.
+   Values are intentionally independent where the released pages differ. */
+
+.lantai[data-ui-theme="snow-ermine"].lt-time {
+  --lt-snow-time-selected-fill: #e3ebf1;
+  --lt-snow-time-selected-ink: #475b6c;
+  --lt-snow-time-current-ring: #799bb4;
+  --lt-snow-time-anniversary: #9a88b0;
+  --lt-snow-time-schedule: #7e92b2;
+  --lt-snow-time-holiday: #b69c65;
+  --lt-snow-time-term: #6e9ead;
+  --lt-snow-time-group-fill: #e5eff8;
+  --lt-snow-time-group-ink: #476984;
+  --lt-snow-time-items-fill: #ecedf8;
+  --lt-snow-time-items-ink: #6e719a;
+  --lt-format-time-heading-size: 16px;
+  --lt-format-time-card-shadow: 0 2px 7px rgb(65 87 110 / 3%);
+  --lt-format-time-card-radius: 5px;
+  --lt-format-time-day-number-size: 30px;
+  --lt-format-time-record-radius: 4px;
+  --lt-format-time-record-title-size: 14px;
+  --lt-format-time-record-title-weight: 650;
+  --lt-format-time-group-shadow: 0 2px 9px rgb(50 85 115 / 4.5%);
+  --lt-format-time-segment-radius: 4px;
+  --lt-format-time-segment-control-radius: 4px;
+  --lt-format-time-field-radius: 4px;
+}
+
+.lantai.benmo[data-ui-theme="snow-ermine"] {
+  --lt-snow-benmo-segment: #eaeff3;
+  --lt-snow-benmo-segment-ink: var(--lt-format-segment-selected-ink);
+  --lt-snow-benmo-reading-ink: #344d60;
+  --lt-format-benmo-segment-radius: 4px;
+  --lt-format-benmo-segment-control-radius: 4px;
+  --lt-format-benmo-segment-selected-background: var(--lt-format-segment-selected-background);
+  --lt-format-benmo-segment-selected-shadow: var(--lt-format-segment-selected-shadow);
+  --lt-format-benmo-card-shadow: 0 2px 7px rgb(65 87 110 / 3%);
+  --lt-format-benmo-card-radius: 5px;
+  --lt-format-benmo-reading-line: 1.85;
+  --lt-format-benmo-record-title-size: 15px;
+  --lt-format-benmo-record-title-weight: 700;
+}
+
+.lantai[data-ui-theme="snow-ermine"]:is(.lt-settings,.lt-api-settings,.workshop) {
+  --lt-format-secondary-workshop-row-shadow: 0 1px 5px rgb(54 93 119 / 3.5%);
+  --lt-format-secondary-settings-heading-size: 15px;
+}

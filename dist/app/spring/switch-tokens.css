@@ -1,0 +1,61 @@
+/* Switch roles preserve each approved surface's current paint and proportions.
+   These are theme-local mappings, not a shared switch redesign. Native disabled,
+   focus, busy, touch targets and forced-colors stay with their existing owners. */
+.lantai[data-ui-theme="spring"].lt-time {
+  --lt-format-switch-off-background: #d6dfd4;
+  --lt-format-switch-off-border: #cad8cd;
+  --lt-format-switch-on-background: #a1c5a5;
+  --lt-format-switch-on-border: #86b58e;
+  --lt-format-switch-knob-background: #fff;
+}
+.lantai[data-ui-theme="spring"]:is([data-memory-settings],.lt-recall) {
+  --lt-format-switch-off-background: #d6dfd4;
+  --lt-format-switch-off-border: #cad8cd;
+  --lt-format-switch-on-background: #86b193;
+  --lt-format-switch-on-border: #77a786;
+  --lt-format-switch-knob-background: #fff;
+}
+.lantai.benmo[data-ui-theme="spring"] {
+  --lt-format-switch-off-background: #e8ece7;
+  --lt-format-switch-off-border: #c9d8ca;
+  --lt-format-switch-on-background: #a3c6a7;
+  --lt-format-switch-on-border: #91b698;
+  --lt-format-switch-knob-background: #fff;
+  --lt-format-switch-knob-shadow: 0 1px 2px #66836a24;
+  --lt-format-switch-track-width: 44px;
+  --lt-format-switch-track-height: 25px;
+  --lt-format-switch-track-radius: 20px;
+  --lt-format-switch-knob-size: 19px;
+  --lt-format-switch-track-inset: 2px;
+  /* Native knob travel matches the original empty-button positions. */
+  --lt-format-switch-knob-off-offset: 19px;
+  --lt-format-switch-knob-on-offset: 1px;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] {
+  /* Keep Workshop's existing normal/system-color palette authoritative. */
+  --lt-format-switch-off-background: var(--lt-spring-workshop-switch-off);
+  --lt-format-switch-off-border: var(--lt-spring-workshop-switch-off-border);
+  --lt-format-switch-on-background: var(--lt-spring-workshop-switch-on);
+  --lt-format-switch-on-border: var(--lt-spring-workshop-switch-border);
+  --lt-format-switch-knob-background: var(--lt-spring-workshop-switch-knob);
+  --lt-format-switch-knob-shadow: 0 1px 2px #66836a24;
+  --lt-format-switch-track-width: 44px;
+  --lt-format-switch-track-height: 25px;
+  --lt-format-switch-track-radius: 20px;
+  --lt-format-switch-knob-size: 19px;
+  --lt-format-switch-track-inset: 2px;
+}
+.lantai[data-ui-theme="spring"].lt-settings {
+  --lt-format-switch-off-background: #e8ece7;
+  --lt-format-switch-off-border: #c9d8ca;
+  --lt-format-switch-on-background: #a3c6a7;
+  --lt-format-switch-on-border: #91b698;
+  --lt-format-switch-knob-background: #fff;
+  --lt-format-switch-knob-shadow: 0 1px 2px #66836a24;
+  --lt-format-switch-track-width: 43px;
+  --lt-format-switch-track-height: 25px;
+  --lt-format-switch-track-radius: 20px;
+  --lt-format-switch-knob-size: 19px;
+  --lt-format-switch-track-inset: 2px;
+  --lt-format-switch-knob-checked-translate: 18px;
+}

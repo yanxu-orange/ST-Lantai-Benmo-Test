@@ -1,0 +1,46 @@
+/* Product appearance roles for the existing Snow Ermine workspace and headers.
+   The root remains 83px, children remain 64px, and approved artwork/crops stay
+   unchanged. Root underline navigation and native target geometry stay local. */
+[data-ui-theme="snow-ermine"],
+:host([data-ui-theme="snow-ermine"]) {
+  --lt-format-page-padding-inline: 16px;
+  --lt-format-workspace-scrollbar: #bfd5e4 transparent;
+
+  --lt-format-header-background: #356990;
+  --lt-format-header-ink: #fff;
+  --lt-format-root-header-min-height: 83px;
+  --lt-format-root-header-compact-min-height: 60px;
+  --lt-format-root-header-padding: 4px var(--lt-format-page-padding-inline);
+  --lt-format-root-header-image: url("./assets/snow-ermine-header.png");
+  --lt-format-root-header-position: 68% 100%;
+  --lt-format-root-header-wash: linear-gradient(90deg, rgb(19 54 96 / 89%), rgb(24 68 112 / 62%) 51%, rgb(23 69 113 / 6%) 90%);
+  --lt-format-root-title-size: 21px;
+  --lt-format-root-title-weight: 700;
+  --lt-format-root-title-tracking: .045em;
+  --lt-format-root-title-shadow: 0 2px 7px rgb(19 48 76 / 42%);
+
+  --lt-format-child-header-min-height: 64px;
+  --lt-format-child-header-compact-min-height: 52px;
+  --lt-format-child-header-padding: 4px var(--lt-format-page-padding-inline);
+  --lt-format-child-header-shadow: 0 3px 6px rgb(32 54 69 / 8%);
+  --lt-format-child-header-image: url("./assets/panoramic-snow-header.png");
+  --lt-format-child-header-position: center 30%;
+  --lt-format-child-header-image-offset: -15%;
+  --lt-format-child-header-image-width: 160%;
+  --lt-format-child-header-wash: linear-gradient(90deg, rgb(20 42 64 / 21%), rgb(20 42 64 / 12%) 64%, rgb(20 42 64 / 4%));
+  --lt-format-child-title-size: 1.125rem;
+  --lt-format-child-title-line: 1.35;
+  --lt-format-child-title-weight: 650;
+
+  --lt-format-header-control-border: rgb(244 250 255 / 55%);
+  --lt-format-header-control-background: rgb(244 251 255 / 18%);
+  --lt-format-header-control-radius: 4px;
+  --lt-format-header-control-hover-background: rgb(255 255 255 / 27%);
+  --lt-format-header-icon-filter: brightness(0) invert(1) drop-shadow(0 1px 1px rgb(18 35 49 / 74%));
+}
+
+@media (max-width: 390px) {
+  [data-ui-theme="snow-ermine"], :host([data-ui-theme="snow-ermine"]) {
+    --lt-format-page-padding-inline: 13px;
+  }
+}

@@ -1,0 +1,27 @@
+/* Independent native foreground dialog. A solid plate prevents the workspace
+   scene, host content or text from showing through consequential wording.
+   Geometry, native top-layer modality, focus and action state stay local to
+   SOURCE_DELETION_DIALOG_CSS, which is appended by the dialog's own loader. */
+.lantai.lt-source-deletion[data-ui-theme="snow-ermine"].ui-dialog {
+  background: #f9fcfe;
+  background-image: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.lantai.lt-source-deletion[data-ui-theme="snow-ermine"].ui-dialog .lt-source-deletion__footer {
+  background: #f6fafe;
+}
+
+.lantai.lt-source-deletion[data-ui-theme="snow-ermine"].ui-dialog .lt-source-deletion__warning {
+  background: var(--ui-color-warning-background);
+}
+
+@media (forced-colors: active) {
+  .lantai.lt-source-deletion[data-ui-theme="snow-ermine"].ui-dialog,
+  .lantai.lt-source-deletion[data-ui-theme="snow-ermine"].ui-dialog .lt-source-deletion__footer,
+  .lantai.lt-source-deletion[data-ui-theme="snow-ermine"].ui-dialog .lt-source-deletion__warning {
+    background: Canvas;
+    color: CanvasText;
+  }
+}

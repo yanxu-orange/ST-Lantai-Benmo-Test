@@ -1,32 +1,20 @@
 /* Snow Ermine 3.3 TIME presentation. Real calendar dates, occurrences, routes,
    fields and actions stay in time-view.js. Never substitute prototype data. */
-.lantai[data-ui-theme="snow-ermine"].lt-time {
-  --lt-snow-time-selected-fill: #e3ebf1;
-  --lt-snow-time-selected-ink: #475b6c;
-  --lt-snow-time-current-ring: #799bb4;
-  --lt-snow-time-anniversary: #9a88b0;
-  --lt-snow-time-schedule: #7e92b2;
-  --lt-snow-time-holiday: #b69c65;
-  --lt-snow-time-term: #6e9ead;
-  --lt-snow-time-group-fill: #e5eff8;
-  --lt-snow-time-group-ink: #476984;
-  --lt-snow-time-items-fill: #ecedf8;
-  --lt-snow-time-items-ink: #6e719a;
-}
+.lantai[data-ui-theme="snow-ermine"].lt-time { /* Page role defaults live in page-tokens.css. */ }
 .lantai[data-ui-theme="snow-ermine"].lt-time .lt-main { padding-block: 17px 23px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-stack { gap: 13px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time h2 {
   color: var(--ui-color-text-primary);
-  font-size: 16px;
+  font-size: var(--lt-format-time-heading-size);
   line-height: 1.5;
   font-weight: 700;
 }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-section {
   padding: 14px;
   border-color: var(--ui-color-border-subtle);
-  border-radius: 5px;
+  border-radius: var(--lt-format-time-card-radius);
   background: var(--ui-color-surface-base);
-  box-shadow: 0 2px 7px rgb(65 87 110 / 3%);
+  box-shadow: var(--lt-format-time-card-shadow);
 }
 /* The production calibration shortcut remains available alongside management. */
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-story-date {
@@ -56,8 +44,8 @@
   font-size: 13px;
 }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-day > span:first-child {
-  inline-size: 30px;
-  block-size: 30px;
+  inline-size: var(--lt-format-time-day-number-size);
+  block-size: var(--lt-format-time-day-number-size);
   min-inline-size: 0;
   min-block-size: 0;
   border: 1px solid transparent;
@@ -111,8 +99,8 @@
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-calendar-footer > .ui-button { margin-inline-start: auto; padding-inline: 3px; background: transparent; border-color: transparent; font-size: 12px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-selected-heading { gap: 9px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-day-list { gap: 8px; }
-.lantai[data-ui-theme="snow-ermine"].lt-time .time-day-list .time-day-item { padding: 13px; border-color: var(--ui-color-border-subtle); border-radius: 4px; background: var(--ui-color-surface-base); }
-.lantai[data-ui-theme="snow-ermine"].lt-time .time-title { color: var(--ui-color-text-primary); font-size: 14px; font-weight: 650; }
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-day-list .time-day-item { padding: 13px; border-color: var(--ui-color-border-subtle); border-radius: var(--lt-format-time-record-radius); background: var(--ui-color-surface-base); }
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-title { color: var(--ui-color-text-primary); font-size: var(--lt-format-time-record-title-size); font-weight: var(--lt-format-time-record-title-weight); }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-item-main > p { font-size: 12px; line-height: 1.75; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-item-main > [data-time-action="expand"] { padding-inline: 0; background: transparent; border-color: transparent; font-size: 12px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time [data-time-action="edit"].ui-icon-button { border-color: var(--ui-color-border-default); border-radius: 4px; background: var(--ui-color-surface-subtle); }
@@ -123,7 +111,7 @@
 
 /* The candidate's two independent management groups map to existing owners. */
 .lantai[data-ui-theme="snow-ermine"].lt-time[data-time-route="manage"] .lt-main > .time-stack { gap: 15px; }
-.lantai[data-ui-theme="snow-ermine"].lt-time .time-prompt-group { border: 1px solid var(--ui-color-border-default); border-radius: 5px; box-shadow: 0 2px 9px rgb(50 85 115 / 4.5%); }
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-prompt-group { border: 1px solid var(--ui-color-border-default); border-radius: var(--lt-format-time-card-radius); box-shadow: var(--lt-format-time-group-shadow); }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-prompt-group > .time-group-heading {
   padding: 14px 16px;
   border-bottom: 1px solid var(--ui-color-border-default);
@@ -138,8 +126,8 @@
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-management-row:hover:enabled { background: var(--ui-color-surface-subtle); }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-management-row small { font-size: 12px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-entry-actions .ui-button { padding: 9px 10px; border: 1px solid var(--ui-color-border-default); border-radius: 4px; background: var(--ui-color-surface-subtle); color: var(--ui-color-action-tertiary-text); font-size: 13px; }
-.lantai[data-ui-theme="snow-ermine"].lt-time .time-state-tabs { padding: 3px; gap: 4px; border: 0; border-radius: 4px; background: var(--ui-color-surface-subtle); }
-.lantai[data-ui-theme="snow-ermine"].lt-time .time-state-tabs > .ui-button { padding-inline: 5px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--ui-color-text-meta); }
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-state-tabs { padding: 3px; gap: 4px; border: 0; border-radius: var(--lt-format-time-segment-radius); background: var(--ui-color-surface-subtle); }
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-state-tabs > .ui-button { padding-inline: 5px; border: 1px solid transparent; border-radius: var(--lt-format-time-segment-control-radius); background: transparent; color: var(--ui-color-text-meta); }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-state-tabs > .ui-button[aria-pressed="true"]:enabled { background: var(--ui-color-selected-background); border-color: var(--ui-color-selected-border); color: var(--ui-color-selected-text); font-weight: 700; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-record { padding-block: 12px; gap: 10px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-record-actions > [data-time-action="toggle-item"] { border-color: transparent; background: transparent; font-size: 12px; padding-inline: 5px; }
@@ -147,7 +135,7 @@
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-holiday-detail { line-height: 1.7; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-field { gap: 7px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .ui-field__label { color: var(--ui-color-text-secondary); font-size: 12px; font-weight: 650; }
-.lantai[data-ui-theme="snow-ermine"].lt-time .ui-input { border-radius: 4px; }
+.lantai[data-ui-theme="snow-ermine"].lt-time .ui-input { border-radius: var(--lt-format-time-field-radius); }
 .lantai[data-ui-theme="snow-ermine"].lt-time textarea.ui-input { font-family: var(--ui-type-reading-family); line-height: 1.75; resize: vertical; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-reminder-row { min-block-size: max(44px, var(--ui-interaction-target-min)); gap: 12px; font-size: 13px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-reminder-row > span { min-inline-size: 0; overflow-wrap: anywhere; }

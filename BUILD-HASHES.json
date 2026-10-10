@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "dc29929a22905b78ca9a96d747ce6174c299e0a8aed77aa479031ff7e306c748"
+    "sha256": "a33d748b09184060e335a14f65ff848c0b1e0bc74eaa7e57f4bc9bd56c2e8e70"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -37,11 +37,11 @@
   },
   {
     "path": "dist/app/benmo-view.css",
-    "sha256": "b25360ab598bf23a8fbb97b0c2ae94a681760ee5698a3bd4edaec521323562ac"
+    "sha256": "3e4423b67fcc9f8f3dc6ad9e664de9d6c6c27486f2f287f5d223a9d08eafffe9"
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "dc83c9248a2a12ccde4abc57bb0d56707ac60ee72b9df428e98bfdcae0221d94"
+    "sha256": "f5a525a19904671af16fb6abfe05fad231df0ac2cc5a6db6e40730c207f03e76"
   },
   {
     "path": "dist/app/control-session.js",
@@ -141,11 +141,39 @@
   },
   {
     "path": "dist/app/memory.css",
-    "sha256": "b8a6b0350cc573fc382fb84b82ab4259e028f84e57d8b4e023c40d28646c7695"
+    "sha256": "5f3f0c5743be3256406b3911500bac0e51f8a5700ee6d44b49bcb46bc712e000"
   },
   {
     "path": "dist/app/navigation.js",
     "sha256": "f8649bcce499c034920dba3b94c233ac9f162938ec8944ee7d2699ce4dc8e5fd"
+  },
+  {
+    "path": "dist/app/panoramic-snow/assets/lake-backdrop.png",
+    "sha256": "f84704b700965716455409fbf1f3350c5d9df5237c091898ec1e236cbdaa8563"
+  },
+  {
+    "path": "dist/app/panoramic-snow/material.css",
+    "sha256": "120bc6a0b60a81ae71e35ee54af977a4e5e7f1b158197a1d744146ec15e802d1"
+  },
+  {
+    "path": "dist/app/panoramic-snow/memory.css",
+    "sha256": "37aad9337ec2cdebd3a4b8c40856e982c27a6e33d86438fbf05c672e079e88cb"
+  },
+  {
+    "path": "dist/app/panoramic-snow/selection.css",
+    "sha256": "1b091045613cad7c75287a7760153c8e3d84b1d3e1175cbe706b6a2fa015dacf"
+  },
+  {
+    "path": "dist/app/panoramic-snow/source-deletion.css",
+    "sha256": "788fc29e5dbcd889a428b6424ee1e4cf6837dc75f51014c1bb22d6c96b2f499e"
+  },
+  {
+    "path": "dist/app/panoramic-snow/time-benmo.css",
+    "sha256": "e6530dfa06bb7f9233850739b17f58cc155ff59c4f0a3774fa0da3a6b2213652"
+  },
+  {
+    "path": "dist/app/panoramic-snow/workshop-settings.css",
+    "sha256": "dd262297ef5289652b9769317deb39b6228312fbb38388bb92ed33d84ed39087"
   },
   {
     "path": "dist/app/recall-controller.js",
@@ -172,6 +200,10 @@
     "sha256": "715ee915b20b2ee2d60e62bdee4af152a5726f108239a0119e326c7f76142280"
   },
   {
+    "path": "dist/app/shared-ui/appearance-format.css",
+    "sha256": "b1c6d4e4f07c864fd322aa948f4771a0ba26d553fd4118c8579b2cd5db08b7c0"
+  },
+  {
     "path": "dist/app/shared-ui/candidate.web.css",
     "sha256": "c97d6ee035087132d4712d25207884b863a8e1445f5a82eac5a84782d6248a5a"
   },
@@ -182,6 +214,10 @@
   {
     "path": "dist/app/shared-ui/manifest.json",
     "sha256": "1cd16f70700570c0cd0bb9b76040ef1b5a8c90043e9ff7b6f9636c2a7dd54be7"
+  },
+  {
+    "path": "dist/app/snow-ermine/appearance-tokens.css",
+    "sha256": "5f0322c2dce4ddc298d6557543331486a1192acc277bc227fdfaf7e48a91ad0f"
   },
   {
     "path": "dist/app/snow-ermine/assets/close-snow.svg",
@@ -201,31 +237,51 @@
   },
   {
     "path": "dist/app/snow-ermine/benmo.css",
-    "sha256": "e8d8e518a0b5ad5d80600eb59bfebd2cc9ff801c4dc32b64a3d1c4d5e7637cc3"
+    "sha256": "240c0a14c3202e5be709b4d98b82f371b36208ac31373959e3585c4a1d2088ff"
   },
   {
     "path": "dist/app/snow-ermine/manifest.json",
-    "sha256": "a5439b1e0442325eb9c2da12688c967e64854ed6f76b4ce8804e425b51b7e866"
+    "sha256": "08b4e93e95d9333dcf4fffbaeb8fa49f8932632617d780639ff97ba54730d793"
+  },
+  {
+    "path": "dist/app/snow-ermine/memory-tokens.css",
+    "sha256": "e2c7dd3dd7e48b0c9ccd9a8c4a646a4b9cd5ced4493dd282ce2af9845197efe7"
   },
   {
     "path": "dist/app/snow-ermine/memory.css",
-    "sha256": "c0eb9f4dd22e40e3a011be8cf8dff396b643218a7a1ca10a412f797ad9d5432b"
+    "sha256": "897542638ced93900669437e354c4ecb03a8cc1f7324cb38d4d3ff3370f7fd0f"
+  },
+  {
+    "path": "dist/app/snow-ermine/page-tokens.css",
+    "sha256": "adaaf883ed34fc670a4648b1fcfc7240c8cab32a7b51d32ae3baf9521f0d8826"
   },
   {
     "path": "dist/app/snow-ermine/secondary.css",
-    "sha256": "c4960c530ac47b350dc0999e47ed366ea8fb4be561385e0963fbd884346e1e09"
+    "sha256": "63f42d35cc583560d69b8a4230d97082b4cf8214b73840112a6de399bedb9225"
+  },
+  {
+    "path": "dist/app/snow-ermine/segment-tokens.css",
+    "sha256": "82375f019fc71488890022a1433e3bab45e7080538af5c40da7253139993eb39"
+  },
+  {
+    "path": "dist/app/snow-ermine/switch-tokens.css",
+    "sha256": "1e5acdb29e41e8170e9ccb02a60a80596b920cecaefa3b7427f2e596aed24ab0"
   },
   {
     "path": "dist/app/snow-ermine/theme.css",
-    "sha256": "5aa7fafc4c5d8c247795d5357dacc2c88f117c90f680ee9f8dea63d238d8caff"
+    "sha256": "91c0b2bb9a8b31b817b7bf01e9b316646322495f20c58f54bbd49b7025479ac6"
   },
   {
     "path": "dist/app/snow-ermine/time.css",
-    "sha256": "b4d96edbac8eb083e662a544d2ce6cd98b9f7c161e42b3374e51f0376a9dbb82"
+    "sha256": "b3b84ec7e579d3074f024031009548de481429dc281ef42a2c81465bfbf7e5f0"
   },
   {
     "path": "dist/app/source-deletion-dialog.js",
     "sha256": "27bee65a52a9e94d9b2e13a5f62c58a605738ab2624e27d29f3e382202c89d37"
+  },
+  {
+    "path": "dist/app/spring/appearance-tokens.css",
+    "sha256": "5a2d1c83fbc90fdcf6e1bd09e9533f80ab319d51eba7bd4f119fcabc51f9112c"
   },
   {
     "path": "dist/app/spring/assets/benmo-leaf.svg",
@@ -285,31 +341,47 @@
   },
   {
     "path": "dist/app/spring/benmo.css",
-    "sha256": "59d03eedfc414b86245634ac99728189578a9b7ec72b75785e3e5596767bc9cc"
+    "sha256": "19be36b4e938af5bdc8faa7d7fa7692b35ffb7d3539f95371aed9e0aef9e0de6"
   },
   {
     "path": "dist/app/spring/manifest.json",
-    "sha256": "820a9345c067b17c250906f16c21c50ddde0b3ada6f533904f30cab7347928da"
+    "sha256": "a233806c87678e82f1ed4e7e3710aff69759926c5b71d2a0aa6752d9285a2f0f"
+  },
+  {
+    "path": "dist/app/spring/memory-tokens.css",
+    "sha256": "ddbbaa6d2ee575d2d1284502c5f045c4609477988eee73ec23ab8442315015c8"
   },
   {
     "path": "dist/app/spring/memory.css",
-    "sha256": "830e3172778604104eb5964ea59e934c5b2dbf033a7de994dd41158bf63d068d"
+    "sha256": "95f464c25f13a5d1c74740ed5d26b8f6a51fb7d2f017f7d0e811ab50da4ee4dc"
+  },
+  {
+    "path": "dist/app/spring/page-tokens.css",
+    "sha256": "0842a3843e7a2804a17393bedc07bab0cab2dcf3a7db56fd05264fcfd928505f"
+  },
+  {
+    "path": "dist/app/spring/segment-tokens.css",
+    "sha256": "7fccde209b4562fe03b4adfe00282ffd88c37b514e0b905314d4b698132379f4"
   },
   {
     "path": "dist/app/spring/settings.css",
-    "sha256": "04625eeacbd8ece0138d6e718c9fe643918cb2def46100f32660704ed0146628"
+    "sha256": "9141f7840089093e4a127414461243b899117fc7f4d595110dbeca4da2d50df6"
+  },
+  {
+    "path": "dist/app/spring/switch-tokens.css",
+    "sha256": "d1b9434107040723bb2eba3ecd30a5c5d4fff7f997f396b1bfed00025158e0c8"
   },
   {
     "path": "dist/app/spring/theme.css",
-    "sha256": "9ad2c1e50457167acdcf7743742ac9115d975bbb534670d174d82b8d462196c9"
+    "sha256": "e41805df5bfc088a8906686e8c765f8909a1e9f8a39df1a8dcf486ba451b50ff"
   },
   {
     "path": "dist/app/spring/time.css",
-    "sha256": "38ae5157a55b7795bb490a3f18b2eca3509520a7266bca567de49a0072a2ae9a"
+    "sha256": "1c4b4bf0a160efa56bf3fb1db5b568dd2031c4e62b56d6911c5dd7f85c178aa7"
   },
   {
     "path": "dist/app/spring/workshop.css",
-    "sha256": "4795528da65df1bbd0873a86f4e2c07fe91f19abe0a2f76506b04c0af0f0ac0f"
+    "sha256": "49117d3ec276092cde1be95e5b48a40b5ef97899151f1ef6d1fbb86dd5b9206a"
   },
   {
     "path": "dist/app/stable-surface.js",
@@ -325,11 +397,11 @@
   },
   {
     "path": "dist/app/styles/style-entries.js",
-    "sha256": "618fc2d2918c082520b7fd37531e9f3034020a89a6962586b5aadc9726b99b9a"
+    "sha256": "aa38ebfa3538bdba07544374969144aaddf41076d3a2bd0074b7a42156321ba8"
   },
   {
     "path": "dist/app/styles/theme.js",
-    "sha256": "271222418491a8c5a536bb41c241b46eb561acfab507ca635a20aee970b46471"
+    "sha256": "5d6001a789b0bb1f4d4f1df9f02a087054998d8f31855369e922ee2dde8c9626"
   },
   {
     "path": "dist/app/summary-controller.js",
@@ -381,7 +453,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "a65c13d007cf23a8fb4030e359f933af0916807f77242988f8f6f5b58a4cb4f8"
+    "sha256": "178db5f5354cc0cbf96b8e8b5e4e034ebe01e714004d8f30d2145d6193fb9863"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -941,10 +1013,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "9959802e7dd627a9de43a98850a27ce90609d9cf341c6dc3d347985e648dacc5"
+    "sha256": "0142501e0123a12e1d93e636a682f30f8f531e5e726679368ebf4ab443b7c28b"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "4c3acd87ccc109f2c79133671cd63d30bbeb72618328c76f06b2f3c3c9410bd4"
+    "sha256": "beac22e188fa8d31d0fe7681f3363b822d227d566f4b004367df881075a22b89"
   }
 ]

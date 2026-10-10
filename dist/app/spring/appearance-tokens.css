@@ -1,0 +1,58 @@
+/* Product appearance roles for the existing Spring workspace and headers.
+   Geometry, selectors and route overrides stay in their original sheets.
+   Native 44px control ownership remains a shared interaction constraint. */
+[data-ui-theme="spring"],
+:host([data-ui-theme="spring"]) {
+  --lt-format-page-padding-inline: 17px;
+  --lt-format-page-padding-block-start: 17px;
+  --lt-format-page-padding-block-end: 23px;
+  --lt-format-workspace-radius: 14px;
+  --lt-format-workspace-scrollbar: #ccdcca transparent;
+
+  --lt-format-header-background: #eaf2e9;
+  --lt-format-root-header-min-height: 64px;
+  --lt-format-root-header-padding: 0 17px 0 21px;
+  --lt-format-root-header-image: url("./assets/cherry-blossoms.webp");
+  --lt-format-root-header-position: center 31%;
+  --lt-format-root-header-wash: linear-gradient(90deg, rgb(251 253 248 / 35%), rgb(251 253 248 / 0%) 55%);
+  --lt-format-root-header-border: #e2e8dc;
+  --lt-format-root-title-ink: #304c3b;
+  --lt-format-root-title-size: 23px;
+  --lt-format-root-title-weight: 750;
+  --lt-format-root-title-line: 1.15;
+  --lt-format-root-title-shadow: 0 1px 3px rgb(255 255 255 / 70%);
+
+  --lt-format-child-header-min-height: 68px;
+  --lt-format-child-header-compact-min-height: 64px;
+  --lt-format-child-header-padding: 0 15px;
+  --lt-format-child-header-gap: 10px;
+  --lt-format-child-header-position: center 45%;
+  --lt-format-child-header-wash: linear-gradient(90deg, rgb(253 252 248 / 72%) 0%, rgb(253 252 248 / 78%) 42%, rgb(253 252 248 / 36%) 80%, rgb(253 252 248 / 25%));
+  --lt-format-child-title-ink: #36523f;
+  --lt-format-child-title-size: 18px;
+  --lt-format-child-title-compact-size: 17px;
+  --lt-format-child-title-weight: 700;
+  --lt-format-child-title-tracking: .02em;
+  --lt-format-child-title-line: 1.2;
+  --lt-format-child-title-shadow: 0 1px 1px #fff7;
+
+  /* Spring has a small painted face inside each unchanged native target. */
+  --lt-format-header-control-ink: #486953;
+  --lt-format-header-control-size: 22px;
+  --lt-format-header-control-inset: 6px;
+  --lt-format-header-control-border: #e9eee7;
+  --lt-format-header-control-radius: 8px;
+  --lt-format-header-control-background: rgb(255 255 255 / 75%);
+  --lt-format-header-control-hover-background: #fff;
+  --lt-format-root-control-inset: 4px;
+  --lt-format-root-control-border: rgb(255 255 255 / 95%);
+  --lt-format-root-control-radius: 9px;
+  --lt-format-root-control-background: rgb(255 255 255 / 83%);
+  --lt-format-root-control-shadow: 0 1px 5px #94ac9a23;
+}
+
+@media (max-width: 390px) {
+  [data-ui-theme="spring"], :host([data-ui-theme="spring"]) {
+    --lt-format-page-padding-inline: 13px;
+  }
+}

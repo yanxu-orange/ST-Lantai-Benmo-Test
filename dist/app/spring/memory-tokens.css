@@ -1,0 +1,46 @@
+/* Product memory appearance values. These preserve the published .4 mapping.
+   Shared format owns common rules; theme-specific motifs and states remain local. */
+.lantai[data-ui-theme="spring"] {
+  --lt-format-memory-history-border: #ebf0e8;
+  --lt-format-memory-card-background: #fff;
+  --lt-format-memory-card-border: #e0e9df;
+  --lt-format-memory-card-radius: 9px;
+  --lt-format-memory-card-shadow: 0 2px 6px #4a6c5011;
+  --lt-format-memory-card-ink: #546a5b;
+  --lt-format-memory-card-gap: 9px;
+  --lt-format-memory-card-padding: 14px 14px 13px;
+  --lt-format-memory-title-size: 1.125rem;
+  --lt-format-memory-title-weight: 750;
+  --lt-format-memory-title-ink: #374f3d;
+  --lt-format-memory-copy-size: .8125rem;
+  --lt-format-memory-copy-line: 1.8;
+  --lt-format-memory-copy-ink: #586c5e;
+  --lt-format-memory-meta-size: .6875rem;
+  --lt-format-memory-tag-gap: 5px;
+  --lt-format-memory-tag-radius: 5px;
+  --lt-format-memory-tag-padding: 2px 6px;
+  --lt-tag-event-bg: #e8f3ed;
+  --lt-tag-event-ink: #59836a;
+  --lt-tag-event-border: transparent;
+  --lt-tag-detail-bg: #f6eaf0;
+  --lt-tag-detail-ink: #aa788f;
+  --lt-tag-detail-border: transparent;
+  --lt-tag-resident-bg: #ece5f2;
+  --lt-tag-resident-ink: #85679c;
+  --lt-tag-resident-border: transparent;
+  --lt-tag-trigger-bg: #e6f1e7;
+  --lt-tag-trigger-ink: #63886b;
+  --lt-tag-trigger-border: transparent;
+  --lt-format-stage-1-fill: #fbf3e5;
+  --lt-format-stage-1-edge: #ede0c9;
+  --lt-format-stage-1-ink: #977450;
+  --lt-format-stage-2-fill: #f9edf0;
+  --lt-format-stage-2-edge: #eedde3;
+  --lt-format-stage-2-ink: #a26c83;
+  --lt-format-stage-3-fill: #eaf4ee;
+  --lt-format-stage-3-edge: #d7e7dc;
+  --lt-format-stage-3-ink: #547c67;
+  --lt-format-stage-merge-fill: #f2f4ee;
+  --lt-format-stage-merge-edge: #dce7da;
+  --lt-format-stage-merge-ink: #607b66;
+}

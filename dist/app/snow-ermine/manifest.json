@@ -43,10 +43,31 @@
     "Theme CSS does not own business data, routing, timestamps or phone/PC page structure."
   ],
   "stylesheets": [
+    "appearance-tokens.css",
+    "memory-tokens.css",
+    "switch-tokens.css",
+    "segment-tokens.css",
     "theme.css",
+    "../shared-ui/appearance-format.css",
     "memory.css",
+    "page-tokens.css",
     "time.css",
     "benmo.css",
     "secondary.css"
-  ]
+  ],
+  "formatContract": {
+    "ownership": "consumer-product",
+    "sharedRules": "../shared-ui/appearance-format.css",
+    "appearanceValues": "appearance-tokens.css",
+    "memoryValues": "memory-tokens.css",
+    "scope": "Existing Spring/Snow rules and final values only; theme-specific headers, motifs, states and page mappings stay local",
+    "baseline": "0.1.0-test.20261010.4",
+    "switchValues": "switch-tokens.css",
+    "segmentValues": "segment-tokens.css",
+    "pageValues": "page-tokens.css",
+    "normalAppearancePreserved": true,
+    "forcedColorsExceptions": [
+      "Three shared surfaces now follow Canvas instead of fixed white"
+    ]
+  }
 }

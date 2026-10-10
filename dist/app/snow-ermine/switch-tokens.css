@@ -1,0 +1,9 @@
+/* The memory-settings/recall switch keeps its blue track and shared geometry.
+   Other Snow surfaces continue to use their existing component/theme mapping. */
+.lantai[data-ui-theme="snow-ermine"]:is([data-memory-settings],.lt-recall) {
+  --lt-format-switch-off-background: #dae5ec;
+  --lt-format-switch-off-border: #c9d7e0;
+  --lt-format-switch-on-background: #73a9ca;
+  --lt-format-switch-on-border: #659abd;
+  --lt-format-switch-knob-background: #fff;
+}

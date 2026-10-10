@@ -3,8 +3,6 @@
    production controls, persistence, credentials and API operations stay intact.
    The shared cherry-blossoms.webp is byte-identical to this reference's photo. */
 .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) {
-  --lt-spring-settings-page: #fbfcf8;
-  --lt-spring-settings-shadow: 0 4px 13px rgb(61 80 61 / 4.5%);
   background: var(--lt-spring-settings-page);
 }
 .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) .lt-main {
@@ -29,40 +27,40 @@
    Feature identity comes from existing controls, never a theme-specific route. */
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-main { gap: 16px; }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group {
-  --lt-settings-heading-bg: #eaf3e9;
-  --lt-settings-heading-ink: #5c8267;
-  --lt-settings-heading-line: #e2ebe1;
+  --lt-settings-heading-bg: var(--lt-format-settings-group-default-background);
+  --lt-settings-heading-ink: var(--lt-format-settings-group-default-ink);
+  --lt-settings-heading-line: var(--lt-format-settings-group-default-border);
   --lt-settings-heading-icon: #8caf91;
   --lt-settings-heading-shape: url("./assets/settings-leaf.svg");
   min-width: 0;
   padding: 0 15px 3px;
   gap: 0;
-  border: 1px solid #e2ebdf;
-  border-radius: 12px;
-  background: #fff;
+  border: 1px solid var(--lt-format-settings-card-border);
+  border-radius: var(--lt-format-settings-card-radius);
+  background: var(--lt-format-page-paper);
   box-shadow: var(--lt-spring-settings-shadow);
 }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="enabled"]) { --lt-settings-heading-shape: url("./assets/settings-seed.svg"); }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-settings-theme]),
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="event"]) {
-  --lt-settings-heading-bg: #f9eff1;
-  --lt-settings-heading-ink: #9f7888;
-  --lt-settings-heading-line: #f0e4e7;
+  --lt-settings-heading-bg: var(--lt-format-settings-group-memory-background);
+  --lt-settings-heading-ink: var(--lt-format-settings-group-memory-ink);
+  --lt-settings-heading-line: var(--lt-format-settings-group-memory-border);
   --lt-settings-heading-icon: #c597a5;
   --lt-settings-heading-shape: url("./assets/settings-flower.svg");
 }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="event"]) { --lt-settings-heading-shape: url("./assets/settings-book.svg"); }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="time"]) {
-  --lt-settings-heading-bg: #fbf4e3;
-  --lt-settings-heading-ink: #967c53;
-  --lt-settings-heading-line: #f0ead9;
+  --lt-settings-heading-bg: var(--lt-format-settings-group-time-background);
+  --lt-settings-heading-ink: var(--lt-format-settings-group-time-ink);
+  --lt-settings-heading-line: var(--lt-format-settings-group-time-border);
   --lt-settings-heading-icon: #c9aa73;
   --lt-settings-heading-shape: url("./assets/settings-clock.svg");
 }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="prompt"]) {
-  --lt-settings-heading-bg: #f2eff9;
-  --lt-settings-heading-ink: #84799b;
-  --lt-settings-heading-line: #e8e2f1;
+  --lt-settings-heading-bg: var(--lt-format-settings-group-prompt-background);
+  --lt-settings-heading-ink: var(--lt-format-settings-group-prompt-ink);
+  --lt-settings-heading-line: var(--lt-format-settings-group-prompt-border);
   --lt-settings-heading-icon: #a69ac0;
   --lt-settings-heading-shape: url("./assets/settings-spark.svg");
 }
@@ -78,8 +76,8 @@
   background: var(--lt-settings-heading-bg);
   color: var(--lt-settings-heading-ink);
   font-family: var(--ui-type-ui-family);
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--lt-format-settings-heading-size);
+  font-weight: var(--lt-format-settings-heading-weight);
   line-height: 1.4;
   letter-spacing: .02em;
 }
@@ -96,12 +94,12 @@
   min-height: 58px;
   padding: 7px 1px;
   gap: 12px;
-  color: #4f6d57;
+  color: var(--lt-format-settings-row-ink);
   font-size: 14px;
   font-weight: 500;
   line-height: 1.45;
 }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > :is(.lt-settings-row,.lt-settings-entry) + :is(.lt-settings-row,.lt-settings-entry) { border-top: 1px solid #ecf1e9; }
+.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > :is(.lt-settings-row,.lt-settings-entry) + :is(.lt-settings-row,.lt-settings-entry) { border-top: 1px solid var(--lt-format-settings-row-divider); }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:not(:has([data-control="enabled"])) .lt-settings-row { min-height: 53px; padding-block: 4px; }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-entry > span:last-child {
   flex: none;
@@ -112,34 +110,34 @@
   background: #96ab9a;
   mask: url("./assets/settings-chev.svg") center / contain no-repeat;
 }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-entry:hover:enabled { color: #3e7852; }
+.lantai[data-ui-theme="spring"].lt-settings .lt-settings-entry:hover:enabled { color: var(--lt-format-settings-entry-hover-ink); }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-entry:focus-visible { outline-offset: -2px; border-radius: 6px; }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > .ui-field { gap: 9px; padding-block: 12px; }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > .ui-field > .ui-field__label { color: #59745f; font-size: 13px; font-weight: 650; }
-.lantai[data-ui-theme="spring"].lt-settings [data-settings-theme] { width: 100%; border-radius: 8px; --ui-color-field-border: #d9e4d8; --ui-color-text-primary: #4e6956; }
+.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > .ui-field > .ui-field__label { color: var(--lt-format-settings-field-label-ink); font-size: 13px; font-weight: 650; }
+.lantai[data-ui-theme="spring"].lt-settings [data-settings-theme] { width: 100%; border-radius: 8px; --ui-color-field-border: var(--lt-format-settings-field-border); --ui-color-text-primary: var(--lt-format-settings-field-ink); }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > :is(.lt-status,.ui-button) { margin-block: 0 12px; }
 
 /* Keep a 44px native switch owner around the reference's small round track. */
 .lantai[data-ui-theme="spring"].lt-settings .ui-switch {
-  --component-switch-track-width: 43px;
-  --component-switch-track-height: 25px;
-  --component-switch-knob-size: 19px;
-  --component-switch-track-inset: 2px;
+  --component-switch-track-width: var(--lt-format-switch-track-width);
+  --component-switch-track-height: var(--lt-format-switch-track-height);
+  --component-switch-knob-size: var(--lt-format-switch-knob-size);
+  --component-switch-track-inset: var(--lt-format-switch-track-inset);
   flex: 0 0 44px;
   min-width: 44px;
   min-height: 44px;
   background: transparent;
 }
-.lantai[data-ui-theme="spring"].lt-settings .ui-switch__track { background: #e8ece7; border-color: #c9d8ca; border-radius: 20px; }
-.lantai[data-ui-theme="spring"].lt-settings .ui-switch[aria-checked="true"]:enabled .ui-switch__track { background: #a3c6a7; border-color: #91b698; }
-.lantai[data-ui-theme="spring"].lt-settings .ui-switch .ui-switch__knob { background: #fff; box-shadow: 0 1px 2px #66836a24; }
-.lantai[data-ui-theme="spring"].lt-settings .ui-switch[aria-checked="true"] .ui-switch__knob { transform: translateX(18px); }
+.lantai[data-ui-theme="spring"].lt-settings .ui-switch__track { background: var(--lt-format-switch-off-background); border-color: var(--lt-format-switch-off-border); border-radius: var(--lt-format-switch-track-radius); }
+.lantai[data-ui-theme="spring"].lt-settings .ui-switch[aria-checked="true"]:enabled .ui-switch__track { background: var(--lt-format-switch-on-background); border-color: var(--lt-format-switch-on-border); }
+.lantai[data-ui-theme="spring"].lt-settings .ui-switch .ui-switch__knob { background: var(--lt-format-switch-knob-background); box-shadow: var(--lt-format-switch-knob-shadow); }
+.lantai[data-ui-theme="spring"].lt-settings .ui-switch[aria-checked="true"] .ui-switch__knob { transform: translateX(var(--lt-format-switch-knob-checked-translate)); }
 .lantai[data-ui-theme="spring"].lt-settings .ui-switch:disabled .ui-switch__track { background: var(--ui-color-disabled-background); border-color: var(--ui-color-border-subtle); }
 .lantai[data-ui-theme="spring"].lt-settings .ui-switch:disabled { opacity: .6; }
 
 /* Keep the live application version and tagline, with the reference leaf. */
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-brand { position: relative; padding: 15px 7px 6px; min-height: 59px; }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-brand > div { gap: 12px; align-items: start; color: #58765e; font-size: 14px; font-weight: 730; }
+.lantai[data-ui-theme="spring"].lt-settings .lt-settings-brand > div { gap: 12px; align-items: start; color: var(--lt-format-settings-brand-ink); font-size: 14px; font-weight: 730; }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-brand .lt-brand-icon {
   width: 38px;
   height: 38px;
@@ -160,33 +158,33 @@
   min-width: 0;
   padding: 16px;
   gap: 15px;
-  border: 1px solid #e2eadd;
-  border-radius: 12px;
-  background: #fff;
+  border: 1px solid var(--lt-format-settings-api-card-border);
+  border-radius: var(--lt-format-settings-card-radius);
+  background: var(--lt-format-page-paper);
   box-shadow: var(--lt-spring-settings-shadow);
 }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-appearance-settings { margin: 0; }
-.lantai[data-ui-theme="spring"].lt-api-settings .lt-settings-section-title { color: #527059; font-size: 15px; line-height: 1.4; }
+.lantai[data-ui-theme="spring"].lt-api-settings .lt-settings-section-title { color: var(--lt-format-settings-api-heading-ink); font-size: 15px; line-height: 1.4; }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-modes { min-width: 0; gap: 8px; }
-.lantai[data-ui-theme="spring"].lt-api-settings .lt-modes > legend { margin-bottom: 15px; padding: 0; color: #527059; font-size: 15px; font-weight: 700; line-height: 1.4; }
+.lantai[data-ui-theme="spring"].lt-api-settings .lt-modes > legend { margin-bottom: 15px; padding: 0; color: var(--lt-format-settings-api-heading-ink); font-size: 15px; font-weight: 700; line-height: 1.4; }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-mode {
   min-width: 0;
   min-height: 45px;
   padding: 10px 6px;
   gap: 7px;
-  border: 1px solid #dae5d8;
-  border-radius: 9px;
-  background: #fff;
-  color: #7d937e;
+  border: 1px solid var(--lt-format-settings-choice-border);
+  border-radius: var(--lt-format-settings-choice-radius);
+  background: var(--lt-format-page-paper);
+  color: var(--lt-format-settings-choice-ink);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.5;
   cursor: pointer;
 }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-mode:has(:checked):not(:has(:disabled)) {
-  background: #fbefd9;
-  border-color: #e8d5b6;
-  color: #80613e;
+  background: var(--lt-format-settings-choice-selected-background);
+  border-color: var(--lt-format-settings-choice-selected-border);
+  color: var(--lt-format-settings-choice-selected-ink);
   box-shadow: none;
   font-weight: 700;
 }
@@ -202,7 +200,7 @@
   border: revert;
   background: revert;
   box-shadow: none;
-  accent-color: #80613e;
+  accent-color: var(--lt-format-settings-choice-selected-ink);
 }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-mode:has(:disabled) { background: var(--ui-color-disabled-background); color: var(--ui-color-text-disabled); border-color: var(--ui-color-border-subtle); cursor: not-allowed; box-shadow: none; }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-editor > section.lt-stack { grid-template-columns: minmax(0,1fr) auto; gap: 14px 8px; }
@@ -210,9 +208,14 @@
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-editor > section.lt-stack > label:has([data-api-field="key"]) { grid-column: 1; }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-editor > section.lt-stack > [data-api-action="toggle-key"] { grid-column: 2; align-self: end; }
 .lantai[data-ui-theme="spring"].lt-api-settings .ui-field { gap: 7px; }
-.lantai[data-ui-theme="spring"].lt-api-settings .ui-field__label { color: #55745e; font-size: 13px; font-weight: 700; }
-.lantai[data-ui-theme="spring"].lt-api-settings .ui-input { padding: 10px 11px; border-radius: 8px; --ui-color-field-border: #d8e3d7; --ui-color-text-primary: #50634f; font-size: 14px; line-height: 1.6; }
-.lantai[data-ui-theme="spring"].lt-api-settings .ui-input::placeholder { color: #adb7ad; }
+.lantai[data-ui-theme="spring"].lt-api-settings .ui-field__label { color: var(--lt-format-settings-api-label-ink); font-size: 13px; font-weight: 700; }
+.lantai[data-ui-theme="spring"].lt-api-settings .ui-input { padding: 10px 11px; border-radius: 8px; --ui-color-field-border: var(--lt-format-settings-api-field-border); --ui-color-text-primary: var(--lt-format-settings-api-field-ink); line-height: 1.6; }
+/* The legacy API control size still belongs to selects and non-text controls. */
+.lantai[data-ui-theme="spring"].lt-api-settings .ui-input:where(
+  :not(input,textarea),
+  input:is([type="checkbox"],[type="radio"],[type="range"],[type="color"],[type="file"],[type="button"],[type="submit"],[type="reset"],[type="image"],[type="hidden"])
+) { font-size: 14px; }
+.lantai[data-ui-theme="spring"].lt-api-settings .ui-input::placeholder { color: var(--lt-format-settings-api-placeholder-ink); }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-api-presets { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 9px; }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-api-presets > label { grid-column: 1; }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-api-presets > [data-api-action="add"] { grid-column: 2; }
@@ -220,26 +223,26 @@
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-entry { flex-wrap: wrap; gap: 8px; align-items: center; }
 .lantai[data-ui-theme="spring"].lt-api-settings .ui-button { min-height: 44px; padding: 7px 11px; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
 .lantai[data-ui-theme="spring"].lt-api-settings .ui-button:is([data-api-action="add"],[data-api-action="save-as"],[data-api-action="toggle-key"],[data-api-action="fetch-models"],[data-api-action="test"],[data-api-action="read"],[data-api-action="cancel-delete"],[data-appearance-action="read"]):enabled {
-  border: 1px solid #dbe8da;
+  border: 1px solid var(--lt-format-page-utility-border);
   border-radius: 8px;
-  background: #fff;
-  color: #58775e;
+  background: var(--lt-format-page-paper);
+  color: var(--lt-format-page-utility-ink);
   box-shadow: none;
   font-weight: 600;
 }
 .lantai[data-ui-theme="spring"].lt-api-settings .ui-button[data-api-action="save"]:enabled {
-  border: 1px solid #d0e4d0;
+  border: 1px solid var(--lt-format-page-primary-border);
   border-radius: 8px;
-  background: #e0efdf;
-  color: #426b4b;
+  background: var(--lt-format-page-primary-background);
+  color: var(--lt-format-page-primary-ink);
   box-shadow: none;
   font-weight: 700;
 }
 .lantai[data-ui-theme="spring"].lt-api-settings .ui-button:is([data-api-action="delete"],[data-api-action="confirm-delete"]):enabled {
-  border: 1px solid #f2e0e4;
+  border: 1px solid var(--lt-format-page-delete-border);
   border-radius: 8px;
-  background: #f9e9ed;
-  color: #a57887;
+  background: var(--lt-format-page-delete-background);
+  color: var(--lt-format-page-delete-ink);
   box-shadow: none;
 }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-footer.ui-action-footer { padding: 10px 16px max(10px, env(safe-area-inset-bottom)); }
@@ -248,9 +251,9 @@
 /* Explanation and operation messages share readable metadata ink. Errors keep their live
    alert roles, and delete confirmation remains the real inline confirmation. */
 .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) .lt-status { padding: 0; border: 0; background: transparent; color: var(--ui-color-text-meta); font-size: 12px; line-height: 1.7; }
-.lantai[data-ui-theme="spring"].lt-api-settings [data-api-models]:not(:empty) { padding: 11px; border: 1px solid #e5ece4; border-radius: 9px; background: #f8faf7; }
-.lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) .lt-error { padding: 11px 13px; border: 1px solid #f2dedf; border-radius: 8px; background: #fff2f2; color: #b2575b; font-size: 12px; line-height: 1.6; }
-.lantai[data-ui-theme="spring"].lt-api-settings .lt-delete-confirmation { padding: 13px; border: 1px solid #f0e4e7; border-radius: 9px; background: #fffafb; color: #806471; }
+.lantai[data-ui-theme="spring"].lt-api-settings [data-api-models]:not(:empty) { padding: 11px; border: 1px solid var(--lt-format-settings-models-border); border-radius: 9px; background: var(--lt-format-settings-models-background); }
+.lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) .lt-error { padding: 11px 13px; border: 1px solid var(--lt-format-settings-error-border); border-radius: 8px; background: var(--lt-format-settings-error-background); color: var(--lt-format-settings-error-ink); font-size: 12px; line-height: 1.6; }
+.lantai[data-ui-theme="spring"].lt-api-settings .lt-delete-confirmation { padding: 13px; border: 1px solid var(--lt-format-settings-confirmation-border); border-radius: 9px; background: var(--lt-format-settings-confirmation-background); color: var(--lt-format-settings-confirmation-ink); }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-delete-confirmation > .lt-entry { margin-top: 12px; }
 .lantai[data-ui-theme="spring"].lt-api-settings .ui-button:disabled { border-color: var(--ui-color-border-subtle); background: var(--ui-color-disabled-background); color: var(--ui-color-text-disabled); box-shadow: none; }
 .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) [hidden] { display: none; }
