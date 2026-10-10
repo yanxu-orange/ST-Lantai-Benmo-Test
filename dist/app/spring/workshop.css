@@ -1,0 +1,165 @@
+/* Workshop reference styling, mapped onto production views and native states.
+   Only this surface owns pink switches; navigation and actions stay sage. */
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] {
+  --wk-divider: #e1e8de;
+  --wk-reader-background: #fff;
+  --wk-directory-background: #e6f1e4;
+  --wk-directory-text: #486f51;
+  --lt-spring-workshop-switch-on: #e7bbc9;
+  --lt-spring-workshop-switch-border: #d9a6b8;
+  --lt-spring-workshop-switch-off: #e8ece7;
+  --lt-spring-workshop-switch-off-border: #d8e0d7;
+  --lt-spring-workshop-switch-knob: #fff;
+  --lt-spring-workshop-leaf: url("./assets/workshop-leaf.svg");
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .lt-main { gap: 16px; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-toolbar { flex-wrap: wrap; gap: 12px; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-toolbar [data-action="new"] {
+  min-width: 100px;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-toolbar [data-action="new"]:enabled {
+  background: #e0efdf;
+  color: var(--ui-color-action-primary-text);
+}
+/* Map the reference's ordinary, primary and ghost buttons by their real action.
+   A generic tertiary override would also repaint navigation and API controls. */
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button:is([data-action="edit-result"],[data-action="first-record"],[data-action="last-record"],[data-action="prev"],[data-action="next"]):enabled {
+  background: #f1f6f0;
+  color: #58775e;
+  border: 1px solid #dbe8da;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button:is([data-action="edit-result"],[data-action="first-record"],[data-action="last-record"],[data-action="prev"],[data-action="next"]):hover:enabled { background: #e5efe4; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button:is([data-action="save"],[data-action="confirm-dialog"],[data-action="load-more"]):enabled {
+  background: #e0efdf;
+  color: #426b4b;
+  border-color: #d0e4d0;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button[data-action="cancel-dialog"]:enabled { background: transparent; border-color: transparent; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-button[data-action="delete-module"]:enabled { background: #fff3f3; color: #b47978; border-color: #efdada; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group-title {
+  gap: 8px;
+  padding: 3px 5px;
+  border-bottom: 1px solid #e7ede3;
+  color: #587561;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group-title > .lt-meta { margin-inline-start: auto; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group-title::after {
+  content: "";
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid #96ab98;
+  border-bottom: 1.5px solid #96ab98;
+  transform: rotate(-45deg);
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group[open] > .wk-group-title::after { transform: rotate(45deg); }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group-label { font-size: 14px; font-weight: 700; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group .wk-group-label::before {
+  content: "";
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  transform: none;
+  background: #91b49a;
+  mask: var(--lt-spring-workshop-leaf) center / contain no-repeat;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group[data-scope="character"] .wk-group-label::before { background: #c99caa; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group[data-scope="chat"] .wk-group-label::before { background: #aaa0c7; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-list { gap: 8px; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row {
+  padding: 10px 13px;
+  border: 1px solid #e0eade;
+  border-radius: 10px;
+  background: var(--ui-color-surface-base);
+  box-shadow: var(--ui-elevation-low-shadow);
+  column-gap: 8px;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row:hover { border-color: #c9dccb; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row-main { color: #44664b; font-size: 14px; font-weight: 700; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row:has(.ui-switch[aria-checked="false"]) .wk-row-main { color: #8b9f8e; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row-actions { padding-top: 0; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch {
+  --component-switch-track-width: 44px;
+  --component-switch-track-height: 25px;
+  --component-switch-knob-size: 19px;
+  --component-switch-track-inset: 2px;
+  min-block-size: 44px;
+  min-inline-size: 44px;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch .ui-switch__track {
+  border: 1px solid var(--lt-spring-workshop-switch-off-border);
+  border-radius: 20px;
+  background: var(--lt-spring-workshop-switch-off);
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch[aria-checked="true"] .ui-switch__track {
+  background: var(--lt-spring-workshop-switch-on);
+  border-color: var(--lt-spring-workshop-switch-border);
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch .ui-switch__knob {
+  background: var(--lt-spring-workshop-switch-knob);
+  box-shadow: 0 1px 2px #66836a24;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch:disabled { opacity: .55; cursor: not-allowed; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch[aria-busy="true"] { cursor: progress; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-form { gap: 13px; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-form-section {
+  padding: 15px;
+  border: 1px solid var(--wk-divider);
+  border-radius: 11px;
+  background: var(--ui-color-surface-base);
+  box-shadow: var(--ui-elevation-low-shadow);
+  gap: 14px;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result-title { color: #42644a; font-size: 16px; font-weight: 700; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result-panel {
+  padding: 14px;
+  border: 1px solid #e0e9dc;
+  border-radius: 11px;
+  background: var(--ui-color-surface-base);
+  box-shadow: var(--ui-elevation-low-shadow);
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result-meta { border-bottom: 1px solid #ecf0e9; padding-bottom: 11px; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result {
+  font-family: var(--ui-type-reading-family);
+  font-size: 14px;
+  line-height: 1.92;
+  color: #526b57;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-result-panel > .wk-result { padding: 0; border: 0; background: transparent; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] [data-action="delete-result"]:enabled {
+  background: #f9e9ed;
+  color: #a57887;
+  border-color: #f2e0e4;
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-history { padding: 0; border: 1px solid var(--wk-divider); border-radius: 9px; background: #fff; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-history summary { padding: 12px 13px; color: #65816a; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-history .wk-result { margin: 0; padding: 13px; border-top: 1px solid var(--wk-divider); }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-empty {
+  padding: 26px 16px;
+  border: 1px dashed #dce9da;
+  border-radius: 11px;
+  background: #f6f9f4;
+  color: var(--ui-color-text-meta);
+}
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-directory-item { padding: 13px 14px; border-color: #e1eade; border-radius: 9px; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-directory-item[aria-current="true"] { border-color: #bcd6bd; background: #f3f8f1; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-directory-title { color: #51705a; font-weight: 700; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-dialog { background: var(--ui-color-scrim); }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-dialog-box { border-radius: 13px; }
+.lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-toast { max-width: calc(100% - 32px); overflow-wrap: anywhere; text-align: center; }
+@media (max-width: 370px) {
+  .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-form-section { padding: 12px; }
+  .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-row { padding: 9px 11px; }
+}
+@media (forced-colors: active) {
+  .lantai.workshop:not(.benmo)[data-ui-theme="spring"] {
+    --lt-spring-workshop-switch-on: Highlight;
+    --lt-spring-workshop-switch-border: Highlight;
+    --lt-spring-workshop-switch-off: ButtonFace;
+    --lt-spring-workshop-switch-off-border: ButtonText;
+    --lt-spring-workshop-switch-knob: ButtonText;
+  }
+  .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .ui-switch[aria-checked="true"] .ui-switch__knob { background: HighlightText; }
+  .lantai.workshop:not(.benmo)[data-ui-theme="spring"] .wk-group .wk-group-label::before { background: CanvasText; }
+}

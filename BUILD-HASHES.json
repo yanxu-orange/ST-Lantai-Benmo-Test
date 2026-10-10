@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "f91577e36b9213f0f738fd6ff3b71c45080013805e9886acf49b43ededf08ecf"
+    "sha256": "ba03b1bc8b7b1ea02d8836b491e945d6ed8d5d9941c06843392bb5a07657712d"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -41,7 +41,7 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "0248d747436102f198e9c26c598487ed927de14d500abd9050017344acde7979"
+    "sha256": "4d42b720815ddd8abe329de49091587ba172296cd4cb0c24ecf8747ae7b1b05f"
   },
   {
     "path": "dist/app/control-session.js",
@@ -212,6 +212,10 @@
     "sha256": "2e272bfac72ddd56f8e618f0a997d6f19fac927f7f24b9bb044b6f7391b63204"
   },
   {
+    "path": "dist/app/spring/assets/benmo-leaf.svg",
+    "sha256": "ffedef79e721ec0731a99c3189263e99807a54de7d1a5abd03bf267c8ed6ccce"
+  },
+  {
     "path": "dist/app/spring/assets/cherry-blossoms.webp",
     "sha256": "70506b144fbaa3badd4b33f4af34ef09a86e810e7c8f595e03e7f720a46e3add"
   },
@@ -220,16 +224,76 @@
     "sha256": "6f84707265728c5bcbebfad4f28ecba25bc1e5a4bf4d1d14df3b71bb69ead13e"
   },
   {
+    "path": "dist/app/spring/assets/settings-book.svg",
+    "sha256": "ed57ce3bf2adbde3f00a446d028679841cd3729df567fd2240ec3974db62cb2b"
+  },
+  {
+    "path": "dist/app/spring/assets/settings-brand.svg",
+    "sha256": "5f2ac3d81a4aafebc4887118175d89b884fc4109b14641a2eea76f6f2448139c"
+  },
+  {
+    "path": "dist/app/spring/assets/settings-chev.svg",
+    "sha256": "8ea8275ee57896eaf0ee2d63406a855508b803201b9daeb1be8996946ca83894"
+  },
+  {
+    "path": "dist/app/spring/assets/settings-clock.svg",
+    "sha256": "25996d79856923d4f596e4378d5784ed8197df9e9845bb600de21450d6edbe1f"
+  },
+  {
+    "path": "dist/app/spring/assets/settings-flower.svg",
+    "sha256": "ac0f33f7182b2d61d968a313a14eb34ab6cc013da23af4481c71699199eb3fb3"
+  },
+  {
+    "path": "dist/app/spring/assets/settings-leaf.svg",
+    "sha256": "0bdcd14633392e1b521722ae094b7e19bdbb8d5cbb791b0a56ac624cd10030bd"
+  },
+  {
+    "path": "dist/app/spring/assets/settings-seed.svg",
+    "sha256": "380d708207f120d9edb34e8cd8459a9fd24f6c5c5aba644b2677eb1aeb21fa96"
+  },
+  {
+    "path": "dist/app/spring/assets/settings-spark.svg",
+    "sha256": "c6d6e971e0f294e562bd2e3e5416901ae5cf2eaf7139fcee8a3a639c4f5f0a5d"
+  },
+  {
+    "path": "dist/app/spring/assets/time-edit.svg",
+    "sha256": "20ef8c3b92f6e0c53e9bb6450dbeaf90e2dd7cc970728e306063f9bdd210d967"
+  },
+  {
+    "path": "dist/app/spring/assets/time-search.svg",
+    "sha256": "add417022f1465a02281afd48968e309a013e9407b61af6e13f7664fbefb47e1"
+  },
+  {
+    "path": "dist/app/spring/assets/workshop-leaf.svg",
+    "sha256": "8eb56ddf2830d046848b666a162ab23dbc579f76d098fd03cb45060b19b729e4"
+  },
+  {
+    "path": "dist/app/spring/benmo.css",
+    "sha256": "741ae2476f166c543f13a84b98c858a22a47a3127ce76ed822587d4610b87382"
+  },
+  {
     "path": "dist/app/spring/manifest.json",
-    "sha256": "8575168d234d1eabc2d9fadd5bed7b2804dd09015e6df6e3c221d92dde0563c5"
+    "sha256": "820a9345c067b17c250906f16c21c50ddde0b3ada6f533904f30cab7347928da"
   },
   {
     "path": "dist/app/spring/memory.css",
-    "sha256": "d3ac133056e31360969176e19af22ab3e627ea6502e42d4368f12bba52ec0b85"
+    "sha256": "830e3172778604104eb5964ea59e934c5b2dbf033a7de994dd41158bf63d068d"
+  },
+  {
+    "path": "dist/app/spring/settings.css",
+    "sha256": "04625eeacbd8ece0138d6e718c9fe643918cb2def46100f32660704ed0146628"
   },
   {
     "path": "dist/app/spring/theme.css",
-    "sha256": "7de38101f120a4e3eca2e5aa227e638a4c0699022b13c05d7c0bc03dc9fa470e"
+    "sha256": "56ec1a48e1f7a867a3eb144f7c240871519f31f647240341364c3d0436206b79"
+  },
+  {
+    "path": "dist/app/spring/time.css",
+    "sha256": "31ffccd5d35ebebe78ca1fa3c72603983d5dfba99ba273c9e8bf1836dfa7bad0"
+  },
+  {
+    "path": "dist/app/spring/workshop.css",
+    "sha256": "4795528da65df1bbd0873a86f4e2c07fe91f19abe0a2f76506b04c0af0f0ac0f"
   },
   {
     "path": "dist/app/styles/mobile.css",
@@ -241,7 +305,7 @@
   },
   {
     "path": "dist/app/styles/style-entries.js",
-    "sha256": "beab6d590d40eff6913554062c44863145ea5645233bd06bb160a065bb120446"
+    "sha256": "07fd0bb20f460dbb3f8980e42fb2a70f03cc212a85e2e54121a9817be6da04b5"
   },
   {
     "path": "dist/app/styles/theme.js",
@@ -285,7 +349,7 @@
   },
   {
     "path": "dist/app/time-view.js",
-    "sha256": "3d1a3d0c53aa58384d4c7580b6dae65e382cd2b6a371a53d8243787853123aba"
+    "sha256": "8ef986fcd34ca48437cbf18fbf64786f6660b0e80585132e6a8644530c812f9b"
   },
   {
     "path": "dist/app/tracking-controller.js",
@@ -297,7 +361,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "962388eab8221c79820915fd0d682ec2580718e6aa7947f136972c0b61d7c278"
+    "sha256": "dbd6b1ab1aa18d9a2b01ec41482b1a8069ac64fe7d56574ee69cfa76ae12a105"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -857,10 +921,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "5f7e472d300c2cec538b11d19e1b620f496deb788c1b0c9831c5c53824e351e4"
+    "sha256": "8983c0347dcb1b8a1b62dfc5aeb29e17169cda141bacb5ddea4b1d91a38cd593"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "65f36149e2b4446c2e7be3218e7f8a3e5c156e119d16de71f8b4fa193c983a99"
+    "sha256": "52bdeb2e9b89e532339d52e42b057869b7bc92335fc67ccfeaf5cdf82697c5be"
   }
 ]

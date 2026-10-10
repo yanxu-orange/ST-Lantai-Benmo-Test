@@ -1,0 +1,276 @@
+/* Spring BENMO port of lantai_spring_benmo_round1(1).html.
+   The existing view/controller own every record, draft and job. This sheet only
+   maps their real states to the approved paper/leaf layout; no prototype data. */
+.lantai.benmo[data-ui-theme="spring"] {
+  --ui-color-workspace: #fbfcf8;
+  --ui-color-text-primary: #44594a;
+  --lt-benmo-line: #e1e8de;
+  --lt-benmo-paper-shadow: 0 4px 13px rgb(61 80 61 / 4.5%);
+  --lt-benmo-leaf: url("./assets/benmo-leaf.svg");
+}
+.lantai.benmo[data-ui-theme="spring"] .lt-root-top {
+  background-image: linear-gradient(90deg, rgb(255 255 253 / 77%), rgb(255 255 253 / 52%) 48%, rgb(255 255 253 / 13%)), var(--lt-spring-header-photo);
+  background-position: center;
+}
+.lantai.benmo[data-ui-theme="spring"] .lt-header--root .lt-type {
+  border-radius: 8px;
+  color: #839487;
+}
+.lantai.benmo[data-ui-theme="spring"] .lt-header--root .lt-type[aria-current="page"] {
+  background: #e6f2e5;
+  color: #486f51;
+}
+.lantai.benmo[data-ui-theme="spring"] .lt-main {
+  padding: 16px 15px 24px;
+  gap: 13px;
+  scrollbar-gutter: auto;
+  overscroll-behavior: contain;
+}
+.lantai.benmo[data-ui-theme="spring"] .subtabs {
+  top: -16px;
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 9px;
+  background: #f2f6ef;
+}
+.lantai.benmo[data-ui-theme="spring"] .subtabs > .ui-button {
+  min-width: 0;
+  padding-inline: 5px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.lantai.benmo[data-ui-theme="spring"] .subtabs > .ui-button:enabled {
+  background: transparent;
+  color: #839487;
+  font-weight: 400;
+}
+.lantai.benmo[data-ui-theme="spring"] .subtabs > .ui-button[aria-pressed="true"]:enabled {
+  background: #e6f2e5;
+  color: #486f51;
+  font-weight: 700;
+}
+.lantai.benmo[data-ui-theme="spring"] .section { gap: 13px; }
+.lantai.benmo[data-ui-theme="spring"] :is(.card,.record,.benmo-basic-fields) {
+  min-width: 0;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--lt-benmo-line);
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: var(--lt-benmo-paper-shadow);
+}
+.lantai.benmo[data-ui-theme="spring"] .record.selected { border-color: var(--ui-color-selected-border); }
+.lantai.benmo[data-ui-theme="spring"] .reading { color: #526956; line-height: 1.87; }
+.lantai.benmo[data-ui-theme="spring"] .meta { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.lantai.benmo[data-ui-theme="spring"] :is(.row,.summary-toolbar-main,.pending-strip) { flex-wrap: wrap; }
+.lantai.benmo[data-ui-theme="spring"] :is(.row,.summary-toolbar-main,.pending-strip) > .meta { flex: 1 1 120px; }
+.lantai.benmo[data-ui-theme="spring"] .actions { gap: 6px; min-width: 0; }
+.lantai.benmo[data-ui-theme="spring"] .summary-toolbar { gap: 0; }
+.lantai.benmo[data-ui-theme="spring"] .summary-card:not(:has(.reading)) {
+  border-radius: 9px;
+  box-shadow: none;
+}
+.lantai.benmo[data-ui-theme="spring"] .summary-card-header { gap: 8px; }
+.lantai.benmo[data-ui-theme="spring"] .summary-card-actions { gap: 4px; }
+.lantai.benmo[data-ui-theme="spring"] .summary-card-actions .ui-icon-button {
+  border-color: transparent;
+  background: transparent;
+  color: #6b9274;
+  box-shadow: none;
+}
+.lantai.benmo[data-ui-theme="spring"] .summary-card > .benmo-text-entry { justify-self: end; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-text-entry { color: #58775e; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-text-entry:hover:enabled { background: transparent; text-decoration: none; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-summary-history { gap: 0; padding-top: 6px; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-summary-history > .record-open {
+  margin-top: 10px;
+  padding: 10px 13px;
+  border: 1px solid var(--lt-benmo-line);
+  border-radius: 9px;
+  background: #fff;
+  color: #53715c;
+  font-size: 13px;
+}
+.lantai.benmo[data-ui-theme="spring"] .benmo-summary-history > .record-open[aria-expanded="true"] {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.lantai.benmo[data-ui-theme="spring"] #benmo-summary-history:not([hidden]) {
+  padding: 14px;
+  border: 1px solid var(--lt-benmo-line);
+  border-top: 0;
+  border-radius: 0 0 9px 9px;
+  background: #fff;
+}
+/* Added captions are decoration, not duplicate controls or accessible labels.
+   The native hidden attribute keeps every other theme's layout unchanged. */
+.lantai.benmo[data-ui-theme="spring"] .benmo-spring-heading[hidden] { display: flex; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-spring-heading,
+.lantai.benmo[data-ui-theme="spring"] .benmo-custom-fields > h2,
+.lantai.benmo[data-ui-theme="spring"] .benmo-narrative-group > .row > h2 {
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: #48664e;
+  font-family: var(--ui-type-ui-family);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.lantai.benmo[data-ui-theme="spring"] .benmo-spring-heading { pointer-events: none; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-spring-heading::before,
+.lantai.benmo[data-ui-theme="spring"] .benmo-custom-fields > h2::before,
+.lantai.benmo[data-ui-theme="spring"] .benmo-narrative-group > .row > h2::before,
+.lantai.benmo[data-ui-theme="spring"][data-benmo-route="narrative-settings"] .card > h2::before,
+.lantai.benmo[data-ui-theme="spring"] .benmo-material-report > h2::before,
+.lantai.benmo[data-ui-theme="spring"] .lt-modes > legend::before {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin-inline-end: 7px;
+  vertical-align: -3px;
+  background: #668a70;
+  -webkit-mask: var(--lt-benmo-leaf) center / contain no-repeat;
+  mask: var(--lt-benmo-leaf) center / contain no-repeat;
+  pointer-events: none;
+}
+.lantai.benmo[data-ui-theme="spring"] .benmo-spring-heading::before { margin-inline-end: 0; }
+.lantai.benmo[data-ui-theme="spring"] .record-open strong { color: #465e4b; font-size: 15px; font-weight: 700; }
+.lantai.benmo[data-ui-theme="spring"] .record > p:not(.reading) { color: #697c6b; font-size: 13px; line-height: 1.7; }
+.lantai.benmo[data-ui-theme="spring"] .record > p.meta { color: var(--ui-color-text-meta); font-size: 12px; }
+.lantai.benmo[data-ui-theme="spring"] .tag { padding: 3px 7px; border-radius: 5px; background: #eef5ed; color: #62806a; }
+.lantai.benmo[data-ui-theme="spring"] [data-tracking-excluded="true"] :is(.record-open,.row) .tag { background: #f8eaf0; color: #a27a8b; }
+.lantai.benmo[data-ui-theme="spring"] .record-detail { gap: 12px; }
+.lantai.benmo[data-ui-theme="spring"] .record-detail > .row h2 { color: #48664e; font-size: 17px; }
+.lantai.benmo[data-ui-theme="spring"] .detail-fields { gap: 0; }
+.lantai.benmo[data-ui-theme="spring"] .detail-field {
+  grid-template-columns: 105px minmax(0,1fr);
+  gap: 10px;
+  padding: 11px 0;
+  margin: 0;
+  border-top: 0;
+  border-bottom: 1px solid #edf1e9;
+  font-size: 13px;
+}
+.lantai.benmo[data-ui-theme="spring"] .detail-field:last-child { border-bottom: 0; }
+.lantai.benmo[data-ui-theme="spring"] .detail-field dd { color: #4d6655; font-size: 13px; line-height: 1.7; }
+.lantai.benmo[data-ui-theme="spring"] .detail-field--long { grid-template-columns: minmax(0,1fr); gap: 6px; }
+.lantai.benmo[data-ui-theme="spring"] .detail-field--long dt { color: #5f8067; font-weight: 700; }
+.lantai.benmo[data-ui-theme="spring"] .detail-field--long dd { font-family: var(--ui-type-reading-family); font-size: 14px; }
+.lantai.benmo[data-ui-theme="spring"] .detail-field .detail-field-empty { color: var(--ui-color-text-meta); }
+.lantai.benmo[data-ui-theme="spring"] .detail-actions { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.lantai.benmo[data-ui-theme="spring"] [data-action="delete-record"]:enabled { border-color: #efdada; background: #fff3f3; color: #b47978; }
+.lantai.benmo[data-ui-theme="spring"] :is([data-action="new"],[data-action="start-backfill"],[data-action="generate-narrative"],[data-action="save"],[data-action="edit"],[data-action="confirm-dialog"]):enabled {
+  border-color: #d0e4d0;
+  background: #e0efdf;
+  color: #426b4b;
+}
+/* The reference explicitly marks these actions .btn.ghost. In particular,
+   narrativeCard's edit is ghost, not the default pale-green utility button.
+   Scope by real action so API and other pages retain their own white buttons. */
+.lantai.benmo[data-ui-theme="spring"] :is([data-action="edit-narrative"],[data-action="toggle-excluded"],[data-action="restore-excluded"],[data-action="default-prompt"],[data-action="default-tracking-prompt"],[data-action="default-narrative-prompt"],[data-action="add-field"],[data-action="add-narrative-character"],[data-action="remove-field"],[data-action="remove-narrative-character"],[data-action="cancel"],[data-action="cancel-dialog"]):enabled {
+  border-color: transparent;
+  background: transparent;
+  color: #58775e;
+}
+/* Production-only recovery/stop actions remain visible. They use the prototype's
+   ordinary .btn treatment rather than inheriting a generic white surface. */
+.lantai.benmo[data-ui-theme="spring"] :is([data-action="stop-backfill"],[data-action="cancel-narrative"],[data-action="reload"]):enabled {
+  border-color: #dbe8da;
+  background: #f1f6f0;
+  color: #58775e;
+}
+.lantai.benmo[data-ui-theme="spring"] :is([data-action="stop-backfill"],[data-action="cancel-narrative"],[data-action="reload"]):hover:enabled { background: #e5efe4; }
+.lantai.benmo[data-ui-theme="spring"] .ui-field { gap: 7px; }
+.lantai.benmo[data-ui-theme="spring"] .ui-field > span { color: #55745e; font-size: 13px; font-weight: 700; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-basic-fields { gap: 13px; }
+.lantai.benmo[data-ui-theme="spring"] .lt-prompt-editor { min-height: 170px; line-height: 1.8; }
+.lantai.benmo[data-ui-theme="spring"] .summary-origin {
+  padding: 9px 11px;
+  border-left: 3px solid #b6ceb6;
+  border-radius: 0 8px 8px 0;
+  background: #f2f7f0;
+  color: #6d826f;
+  line-height: 1.7;
+}
+.lantai.benmo[data-ui-theme="spring"] .form-actions { bottom: -24px; gap: 10px; margin-top: 0; padding-block: 12px; }
+.lantai.benmo[data-ui-theme="spring"] .lt-modes { padding: 12px 14px; border: 1px solid var(--lt-benmo-line); border-radius: 9px; background: #fff; }
+.lantai.benmo[data-ui-theme="spring"] .lt-modes > legend { padding-inline: 0 7px; color: #48664e; font-size: 17px; font-weight: 700; }
+.lantai.benmo[data-ui-theme="spring"] .lt-mode:not(:has(:disabled)) { gap: 7px; border-radius: 8px; border: 1px solid #dfe9de; background: #fff; color: #607964; }
+.lantai.benmo[data-ui-theme="spring"] .lt-mode:has(:checked):not(:has(:disabled)) { border-color: #cce3cd; background: #e9f4e8; color: #436f4e; }
+.lantai.benmo[data-ui-theme="spring"] .custom-field-row,
+.lantai.benmo[data-ui-theme="spring"][data-benmo-route="narrative-settings"] .card > .section {
+  padding: 12px;
+  border: 1px solid #e4ece1;
+  border-radius: 9px;
+  background: #f5f9f3;
+}
+.lantai.benmo[data-ui-theme="spring"] .custom-field-heading { align-items: end; gap: 10px; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-material-report { background: #f2f7f0; box-shadow: none; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-material-report h2 { font-size: 14px; font-weight: 700; color: #5f8067; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-narrative-entry { gap: 10px; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-narrative-entry .reading { font-size: 14px; }
+.lantai.benmo[data-ui-theme="spring"][data-benmo-route="narrative-settings"] .card > h2 { color: #48664e; font-size: 17px; font-weight: 700; }
+/* The narrative view's native switch owns the full 44px target. Its decorative
+   track/knob are pseudo-elements, preserving the existing aria-checked state. */
+.lantai.benmo[data-ui-theme="spring"] .ui-switch:empty { position: relative; flex: 0 0 44px; }
+.lantai.benmo[data-ui-theme="spring"] .ui-switch:empty::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 25px;
+  border: 1px solid #c9d8ca;
+  border-radius: 20px;
+  background: #e8ece7;
+  transform: translate(-50%,-50%);
+  pointer-events: none;
+}
+.lantai.benmo[data-ui-theme="spring"] .ui-switch:empty::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 19px);
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px #66836a24;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.lantai.benmo[data-ui-theme="spring"] .ui-switch:empty[aria-checked="true"]::before { background: #a3c6a7; border-color: #91b698; }
+.lantai.benmo[data-ui-theme="spring"] .ui-switch:empty[aria-checked="true"]::after { left: calc(50% - 1px); }
+.lantai.benmo[data-ui-theme="spring"] .ui-switch:empty:disabled::before { background: var(--ui-color-disabled-background); border-color: var(--ui-color-border-subtle); }
+.lantai.benmo[data-ui-theme="spring"] .wk-dialog { background: rgb(40 60 48 / 58%); padding: 22px; }
+.lantai.benmo[data-ui-theme="spring"] .wk-dialog-box { max-width: 380px; padding: 20px; border: 1px solid #dbe6da; border-radius: 13px; box-shadow: 0 12px 36px #263d303b; }
+.lantai.benmo[data-ui-theme="spring"] .wk-dialog-box > .section { margin-top: 14px; }
+.lantai.benmo[data-ui-theme="spring"] .wk-dialog-actions { gap: 10px; }
+.lantai.benmo[data-ui-theme="spring"] .benmo-text-entry:disabled { color: var(--ui-color-text-disabled); cursor: not-allowed; text-decoration: none; }
+@media (max-width: 370px) {
+  .lantai.benmo[data-ui-theme="spring"] .lt-main { padding-inline: 14px; }
+  .lantai.benmo[data-ui-theme="spring"] .subtabs > .ui-button { font-size: 12px; }
+  .lantai.benmo[data-ui-theme="spring"] :is(.card,.record,.benmo-basic-fields) { padding: 12px; }
+  .lantai.benmo[data-ui-theme="spring"] .detail-field:not(.detail-field--long) { grid-template-columns: 92px minmax(0,1fr); }
+  .lantai.benmo[data-ui-theme="spring"] .record-open { flex-wrap: wrap; }
+  .lantai.benmo[data-ui-theme="spring"] .summary-card-actions { gap: 0; }
+  .lantai.benmo[data-ui-theme="spring"] .summary-card-actions .benmo-text-entry { padding-inline: 5px; font-size: 12px; }
+}
+@media (forced-colors: active) {
+  .lantai.benmo[data-ui-theme="spring"] { --ui-color-workspace: Canvas; --ui-color-text-primary: CanvasText; --ui-color-text-meta: CanvasText; --lt-benmo-line: CanvasText; --lt-benmo-paper-shadow: none; }
+  .lantai.benmo[data-ui-theme="spring"] .lt-root-top { background: Canvas; }
+  .lantai.benmo[data-ui-theme="spring"] :is(.card,.record,.benmo-basic-fields,.lt-modes,.lt-mode,.custom-field-row,.benmo-material-report,.summary-origin,.benmo-summary-history > .record-open,#benmo-summary-history) { background: Canvas; color: CanvasText; border-color: CanvasText; box-shadow: none; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty::before { background: ButtonFace; border-color: ButtonText; forced-color-adjust: none; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty[aria-checked="true"]::before { background: Highlight; border-color: Highlight; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty::after { background: ButtonText; box-shadow: none; forced-color-adjust: none; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty[aria-checked="true"]::after { background: HighlightText; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty:disabled::before { background: Canvas; border-color: GrayText; }
+  .lantai.benmo[data-ui-theme="spring"] .ui-switch:empty:disabled::after { background: GrayText; }
+  .lantai.benmo[data-ui-theme="spring"] .benmo-spring-heading::before { background: CanvasText; }
+}

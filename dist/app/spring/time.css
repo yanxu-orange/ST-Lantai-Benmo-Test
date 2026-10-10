@@ -1,0 +1,274 @@
+/* Spring TIME port from lantai_spring_time_full_round1_2(1).html.
+   Only visual mapping: the production calendar, records, editors and all actions
+   stay in time-view.js. The single embedded photograph is preserved unchanged.
+   Selected-date peach is the approved correction to the reference's green. */
+.lantai[data-ui-theme="spring"].lt-time {
+  --ui-color-workspace: #fcfdf9;
+  --ui-color-text-primary: #394f3f;
+  --ui-color-text-secondary: #627868;
+  --ui-color-border-subtle: #eaf0e7;
+  --ui-color-border-default: #dce8dc;
+  --ui-color-field-border: #d9e4d9;
+  --ui-color-field-placeholder: #9aaa9e;
+  --ui-color-field-focus: #6d9d7a;
+  --ui-color-focus-ring: #86ae91;
+  --lt-spring-time-header-photo: url("./assets/cherry-blossoms.webp");
+  --lt-spring-time-selected-fill: #fae8e0;
+  --lt-spring-time-selected-ink: #775243;
+  --lt-spring-time-selected-border: #e9c9ba;
+  --lt-spring-time-today-border: #9ec0a5;
+  --lt-spring-time-anniversary: #b58eae;
+  --lt-spring-time-schedule: #df9aab;
+  --lt-spring-time-holiday: #dfbc78;
+  --lt-spring-time-term: #8fbca4;
+  --lt-spring-time-leaf-fill: #eaf2e8;
+  --lt-spring-time-blossom-fill: #f7e8eb;
+}
+
+/* Root and focused headers share the reference image without changing chrome
+   geometry or reducing the existing native 44px control hit areas. */
+.lantai[data-ui-theme="spring"].lt-time :is(.lt-root-top,.lt-header:not(.lt-header--root)) {
+  background-color: #f5f8f0;
+  background-image: linear-gradient(90deg, rgb(253 254 250 / 77%) 0%, rgb(251 252 249 / 49%) 55%, rgb(248 251 245 / 15%) 100%), var(--lt-spring-time-header-photo);
+  background-position: center 34%;
+  background-size: cover;
+  border-bottom-color: #e6eddf;
+}
+.lantai[data-ui-theme="spring"].lt-time .lt-root-top .ui-page-title { color: #365540; }
+.lantai[data-ui-theme="spring"].lt-time .lt-header:not(.lt-header--root) {
+  min-height: 64px;
+  padding-inline: 13px;
+  gap: 8px;
+}
+.lantai[data-ui-theme="spring"].lt-time .lt-header:not(.lt-header--root) .ui-page-title {
+  color: #35553f;
+  font-family: var(--ui-type-reading-family);
+  font-weight: 750;
+}
+.lantai[data-ui-theme="spring"].lt-time .lt-header--root .lt-type { color: #859687; font-size: 14px; }
+.lantai[data-ui-theme="spring"].lt-time .lt-header--root .lt-type[aria-current="page"] { background: #e6f1e7; color: #477456; }
+.lantai[data-ui-theme="spring"].lt-time .lt-main { padding: 13px 13px 17px; }
+.lantai[data-ui-theme="spring"].lt-time .time-stack { gap: 12px; }
+.lantai[data-ui-theme="spring"].lt-time h2 {
+  color: #47664f;
+  font-family: var(--ui-type-reading-family);
+  font-size: 17px;
+  font-weight: 700;
+}
+.lantai[data-ui-theme="spring"].lt-time .time-section {
+  padding: 14px;
+  border: 1px solid #e3ebe0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(59 82 65 / 3%);
+}
+
+/* The approved Spring root omits only this duplicate strip. CSS owns visibility
+   so a mounted TIME view also responds correctly to a live theme change. */
+.lantai[data-ui-theme="spring"].lt-time .time-story-date { display: none; }
+.lantai[data-ui-theme="spring"].lt-time .time-month-calendar {
+  padding: 14px 12px 12px;
+  border-color: #dfe9de;
+  border-radius: 12px;
+}
+.lantai[data-ui-theme="spring"].lt-time .time-calendar-toolbar { padding-inline: 2px; gap: 8px; }
+.lantai[data-ui-theme="spring"].lt-time .time-calendar-toolbar h2 { color: #41644b; font-size: 18px; }
+.lantai[data-ui-theme="spring"].lt-time .time-calendar-toolbar .ui-icon-button {
+  border: 1px solid #e1ece0;
+  border-radius: 50%;
+  background: #f3f8f1;
+  color: #688f72;
+}
+.lantai[data-ui-theme="spring"].lt-time .time-calendar-toolbar .ui-icon-button:hover:enabled { background: #e8f2e5; border-color: #bdd7c2; }
+.lantai[data-ui-theme="spring"].lt-time :is(.time-week,.time-calendar-grid) { gap: 2px; }
+.lantai[data-ui-theme="spring"].lt-time .time-week { color: var(--ui-color-text-meta); font-size: 12px; }
+.lantai[data-ui-theme="spring"].lt-time .time-day {
+  min-block-size: max(44px, var(--ui-interaction-target-min));
+  gap: 2px;
+  padding: 3px 0;
+  outline: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #4b6853;
+  font-size: 14px;
+}
+.lantai[data-ui-theme="spring"].lt-time .time-day > span:first-child {
+  inline-size: 32px;
+  block-size: 32px;
+  min-inline-size: 0;
+  min-block-size: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+}
+.lantai[data-ui-theme="spring"].lt-time .time-day:hover:enabled:not([aria-pressed="true"]):not(.time-day--today) > span:first-child { background: #f3f8ef; }
+.lantai[data-ui-theme="spring"].lt-time .time-day--today[aria-pressed="false"] > span:first-child {
+  border-color: var(--lt-spring-time-today-border);
+  background: #f8fbf5;
+  color: #426d4f;
+  font-weight: 650;
+}
+.lantai[data-ui-theme="spring"].lt-time .time-day[aria-pressed="true"] > span:first-child {
+  border-color: var(--lt-spring-time-selected-border);
+  background: var(--lt-spring-time-selected-fill);
+  color: var(--lt-spring-time-selected-ink);
+  font-weight: 700;
+}
+/* Today keeps its outer ring even when selected, while the peach center still
+   identifies selection. aria-current remains owned by the real story clock. */
+.lantai[data-ui-theme="spring"].lt-time .time-day--today[aria-pressed="true"] > span:first-child { box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--lt-spring-time-today-border); }
+.lantai[data-ui-theme="spring"].lt-time .time-day:focus-visible {
+  outline: max(2px, var(--ui-interaction-focus-width-min)) solid var(--ui-color-focus-ring);
+  outline-offset: 1px;
+}
+.lantai[data-ui-theme="spring"].lt-time .time-day-marks { align-items: center; min-block-size: 6px; gap: 3px; }
+.lantai[data-ui-theme="spring"].lt-time .time-marker { inline-size: 6px; block-size: 6px; }
+.lantai[data-ui-theme="spring"].lt-time .time-marker--anniversary { background: var(--lt-spring-time-anniversary); }
+.lantai[data-ui-theme="spring"].lt-time .time-marker--schedule { background: var(--lt-spring-time-schedule); }
+.lantai[data-ui-theme="spring"].lt-time .time-marker--holiday { background: var(--lt-spring-time-holiday); }
+.lantai[data-ui-theme="spring"].lt-time .time-marker--term { background: transparent; border-color: var(--lt-spring-time-term); }
+.lantai[data-ui-theme="spring"].lt-time .time-calendar-footer { flex-wrap: wrap; gap: 8px; }
+.lantai[data-ui-theme="spring"].lt-time .time-legend { gap: 9px; color: var(--ui-color-text-meta); font-size: 11px; }
+.lantai[data-ui-theme="spring"].lt-time .time-legend > span { gap: 5px; }
+.lantai[data-ui-theme="spring"].lt-time .time-calendar-footer > .ui-button { margin-inline-start: auto; padding-inline: 7px; border-color: transparent; background: transparent; color: #628b6d; font-size: 12px; }
+
+/* Selected-day details and real upcoming records preserve their actions and
+   expansion state, with the same light paper surfaces as the reference. */
+.lantai[data-ui-theme="spring"].lt-time .time-selected-heading { gap: 8px; }
+.lantai[data-ui-theme="spring"].lt-time .time-day-list { gap: 12px; }
+.lantai[data-ui-theme="spring"].lt-time .time-day-list .time-day-item { gap: 8px; padding: 12px; border-color: #e3ebe0; border-radius: 10px; background: #fff; }
+.lantai[data-ui-theme="spring"].lt-time .time-title { color: #4c6b55; font-size: 14px; font-weight: 650; }
+.lantai[data-ui-theme="spring"].lt-time .time-item-main > p { font-size: 12px; line-height: 1.75; }
+.lantai[data-ui-theme="spring"].lt-time .time-item-main > [data-time-action="expand"] { padding-inline: 0; border-color: transparent; background: transparent; color: #628b6d; font-size: 12px; }
+.lantai[data-ui-theme="spring"].lt-time .time-record-actions { gap: 8px; }
+.lantai[data-ui-theme="spring"].lt-time [data-time-action="edit"].ui-icon-button {
+  flex: 0 0 44px;
+  border: 1px solid #e1ecdf;
+  border-radius: 9px;
+  background: #eff5ee;
+  color: #5a8268;
+  box-shadow: none;
+}
+.lantai[data-ui-theme="spring"].lt-time [data-time-action="edit"].ui-icon-button .lt-icon {
+  content: url("./assets/time-edit.svg");
+  inline-size: 17px;
+  block-size: 17px;
+}
+.lantai[data-ui-theme="spring"].lt-time [data-time-action="edit"].ui-icon-button:hover:enabled { background: #e2eee3; border-color: #bdd7c2; color: #416b50; }
+.lantai[data-ui-theme="spring"].lt-time .time-upcoming .time-section { padding: 0 12px; }
+.lantai[data-ui-theme="spring"].lt-time .time-recent-jump { gap: 8px; padding-block: 12px; }
+.lantai[data-ui-theme="spring"].lt-time .time-recent-name { font-size: 13px; }
+.lantai[data-ui-theme="spring"].lt-time .time-recent-jump > .lt-meta { color: #628b6d; }
+
+/* Management keeps its existing two groups and existing calibration entrance. */
+.lantai[data-ui-theme="spring"].lt-time[data-time-route="manage"] .lt-main > .time-stack { gap: 17px; }
+.lantai[data-ui-theme="spring"].lt-time .time-prompt-group { border: 1px solid #dfe9df; border-radius: 10px; background: #fff; box-shadow: 0 2px 8px rgb(65 94 73 / 4%); }
+.lantai[data-ui-theme="spring"].lt-time .time-prompt-group > .time-group-heading { padding: 14px 16px; background: var(--lt-spring-time-leaf-fill); color: #50705a; font-family: var(--ui-type-reading-family); font-weight: 700; font-size: 16px; }
+.lantai[data-ui-theme="spring"].lt-time[data-time-route="manage"] .time-prompt-group:nth-child(2) > .time-group-heading { background: var(--lt-spring-time-blossom-fill); color: #9c6b7a; }
+.lantai[data-ui-theme="spring"].lt-time .time-group-body { padding-inline: 16px; }
+.lantai[data-ui-theme="spring"].lt-time .time-management-row { min-block-size: max(52px, var(--ui-interaction-target-min)); padding-block: 15px; font-size: 14px; }
+.lantai[data-ui-theme="spring"].lt-time .time-management-row small { color: var(--ui-color-text-meta); font-size: 12px; }
+.lantai[data-ui-theme="spring"].lt-time .time-entry-actions .ui-button { padding: 9px 10px; border-color: #dfebe0; background: #fff; color: #5c8166; font-size: 13px; }
+.lantai[data-ui-theme="spring"].lt-time .time-entry-actions .ui-button:hover:enabled { background: #f4f9f1; }
+.lantai[data-ui-theme="spring"].lt-time .time-state-tabs { gap: 5px; padding: 4px; border: 0; border-radius: 8px; background: #f3f7f0; }
+.lantai[data-ui-theme="spring"].lt-time .time-state-tabs > .ui-button { border: 0; border-radius: 6px; background: transparent; color: #7e9583; }
+.lantai[data-ui-theme="spring"].lt-time .time-state-tabs > .ui-button[aria-pressed="true"] { background: #e0eee3; color: #487557; font-weight: 700; }
+.lantai[data-ui-theme="spring"].lt-time .time-field:has([data-time-field="query"]) { gap: 7px; margin-inline: 1px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.lantai[data-ui-theme="spring"].lt-time .time-field:has([data-time-field="query"]) > .ui-field__label { color: #69836f; }
+.lantai[data-ui-theme="spring"].lt-time .ui-input[data-time-field="query"] {
+  padding-inline-start: 39px;
+  border: 1px solid #dce8dc;
+  border-radius: 9px;
+  background-image: url("./assets/time-search.svg");
+  background-repeat: no-repeat;
+  background-position: 13px center;
+  background-size: 17px;
+  box-shadow: 0 1px 4px rgb(55 88 61 / 2%);
+  font-size: 14px;
+}
+.lantai[data-ui-theme="spring"].lt-time .time-record { min-block-size: 64px; padding-block: 12px; gap: 8px; }
+.lantai[data-ui-theme="spring"].lt-time .time-record .lt-meta { font-size: 12px; color: var(--ui-color-text-meta); }
+.lantai[data-ui-theme="spring"].lt-time .time-record-actions > [data-time-action="toggle-item"] { border-color: transparent; background: transparent; color: #7d9483; font-size: 12px; padding-inline: 5px; }
+.lantai[data-ui-theme="spring"].lt-time .time-holiday-record { padding-block: 12px; column-gap: 9px; }
+.lantai[data-ui-theme="spring"].lt-time .time-holiday-record > .ui-switch { justify-self: end; }
+.lantai[data-ui-theme="spring"].lt-time .time-holiday-detail { color: var(--ui-color-text-meta); font-size: 12px; }
+
+/* Calendar, calibration, all item kinds and reminder editors share these form
+   styles; no mock fields, buttons, data or prototype JavaScript are introduced. */
+.lantai[data-ui-theme="spring"].lt-time .ui-field__label { color: #536e5a; font-size: 13px; font-weight: 600; }
+.lantai[data-ui-theme="spring"].lt-time .ui-input { border-radius: 8px; color: #49634f; }
+.lantai[data-ui-theme="spring"].lt-time textarea.ui-input { min-block-size: 114px; font-family: var(--ui-type-reading-family); font-size: 14px; line-height: 1.75; resize: vertical; }
+.lantai[data-ui-theme="spring"].lt-time textarea.lt-prompt-editor { font-size: var(--lt-prompt-editor-size); }
+.lantai[data-ui-theme="spring"].lt-time .time-reminder-row { gap: 8px; min-block-size: 44px; }
+.lantai[data-ui-theme="spring"].lt-time .time-reminder-row > span { min-inline-size: 0; color: #557260; font-weight: 650; overflow-wrap: anywhere; }
+.lantai[data-ui-theme="spring"].lt-time[data-time-route^="edit/"] .time-reminder-row { padding: 12px; border-radius: 8px; background: #f1f7ef; }
+.lantai[data-ui-theme="spring"].lt-time .time-radio-field { display: grid; gap: 8px; }
+.lantai[data-ui-theme="spring"].lt-time .time-radio-field legend { margin-block-end: 8px; }
+.lantai[data-ui-theme="spring"].lt-time .time-radio-field .lt-mode { color: #657d6b; }
+.lantai[data-ui-theme="spring"].lt-time :is(.time-radio-field input,.time-check input) { accent-color: #84a78c; }
+.lantai[data-ui-theme="spring"].lt-time .ui-switch .ui-switch__track { background: #d6dfd4; border-color: #cad8cd; }
+.lantai[data-ui-theme="spring"].lt-time .ui-switch[aria-checked="true"] .ui-switch__track { background: #a1c5a5; border-color: #86b58e; }
+.lantai[data-ui-theme="spring"].lt-time .ui-switch .ui-switch__knob { background: #fff; }
+.lantai[data-ui-theme="spring"].lt-time .time-calibration > .time-section { border: 1px solid #e3ebe0; }
+.lantai[data-ui-theme="spring"].lt-time .time-era-row { gap: 8px; }
+.lantai[data-ui-theme="spring"].lt-time .time-era-moved { border-radius: 8px; background: #eaf2e8; }
+.lantai[data-ui-theme="spring"].lt-time .time-recognition-result { padding: 10px 12px; border-radius: 8px; background: #eef6ee; color: #62856b; }
+.lantai[data-ui-theme="spring"].lt-time .ui-action-footer { padding: 11px 13px; padding-block-end: max(11px, env(safe-area-inset-bottom)); }
+.lantai[data-ui-theme="spring"].lt-time .time-editor-actions { gap: 10px; }
+.lantai[data-ui-theme="spring"].lt-time .time-editor-actions > [data-time-action="save"] { background: #dcebdc; color: #466b50; border-color: #cee3cf; border-radius: 8px; font-size: 14px; font-weight: 700; }
+.lantai[data-ui-theme="spring"].lt-time .time-editor-actions > [data-time-action="save"]:hover:enabled { background: #cce2d0; }
+.lantai[data-ui-theme="spring"].lt-time .time-confirm { border: 1px solid #dfe8d9; border-radius: 11px; background: #fff; box-shadow: 0 10px 38px rgb(54 69 54 / 14%); }
+.lantai[data-ui-theme="spring"].lt-time .lt-saved { border-color: #e2ecdf; background: #eef6ee; color: #62856b; }
+
+/* Disabled and error semantics win over every decoration and selection. */
+.lantai[data-ui-theme="spring"].lt-time :is(.ui-button,.ui-icon-button,.time-day):disabled {
+  background: var(--ui-color-disabled-background);
+  color: var(--ui-color-text-disabled);
+  border-color: var(--ui-color-border-subtle);
+  box-shadow: none;
+}
+.lantai[data-ui-theme="spring"].lt-time .time-state-tabs > .ui-button:disabled,
+.lantai[data-ui-theme="spring"].lt-time .time-editor-actions > [data-time-action="save"]:disabled { background: var(--ui-color-disabled-background); color: var(--ui-color-text-disabled); border-color: var(--ui-color-border-subtle); }
+.lantai[data-ui-theme="spring"].lt-time .ui-switch:disabled .ui-switch__track { background: var(--ui-color-disabled-background); border-color: var(--ui-color-border-subtle); }
+.lantai[data-ui-theme="spring"].lt-time .ui-input:disabled { color: var(--ui-color-text-disabled); background-color: var(--ui-color-disabled-background); }
+.lantai[data-ui-theme="spring"].lt-time .ui-input[aria-invalid="true"] { border-color: var(--ui-color-field-invalid-border); }
+
+@media (max-width: 380px) {
+  .lantai[data-ui-theme="spring"].lt-time .lt-main { padding-inline: 12px; }
+  .lantai[data-ui-theme="spring"].lt-time .time-month-calendar { padding-inline: 5px; }
+  .lantai[data-ui-theme="spring"].lt-time .time-calendar-toolbar { padding-inline: 7px; }
+  .lantai[data-ui-theme="spring"].lt-time .time-record-actions { gap: 6px; }
+  .lantai[data-ui-theme="spring"].lt-time .time-holiday-record { column-gap: 7px; }
+  .lantai[data-ui-theme="spring"].lt-time .time-legend { gap: 6px; }
+}
+@media (forced-colors: active) {
+  .lantai[data-ui-theme="spring"].lt-time {
+    --ui-color-workspace: Canvas;
+    --ui-color-text-primary: CanvasText;
+    --ui-color-text-secondary: CanvasText;
+    --ui-color-text-meta: CanvasText;
+    --ui-color-border-subtle: ButtonText;
+    --ui-color-border-default: ButtonText;
+    --ui-color-field-border: FieldText;
+    --ui-color-field-focus: Highlight;
+    --ui-color-focus-ring: Highlight;
+    --lt-spring-time-selected-fill: Highlight;
+    --lt-spring-time-selected-ink: HighlightText;
+    --lt-spring-time-selected-border: Highlight;
+    --lt-spring-time-today-border: CanvasText;
+    --lt-spring-time-anniversary: CanvasText;
+    --lt-spring-time-schedule: CanvasText;
+    --lt-spring-time-holiday: CanvasText;
+    --lt-spring-time-term: CanvasText;
+    --lt-spring-time-leaf-fill: Canvas;
+    --lt-spring-time-blossom-fill: Canvas;
+  }
+  .lantai[data-ui-theme="spring"].lt-time :is(.lt-root-top,.lt-header:not(.lt-header--root)) { background: Canvas; }
+  .lantai[data-ui-theme="spring"].lt-time .ui-input[data-time-field="query"] { background-image: none; padding-inline-start: 12px; }
+  .lantai[data-ui-theme="spring"].lt-time .time-day[aria-pressed="true"] > span:first-child { forced-color-adjust: none; }
+  .lantai[data-ui-theme="spring"].lt-time .time-day--today[aria-pressed="false"] > span:first-child { background: Canvas; color: CanvasText; border: 2px solid CanvasText; }
+  .lantai[data-ui-theme="spring"].lt-time .time-day--today[aria-pressed="true"] > span:first-child { outline: 1px solid CanvasText; outline-offset: 2px; box-shadow: none; }
+  .lantai[data-ui-theme="spring"].lt-time .time-day:focus-visible { outline-color: Highlight; }
+  .lantai[data-ui-theme="spring"].lt-time .time-marker { forced-color-adjust: none; }
+}

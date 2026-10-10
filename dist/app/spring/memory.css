@@ -45,11 +45,11 @@
 .lantai[data-ui-theme="spring"][data-memory-type] .lt-row [data-memory-mode="trigger"] { background: #e6f1e7; color: #63886b; }
 .lantai[data-ui-theme="spring"][data-memory-type] .lt-row .lt-tag--event { background: #e8f3ed; color: #59836a; }
 .lantai[data-ui-theme="spring"][data-memory-type] .lt-row .lt-tag--detail { background: #f6eaf0; color: #aa788f; }
-.lantai[data-ui-theme="spring"][data-memory-type] .lt-empty { padding: 20px 13px; text-align: center; border: 1px dashed #dfe8dc; border-radius: 9px; background: #f8faf4; color: #7a8f7e; }
+.lantai[data-ui-theme="spring"][data-memory-type] .lt-empty { padding: 20px 13px; text-align: center; border: 1px dashed #dfe8dc; border-radius: 9px; background: #f8faf4; color: var(--ui-color-text-meta); }
 .lantai[data-ui-theme="spring"][data-memory-type] .lt-timeline-year { gap: 12px; }
 .lantai[data-ui-theme="spring"][data-memory-type] .lt-timeline-year > h2 { font-size: 1.125rem; color: #41614a; font-weight: 740; }
 .lantai[data-ui-theme="spring"][data-memory-type] .lt-timeline-track { border-inline-start: 2px solid #a9c6ae; margin-inline-start: 7px; gap: 17px; }
-.lantai[data-ui-theme="spring"][data-memory-type] .lt-timeline-date > h3 { padding-inline-start: 14px; font-size: .75rem; color: #6d9177; }
+.lantai[data-ui-theme="spring"][data-memory-type] .lt-timeline-date > h3 { padding-inline-start: 14px; font-size: .75rem; color: var(--ui-color-text-meta); }
 .lantai[data-ui-theme="spring"][data-memory-type] .lt-timeline-entry { padding-inline-start: 14px; }
 .lantai[data-ui-theme="spring"][data-memory-type] .lt-timeline-entry::before { width: 8px; height: 8px; border: 2px solid #fdfcf8; background: #a9c6ae; inset-inline-start: -5px; }
 .lantai[data-ui-theme="spring"][data-memory-type] .lt-timeline-cards { gap: 10px; }
@@ -139,7 +139,7 @@
 .lantai[data-ui-theme="spring"].lt-recall .lt-recall-section { padding-block: 8px; gap: 11px; }
 .lantai[data-ui-theme="spring"].lt-recall .lt-recall-grid { gap: 11px; }
 .lantai[data-ui-theme="spring"].lt-recall :is(.lt-recall-detail-body,.lt-recall-memory-body,.lt-recall-item-title > span) { font-family: var(--ui-type-reading-family); font-size: .8125rem; line-height: 1.85; }
-.lantai[data-ui-theme="spring"].lt-recall .lt-recall-memory-reason { font-size: .75rem; color: #728676; line-height: 1.75; }
+.lantai[data-ui-theme="spring"].lt-recall .lt-recall-memory-reason { font-size: .75rem; color: var(--ui-color-text-meta); line-height: 1.75; }
 
 @media (max-width: 390px) {
   .lantai[data-ui-theme="spring"][data-memory-type] .lt-row { padding: 12px; }

@@ -30,8 +30,12 @@ export const SNOW_ERMINE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../snow-ermine/theme.css'),
 ]);
 
-// Spring keeps its common mapping separate from the approved memory detail.
+// Spring keeps common mapping and each approved page grammar independently scoped.
 export const SPRING_STYLE_ENTRIES=Object.freeze([
   entry('shared','../spring/theme.css'),
   entry('shared','../spring/memory.css'),
+  entry('shared','../spring/time.css'),
+  entry('shared','../spring/benmo.css'),
+  entry('shared','../spring/workshop.css'),
+  entry('shared','../spring/settings.css'),
 ]);

@@ -4,8 +4,8 @@
   "ownership": "consumer",
   "reference": {
     "name": "lantai_spring_memory_summary_recall_round2_1(1).html",
-    "scope": "Common appearance and memory only",
-    "date": "2026-10-09",
+    "scope": "Common appearance, memory, time, Benmo, workshop and settings",
+    "date": "2026-10-10",
     "scriptsExecuted": false
   },
   "assets": [
@@ -20,6 +20,106 @@
       "source": "Original static line-flower SVG for the three user-approved quality-summary/index/merge headings",
       "bytes": 281,
       "sha256": "6f84707265728c5bcbebfad4f28ecba25bc1e5a4bf4d1d14df3b71bb69ead13e"
+    },
+    {
+      "file": "assets/benmo-leaf.svg",
+      "source": "Static SVG paths extracted from the supplied benmo HTML reference; no prototype functions copied",
+      "bytes": 259,
+      "sha256": "ffedef79e721ec0731a99c3189263e99807a54de7d1a5abd03bf267c8ed6ccce"
+    },
+    {
+      "file": "assets/settings-book.svg",
+      "source": "Static SVG paths extracted from the supplied settings HTML reference; no prototype functions copied",
+      "bytes": 263,
+      "sha256": "ed57ce3bf2adbde3f00a446d028679841cd3729df567fd2240ec3974db62cb2b"
+    },
+    {
+      "file": "assets/settings-brand.svg",
+      "source": "Static SVG paths extracted from the supplied settings HTML reference; no prototype functions copied",
+      "bytes": 240,
+      "sha256": "5f2ac3d81a4aafebc4887118175d89b884fc4109b14641a2eea76f6f2448139c"
+    },
+    {
+      "file": "assets/settings-chev.svg",
+      "source": "Static SVG paths extracted from the supplied settings HTML reference; no prototype functions copied",
+      "bytes": 193,
+      "sha256": "8ea8275ee57896eaf0ee2d63406a855508b803201b9daeb1be8996946ca83894"
+    },
+    {
+      "file": "assets/settings-clock.svg",
+      "source": "Static SVG paths extracted from the supplied settings HTML reference; no prototype functions copied",
+      "bytes": 222,
+      "sha256": "25996d79856923d4f596e4378d5784ed8197df9e9845bb600de21450d6edbe1f"
+    },
+    {
+      "file": "assets/settings-flower.svg",
+      "source": "Static SVG paths extracted from the supplied settings HTML reference; no prototype functions copied",
+      "bytes": 268,
+      "sha256": "ac0f33f7182b2d61d968a313a14eb34ab6cc013da23af4481c71699199eb3fb3"
+    },
+    {
+      "file": "assets/settings-leaf.svg",
+      "source": "Static SVG paths extracted from the supplied settings HTML reference; no prototype functions copied",
+      "bytes": 245,
+      "sha256": "0bdcd14633392e1b521722ae094b7e19bdbb8d5cbb791b0a56ac624cd10030bd"
+    },
+    {
+      "file": "assets/settings-seed.svg",
+      "source": "Static SVG paths extracted from the supplied settings HTML reference; no prototype functions copied",
+      "bytes": 250,
+      "sha256": "380d708207f120d9edb34e8cd8459a9fd24f6c5c5aba644b2677eb1aeb21fa96"
+    },
+    {
+      "file": "assets/settings-spark.svg",
+      "source": "Static SVG paths extracted from the supplied settings HTML reference; no prototype functions copied",
+      "bytes": 216,
+      "sha256": "c6d6e971e0f294e562bd2e3e5416901ae5cf2eaf7139fcee8a3a639c4f5f0a5d"
+    },
+    {
+      "file": "assets/time-edit.svg",
+      "source": "Static SVG paths extracted from the supplied time HTML reference; no prototype functions copied",
+      "bytes": 263,
+      "sha256": "20ef8c3b92f6e0c53e9bb6450dbeaf90e2dd7cc970728e306063f9bdd210d967"
+    },
+    {
+      "file": "assets/time-search.svg",
+      "source": "Static SVG paths extracted from the supplied time HTML reference; no prototype functions copied",
+      "bytes": 201,
+      "sha256": "add417022f1465a02281afd48968e309a013e9407b61af6e13f7664fbefb47e1"
+    },
+    {
+      "file": "assets/workshop-leaf.svg",
+      "source": "Static SVG paths extracted from the supplied workshop HTML reference; no prototype functions copied",
+      "bytes": 244,
+      "sha256": "8eb56ddf2830d046848b666a162ab23dbc579f76d098fd03cb45060b19b729e4"
     }
+  ],
+  "references": [
+    {
+      "name": "lantai_spring_benmo_round1(1).html",
+      "sha256": "2cc95ff0e8d586e0f17fd716ac878b2b05729bf4f0bbf34fd2b59e859908cf39",
+      "scriptsExecuted": false
+    },
+    {
+      "name": "lantai_spring_settings_round1(1).html",
+      "sha256": "d7f4321bafa9a21c6c4190d86c0c92d27e432f6aac2d1fbf41803415d225621d",
+      "scriptsExecuted": false
+    },
+    {
+      "name": "lantai_spring_time_full_round1_2(1).html",
+      "sha256": "2c8506fa86dbd5d3e0658dbd5f8ac7f87d8b8d9947bda80403df8d631b5e13d1",
+      "scriptsExecuted": false
+    },
+    {
+      "name": "lantai_spring_workshop_round1(1).html",
+      "sha256": "6a22ab015c5b8f2c17f0f77e895eba12fc839170e7e637bb0471d3e98f911f61",
+      "scriptsExecuted": false
+    }
+  ],
+  "approvedAdjustments": [
+    "Root banner 64px, title 23px, compact tabs; native controls keep 44px owners",
+    "Calendar duplicate date strip omitted only in Spring; selected peach and current-date outline distinguished",
+    "Workshop checked switches soft pink with white knobs, scoped to Workshop only",
+    "API selected source/preset pale apricot with native radios; quiet secondary actions and green save"
   ]
 }

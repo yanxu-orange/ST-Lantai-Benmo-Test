@@ -11,7 +11,8 @@
   --ui-color-surface-subtle: #f7faf6;
   --ui-color-text-primary: #3c5546;
   --ui-color-text-secondary: #546a5b;
-  --ui-color-text-meta: #87988a;
+  /* Normal metadata shares one readable sage ink; disabled and placeholders stay separate. */
+  --ui-color-text-meta: #5f7163;
   --ui-color-text-disabled: #97a39a;
   --ui-color-border-subtle: #e6ebe2;
   --ui-color-border-default: #dfe8dd;
@@ -127,7 +128,7 @@
 }
 .lantai[data-ui-theme="spring"] .lt-header--root { gap: 0; padding: 0; }
 .lantai[data-ui-theme="spring"] .lt-root-top {
-  min-height: 96px;
+  min-height: 64px;
   padding: 0 17px 0 21px;
   background-image: linear-gradient(90deg, rgb(251 253 248 / 35%), rgb(251 253 248 / 0%) 55%), var(--lt-spring-header-photo);
   background-position: center 31%;
@@ -138,7 +139,7 @@
   min-width: 0;
   color: var(--lt-spring-root-ink);
   font-family: var(--ui-type-reading-family);
-  font-size: 26px;
+  font-size: 23px;
   font-weight: 750;
   line-height: 1.15;
   text-align: start;
@@ -204,7 +205,7 @@
 .lantai[data-ui-theme="spring"] .lt-header .ui-icon-button:hover:enabled::before { background: #fff; }
 .lantai[data-ui-theme="spring"] .lt-header .lt-icon { width: 20px; height: 20px; }
 .lantai[data-ui-theme="spring"] .lt-header--root .ui-tablist {
-  padding: 9px 15px 8px;
+  padding: 3px 15px;
   gap: 7px;
   background: #fff;
   margin-block-end: 0;
@@ -212,7 +213,7 @@
 .lantai[data-ui-theme="spring"] .lt-header--root .lt-type {
   min-width: 0;
   min-height: 44px;
-  padding: 10px 5px;
+  padding: 7px 5px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -258,7 +259,7 @@
   min-block-size: max(44px, var(--ui-interaction-target-min));
   min-inline-size: 44px;
 }
-.lantai[data-ui-theme="spring"] :is(.ui-input:not([type="checkbox"]):not([type="radio"]),.lt-textarea,summary) {
+.lantai[data-ui-theme="spring"] :is(.ui-input:not(:where([type="checkbox"],[type="radio"])),.lt-textarea,summary) {
   min-block-size: max(44px, var(--ui-interaction-target-min));
 }
 .lantai[data-ui-theme="spring"] :is(.ui-button,.ui-icon-button) {
@@ -292,7 +293,7 @@
   border-color: var(--ui-color-selected-border);
   font-weight: 700;
 }
-.lantai[data-ui-theme="spring"] :is(.ui-input:not([type="checkbox"]):not([type="radio"]),.lt-textarea) {
+.lantai[data-ui-theme="spring"] :is(.ui-input:not(:where([type="checkbox"],[type="radio"])),.lt-textarea) {
   min-width: 0;
   border: 1px solid var(--ui-color-field-border);
   border-radius: 7px;
@@ -357,7 +358,6 @@
 
 @media (max-width: 390px) {
   [data-ui-theme="spring"], :host([data-ui-theme="spring"]) { --lt-spring-page-pad: 13px; }
-  .lantai[data-ui-theme="spring"] .lt-root-top { min-height: 88px; }
   .lantai[data-ui-theme="spring"] .lt-header:not(.lt-header--root) { min-height: 64px; }
   .lantai[data-ui-theme="spring"] .lt-header:not(.lt-header--root) .ui-page-title { font-size: 17px; }
   .lantai[data-ui-theme="spring"] .lt-footer .ui-nav-item { font-size: 13px; }
