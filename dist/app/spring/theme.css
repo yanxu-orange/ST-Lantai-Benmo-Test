@@ -1,4 +1,4 @@
-/* Consumer-owned, opt-in Spring appearance. Existing shared markup owns routes,
+/* Consumer-owned default Spring appearance. Existing shared markup owns routes,
    host sizing and all behavior. The supplied prototype was read as static text;
    its embedded photograph is preserved byte-for-byte in assets/. */
 [data-ui-theme="spring"],

@@ -41,8 +41,8 @@ import {createCumulativeHistoryHook} from './cumulative-history.js';
 import {mountCumulativeView} from '../../app/cumulative-view.js';
 import {createCumulativeSettingsController} from '../../app/cumulative-settings-controller.js';
 import {mountCumulativeSettingsView} from '../../app/cumulative-settings-view.js';
-import '../../app/memphis/compact-group-candidate.js';
-import {BASE_STYLE_ENTRIES,MEMPHIS_STYLE_ENTRIES,SNOW_ERMINE_STYLE_ENTRIES,SPRING_STYLE_ENTRIES} from '../../app/styles/style-entries.js';
+import '../../app/shared-ui/compact-group-candidate.js';
+import {BASE_STYLE_ENTRIES,SHARED_STYLE_ENTRIES,SNOW_ERMINE_STYLE_ENTRIES,SPRING_STYLE_ENTRIES} from '../../app/styles/style-entries.js';
 
 import { DEFAULT_THEME, applyTheme, resolveStyleAssets } from '../../app/styles/theme.js';
 import { createAppearanceAdapter } from './appearance-adapter.js';
@@ -56,12 +56,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, stylePromise,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryHistory,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
-    memphisStyle,memphisObserver,memphisStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
+    sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
   const storybarTheme=mountStorybarTheme({document:doc});
   const appearance = createAppearanceSession({ adapter: createAppearanceAdapter({ getContext, fetchImpl: request, ...appearanceOptions }), prepareTheme: async theme => { if (theme === 'snow-ermine') await snowStyles(); if (theme === 'spring') await springStyles(); }, canSave: () => {
     try { if(controls?.inspect().busy)return false;if (apiSession && !['ready','saved'].includes(apiSession.inspect().status)) return false; runtime.settings.getEpoch(); return true; } catch { return false; }
   } });
-  const unsubscribeAppearance = appearance.subscribe(() => syncMemphis());
+  const unsubscribeAppearance = appearance.subscribe(() => syncAppearance());
   const entryId = 'lantai-benmo-open';
   const lifetime = new AbortController();
   let cumulativeRuntime,cumulativeHistory,cumulativeView,cumulativeSettingsView,cumulativeSettingsController,cumulativeSettingsTarget,cumulativeNotices,
@@ -212,7 +212,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       for(const page of Object.values(areaPages)){cleanup(()=>page.unmount({preserve:false}));page.settingsReturn=false;}
       benmoNavigation=null;cleanup(()=>timeController?.dispose());timeController=null;
       const currentApp=app;app=null;cleanup(()=>currentApp?.dispose());
-      const currentObserver=memphisObserver;memphisObserver=null;memphisStyle=null;snowStyle=null;springStyle=null;
+      const currentObserver=sharedObserver;sharedObserver=null;sharedStyle=null;snowStyle=null;springStyle=null;
       cleanup(()=>currentObserver?.disconnect());
     } finally {
       const currentPanel=panel;panel=null;content=memoryContent=benmoContent=settingsContent=summaryContent=null;
@@ -352,7 +352,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(area==='memory')void returnFromSummary();else if(area==='time')void openTime();else if(area==='workshop')void openWorkshop();
     }});
     if(!panel||serial!==ticket||request!==pageRequest||!sameTarget(target,repository.captureTarget())){view.dispose();return false;}
-    benmoView=view;syncMemphis();return true;
+    benmoView=view;syncAppearance();return true;
     }catch(error){if(panel&&serial===ticket&&request===pageRequest&&sameTarget(target,repository.captureTarget()))loading.fail(error);return false;}
   }
   const openLatestSummary=()=>openBenmo({kind:'summary'});
@@ -496,7 +496,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(!panel||closing||replacingPage)return;
     settingsRootView?.dispose();apiView?.dispose();apiView=null;
     settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,availability,focusAction,onApi:openApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
-    syncMemphis();
+    syncAppearance();
   }
   function openApiSettings(){
     if(!settingsOpen||apiSession||!panel)return;
@@ -591,11 +591,11 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     cumulativePage='cleaning';cumulativePageTarget=target;
     summarySettingsView=mountSummarySettingsView(summaryContent,cleaningFacade,{readonlyContent:summaryReadonlyContent});return true;
   }
-  async function memphisStyles() {
-    if(!memphisStylePromise)memphisStylePromise=Promise.all(MEMPHIS_STYLE_ENTRIES.map(async ({url})=>{const response=await request(url);if(!response.ok)throw new Error('孟菲斯候选样式未能加载');return response.text();}))
+  async function sharedStyles() {
+    if(!sharedStylePromise)sharedStylePromise=Promise.all(SHARED_STYLE_ENTRIES.map(async ({url})=>{const response=await request(url);if(!response.ok)throw new Error('共用界面样式未能加载');return response.text();}))
       .then(parts=>parts.map(css=>css.replace(/:root\b/g,':host')).join('\n'))
-      .catch(error=>{memphisStylePromise=null;throw error;});
-    return memphisStylePromise;
+      .catch(error=>{sharedStylePromise=null;throw error;});
+    return sharedStylePromise;
   }
   async function snowStyles() {
     if (!snowStylePromise) snowStylePromise = Promise.all(SNOW_ERMINE_STYLE_ENTRIES.map(async ({url}) => {
@@ -619,8 +619,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     });
     return springStylePromise;
   }
-  function syncMemphis() {
-    if (!panel || !memphisStyle) return;
+  function syncAppearance() {
+    if (!panel || !sharedStyle) return;
     const requested = appearance.inspect().previewTheme ?? appearance.inspect().theme;
     const theme = requested === 'spring' && springCss ? 'spring' : requested === 'snow-ermine' && snowCss ? 'snow-ermine' : DEFAULT_THEME;
     if(panel.getAttribute('data-ui-theme')!==theme)panel.setAttribute('data-ui-theme', theme);
@@ -633,14 +633,14 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if (page && page.getAttribute('data-ui-theme') !== theme) page.setAttribute('data-ui-theme', theme);
       if (themed && !page.hidden) active = true;
     }
-    // The complete fixed candidate contains shared choice/hit-area semantics.
-    // Its Memphis visuals are scoped; all themes retain that shared layer.
-    const media=active?'all':'not all';if(memphisStyle.media!==media)memphisStyle.media=media;
+    // The extracted candidate retains shared choice/hit-area semantics.
+    // Every supported theme uses this same component and touch layer.
+    const media=active?'all':'not all';if(sharedStyle.media!==media)sharedStyle.media=media;
     if (theme === 'snow-ermine' && !snowStyle) {
       snowStyle = doc.createElement('style'); snowStyle.textContent = snowCss; panel.shadowRoot.append(snowStyle);
     }
     if(snowStyle){const snowMedia=active&&theme==='snow-ermine'?'all':'not all';if(snowStyle.media!==snowMedia)snowStyle.media=snowMedia;}
-    if (theme === 'spring' && !springStyle) {
+    if (theme === 'spring' && springCss && !springStyle) {
       springStyle = doc.createElement('style'); springStyle.textContent = springCss; panel.shadowRoot.append(springStyle);
     }
     if(springStyle){const springMedia=active&&theme==='spring'?'all':'not all';if(springStyle.media!==springMedia)springStyle.media=springMedia;}
@@ -650,7 +650,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     memoryContent.replaceChildren();
     const surface = doc.createElement('section'); surface.className = 'lantai';
     const main = doc.createElement('main'); main.className = 'lt-main lt-stack';
-    const message = doc.createElement('p'); message.className = 'lt-error'; message.setAttribute('role', 'alert'); message.textContent = '记忆读取失败，请恢复连接后重试。';
+    const message = doc.createElement('p'); message.className = 'lt-error'; message.setAttribute('role', 'alert'); message.textContent = error?.code === 'APPEARANCE_STYLE_UNAVAILABLE' ? '皮肤资源未能加载，请恢复连接后重试。' : '记忆读取失败，请恢复连接后重试。';
     const retry = doc.createElement('button'); retry.type = 'button'; retry.className = 'ui-button ui-button--secondary'; retry.textContent = '重试'; retry.addEventListener('click', () => void open());
     const exit = doc.createElement('button'); exit.type = 'button'; exit.className = 'ui-button ui-button--tertiary'; exit.textContent = '返回聊天'; exit.addEventListener('click', close);
     main.append(message, retry, exit); surface.append(main); memoryContent.append(surface); retry.focus();
@@ -688,13 +688,17 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
     try {
-      const [css,memphisCss] = await Promise.all([styles(),memphisStyles(),appearance.ensure()]);
+      const [css,sharedCss] = await Promise.all([styles(),sharedStyles(),appearance.ensure()]);
       if (disposed || currentTicket !== ticket || !panel) return;
       if (!panel.shadowRoot.querySelector('style')) { const style = doc.createElement('style'); style.textContent = css; panel.shadowRoot.prepend(style); }
-      if(!memphisStyle){memphisStyle=doc.createElement('style');memphisStyle.media='not all';memphisStyle.textContent=memphisCss;panel.shadowRoot.append(memphisStyle);}
+      if(!sharedStyle){sharedStyle=doc.createElement('style');sharedStyle.media='not all';sharedStyle.textContent=sharedCss;panel.shadowRoot.append(sharedStyle);}
+      // A failed settings read still uses the real default theme. Do not mount
+      // business pages with Spring attributes before its stylesheet is ready.
+      if (appearance.inspect().theme === DEFAULT_THEME && !springCss) await springStyles();
+      if (disposed || currentTicket !== ticket || !panel) return;
       // Seed the presentation owner before any view creates its first root.
-      syncMemphis();
-      if(!memphisObserver&&Observer){memphisObserver=new Observer(syncMemphis);memphisObserver.observe(content,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});}
+      syncAppearance();
+      if(!sharedObserver&&Observer){sharedObserver=new Observer(syncAppearance);sharedObserver.observe(content,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});}
       ensureAdapter();
       await adapter.prepare();
       if (disposed || currentTicket !== ticket || !panel) return;
@@ -703,7 +707,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       await controls.ensure();
       await benmoController?.ensure().catch(()=>{});
       if(disposed||currentTicket!==ticket||!panel)return;
-      if(!allowed('memory')){if(allowed('time'))await openTime();else if(allowed('workshop'))await openWorkshop();else if(allowed('benmo'))await openBenmo();else openSettings();syncMemphis();return;}
+      if(!allowed('memory')){if(allowed('time'))await openTime();else if(allowed('workshop'))await openWorkshop();else if(allowed('benmo'))await openBenmo();else openSettings();syncAppearance();return;}
       if(!allowed(memoryType))memoryType=allowed('event')?'event':'cumulative';
       app = mountMemoryApp(memoryContent, repository, { history: null, window: null, onClose: close,
         managementService: runtime?.service, managementController: runtime?.controller,
@@ -712,7 +716,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         openBenmo:()=>void openBenmo(),openWorkshop:()=>void openWorkshop(),openTime:()=>void openTime(),openSummary:origin=>void showSummary(origin),openSummarySettings:()=>void openSummarySettings(true),openRecall:()=>void openRecall(),regenerateBatch:id=>void showSummary('manual',id),cumulativeController:runtime.cumulativeController,initialMemoryType:memoryType,availability,onMemoryType:type=>{memoryType=type;cumulativePage='root';},openCumulative:origin=>void showCumulative(origin),openCumulativeSettings:()=>void openCumulativeSettings('root') });
       const reopenPage=cumulativePage,reopenTarget=cumulativePageTarget;await app.ready;
       if(memoryType==='cumulative'&&sameTarget(reopenTarget,repository.captureTarget())){if(['manual','auto'].includes(reopenPage))await showCumulative(reopenPage);else if(reopenPage==='settings'||reopenPage==='cleaning'){await openCumulativeSettings(cumulativeReturnPage,true);if(reopenPage==='cleaning')await openCumulativeCleaning();}}
-      syncMemphis();
+      syncAppearance();
     } catch (error) { if (!disposed && currentTicket === ticket && panel) errorView(error); }
   }
   function installEntry() {

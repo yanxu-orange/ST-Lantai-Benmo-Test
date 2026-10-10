@@ -1,0 +1,46 @@
+{
+  "version": "1",
+  "status": "consumer-extracted-shared-candidate-not-promoted",
+  "sourceBundle": "TASK-028 memphis-candidate.web.css",
+  "sourceBundleSHA256": "2f909d7a9589d53032ae469a00b5289cce10f93e9a6dac42028aef92a7ac8a3f",
+  "retainedSourceSections": [
+    {
+      "path": "platforms/web-interaction.css",
+      "normalizedSHA256": "05ff2bc185fb4c11fa315d1eb6625a3b1c128d72923c5eec63205347b321f426"
+    },
+    {
+      "path": "themes/quiet-light.css",
+      "normalizedSHA256": "fcc955934d1820c19a9b2df82b09cb94f82a5cf8b29ad5361ed06b8730e218ad"
+    },
+    {
+      "path": "themes/soft-bloom-candidate.css",
+      "normalizedSHA256": "a857a51fb422c6213da9acb991735aed88729b39a3005d4345e363267cdb0fda"
+    },
+    {
+      "path": "starter/components.css",
+      "normalizedSHA256": "b22076a9533f7ef61d4a68cb455789d7f9fbb9ebe7e9a851e66d53f56b5702ec"
+    },
+    {
+      "path": "starter/graphic-interaction.css",
+      "normalizedSHA256": "796bd0c550d11fce60a644cf5f61b34b10aa90b797d887515b7b991a395a19e4"
+    },
+    {
+      "path": "platforms/web-compact-group-candidate.css",
+      "normalizedSHA256": "891d0fa856bddd17b6c14beb6bd2608927648d55f2271916a32aee08417d392a"
+    }
+  ],
+  "excludedSourceSections": [
+    "themes/memphis-candidate.css",
+    "themes/memphis-candidate.recipe.css",
+    "themes/memphis-candidate.states.css"
+  ],
+  "themeCss": "candidate.web.css",
+  "outputSHA256": "c97d6ee035087132d4712d25207884b863a8e1445f5a82eac5a84782d6248a5a",
+  "interactionProfile": "compact-group-candidate: explicit opt-in, not promoted",
+  "interactionHelper": "compact-group-candidate.js",
+  "interactionHelperSHA256": "e0291da8097707fcc3fe7cf38258b38374c53da5331f863c33e8ec2d5ebc4e17",
+  "notes": [
+    "Shared source sections and helper bytes are unchanged and retain their original cascade order.",
+    "This is a consumer-owned extraction, not the complete supplier bundle or promotion of the candidate."
+  ]
+}

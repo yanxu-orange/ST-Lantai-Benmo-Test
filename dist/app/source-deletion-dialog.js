@@ -1,5 +1,5 @@
 import { DEFAULT_THEME, normalizeTheme, resolveStyleAssets } from './styles/theme.js';
-import { BASE_STYLE_ENTRIES, MEMPHIS_STYLE_ENTRIES, SNOW_ERMINE_STYLE_ENTRIES, SPRING_STYLE_ENTRIES } from './styles/style-entries.js';
+import { BASE_STYLE_ENTRIES, SHARED_STYLE_ENTRIES, SNOW_ERMINE_STYLE_ENTRIES, SPRING_STYLE_ENTRIES } from './styles/style-entries.js';
 
 // This foreground confirmation shares the existing component/theme styles, but
 // owns only its compact placement. It never reads or writes memory data.
@@ -58,7 +58,7 @@ function createStyleLoader(request) {
     return cached.get(key);
   };
   return async theme => {
-    const entries = [...BASE_STYLE_ENTRIES.slice(0,2),...MEMPHIS_STYLE_ENTRIES];
+    const entries = [...BASE_STYLE_ENTRIES.slice(0,2),...SHARED_STYLE_ENTRIES];
     if (theme === 'snow-ermine') entries.push(...SNOW_ERMINE_STYLE_ENTRIES);
     if (theme === 'spring') entries.push(...SPRING_STYLE_ENTRIES);
     return (await Promise.all(entries.map(load))).join('\n');

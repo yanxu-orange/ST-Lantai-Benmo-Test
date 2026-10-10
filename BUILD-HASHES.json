@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "ba03b1bc8b7b1ea02d8836b491e945d6ed8d5d9941c06843392bb5a07657712d"
+    "sha256": "b282913e636624f9278a240c0016710613dce99603d1cd5cadc2c5b04279790c"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -129,7 +129,7 @@
   },
   {
     "path": "dist/app/memory-app.js",
-    "sha256": "b226b4ab61145853fe4f7465fc72b30caffe5a6e8fbdb6fbc315d70df7ac0a43"
+    "sha256": "bdcdaf91c1e01ae99eda15fa4e332730dc4996d1d853307fe21391ba16646dd9"
   },
   {
     "path": "dist/app/memory-card-time.js",
@@ -142,22 +142,6 @@
   {
     "path": "dist/app/memory.css",
     "sha256": "b8a6b0350cc573fc382fb84b82ab4259e028f84e57d8b4e023c40d28646c7695"
-  },
-  {
-    "path": "dist/app/memphis/compact-group-candidate.js",
-    "sha256": "e0291da8097707fcc3fe7cf38258b38374c53da5331f863c33e8ec2d5ebc4e17"
-  },
-  {
-    "path": "dist/app/memphis/lantai-adapter.css",
-    "sha256": "b478f5b2df586102be5713d61ccc96efff5891bbf6e81abf4fadc5ebec83b98b"
-  },
-  {
-    "path": "dist/app/memphis/manifest.json",
-    "sha256": "92ad5d2abedbb0ea2960132d257a9099cf10efd3016e2e9c779c9c71dce70337"
-  },
-  {
-    "path": "dist/app/memphis/memphis-candidate.web.css",
-    "sha256": "2f909d7a9589d53032ae469a00b5289cce10f93e9a6dac42028aef92a7ac8a3f"
   },
   {
     "path": "dist/app/navigation.js",
@@ -188,6 +172,18 @@
     "sha256": "715ee915b20b2ee2d60e62bdee4af152a5726f108239a0119e326c7f76142280"
   },
   {
+    "path": "dist/app/shared-ui/candidate.web.css",
+    "sha256": "c97d6ee035087132d4712d25207884b863a8e1445f5a82eac5a84782d6248a5a"
+  },
+  {
+    "path": "dist/app/shared-ui/compact-group-candidate.js",
+    "sha256": "e0291da8097707fcc3fe7cf38258b38374c53da5331f863c33e8ec2d5ebc4e17"
+  },
+  {
+    "path": "dist/app/shared-ui/manifest.json",
+    "sha256": "1cd16f70700570c0cd0bb9b76040ef1b5a8c90043e9ff7b6f9636c2a7dd54be7"
+  },
+  {
     "path": "dist/app/snow-ermine/assets/close-snow.svg",
     "sha256": "dd2134624d963a57de0a3b702c0747a1df3c2dfd200e7d215cb3d0e2bc8b3318"
   },
@@ -201,7 +197,7 @@
   },
   {
     "path": "dist/app/snow-ermine/manifest.json",
-    "sha256": "9e7028383e3336f210aa8ef1926ef7cd08510aac121b4b177f8f5312f4c2a056"
+    "sha256": "6aaa9237a307538b277e850ab3950c60d6bee0696f9e09c2529d68e0622af21d"
   },
   {
     "path": "dist/app/snow-ermine/theme.css",
@@ -209,7 +205,7 @@
   },
   {
     "path": "dist/app/source-deletion-dialog.js",
-    "sha256": "2e272bfac72ddd56f8e618f0a997d6f19fac927f7f24b9bb044b6f7391b63204"
+    "sha256": "27bee65a52a9e94d9b2e13a5f62c58a605738ab2624e27d29f3e382202c89d37"
   },
   {
     "path": "dist/app/spring/assets/benmo-leaf.svg",
@@ -285,7 +281,7 @@
   },
   {
     "path": "dist/app/spring/theme.css",
-    "sha256": "56ec1a48e1f7a867a3eb144f7c240871519f31f647240341364c3d0436206b79"
+    "sha256": "9ad2c1e50457167acdcf7743742ac9115d975bbb534670d174d82b8d462196c9"
   },
   {
     "path": "dist/app/spring/time.css",
@@ -305,11 +301,11 @@
   },
   {
     "path": "dist/app/styles/style-entries.js",
-    "sha256": "07fd0bb20f460dbb3f8980e42fb2a70f03cc212a85e2e54121a9817be6da04b5"
+    "sha256": "9a635108e8bb2c8c8cb871985e707ff67b83ca87e8de197a70e396f86bad5a71"
   },
   {
     "path": "dist/app/styles/theme.js",
-    "sha256": "ed896563cc698eda802920ac4c25feaeb8eaa19e6aaab5462d97475af747f337"
+    "sha256": "271222418491a8c5a536bb41c241b46eb561acfab507ca635a20aee970b46471"
   },
   {
     "path": "dist/app/summary-controller.js",
@@ -361,7 +357,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "dbd6b1ab1aa18d9a2b01ec41482b1a8069ac64fe7d56574ee69cfa76ae12a105"
+    "sha256": "459a6befd6d26390b20f2ab14b8652cf67213edbdc67948550288d2ae2937790"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -373,7 +369,7 @@
   },
   {
     "path": "dist/app/workshop-view.css",
-    "sha256": "0cfae70bd1f4fd7fcb55e3bbdc12da3ed07631a1913788f68380148c24a1599c"
+    "sha256": "12d37af3e220da5a412b32b8c2d39f212dd2b99c961bf5d1bdf84796ed916e66"
   },
   {
     "path": "dist/app/workshop-view.js",
@@ -781,7 +777,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "cc94ebe864e2481a41f8821e6578d0e1bdeba456f8104321407bb8653da9e0e0"
+    "sha256": "d389886b32c75d8af7ae1863266dbc9356e4241c2924a514a9564074c844905d"
   },
   {
     "path": "dist/platform/sillytavern/narrative-runtime.js",
@@ -921,10 +917,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "8983c0347dcb1b8a1b62dfc5aeb29e17169cda141bacb5ddea4b1d91a38cd593"
+    "sha256": "0ab7732f4edf4e60e8dfeaf5d64faa50b2e67724c64a002e7dd39e3a922ccc41"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "52bdeb2e9b89e532339d52e42b057869b7bc92335fc67ccfeaf5cdf82697c5be"
+    "sha256": "ab87a8a3a4fdf5b203378f036124fe21dc3fa1fec286c42a195c52143f57d32c"
   }
 ]

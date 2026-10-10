@@ -28,7 +28,7 @@
     }
   ],
   "notes": [
-    "Consumes the existing complete pinned Memphis candidate bundle for shared component, touch and forced-color safety; its Memphis visual selectors remain scoped and are not promoted or extracted.",
+    "Consumes the preserved TASK-028 shared component, touch and forced-color layer in shared-ui/candidate.web.css; theme-specific Memphis styles are removed.",
     "Only the root and subpage headers use scenic images; the body is an opaque cool-white/light-ice workspace. The panoramic lake backdrop is not included.",
     "No font is embedded or downloaded. SimSun/Songti is a regular-400 reading fallback; actual availability depends on the user device.",
     "Theme CSS does not own business data, routing, timestamps or phone/PC page structure."

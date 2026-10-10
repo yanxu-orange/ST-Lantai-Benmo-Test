@@ -1,4 +1,4 @@
-// Consumer-owned cascade. Supplier bundles stay intact; their manifests own provenance.
+// Consumer-owned cascade. Pinned supplier and extracted shared layers retain provenance.
 // Both ends share themes, components, host geometry and pointer/forced-color semantics.
 const entry=(layer,path)=>Object.freeze({layer,url:new URL(path,import.meta.url)});
 export const BASE_STYLE_ENTRIES=Object.freeze([
@@ -19,13 +19,12 @@ export const BASE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../benmo-view.css'),
   entry('shared','../../platform/sillytavern/memory-host.css'),
 ]);
-// Separate opt-in sheet: the host retains its cache and all/not-all media switch.
-export const MEMPHIS_STYLE_ENTRIES=Object.freeze([
-  entry('supplier','../memphis/memphis-candidate.web.css'),
-  entry('shared','../memphis/lantai-adapter.css'),
+// Shared candidate components and touch calibration, after the base cascade.
+export const SHARED_STYLE_ENTRIES=Object.freeze([
+  entry('shared','../shared-ui/candidate.web.css'),
 ]);
 
-// Product-owned appearance, after the complete candidate's shared component layer.
+// Product-owned appearance, after the preserved shared component layer.
 export const SNOW_ERMINE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../snow-ermine/theme.css'),
 ]);
