@@ -32,7 +32,7 @@ const pendingProjection=message=>{
 export function createLatestSummaryRuntime({repository,adapter,settings,provider,getGenerationSettings,getContext,getControls,workshopRuntime,trackingRuntime}={}) {
   let latestEpoch=0,disposed=false,serial=0,readSerial=0,target=null,selection=null,pending=null,receipt=null,enabled=true,generationQueue=Promise.resolve(),foregroundStopped=false,foregroundType=null,foregroundEnded=false;
   let workshopState=null,workshopFloorStates={},trackingState=null,trackingFloorStates={};
-  const automaticReceipts=new Map();
+  const automaticReceipts=new Map(),displayBatches=new Map();
   let state={...emptyLatest(),status:'idle',error:'',floorStates:{}};
   let backfillState={status:'idle',id:null,total:0,completed:0,skipped:0,failed:0,error:''},backfillController=null;
   let automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};
@@ -44,7 +44,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   const publish=()=>{for(const listener of listeners)try{listener(inspect());}catch{/* UI cannot break a write. */}};
   function inspect(){return copy({...state,target,automatic:automaticState,backfill:backfillState});}
   function automaticStatus(status,message,floor=automaticState.floor){automaticState={status,message,floor};publish();}
-  function cancel(){stopBackfill();for(const [key,value] of automaticReceipts)if(['queued','running'].includes(value.status))automaticReceipts.set(key,{...value,status:'cancelled',message:'本轮自动生成已取消，未自动重试'});if(['waiting','queued','running'].includes(automaticState.status))automaticState={...automaticState,status:'cancelled',message:'本轮自动生成已取消，未自动重试'};serial++;foregroundType=null;for(const [key,value] of Object.entries(trackingFloorStates))if(value.status==='running')trackingFloorStates[key]={status:'idle',error:''};for(const tasks of Object.values(workshopFloorStates))for(const [key,value] of Object.entries(tasks))if(value.status==='running')tasks[key]={status:'idle',error:''};receipt=null;foregroundEnded=false;generationQueue=Promise.resolve();queuedFloors.clear();for(const job of jobs)job.abort();jobs.clear();for(const [key,value] of Object.entries(state.floorStates))if(value.status==='running')state.floorStates[key]={status:'idle',error:''};if(state.status==='running')state.status='ready';publish();}
+  function cancel(){stopBackfill();for(const [key,value] of automaticReceipts)if(['queued','running'].includes(value.status))automaticReceipts.set(key,{...value,status:'cancelled',message:'本轮自动生成已取消，未自动重试'});if(['waiting','queued','running'].includes(automaticState.status))automaticState={...automaticState,status:'cancelled',message:'本轮自动生成已取消，未自动重试'};serial++;foregroundType=null;for(const [key,value] of Object.entries(trackingFloorStates))if(value.status==='running')trackingFloorStates[key]={status:'idle',error:''};for(const tasks of Object.values(workshopFloorStates))for(const [key,value] of Object.entries(tasks))if(value.status==='running')tasks[key]={status:'idle',error:''};receipt=null;foregroundEnded=false;generationQueue=Promise.resolve();queuedFloors.clear();displayBatches.clear();for(const job of jobs)job.abort();jobs.clear();for(const [key,value] of Object.entries(state.floorStates))if(value.status==='running')state.floorStates[key]={status:'idle',error:''};if(state.status==='running')state.status='ready';publish();}
   function raw(t,retention=false){
     const snapshot=retention&&adapter.captureLatestRetentionSource?adapter.captureLatestRetentionSource(t):adapter.captureChatSource(t),chat=getContext().chat;
     snapshot.messages=snapshot.messages.map(item=>{
@@ -127,7 +127,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     selection=saved.selection;state={...selection.latest,status:'ready',error:'',floorStates:{}};publish();return inspect();
   }
   async function generate(floor,{automatic=false,expectedMessage=null,workshopOnly=false,taskId,automaticSummaryProof=null,automaticMasterProof=null,queuedSummary=null}={}){
-    const ticket=serial,controller=new AbortController();jobs.add(controller);let key=String(floor),t,latestTask=false,plan=null,trackingPlan=null,preparationFailed=false,partialResults=false,skippedTasks=0,automaticReceiptKey=null,stage='preparation',firstFailure='',generationCurrent=null,originSource=null;
+    const ticket=serial,controller=new AbortController();jobs.add(controller);displayBatches.set(controller,{floor,ticket});let key=String(floor),t,latestTask=false,plan=null,trackingPlan=null,preparationFailed=false,partialResults=false,skippedTasks=0,automaticReceiptKey=null,stage='preparation',firstFailure='',generationCurrent=null,originSource=null;
     const inputPair=snapshot=>snapshot.messages.filter(row=>row.floor===floor||row.floor===floor-1).map(({replyId,...row})=>row);
     const origin=getContext().chat?.[floor],originText=origin?.mes,originSwipe=origin?.swipe_id??0;
     const failure=(error,at=stage)=>{const message=safeFailure(error,at);firstFailure||=message;return message;};
@@ -265,7 +265,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       }
       return false;
     }finally{
-      jobs.delete(controller);
+      jobs.delete(controller);displayBatches.delete(controller);
       if(automatic&&['queued','running'].includes(automaticState.status))report('cancelled','来源或配置已变化，本轮结果未写入');
       if(!disposed&&ticket===serial){
         if(state.floorStates[key]?.status==='running'){state.floorStates[key]={status:'idle',error:''};if(state.status==='running')state.status='ready';}
@@ -324,10 +324,10 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           const record=byReply.get(row.replyId)?.get(module.id),snapshot=record?.sourceSnapshot;
           const pair={epoch:source.epoch,messages:snapshot?.rawMessages.flatMap(item=>byFloor.has(item.floor)?[byFloor.get(item.floor)]:[])??[]};
           const valid=record&&!snapshot.rawMessages.some(item=>invalidatedFloors.has(item.floor))&&matchesStoredLatestSource(snapshot,pair);
-          return {id:module.id,name:module.name,body:valid?resultText(record):'',...(workshopFloorStates[row.replyId]?.[module.id]??{status:'idle',error:''})};
+          return {id:module.id,kind:'workshop',name:module.name,body:valid?resultText(record):'',...(workshopFloorStates[row.replyId]?.[module.id]??{status:'idle',error:''})};
         });
         tasks.push(...(trackingRuntime?.floorTasks(trackingDisplay,source,floor,row.replyId,trackingFloorStates[row.replyId]??{})??[]));
-        if(tasks.length)result.set(floor,{floor,replyId:row.replyId,tasks});
+        if(tasks.length)result.set(floor,{floor,replyId:row.replyId,tasks,batchRunning:[...displayBatches.values()].some(batch=>batch.floor===floor&&batch.ticket===serial)});
       }
     }catch{/* Changing chat ownership cannot authorize a display. */}
     return result;

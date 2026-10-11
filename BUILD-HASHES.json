@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "eef6ea193227dbd56d2a5221e10b048395292449d41f0d95b7d8d33f6089257d"
+    "sha256": "1d8b49a2b17f29722550e6cb3780319c7f15a799105b1a6b0ea65e6a287359ef"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -485,7 +485,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "1b688331c4e07f943e7596cda029537b7c25d6fde99adbc31b0bb670f891dc72"
+    "sha256": "b68cd9b51d42593dc5082b6c83601e89fd1d3cbd8327189b21b58fd425472162"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -881,7 +881,7 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "sha256": "35cf02523a56a91850f08d14ecc6187cc5117611ea63f18091033efba6e53879"
+    "sha256": "c067fac0c37c267e4a7b0a5feb7d255b989f4fb2b85a0fe6b4552c123de6c395"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -905,7 +905,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "2187cc9e8eb9d2175027b8343a65b3d574a4ef5dc36dac095dc5db116a0bdbae"
+    "sha256": "fdee710f0306d81c423a280922cc821f2b69c96a766b9eadaf0da54ec4c06453"
   },
   {
     "path": "dist/platform/sillytavern/narrative-runtime.js",
@@ -973,7 +973,11 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-background-display.js",
-    "sha256": "fc5e83c0a1e085614319c76eef062afe5fd8e6912edcacf6c46b3bf5b007f33b"
+    "sha256": "c00efcf228bdafd786e546148e608ebebf5a2c80f4082e477ff3b703169b0960"
+  },
+  {
+    "path": "dist/platform/sillytavern/workshop-display-formatter.js",
+    "sha256": "bec6d5096e69fece9a544cd683a08200067a527f3d05acd953bdb1b4a43f74cf"
   },
   {
     "path": "dist/platform/sillytavern/workshop-identities.js",
@@ -1045,10 +1049,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "94e681f56af255995b6ed51af506448851661274fdd23fb6e88d605c0ce30a1d"
+    "sha256": "db60a913c2048b73f8e8023776e5e0dc142a1d1a136187b74a46b1e36b70fc04"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "b6217cd7c36d358331b5784a05fdcfee7f7417b9012c858eaf4b7ad57046d7e0"
+    "sha256": "742e9a4b8fdd36b6317be4ee9cba8e3b9f79e5506b4d537d6503b621e63a1e25"
   }
 ]

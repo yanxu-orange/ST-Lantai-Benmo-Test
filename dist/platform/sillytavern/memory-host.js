@@ -1,6 +1,7 @@
 import { ensureBookThemeFont } from '../../app/styles/book-font.js';
 import {createNarrativeRuntime} from './narrative-runtime.js';
 import {mountWorkshopBackgroundDisplay} from './workshop-background-display.js';
+import {createWorkshopDisplayFormatter} from './workshop-display-formatter.js';
 import {createLatestSummaryRuntime} from './latest-summary-runtime.js';
 import {mountLatestSummaryDisplay} from './latest-summary-display.js';
 import {createBenmoController} from '../../app/benmo-controller.js';
@@ -244,7 +245,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         benmoSubscription=benmoController.subscribeAvailability(syncBenmoAvailability);
         await benmoController.load().catch(()=>{});
         latestDisplay=mountLatestSummaryDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer});
-        workshopBackgroundDisplay=mountWorkshopBackgroundDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer});
+        workshopBackgroundDisplay=mountWorkshopBackgroundDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,formatter:createWorkshopDisplayFormatter({getContext})});
         cumulativeRuntime=createCumulativeRuntime({repository,settings:runtime.settings,getContext});
         cumulativeHistory=createCumulativeHistoryHook({repository,settings:runtime.settings,getContext,getReplacementProof:()=>cumulativeRuntime.getReplacementProof()});
         const seen=new Set();
