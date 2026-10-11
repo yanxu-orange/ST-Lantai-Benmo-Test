@@ -83,13 +83,15 @@ export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.docu
   const unregister = shared.register(collect);
   const style = doc?.createElement?.('style');
   if (style) { style.textContent = `
-.lantai-workshop-results{margin-block-start:.6em;padding-block-start:.4em;border-block-start:1px solid currentColor;font-size:.9em}
+.lantai-workshop-results{margin-block-start:.6em;padding-block-start:.4em;font-size:.9em}
 .lantai-workshop-result-body{white-space:pre-wrap;overflow-wrap:anywhere}
 .lantai-workshop-result-formatted{white-space:normal}
 .lantai-workshop-result-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ui-space-control,.5em);min-inline-size:0}
 .lantai-workshop-result-status{min-inline-size:0;max-inline-size:100%;overflow-wrap:anywhere}
 .lantai-workshop-results button{display:inline-flex;width:max-content;white-space:nowrap;flex-shrink:0}
 .lantai-workshop-results summary{cursor:pointer}
+.lantai-workshop-results > details > summary{display:list-item;box-sizing:border-box;inline-size:100%;min-block-size:44px;padding:10px .25em;cursor:pointer}
+.lantai-workshop-results > details + details{margin-block-start:4px}
 `; doc.head?.append(style); }
   return { dispose() {
     disposed = true;

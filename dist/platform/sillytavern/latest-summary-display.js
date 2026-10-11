@@ -77,13 +77,14 @@ export function mountLatestSummaryDisplay({
   const style = doc?.createElement?.('style');
   if (style) {
     style.textContent = `
-      .lantai-latest-summary{margin-block-start:.6em;padding-block-start:.4em;border-block-start:1px solid currentColor;font-size:.9em}
+      .lantai-latest-summary{margin-block-start:.6em;padding-block-start:.4em;font-size:.9em}
       .lantai-latest-summary-body{white-space:pre-wrap;overflow-wrap:anywhere}
       .lantai-latest-summary-formatted{white-space:normal}
       .lantai-latest-summary-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ui-space-control,.5em);min-inline-size:0}
       .lantai-latest-summary-status{min-inline-size:0;max-inline-size:100%;overflow-wrap:anywhere}
       .lantai-latest-summary button{display:inline-flex;width:max-content;white-space:nowrap;flex-shrink:0}
       .lantai-latest-summary summary{cursor:pointer}
+      .lantai-latest-summary > details > summary{display:list-item;box-sizing:border-box;inline-size:100%;min-block-size:44px;padding:10px .25em;cursor:pointer}
     `;
     doc.head?.append(style);
   }

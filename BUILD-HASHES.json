@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "2DBFA27163C24AECCD43BCFB025C1F801108910B42C389B554F10595F43503C5"
+    "sha256": "3DDB1EEC3C5172CA3DE412469A2A63BA8B2687A653D34ADB4DE92694A107723C"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -485,7 +485,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "AEDD1255097FAD0C1C2BCE291CB862AF061A3B5DB3A1272990D465496E515758"
+    "sha256": "8983CE9040898131A8AF3D227C1E1C082C9C1676331A9AB7B583811B269CE259"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -881,7 +881,7 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-display.js",
-    "sha256": "F689AAAC02DD187611E8F712FDC87F604D8BA08EE8B86C878F6F8286354F7EF5"
+    "sha256": "EB2DF72DC2C1AC70992656E6BA72A10A828E7694B39A77D396614D3E0C7E492D"
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
@@ -977,7 +977,7 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-background-display.js",
-    "sha256": "BE638131BC1E5A0275D675586E19755CBE9EEEB090EC91AF3C8B1FCC69BAFBAA"
+    "sha256": "73F7B2FE2163DDD73701458C1F64945DB5AD9FB3F9B77DFE0BF75C2FFE980910"
   },
   {
     "path": "dist/platform/sillytavern/workshop-display-formatter.js",
@@ -1053,10 +1053,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "AB3195148A06F02AB65D880B976B10FF9DBCFE89C2A3E09A870E73D939708802"
+    "sha256": "79A3A04EA5F43FB943A3795B9197F8FC471CCD9F0EE9720DE929D105EFADF48C"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "060C5C07C0F80079537BC1F124D07C5B0634AEF8AAF631FFD8D38E2D8A5F0A3B"
+    "sha256": "73FB86655886D53D32C34B90236CD38F90E1E94DBBD9C1937D3E7B4832836E25"
   }
 ]
