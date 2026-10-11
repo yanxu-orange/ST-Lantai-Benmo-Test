@@ -1,112 +1,85 @@
 import { placeFloorBackgroundDisplay } from './floor-background-display-order.js';
+import { floorOf, getFloorDisplayCoordinator, createDisplayBody, prepareDisplayBody, commitDisplayBodies } from './floor-display-coordinator.js';
 
-// Append after the complete source floor content. No mes/mes_text rewriting,
-// host chat-data mutation, scrolling, or dependence on the settings page.
+let displaySerial = 0;
+const text = (node, value) => { if (node.textContent !== value) node.textContent = value; };
+const busy = info => info.batchRunning === true || info.status === 'running';
+// Independent floor-tail UI. Source mes/mes_text and saved summaries are never
+// rewritten; only the rendered body participates in display formatting.
 export function mountLatestSummaryDisplay({
-  document: doc = globalThis.document, runtime,
+  document: doc = globalThis.document, runtime, formatter, coordinator,
   MutationObserver: Observer = globalThis.MutationObserver,
 } = {}) {
-  let disposed = false, scheduled = false;
-  const rendered = new WeakMap();
+  let disposed = false;
+  const rendered = new WeakMap(), mounted = new Set();
   const targetKey = () => JSON.stringify(runtime.inspect?.().target ?? null);
-  const floorOf = message => {
-    const value = message.getAttribute('mesid');
-    return value !== null && /^\d+$/.test(value) ? Number(value) : NaN;
-  };
-  function render() {
-    scheduled = false;
-    if (disposed) return;
-    const target = targetKey();
-    const messages = [...(doc?.querySelectorAll?.('#chat .mes[mesid]') ?? [])];
-    const floors = messages.map(floorOf)
-      .filter(floor => Number.isSafeInteger(floor) && floor >= 0);
-    const infoByFloor = runtime.floorInfos?.(floors);
+  const shared = coordinator ?? getFloorDisplayCoordinator({ document: doc, runtime, formatter, MutationObserver: Observer });
+  function release(box) {
+    const state = rendered.get(box);
+    if (state?.entry.frontend) shared.requestCleanup({ ...state, ownsChat: state.snapshot?.ownsChat });
+    box.remove(); mounted.delete(box); rendered.delete(box);
+  }
+  function collect({ messages, floors, target }) {
+    if (disposed) return [];
+    const plans = [], infoByFloor = runtime.floorInfos?.(floors);
+    for (const box of mounted) if (box.isConnected === false) release(box);
     for (const message of messages) {
       const floor = floorOf(message);
       const info = Number.isSafeInteger(floor) && floor >= 0
         ? infoByFloor ? infoByFloor.get(floor) : runtime.floorInfo(floor) : null;
       let box = message.querySelector('.lantai-latest-summary');
-      if (!info) { box?.remove(); continue; }
+      if (!info) { if (box) release(box); continue; }
       const parent = message.querySelector('.mes_block') ?? message;
-      if (!box) {
-        box = doc.createElement('div');
-        box.className = 'lantai-latest-summary';
-      }
-      // Keep both extension tails after complete host content, in fixed order.
+      if (!box) { box = doc.createElement('div'); box.className = 'lantai-latest-summary'; }
       placeFloorBackgroundDisplay(parent, box);
-      const previous = rendered.get(box), signature = JSON.stringify(info), replyId = info.replyId;
-      if (previous?.signature === signature && previous.target === target) continue;
-      const wasOpen = previous?.target === target && previous.replyId === replyId
-        ? box.querySelector('details')?.open : undefined;
-      box.replaceChildren();
-      const details = doc.createElement('details');
-      details.open = wasOpen ?? (!!info.body || ['running', 'failed'].includes(info.status));
-      const heading = doc.createElement('summary');
-      heading.textContent = '最新摘要';
-      details.append(heading);
-      if (info.body) {
-        const body = doc.createElement('div');
-        body.className = 'lantai-latest-summary-body';
-        body.textContent = info.body;
-        details.append(body);
+      let state = rendered.get(box);
+      if (!state || state.target !== target || state.replyId !== info.replyId) {
+        if (state?.entry.frontend) shared.requestCleanup({ ...state, ownsChat: state.snapshot?.ownsChat });
+        box.replaceChildren();
+        const details = doc.createElement('details');
+        details.open = !!info.body || ['running', 'failed'].includes(info.status);
+        const heading = doc.createElement('summary'); heading.textContent = '最新摘要';
+        const entry = createDisplayBody(doc, 'lantai-latest-summary-body', info.body ?? '');
+        const actions = doc.createElement('div'); actions.className = 'lantai-latest-summary-actions';
+        const status = doc.createElement('span'); status.className = 'lantai-latest-summary-status'; status.setAttribute('role', 'status');
+        const retry = doc.createElement('button'); retry.type = 'button'; retry.className = 'menu_button';
+        state = { id: `latest-${++displaySerial}`, target, replyId: info.replyId, message, floor, entry, status, retry };
+        const owned = state;
+        retry.addEventListener('click', () => {
+          if (disposed || retry.disabled || message.isConnected === false || box.isConnected === false
+            || floorOf(message) !== floor || targetKey() !== target || rendered.get(box) !== owned) return;
+          const current = runtime.floorInfo(floor);
+          if (!current || current.replyId !== owned.replyId || current.status === 'running') return;
+          try { Promise.resolve(runtime.generate(floor)).catch(() => {}); }
+          catch { /* Runtime owns generation failure reporting. */ }
+        });
+        actions.append(status, retry); details.append(heading, entry.body, actions); box.append(details);
+        rendered.set(box, state); mounted.add(box);
       }
-      const actions = doc.createElement('div');
-      actions.className = 'lantai-latest-summary-actions';
-      const status = doc.createElement('span');
-      status.className = 'lantai-latest-summary-status';
-      status.setAttribute('role', 'status');
       const actionStatus = info.status === 'running' ? '正在生成…' : info.error || (!info.body ? '尚未生成' : '');
-      status.textContent = [info.stale ? '正文已编辑，可按需更新摘要' : '', actionStatus]
-        .filter(Boolean).join(' · ');
-      const retry = doc.createElement('button');
-      retry.type = 'button';
-      retry.className = 'menu_button';
-      retry.textContent = info.body ? '重新生成' : info.status === 'failed' ? '重试' : '生成摘要';
-      retry.disabled = info.status === 'running';
-      retry.addEventListener('click', () => {
-        // A rendered button can survive until the next host mutation frame.
-        // Never let an old chat/swipe/floor button act on the replacement.
-        if (disposed || retry.disabled || message.isConnected === false || box.isConnected === false
-          || floorOf(message) !== floor || targetKey() !== target) return;
-        const current = runtime.floorInfo(floor);
-        if (!current || current.replyId !== replyId || current.status === 'running') return;
-        try { Promise.resolve(runtime.generate(floor)).catch(() => {}); }
-        catch { /* Runtime owns generation failure reporting. */ }
+      text(state.status, [info.stale ? '正文已编辑，可按需更新摘要' : '', actionStatus].filter(Boolean).join(' · '));
+      text(state.retry, info.body ? '重新生成' : info.status === 'failed' ? '重试' : '生成摘要');
+      state.retry.disabled = info.status === 'running';
+      const raw = info.body ?? '';
+      plans.push({ ...state, ownsChat: () => !state.snapshot?.ownsChat || state.snapshot.ownsChat(), bind: snapshot => { state.snapshot ??= snapshot; }, content: raw, busy: busy(info),
+        current: () => {
+          if (disposed || box.isConnected === false || rendered.get(box) !== state) return false;
+          const now = runtime.floorInfo(floor);
+          return !!now && now.replyId === state.replyId && !busy(now) && (now.body ?? '') === raw;
+        },
+        prepare: snapshot => prepareDisplayBody(state.entry, raw, snapshot),
+        commit(update, snapshot) { state.snapshot = snapshot; return commitDisplayBodies([update], snapshot, doc); },
       });
-      actions.append(status, retry);
-      details.append(actions);
-      box.append(details);
-      rendered.set(box, { signature, target, replyId });
     }
+    return plans;
   }
-  const schedule = () => {
-    if (disposed || scheduled) return;
-    scheduled = true;
-    queueMicrotask(render);
-  };
-  const touchesChat = record => {
-    if (record.target?.closest?.('.lantai-latest-summary')
-      || record.target?.closest?.('.lantai-workshop-results')) return false;
-    if (record.target?.closest?.('#chat')) return true;
-    return [...(record.addedNodes ?? []), ...(record.removedNodes ?? [])]
-      .some(node => node.id === 'chat' || node.querySelector?.('#chat'));
-  };
-  const unsubscribe = runtime.subscribe(schedule);
-  // Observe the stable host parent so replacing #chat itself also remounts the
-  // floor summaries. Ignore unrelated UI and our own internal text updates.
-  const observationRoot = doc?.body ?? doc?.documentElement ?? doc?.querySelector?.('#chat');
-  const observer = Observer && observationRoot ? new Observer(records => {
-    if (records.some(touchesChat)) schedule();
-  }) : null;
-  observer?.observe(observationRoot, { childList: true, subtree: true, attributes: true, attributeFilter: ['mesid'] });
+  const unregister = shared.register(collect);
   const style = doc?.createElement?.('style');
   if (style) {
-    // Keep the host button's visual treatment, but override .menu_button's
-    // width:min-content: Chinese labels otherwise collapse to a vertical stack.
-    // Wrap the action group/status on narrow floors, never the action label.
     style.textContent = `
       .lantai-latest-summary{margin-block-start:.6em;padding-block-start:.4em;border-block-start:1px solid currentColor;font-size:.9em}
       .lantai-latest-summary-body{white-space:pre-wrap;overflow-wrap:anywhere}
+      .lantai-latest-summary-formatted{white-space:normal}
       .lantai-latest-summary-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ui-space-control,.5em);min-inline-size:0}
       .lantai-latest-summary-status{min-inline-size:0;max-inline-size:100%;overflow-wrap:anywhere}
       .lantai-latest-summary button{display:inline-flex;width:max-content;white-space:nowrap;flex-shrink:0}
@@ -114,14 +87,9 @@ export function mountLatestSummaryDisplay({
     `;
     doc.head?.append(style);
   }
-  schedule();
-  return {
-    dispose() {
-      disposed = true;
-      unsubscribe();
-      observer?.disconnect();
-      style?.remove();
-      for (const node of doc?.querySelectorAll?.('.lantai-latest-summary') ?? []) node.remove();
-    },
-  };
+  return { dispose() {
+    disposed = true;
+    for (const box of mounted) release(box);
+    unregister(); style?.remove();
+  } };
 }

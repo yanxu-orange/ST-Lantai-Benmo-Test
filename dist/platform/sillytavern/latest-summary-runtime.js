@@ -301,7 +301,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         const candidate=records.get(row.replyId),snapshot=candidate?.sourceSnapshot;
         const subset={epoch:source.epoch,messages:snapshot?.rawMessages.map(item=>byFloor.get(item.floor)).filter(Boolean)??[]};
         const record=snapshot?.assistantFloor===floor?candidate:null,stale=!!record&&(record.stale===true||invalidatedFloors.has(snapshot.assistantFloor)||invalidatedFloors.has(snapshot.userFloor)||!matchesStoredLatestSource(snapshot,subset));
-        result.set(floor,{floor,replyId:row.replyId,body:record?.body??'',...(stale?{stale:true}:{}),...(state.floorStates[row.replyId]??{status:'idle',error:''})});
+        result.set(floor,{floor,replyId:row.replyId,body:record?.body??'',batchRunning:[...displayBatches.values()].some(batch=>batch.floor===floor&&batch.ticket===serial),...(stale?{stale:true}:{}),...(state.floorStates[row.replyId]??{status:'idle',error:''})});
       }
     }catch{/* A changing source cannot authorize a display. */}
     return result;
