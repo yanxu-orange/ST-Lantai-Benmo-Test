@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "ec4e15906249994a2bcdcc7e3edadf62858106c9b3d163f73a27fc63cda95890"
+    "sha256": "eef6ea193227dbd56d2a5221e10b048395292449d41f0d95b7d8d33f6089257d"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -429,11 +429,11 @@
   },
   {
     "path": "dist/app/styles/style-entries.js",
-    "sha256": "a802546447ec4f3df2e43e2cf8fa52d22673825334deb478cd7af5b6cae89777"
+    "sha256": "707e0bb0e6f2ac212922aa3cf3c2cfe0eb2426a921ad4200525ee33b0a624d8f"
   },
   {
     "path": "dist/app/styles/theme.js",
-    "sha256": "f6987439855ce4e4e43ee0702c5b14d6238c855a93f5a28a400628080837af5f"
+    "sha256": "65f8b2e353e7f4e45abaa2d7c614e6915e6a37e965f6170bf9531a3d378511ab"
   },
   {
     "path": "dist/app/summary-controller.js",
@@ -485,7 +485,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "e74a2c0c0868667231c8dadf7c0019a0fdabd8d4fe95b148a92d89def723ff0f"
+    "sha256": "1b688331c4e07f943e7596cda029537b7c25d6fde99adbc31b0bb670f891dc72"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1045,10 +1045,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "c1f24c948232d92c378b9483257edb1250a442b7e93bc02f425aae5fc5d71d48"
+    "sha256": "94e681f56af255995b6ed51af506448851661274fdd23fb6e88d605c0ce30a1d"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "f9fa14553378a95f65ac3cb615f060131cefa7e29829b32b233aca08260dbdad"
+    "sha256": "b6217cd7c36d358331b5784a05fdcfee7f7417b9012c858eaf4b7ad57046d7e0"
   }
 ]

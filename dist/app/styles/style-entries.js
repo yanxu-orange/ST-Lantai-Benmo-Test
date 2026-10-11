@@ -43,14 +43,7 @@ export const SNOW_ERMINE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../snow-ermine/time.css'),
   entry('shared','../snow-ermine/benmo.css'),
   entry('shared','../snow-ermine/secondary.css'),
-  // Transparent Snow material reuses the Snow grammar and stored identity.
-  // Both the main host and independent native dialogs load this same chain.
-  entry('shared','../panoramic-snow/material.css'),
-  entry('shared','../panoramic-snow/selection.css'),
-  entry('shared','../panoramic-snow/memory.css'),
-  entry('shared','../panoramic-snow/time-benmo.css'),
-  entry('shared','../panoramic-snow/workshop-settings.css'),
-  entry('shared','../panoramic-snow/source-deletion.css'),
+
 ]);
 
 // Spring keeps common mapping and each approved page grammar independently scoped.
