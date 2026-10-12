@@ -1,4 +1,5 @@
 import {generationSourceOf} from './model.js';
+import {workshopTrackingInstructions} from './prompts.js';
 import {currentResult,resultText} from './results.js';
 import {emptyLatest,pruneLatestRecords} from '../latest/data.js';
 import {storedLatestSource,matchesStoredLatestSource} from '../latest/source.js';
@@ -9,7 +10,7 @@ export function backgroundModules(modules){return modules.filter(module=>module.
 export function previousBackgroundResult(results,moduleId,floor){return currentResult(results.filter(row=>row.floor<floor),moduleId);}
 export function workshopBackgroundTask(module,results,source,index){
   const previous=module.lifecycle==='sync'?previousBackgroundResult(results,module.id,source.assistantFloor):null;
-  return {id:`workshop_${index}`,name:module.name,instructions:module.content.trim(),...(module.lifecycle==='sync'?{previousState:previous?resultText(previous):null}:{}),module:copy(module),previous:copy(previous),existing:copy(results.find(row=>row.moduleId===module.id&&row.replyId===source.replyId)??null)};
+  return {id:`workshop_${index}`,name:module.name,instructions:workshopTrackingInstructions(module,'background'),...(previous?{previousState:resultText(previous)}:{}),module:copy(module),previous:copy(previous),existing:copy(results.find(row=>row.moduleId===module.id&&row.replyId===source.replyId)??null)};
 }
 export function reconcileBackgroundResults(results,raw,{replyVersions,invalidatedFloors=[]}={}){
   if(!results.some(row=>row.generationSource==='background'))return copy(results);

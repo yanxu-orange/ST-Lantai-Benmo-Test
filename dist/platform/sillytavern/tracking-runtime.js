@@ -4,7 +4,7 @@ import {sameTarget} from '../../domain/memory/repository.js';
 import {featureGate} from '../../domain/controls/gate.js';
 import {currentTracking,prepareTrackingUpdate,applyTrackingResponseParts,addTrackingRecord,editTrackingRecord,deleteTrackingRecord,setTrackingPreferences,invalidateTrackingFloors,pruneTrackingSnapshots,setTrackingExclusionNames,setTrackingRecordExcluded} from '../../domain/tracking/data.js';
 import {TRACKING_FIELDS} from '../../domain/tracking/model.js';
-import {buildTrackingRequest,parseTrackingResponseParts} from '../../domain/tracking/requests.js';
+import {buildTrackingTask,parseTrackingResponseParts} from '../../domain/tracking/requests.js';
 import {buildTrackingRecall} from '../../domain/tracking/recall.js';
 import {matchesStoredLatestSource} from '../../domain/latest/source.js';
 import {recallInputs} from './recall-runtime.js';
@@ -47,7 +47,6 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     exclusionEpoch++;pendingExclusions++;clear();
     return mutate(change,{fresh:true}).finally(()=>{pendingExclusions--;clear({invalidate:false});});
   }
-  const visibleRecords=ticket=>ticket.current.filter(record=>ticket.preferences[record.kind==='item'?'itemsEnabled':'npcsEnabled']&&!trackingRecordExcluded(record,ticket.exclusions));
   function saveRecord(kind,draft){
     if(!['item','npc'].includes(kind)||!draft||typeof draft.id!=='string'||!draft.id)throw new Error('追踪记录身份无效');
     const value=clone(draft);
@@ -59,7 +58,7 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
       return addTrackingRecord(domain,{kind,...patch},{makeId:()=>value.id});
     },{category:kind==='item'?'items':'npcs'});
   }
-  async function prepareBackground(t,source,{automatic=false,taskId,rules=[]}={}){
+  async function prepareBackground(t,source,{automatic=false,taskId,rules=[],identities={}}={}){
     if(pendingExclusions||!gate.allowed()||taskId&&taskId!=='tracking')return null;
     const preparedEpoch=exclusionEpoch,captured=await repository.captureTracking(t),domain=captured.tracking;
     const activePreferences=effectivePreferences();
@@ -68,8 +67,8 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     if(automatic&&domain.snapshots.some(row=>row.sourceSnapshot.replyId===source.replyId&&matchesStoredLatestSource(row.sourceSnapshot,raw)))return null;
     const ticket=prepareTrackingUpdate({...domain,preferences:activePreferences},raw,{floor:source.assistantFloor,rules});
     const prompts=settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS;
-    const request=buildTrackingRequest({ticket,prompts});
-    return {target:clone(t),selection:captured,ticket,prompts,exclusionEpoch:preparedEpoch,categoryProofs:captureCategories(),gate:gate.capture(),task:{id:'tracking',name:'物品与 NPC 追踪',instructions:request.previewParts.slice(0,-1).map(part=>part.content).join('\n\n'),previousState:visibleRecords(ticket)}};
+    const task=buildTrackingTask({ticket,prompts,identities});
+    return {target:clone(t),selection:captured,ticket,prompts,identities:clone(identities),exclusionEpoch:preparedEpoch,categoryProofs:captureCategories(),gate:gate.capture(),task};
   }
   // Recheck immediately before the shared provider call, without granting a
   // new epoch to a category switched off/on while other plans were prepared.
@@ -91,8 +90,8 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     if(!plan||pendingExclusions||plan.exclusionEpoch!==exclusionEpoch||!current(plan.target)||!gate.allowed()||!gate.matches(plan.gate))return null;
     const preferences=Object.fromEntries(['items','npcs'].map(key=>[`${key}Enabled`,plan.ticket.preferences[`${key}Enabled`]&&categoryGates[key].matches(plan.categoryProofs[key])]));
     if(!Object.values(preferences).some(Boolean))return null;
-    const ticket={...plan.ticket,preferences},request=buildTrackingRequest({ticket,prompts:plan.prompts});
-    return {...plan,ticket,task:{...plan.task,instructions:request.previewParts.slice(0,-1).map(part=>part.content).join('\n\n'),previousState:visibleRecords(ticket)}};
+    const ticket={...plan.ticket,preferences},task=buildTrackingTask({ticket,prompts:plan.prompts,identities:plan.identities});
+    return {...plan,ticket,task};
   }
   async function saveBackgroundResult(plan,text,{isCurrent=()=>true,attempt=0}={}){
     const valid=()=>!pendingExclusions&&plan.exclusionEpoch===exclusionEpoch&&current(plan.target)&&gate.allowed()&&gate.matches(plan.gate)&&isCurrent();

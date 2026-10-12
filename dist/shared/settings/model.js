@@ -1,9 +1,9 @@
-import {assertTrackingPrompts, DEFAULT_TRACKING_PROMPTS} from '../../domain/tracking/prompts.js';
+import {assertTrackingPrompts, DEFAULT_TRACKING_PROMPTS, migrateTrackingPrompts} from '../../domain/tracking/prompts.js';
 import {normalizeControls, assertControls, defaultControls} from '../../domain/controls/model.js';
 import {assertWorkshop, emptyWorkshop} from '../../domain/workshop/model.js';
-import {validateTimeReminders, defaultTimeReminders} from './time-reminders.js';
+import {validateTimeReminders, defaultTimeReminders, reviseTimeRemindersDefaults} from './time-reminders.js';
 import { createDefaultEventWords } from './default-event-words.js';
-import { SUMMARY_PROMPT_KEYS } from './summary-prompts.js';
+import { SUMMARY_PROMPT_KEYS, LEGACY_SUMMARY_PROMPT_DEFAULTS, summaryPromptDefault } from './summary-prompts.js';
 import { createDefaultCleaningRules, normalizeCleaningRule } from '../../domain/summary/cleaning.js';
 
 export const SETTINGS_KEY = 'lantai_benmo';
@@ -140,13 +140,21 @@ export function assertSettings(value) {
     exact(value.domainRevisions, [...required, ...optional]);
     if (Object.values(value.domainRevisions).some(version => !Number.isSafeInteger(version) || version < 0)
       || SETTINGS_DOMAIN_KEYS.reduce((sum, field) => sum + (value.domainRevisions[field] ?? 0), 0) !== value.revision) invalid();
-    ai(value.ai); const eventGeneration = generation(value.eventGeneration);
+    ai(value.ai); const validatedGeneration = generation(value.eventGeneration);
+    // This is a normalized read view, not a persistence operation. Match the
+    // complete known old default; near-matches, edits and explicit blanks are
+    // user content and must survive both loading and unrelated settings saves.
+    const eventGeneration = { ...validatedGeneration, promptOverrides: Object.fromEntries(
+      Object.entries(validatedGeneration.promptOverrides).map(([key, content]) => [key,
+        Object.hasOwn(LEGACY_SUMMARY_PROMPT_DEFAULTS, key) && content === LEGACY_SUMMARY_PROMPT_DEFAULTS[key]
+          ? summaryPromptDefault(key) : content]),
+    ) };
     if(!hasRecall&&(value.domainRevisions.recall??0)!==0)invalid();
     const migrated = { ...value, schema: 2, credentials: legacy ? [] : value.credentials, eventGeneration,domainRevisions:{...value.domainRevisions,recall:value.domainRevisions.recall??0},recall:hasRecall?assertRecallSettings(value.recall):defaultRecallSettings() };
-    if(hasTracking)migrated.trackingPrompts=assertTrackingPrompts(value.trackingPrompts);
+    if(hasTracking)migrated.trackingPrompts=migrateTrackingPrompts(assertTrackingPrompts(value.trackingPrompts));
     if(hasControls)migrated.controls=normalizeControls(value.controls);
     if(hasWorkshop)migrated.workshop=assertWorkshop(value.workshop);
-    if(hasTime)migrated.timeReminders=assertTimeReminders(value.timeReminders);
+    if(hasTime)migrated.timeReminders=assertTimeReminders(reviseTimeRemindersDefaults(value.timeReminders));
     if(hasCumulative)migrated.cumulativeGeneration=assertCumulativeGeneration(value.cumulativeGeneration);
     if (!Array.isArray(migrated.credentials)) invalid();
     const ids = new Set();

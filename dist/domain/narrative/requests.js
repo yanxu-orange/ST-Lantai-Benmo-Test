@@ -48,7 +48,23 @@ export function validateNarrativeEntries(previous, next) {
   if (previous.length && !next.length) throw new Error('已有自述或大纲不能被空结果清空');
   const protectedLength = Math.max(0, previous.length - 2);
   if (next.length < protectedLength || previous.slice(0, protectedLength).some((row, index) => row !== next[index])) throw new Error('只能修改最后两条；更早内容必须逐字保留');
-  const normalized = next.map(row => row.normalize('NFKC').replace(/\s+/gu, '').trim());
-  if (new Set(normalized).size !== normalized.length) throw new Error('自述或大纲不能重复条目');
+  const groups = rows => {
+    const result = new Map();
+    for (const row of rows) {
+      const normalized = row.normalize('NFKC').replace(/\s+/gu, '').trim();
+      if (!result.has(normalized)) result.set(normalized, {count: 0, texts: new Map()});
+      const group = result.get(normalized);
+      group.count++;
+      group.texts.set(row, (group.texts.get(row) ?? 0) + 1);
+    }
+    return result;
+  };
+  // Historical duplicates are data, including their original spelling. Only
+  // unchanged existing occurrences may coexist; editing/appending cannot
+  // introduce another exact or normalization-equivalent copy.
+  const previousGroups = groups(previous);
+  for (const [normalized, group] of groups(next)) {
+    if (group.count > 1 && [...group.texts].some(([row, count]) => count > (previousGroups.get(normalized)?.texts.get(row) ?? 0))) throw new Error('自述或大纲不能新增重复条目');
+  }
   return clone(next);
 }

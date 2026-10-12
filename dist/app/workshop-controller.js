@@ -1,5 +1,5 @@
 import {createWorkshopExamples,reviseWorkshopExamples} from '../domain/workshop/examples.js';
-import {allocateCaptureTag,validateModule} from '../domain/workshop/model.js';
+import {allocateCaptureTag,validateModule,workshopEditableModule} from '../domain/workshop/model.js';
 import {visibleResults,resultText,editResult,deleteResult} from '../domain/workshop/results.js';
 import {sameTarget} from '../domain/memory/repository.js';
 export function createWorkshopController({repository,settings,target,runtime,ensureRegex,getCharacterName,onProgress,onMemory,onTime,onSettings,onBenmo,onClose}={}) {
@@ -54,7 +54,7 @@ export function createWorkshopController({repository,settings,target,runtime,ens
   function snapshot(){
     const globals=globalSnapshot.workshop.modules.filter(module=>module.scope==='global'||module.scope==='character'&&module.characterKey===binding?.owner);
     const visible=new Map([...globals,...chatSnapshot.workshop.modules].map(module=>[module.id,module]));
-    const modules=[...visible.values()].sort((a,b)=>Number(!!b.example)-Number(!!a.example)).map(module=>({...structuredClone(module),kind:module.lifecycle,generationSource:module.lifecycle==='prompt'?'story':module.generationSource??'story',...(enabledIntents.has(module.id)?{enabled:enabledIntents.get(module.id)}:{})}));
+    const modules=[...visible.values()].sort((a,b)=>Number(!!b.example)-Number(!!a.example)).map(module=>({...workshopEditableModule(module),kind:module.lifecycle,generationSource:module.lifecycle==='prompt'?'story':module.generationSource??'story',...(enabledIntents.has(module.id)?{enabled:enabledIntents.get(module.id)}:{})}));
     const results=Object.fromEntries(modules.map(module=>[module.id,(module.lifecycle==='sync'?visibleResults(chatSnapshot.workshop.results,module.id).slice(-3).reverse():visibleResults(chatSnapshot.workshop.results,module.id)).map(row=>({...row,text:resultText(row),edited:row.manualValue!==null}))]));
     return {modules,results,warning,pendingIds:[...toggleTasks.keys()],deletingIds:[...deleting],writeBlocked:!!writeFailure,characterName:getCharacterName?.(binding)??'当前角色',canUseCharacter:binding?.kind==='character'};
   }
@@ -120,6 +120,7 @@ export function createWorkshopController({repository,settings,target,runtime,ens
     let captureTag=old?.captureTag??null;
     if(lifecycle!=='prompt'&&(!captureTag||old?.scope!==draft.scope)){const allocation=allocateCaptureTag(store,draft.scope);captureTag=allocation.tag;store=allocation.workshop;}
     const module=validateModule({id:old?.id??draft.id??crypto.randomUUID(),name:draft.name,content:draft.content,scope:draft.scope,role:draft.role,depth:Number(draft.depth),enabled:draft.enabled,lifecycle,generationSource:lifecycle==='prompt'?'story':draft.generationSource??'story',captureTag:lifecycle==='prompt'?null:captureTag,
+      ...(lifecycle==='sync'&&draft.syncContentVersion!==undefined?{syncContentVersion:draft.syncContentVersion}:{}),
       ...(old?.example?{example:true}:{}),
       moveVersion:(old?.moveVersion??0)+(old&&((old.scope==='chat')!==(draft.scope==='chat'))?1:0),
       ...(old?.captureTag&&old.captureTag!==captureTag?{captureAliases:[...(old.captureAliases??[]),{tag:old.captureTag,rootId:target.rootId}]}:old?.captureAliases?{captureAliases:old.captureAliases}:{}),

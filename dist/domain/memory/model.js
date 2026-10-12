@@ -6,7 +6,7 @@ import {assertTime,inheritTime} from '../time/data.js';
 import {emptySummary,assertSummary,summaryOf} from '../summary/data.js';
 import {effectiveBatchPositions,effectiveBatchRanges} from '../summary/source-positions.js';
 import {assertCumulative,inheritCumulative} from '../cumulative/data.js';
-import {assertLatest,inheritLatest} from '../latest/data.js';
+import {assertLatest,inheritLatest,migrateLatestPreferences} from '../latest/data.js';
 import {validateEvent,assertMergeRelations,validRange} from './event-model.js';
 // Keep the existing public entry point while summary uses the leaf event model.
 export {blankEvent,splitWords,detailWordError,validateEvent,activeEvents,assertMergeRelations,validRange,validateEventForSave} from './event-model.js';
@@ -26,7 +26,11 @@ export function assertRoot(root, target) {
   if(Object.hasOwn(root,'time'))assertTime(root.time);
   if(Object.hasOwn(root,'controls'))assertChatControls(root.controls);
   if(Object.hasOwn(root,'workshop'))assertWorkshop(root.workshop);
-  return clone(root);
+  const normalized=clone(root);
+  // Upgrade only an exact shipped default in the returned view. Reading a chat
+  // never writes metadata, changes revisions, or rewrites a user's prompt.
+  if(normalized.latest)normalized.latest.preferences=migrateLatestPreferences(normalized.latest.preferences);
+  return normalized;
 }
 export function inheritEvents(events, floor) {
   if (!Number.isSafeInteger(floor) || floor < 0) throw new Error('分支楼层无效');

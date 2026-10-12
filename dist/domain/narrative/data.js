@@ -96,21 +96,6 @@ export function reconcileNarrativeSource(value, raw) {
   }
   return {domain: assertNarrative(domain), staleKinds, firstChangedFloor};
 }
-// Count additions rather than the complete accumulated history. Identical
-// codepoints in the editable suffix are retained content, not this batch's new
-// allowance. Surrogate pairs count as one character.
-export function countNarrativeAddedCharacters(previous, next) {
-  const protectedLength = Math.max(0, previous.length - 2);
-  let before = [...previous.slice(protectedLength).join('')], after = [...next.slice(protectedLength).join('')];
-  let prefix = 0; while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix++;
-  before = before.slice(prefix); after = after.slice(prefix);
-  while (before.length && after.length && before.at(-1) === after.at(-1)) { before.pop(); after.pop(); }
-  if (!before.length || !after.length) return after.length;
-  if (before.length * after.length > 4000000) return after.length;
-  const dp = new Uint32Array(after.length + 1);
-  for (const char of before) { let diagonal = 0; for (let j = 1; j <= after.length; j++) { const old = dp[j]; dp[j] = char === after[j - 1] ? diagonal + 1 : Math.max(dp[j], dp[j - 1]); diagonal = old; } }
-  return after.length - dp[after.length];
-}
 export function applyNarrativeResponse(value, ticket, response, raw, {events, makeId = () => crypto.randomUUID(), now = new Date().toISOString()} = {}) {
   const domain = assertNarrative(value), kind = assertKind(ticket?.kind);
   if (ticket.revision !== domain.revision || !same(ticket.preferences, domain.preferences[kind]) || !same(ticket.previous, domain[kind])
@@ -122,12 +107,29 @@ export function applyNarrativeResponse(value, ticket, response, raw, {events, ma
   const update = (entries, texts) => {
     const previous = entries.map(row => row.text);
     validateNarrativeEntries(previous, texts);
-    if (countNarrativeAddedCharacters(previous, texts) > (kind === 'self' ? 100 : 150)) throw new Error(kind === 'self' ? '本批新增自述超过100字' : '本批新增大纲超过150字');
+    // Match each retained occurrence once. Legacy equal text can have distinct
+    // IDs, timestamps and provenance; finding by text alone reuses the first ID.
+    const retainedIds = new Set();
+    const unchanged = texts.map((body, index) => {
+      const entry = entries[index];
+      if (entry?.text !== body) return null;
+      retainedIds.add(entry.id);
+      return entry;
+    });
+    const available = new Map();
+    for (const entry of entries) {
+      if (retainedIds.has(entry.id)) continue;
+      if (!available.has(entry.text)) available.set(entry.text, []);
+      available.get(entry.text).push(entry);
+    }
+    for (let index = 0; index < texts.length; index++) {
+      if (unchanged[index]) continue;
+      unchanged[index] = available.get(texts[index])?.shift() ?? null;
+      if (unchanged[index]) retainedIds.add(unchanged[index].id);
+    }
     return texts.map((body, index) => {
-      const unchanged = entries.find(row => row.text === body);
-      if (unchanged) return clone(unchanged);
-      if (kind === 'self' && [...body].length > 100) throw new Error('单条新增或修改的角色自述超过100字');
-      const existing = entries[index] && !texts.includes(entries[index].text) ? entries[index] : null, sources = mergeRanges([...(existing?.sources ?? []), ticket.source.requestedRange]);
+      if (unchanged[index]) return clone(unchanged[index]);
+      const existing = entries[index] && !retainedIds.has(entries[index].id) ? entries[index] : null, sources = mergeRanges([...(existing?.sources ?? []), ticket.source.requestedRange]);
       return {id: existing?.id ?? freshId(), text: body, sources, createdAt: existing?.createdAt ?? now, updatedAt: now};
     });
   };

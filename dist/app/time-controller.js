@@ -103,7 +103,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
    if(!guard())throw new Error('聊天已变化');
    if(state.draft===editor)state.editorTime=copy(state.time);
    // If the separate global save fails, keep this editor and disclose the completed chat save.
-   try{const latest=settings.captureTimeReminders();if(!settings.matchesTimeReminders(config))throw new Error('当前日期提醒配置已变化');const receipt=await settings.saveTimeReminders({...latest.reminders,current:draft.current},{expectedEpoch:latest.epoch,isCurrent:guard});if(receipt.status!=='committed')throw new Error('提醒设置保存尚未确认');config=settings.captureTimeReminders();state.reminders=copy(config.reminders);}
+   try{const latest=settings.captureTimeReminders();if(!settings.matchesTimeReminders(config))throw new Error('时间推进配置已变化');const receipt=await settings.saveTimeReminders({...latest.reminders,current:draft.current},{expectedEpoch:latest.epoch,isCurrent:guard});if(receipt.status!=='committed')throw new Error('提醒设置保存尚未确认');config=settings.captureTimeReminders();state.reminders=copy(config.reminders);}
    catch(error){throw new Error(`故事日期已保存；全局提醒设置未确认：${error.message}`);}
    state.pendingCalendar=null;await dateRuntime.request();
    if(!guard())return;

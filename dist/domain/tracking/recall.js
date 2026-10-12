@@ -52,7 +52,7 @@ export async function buildTrackingRecall({ records = [], input = '', recentHist
     if (!candidate.pinned) matchedCount++;
     selected.push(candidate);
   }
-  const prompt = selected.length ? ['<lantai_entity_memory>', '以下为与近期对话有关或人工常驻的物品与 NPC 资料。未知信息没有填写；缺席不表示离场、消失或死亡。请作为连续性参考，不要机械复述。', ...selected.map(row => row.text), '</lantai_entity_memory>'].join('\n\n') : '';
+  const prompt = selected.length ? ['<lantai_entity_memory>', '以下是故事相关的道具与角色介绍，用以保持人物、物品及相关设定的连续性。剧情涉及相关人物或物品时，你可以酌情参考，但不要机械复述。', ...selected.map(row => row.text), '</lantai_entity_memory>'].join('\n\n') : '';
   return { selected, selectedIds: selected.map(row => row.id), unselected, prompt,
     budget: { maxCount: settings.maxCount, maxTokens: settings.maxTokens, totalTokens: settings.maxTokens === null ? null : totalTokens, estimated, soft: true, scope: 'matched-records' } };
 }

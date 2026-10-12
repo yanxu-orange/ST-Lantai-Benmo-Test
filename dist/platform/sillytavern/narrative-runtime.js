@@ -4,7 +4,7 @@ import {summaryOf} from '../../domain/summary/data.js';
 import {emptyNarrative,assertNarrative,applyNarrativeResponse,reconcileNarrativeSource} from '../../domain/narrative/data.js';
 import {prepareNarrativeUpdate,matchesNarrativeSource,matchesNarrativeMemory,projectNarrativeMemory} from '../../domain/narrative/source.js';
 import {buildNarrativeRequest,parseNarrativeResponse} from '../../domain/narrative/requests.js';
-import {DEFAULT_NARRATIVE_PROMPTS} from '../../domain/narrative/prompts.js';
+import {DEFAULT_NARRATIVE_PROMPTS,NARRATIVE_OUTLINE_INJECTION,narrativeSelfInjection} from '../../domain/narrative/prompts.js';
 
 export const NARRATIVE_PROMPT_KEYS=Object.freeze({outline:'lantai_benmo_narrative_0_outline',self:'lantai_benmo_narrative_1_self'});
 const kinds=['self','outline'],supported=new Set(['normal','regenerate','swipe','continue']);
@@ -225,9 +225,9 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       const valid=()=>!disposed&&ticket===injectionSerial&&current(t)&&proofs.every(matches)&&equal(source(t),raw)&&(!repository.matchesNarrative||repository.matchesNarrative(t,captured));
       if(!valid())return;
       const domain=projection.domain,parts=[];
-      if(active.includes('outline')&&!projection.staleKinds.includes('outline')&&domain.outline.length)parts.push({kind:'outline',depth:domain.preferences.outline.depth,text:`【已发生的故事大纲】\n${domain.outline.map(row=>row.text).join('\n')}`});
+      if(active.includes('outline')&&!projection.staleKinds.includes('outline')&&domain.outline.length)parts.push({kind:'outline',depth:domain.preferences.outline.depth,text:`${NARRATIVE_OUTLINE_INJECTION}\n\n【已发生的故事大纲】\n${domain.outline.map(row=>row.text).join('\n')}`});
       if(active.includes('self')&&!projection.staleKinds.includes('self')){
-        const chosen=domain.preferences.self.characters.filter(row=>row.inject!==false),records=chosen.flatMap(character=>{const record=domain.self.find(row=>row.id===character.id);return record?.entries.length?[`【${character.name}的阶段自述】\n${record.entries.map(row=>row.text).join('\n')}`]:[];});
+        const chosen=domain.preferences.self.characters.filter(row=>row.inject!==false),records=chosen.flatMap(character=>{const record=domain.self.find(row=>row.id===character.id);return record?.entries.length?[`${narrativeSelfInjection(character.name)}\n\n【${character.name}的阶段自述】\n${record.entries.map(row=>row.text).join('\n')}`]:[];});
         if(records.length)parts.push({kind:'self',depth:domain.preferences.self.depth,text:records.join('\n\n')});
       }
       // Equal-depth content is one payload, making outline-before-self order

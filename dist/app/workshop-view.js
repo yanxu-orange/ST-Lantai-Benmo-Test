@@ -1,3 +1,4 @@
+import {DEFAULT_WORKSHOP_SYNC_REQUIREMENTS} from '../domain/workshop/model.js';
 import {mainNavigation,rootTitle} from './navigation.js';
 import {surfaceTheme} from './styles/theme.js';
 export async function mountWorkshopView({container:app,controller,initialKind='prompt',availability=()=>({memory:true,time:true,workshop:true,prompt:true,collect:true,sync:true})}) {
@@ -8,7 +9,7 @@ const apply=value=>{lastError='';initial=value;modules=value.modules.map(module=
 const kinds={prompt:'提示词注入',collect:'内容收集',sync:'长期追踪'};
 const scopes={global:'全局',character:'当前角色',chat:'当前聊天'};
 const generationSources={story:'随剧情生成',background:'后台生成'};
-const make=(id,kind,scope,name,content,enabled=true)=>({id,kind,scope,name,content,enabled,role:'system',depth:0,generationSource:'story'});
+const make=(id,kind,scope,name,content,enabled=true)=>({id,kind,scope,name,content:kind==='sync'?DEFAULT_WORKSHOP_SYNC_REQUIREMENTS+(content?'\n'+content:''):content,...(kind==='sync'?{syncContentVersion:1}:{}),enabled,role:'system',depth:0,generationSource:'story'});
 let state={kind:availability()[initialKind]&&Object.hasOwn(kinds,initialKind)?initialKind:Object.keys(kinds).find(key=>availability()[key])??'prompt',route:'root',theme:surfaceTheme(app),draft:null,moduleId:null,index:0,dialog:null,closed:false,query:'',directoryLimit:20};
 let toastTimer,draftBaseline='';const scrolls={},collapsed={};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

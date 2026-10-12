@@ -1,6 +1,6 @@
 import {narrativeOf,assertNarrative} from '../narrative/data.js';
 import {trackingOf,assertTracking} from '../tracking/data.js';
-import {latestOf,assertLatest,assertLatestPreferences,assertLatestRecord} from '../latest/data.js';
+import {latestOf,assertLatest,assertLatestPreferences,assertLatestRecord,migrateLatestPreferences} from '../latest/data.js';
 import {storedLatestSource} from '../latest/source.js';
 import {affectedSummaryDeletion} from '../summary/source-deletion.js';
 import {rebaseSummaryPositions} from '../summary/source-positions.js';
@@ -108,7 +108,14 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
   };
   const latestMutation=(target,selection,options,change)=>{
     const frozen=copy(target),snapshot=copy(selection);
-    const guard=root=>{requireTarget(frozen);if((options.isCurrent??(()=>true))()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(latestOf(root),snapshot.latest))throw new Error('最新摘要来源或配置已变化');return true;};
+    // Host adapters guard against the raw stored root. Compare the same
+    // normalized read view as the captured selection, including old defaults.
+    const guard=root=>{
+      requireTarget(frozen);
+      if((options.isCurrent??(()=>true))()!==true||!snapshot||!sameTarget(frozen,snapshot.target))throw new Error('最新摘要来源或配置已变化');
+      const current=latestOf(root);current.preferences=migrateLatestPreferences(current.preferences);
+      if(!equal(current,snapshot.latest))throw new Error('最新摘要来源或配置已变化');return true;
+    };
     return enqueue(async()=>{
       const root=await read(frozen);guard(root);const current=latestOf(root),candidate=assertLatest(change(copy(current))),nextLatest={...candidate,revision:current.revision};
       if(!options.forceSave&&equal(current,nextLatest))return {status:'unchanged',root,selection:freeze({target:frozen,latest:current})};

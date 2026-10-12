@@ -5,7 +5,7 @@ import {cleanSummaryFloors,createDefaultCleaningRules,normalizeCleaningRule} fro
 import {sameTarget} from '../../domain/memory/repository.js';
 import {DEFAULT_LATEST_PROMPT,emptyLatest,pruneLatestRecords} from '../../domain/latest/data.js';
 import {prepareLatestSource,prepareManualLatestSource,storedLatestSource,matchesLatestSource,matchesStoredLatestSource} from '../../domain/latest/source.js';
-import {buildLatestRequest} from '../../domain/latest/requests.js';
+import {buildLatestRequest,promptIdentities} from '../../domain/latest/requests.js';
 import {planLatestBackfill,buildLatestBackfillRequest,parseLatestBackfillResponse} from '../../domain/latest/backfill.js';
 import {buildBackgroundRoundRequest,parseBackgroundRoundResponse} from '../../domain/background/round.js';
 import {resultText} from '../../domain/workshop/results.js';
@@ -28,11 +28,17 @@ const pendingProjection=message=>{
   const slot=message?.swipe_info?.[message.swipe_id??0]?.extra?.[WORKSHOP_REPLY_KEY],active=message?.extra?.[WORKSHOP_REPLY_KEY];
   return typeof slot==='string'&&!!slot&&typeof active==='string'&&!!active&&slot!==active;
 };
+// Capture only names the host explicitly binds; never infer a story person from
+// the user/assistant author labels on a message.
+export function captureLatestPromptIdentities(context={}){
+  const character=context.characters?.[context.characterId];
+  return promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name});
+}
 // Latest owns neither provider configuration nor event/ancient summary progress.
 export function createLatestSummaryRuntime({repository,adapter,settings,provider,getGenerationSettings,getContext,getControls,workshopRuntime,trackingRuntime}={}) {
   let latestEpoch=0,disposed=false,serial=0,readSerial=0,target=null,selection=null,pending=null,receipt=null,enabled=true,generationQueue=Promise.resolve(),foregroundStopped=false,foregroundType=null,foregroundEnded=false;
   let workshopState=null,workshopFloorStates={},trackingState=null,trackingFloorStates={};
-  const automaticReceipts=new Map(),displayBatches=new Map();
+  const automaticReceipts=new Map(),displayBatches=new Map(),failureReports=[];
   let state={...emptyLatest(),status:'idle',error:'',floorStates:{}};
   let backfillState={status:'idle',id:null,total:0,completed:0,skipped:0,failed:0,error:''},backfillController=null;
   let automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};
@@ -42,7 +48,15 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   const summaryMatches=proof=>summaryAllowed()&&getControls?.()?.matches(proof)===true;
   const current=t=>{try{return !disposed&&sameTarget(t,repository.captureTarget());}catch{return false;}};
   const publish=()=>{for(const listener of listeners)try{listener(inspect());}catch{/* UI cannot break a write. */}};
-  function inspect(){return copy({...state,target,automatic:automaticState,backfill:backfillState});}
+  const identities=()=>captureLatestPromptIdentities(getContext());
+  const currentFailures=()=>failureReports.filter(row=>target&&current(target)&&row.target.chatId===target.chatId&&row.target.rootId===target.rootId);
+  function retainFailure({requestId,target:owner,replyIds,taskIds,rawResponse,error}){
+    if(typeof rawResponse!=='string'||!owner)return;
+    const existing=failureReports.find(row=>row.requestId===requestId);
+    if(existing){if(error&&!existing.errors.includes(error))existing.errors.push(error);return;}
+    failureReports.push({requestId,target:copy(owner),replyIds:copy(replyIds),taskIds:copy(taskIds),rawResponse,errors:error?[error]:[],createdAt:new Date().toISOString()});
+  }
+  function inspect(){return copy({...state,target,automatic:automaticState,backfill:backfillState,failureReports:currentFailures()});}
   function automaticStatus(status,message,floor=automaticState.floor){automaticState={status,message,floor};publish();}
   function cancel(){stopBackfill();for(const [key,value] of automaticReceipts)if(['queued','running'].includes(value.status))automaticReceipts.set(key,{...value,status:'cancelled',message:'本轮自动生成已取消，未自动重试'});if(['waiting','queued','running'].includes(automaticState.status))automaticState={...automaticState,status:'cancelled',message:'本轮自动生成已取消，未自动重试'};serial++;foregroundType=null;for(const [key,value] of Object.entries(trackingFloorStates))if(value.status==='running')trackingFloorStates[key]={status:'idle',error:''};for(const tasks of Object.values(workshopFloorStates))for(const [key,value] of Object.entries(tasks))if(value.status==='running')tasks[key]={status:'idle',error:''};receipt=null;foregroundEnded=false;generationQueue=Promise.resolve();queuedFloors.clear();displayBatches.clear();for(const job of jobs)job.abort();jobs.clear();for(const [key,value] of Object.entries(state.floorStates))if(value.status==='running')state.floorStates[key]={status:'idle',error:''};if(state.status==='running')state.status='ready';publish();}
   function raw(t,retention=false){
@@ -127,7 +141,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     selection=saved.selection;state={...selection.latest,status:'ready',error:'',floorStates:{}};publish();return inspect();
   }
   async function generate(floor,{automatic=false,expectedMessage=null,workshopOnly=false,taskId,automaticSummaryProof=null,automaticMasterProof=null,queuedSummary=null}={}){
-    const ticket=serial,controller=new AbortController();jobs.add(controller);displayBatches.set(controller,{floor,ticket});let key=String(floor),t,latestTask=false,plan=null,trackingPlan=null,preparationFailed=false,partialResults=false,skippedTasks=0,automaticReceiptKey=null,stage='preparation',firstFailure='',generationCurrent=null,originSource=null;
+    const ticket=serial,controller=new AbortController(),requestId=crypto.randomUUID();let rawResponse=null,requestedTaskIds=[];jobs.add(controller);displayBatches.set(controller,{floor,ticket});let key=String(floor),t,latestTask=false,plan=null,trackingPlan=null,preparationFailed=false,partialResults=false,skippedTasks=0,automaticReceiptKey=null,stage='preparation',firstFailure='',generationCurrent=null,originSource=null;
     const inputPair=snapshot=>snapshot.messages.filter(row=>row.floor===floor||row.floor===floor-1).map(({replyId,...row})=>row);
     const origin=getContext().chat?.[floor],originText=origin?.mes,originSwipe=origin?.swipe_id??0;
     const failure=(error,at=stage)=>{const message=safeFailure(error,at);firstFailure||=message;return message;};
@@ -144,9 +158,9 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       const rawSource=raw(t);key=rawSource.messages.find(row=>row.floor===floor)?.replyId??key;
       stage='config';const generation=getGenerationSettings();stage='preparation';
       latestTask=!workshopOnly&&summaryMatches(summaryProof);
-      const source=prepareLatestSource(rawSource,{floor,rules:generation.summaryCleaning.rules});
+      const source=prepareLatestSource(rawSource,{floor,rules:generation.summaryCleaning.rules}),names=identities();
       const valid=()=>{
-        try{return allowed()&&getControls?.()?.matches(masterProof)===true&&!controller.signal.aborted&&ticket===serial&&current(t)&&getGenerationSettings().epoch===generation.epoch&&matchesLatestSource(source,raw(t));}catch{return false;}
+        try{return allowed()&&getControls?.()?.matches(masterProof)===true&&!controller.signal.aborted&&ticket===serial&&current(t)&&getGenerationSettings().epoch===generation.epoch&&equal(names,identities())&&matchesLatestSource(source,raw(t));}catch{return false;}
       };
       generationCurrent=valid;
       const summaryEligible=()=>captured.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId)||!archivedFloor(t,floor);
@@ -160,7 +174,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         try{plan=await workshopRuntime?.prepareBackground(t,source,{automatic,taskId});}
         catch(error){if(!valid())return false;preparationFailed=true;for(const module of workshopState?.modules??[])if(taskId===undefined||module.id===taskId)markWorkshop({module},'failed',failure(error));}
       }
-      if(automatic||workshopOnly){try{trackingPlan=await trackingRuntime?.prepareBackground(t,source,{automatic,taskId,rules:generation.summaryCleaning.rules});}catch(error){if(!valid())return false;preparationFailed=true;markTracking('failed',failure(error));}}
+      if(automatic||workshopOnly){try{trackingPlan=await trackingRuntime?.prepareBackground(t,source,{automatic,taskId,rules:generation.summaryCleaning.rules,identities:names});}catch(error){if(!valid())return false;preparationFailed=true;markTracking('failed',failure(error));}}
       let tasks=(plan?.tasks??[]).filter(task=>task.instructions.trim());
       for(const task of plan?.tasks??[])if(!task.instructions.trim()){preparationFailed=true;markWorkshop(task,'failed','请先填写该工坊条目的生成要求');}
       if(!latestTask&&!tasks.length&&!trackingPlan){report('skipped','本轮没有可发送的任务，请检查功能开关、已有结果及工坊生成要求');publish();return false;}
@@ -193,10 +207,12 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       }
       if(!valid()||!latestTask&&!tasks.length&&!trackingPlan)return false;
       const descriptors=[...(latestTask?[{id:'latest',name:'最新摘要',instructions:preferences.prompt}]:[]),...tasks,...(trackingPlan?[trackingPlan.task]:[])];
-      stage='request';const request=tasks.length||trackingPlan?buildBackgroundRoundRequest({source,tasks:descriptors}):buildLatestRequest({source,prompt:preferences.prompt});
+      requestedTaskIds=descriptors.map(task=>task.id);
+      stage='request';const request=tasks.length||trackingPlan?buildBackgroundRoundRequest({source,tasks:descriptors,identities:names}):buildLatestRequest({source,prompt:preferences.prompt,identities:names});
       report('running','正在进行本轮自动生成');
       stage='request';const output=await provider.generateText({...request,signal:controller.signal,isCurrent:valid});
       if(!valid())return false;
+      rawResponse=output.text;
       stage='parse';const segments=tasks.length||trackingPlan?parseBackgroundRoundResponse(output.text,descriptors):new Map([['latest',{text:output.text}]]);
       let successes=0;
       if(latestTask&&summaryMatches(summaryProof)&&summaryEligible()){
@@ -211,7 +227,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           await repository.upsertLatestRecord(t,latest,{id:previous?.id??crypto.randomUUID(),body:segment.text,sourceSnapshot:source,cleaningRules:normalizedRules(generation.summaryCleaning.rules),createdAt:previous?.createdAt??now,updatedAt:now},{isCurrent:()=>valid()&&summaryMatches(summaryProof)&&summaryEpoch===latestEpoch&&summaryEligible()});
           if(!valid())return false;
           state.floorStates[key]={status:'ready',error:''};successes++;
-        }catch(error){if(!valid())return false;if(!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}else{state.floorStates[key]={status:'failed',error:failure(error)};state.error=failure(error);}}
+        }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:failure(error,'save')});if(!valid())return false;if(!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}else{state.floorStates[key]={status:'failed',error:failure(error)};state.error=failure(error);}}
         publish();
       }else if(latestTask&&!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}
       for(const task of tasks){
@@ -222,7 +238,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           if(!valid())return false;
           markWorkshop(task,'ready');successes++;
           workshopState=await workshopRuntime.backgroundState(t);
-        }catch(error){if(!valid())return false;markWorkshop(task,'failed',failure(error));}
+        }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:failure(error,'save')});if(!valid())return false;markWorkshop(task,'failed',failure(error));}
         publish();
       }
       if(trackingPlan&&valid()){
@@ -232,9 +248,9 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           if(!valid())return false;
           const errors=Object.entries(result.errors).filter(([,error])=>error).map(([kind,error])=>`${kind==='items'?'物品':'NPC'}：${error}`);
           if(result.skipped){markTracking('idle');skippedTasks++;}
-          else{markTracking(errors.length?'failed':'ready',errors.join('；'));successes++;if(errors.length)partialResults=true;}
+          else{markTracking(errors.length?'failed':'ready',errors.join('；'));successes++;if(errors.length){partialResults=true;firstFailure||=errors.join('；');}}
           trackingState=await trackingRuntime.backgroundState(t);
-        }catch(error){if(!valid())return false;markTracking('failed',failure(error));}
+        }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:failure(error,'save')});if(!valid())return false;markTracking('failed',failure(error));}
         publish();
       }
       if(valid()){
@@ -242,6 +258,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         selection=latest;state={...latest.latest,status:state.floorStates[key]?.status==='failed'?'failed':'ready',error:state.floorStates[key]?.error??'',floorStates:state.floorStates};publish();
       }
       const complete=successes===descriptors.length&&!preparationFailed&&!partialResults;
+      if(!complete&&(!skippedTasks||firstFailure||partialResults))retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:firstFailure||'本轮部分任务结果未能保存'});
       report(complete?'succeeded':successes?'partial':skippedTasks&&!preparationFailed?'skipped':'failed',complete?'本轮自动生成已保存':successes?'本轮部分结果已保存，其余任务已取消或失败':skippedTasks&&!preparationFailed?'任务授权已变化，本轮结果未写入':`本轮自动生成失败：${firstFailure||'未收到可保存结果，请重试。'}`);
       return successes>0;
     }catch(error){
@@ -251,6 +268,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         // original input pair too, including hidden flags and user content.
         try{if(originSource&&!equal(originSource,inputPair(raw(t))))return false;}catch{if(error?.code!=='COMMIT_UNCONFIRMED')return false;}
         const message=failure(error);
+        retainFailure({requestId,target:t,replyIds:key?[key]:[],taskIds:requestedTaskIds,rawResponse,error:message});
         report('failed',`本轮自动生成失败：${firstFailure||'未收到可保存结果，请重试。'}`);
         // refresh may create the reply UUID before preparation fails. Bind only
         // to the same reply version; a floor number is never an error owner.
@@ -334,7 +352,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   }
   function workshopFloorInfo(floor){return workshopFloorInfos([floor]).get(floor)??null;}
   function library(){
-    const result={records:[],missing:[],running:[],currentRows:[],historyRecords:[],preferences:copy(state.preferences),target:copy(target),automatic:copy(automaticState),backfill:copy(backfillState)};
+    const result={records:[],missing:[],running:[],currentRows:[],historyRecords:[],preferences:copy(state.preferences),target:copy(target),automatic:copy(automaticState),backfill:copy(backfillState),failureReports:copy(currentFailures())};
     if(!target||!current(target))return result;
     try{
       let cleaningRules=[];try{cleaningRules=settings?.captureEventGeneration?settings.captureEventGeneration().generation.summaryCleaning.rules:getGenerationSettings().summaryCleaning.rules;}catch{/* Reading saved facts never requires a connected model. */}
@@ -381,7 +399,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start)throw new Error('请输入有效的起止楼层');
     const source=raw(target),rules=cleaningRules(),missing=library().missing,byFloor=new Map(source.messages.map(row=>[row.floor,row]));
     const sources=missing.filter(row=>row.floor>=start&&row.floor<=end).map(row=>prepareLatestSource({epoch:source.epoch,messages:[byFloor.get(row.floor-1),byFloor.get(row.floor)].filter(Boolean)},{floor:row.floor,rules}));
-    return {...planLatestBackfill({sources,prompt:state.preferences.prompt}),rules};
+    return {...planLatestBackfill({sources,prompt:state.preferences.prompt,identities:identities()}),rules};
   }
   function estimateBackfill(range){const {count,calls,oversized}=backfillPlan(range);return {count,calls,oversized};}
   function resetBackfill(){backfillState={status:'idle',id:null,total:0,completed:0,skipped:0,failed:0,error:''};backfillController=null;}
@@ -392,10 +410,10 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   function startBackfill(range){
     if(['queued','running'].includes(backfillState.status))throw new Error('摘要补缺正在进行');
     const plan=backfillPlan(range),t=copy(target),ticket=serial,proof=getControls?.()?.capture('summary'),epoch=latestEpoch;
-    const generation=getGenerationSettings(),frozenRaw=raw(t),prompt=state.preferences.prompt,id=crypto.randomUUID(),controller=new AbortController();
+    const generation=getGenerationSettings(),frozenRaw=raw(t),prompt=state.preferences.prompt,names=identities(),id=crypto.randomUUID(),controller=new AbortController();
     backfillController=controller;jobs.add(controller);
     backfillState={status:'queued',id,total:plan.count,completed:0,skipped:0,failed:0,error:plan.oversized.length?`以下楼层超过字符保护预算，未加入请求：${plan.oversized.join('、')}`:''};publish();
-    const valid=()=>{try{return !controller.signal.aborted&&backfillState.id===id&&ticket===serial&&current(t)&&summaryMatches(proof)&&epoch===latestEpoch&&getGenerationSettings().epoch===generation.epoch&&adapter.matchesChatSource(t,frozenRaw);}catch{return false;}};
+    const valid=()=>{try{return !controller.signal.aborted&&backfillState.id===id&&ticket===serial&&current(t)&&summaryMatches(proof)&&epoch===latestEpoch&&getGenerationSettings().epoch===generation.epoch&&equal(names,identities())&&adapter.matchesChatSource(t,frozenRaw);}catch{return false;}};
     const archivedNow=source=>archivedFloor(t,source.assistantFloor);
     const skipArchived=source=>{state.floorStates[source.replyId]={status:'idle',error:''};backfillState={...backfillState,skipped:backfillState.skipped+1};};
     const execute=async()=>{
@@ -410,11 +428,12 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           backfillState={...backfillState,skipped:backfillState.skipped+planned.length-sources.length};
           if(!sources.length){publish();continue;}
           for(const source of sources)state.floorStates[source.replyId]={status:'running',error:''};publish();
-          let parsed;
+          let parsed,batchResponse=null;const batchRequestId=crypto.randomUUID();
           try{
-            const request=buildLatestBackfillRequest({sources,prompt});
+            const request=buildLatestBackfillRequest({sources,prompt,identities:names});
             const output=await provider.generateText({...request,signal:controller.signal,isCurrent:()=>valid()&&sources.every(source=>matchesLatestSource(source,raw(t)))});
             if(!valid())break;
+            batchResponse=output.text;
             parsed=parseLatestBackfillResponse(output.text,sources);
           }catch(error){
             if(!valid())break;
@@ -438,9 +457,10 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
             }catch(error){
               // Unconfirmed persistence is not ordinary source cancellation.
               // Preserve this error even after the adapter revokes authority.
-              if(error.code==='COMMIT_UNCONFIRMED')throw error;
+              if(error.code==='COMMIT_UNCONFIRMED'){retainFailure({requestId:batchRequestId,target:t,replyIds:sources.map(row=>row.replyId),taskIds:['latest.backfill'],rawResponse:batchResponse,error:error.message});throw error;}
               if(!valid())break;
               if(archivedNow(source)){skipArchived(source);continue;}
+              retainFailure({requestId:batchRequestId,target:t,replyIds:sources.map(row=>row.replyId),taskIds:['latest.backfill'],rawResponse:batchResponse,error:`${source.replyId}：${error.message}`});
               state.floorStates[source.replyId]={status:'failed',error:error.message};backfillState={...backfillState,failed:backfillState.failed+1};
             }
             publish();

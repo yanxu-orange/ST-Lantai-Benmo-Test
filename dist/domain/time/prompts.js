@@ -2,7 +2,7 @@ import {createCalendar} from './calendar.js';
 import {yearLabel} from './chronology.js';
 import {storyDate} from './point.js';
 import {factsForDate,reminderChannels} from './occurrence.js';
-import {validateTimeReminders} from '../../shared/settings/time-reminders.js';
+import {validateTimeReminders,DEFAULT_STORY_DATE_PROMPT} from '../../shared/settings/time-reminders.js';
 export function formatStoryDate(calendar,date,chronology={eras:[]}){
  if(!date)return '';
  const point=storyDate(calendar,date),year=yearLabel(chronology,point.year);
@@ -15,8 +15,8 @@ export function composeTimePrompts(time,config){
  const definition=time.calendars.find(item=>item.id===time.activeCalendarId);
  if(!definition||!time.currentDate)return result;
  const calendar=createCalendar(definition),label=formatStoryDate(calendar,time.currentDate,time.chronology);
- if(settings.current.enabled){const template=settings.current.prompt;result.current.prompt=template.includes('{当前故事日期}')?template.replaceAll('{当前故事日期}',label):[`当前故事日期：${label}`,template].filter(Boolean).join('\n');}
+ if(settings.current.enabled){const template=settings.current.prompt;result.current.prompt=template===DEFAULT_STORY_DATE_PROMPT?template:template.includes('{当前故事日期}')?template.replaceAll('{当前故事日期}',label):[`当前故事日期：${label}`,template].filter(Boolean).join('\n');}
  const facts=factsForDate(calendar,time.items,time.currentDate,settings);
- Object.assign(result,reminderChannels(facts,settings));
+ Object.assign(result,reminderChannels(facts,settings,{storyDate:label,formatDate:date=>formatStoryDate(calendar,date,time.chronology)}));
  return result;
 }

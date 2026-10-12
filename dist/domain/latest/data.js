@@ -1,12 +1,13 @@
 import {assertLatestSource,latestSourceKey,matchesStoredLatestSource} from './source.js';
 import {assertRawSummarySource,durableSourceMessages} from '../summary/source.js';
 import {normalizeCleaningRule} from '../summary/cleaning.js';
-import {DEFAULT_LATEST_PROMPT} from './requests.js';
+import {DEFAULT_LATEST_PROMPT,migrateLatestPrompt} from './requests.js';
 export {DEFAULT_LATEST_PROMPT} from './requests.js';
 const clone=structuredClone;
 const integer=value=>Number.isSafeInteger(value)&&value>=0;
 const text=value=>typeof value==='string'&&Boolean(value.trim());
 const exact=(value,keys)=>value&&Object.getPrototypeOf(value)===Object.prototype&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
+export function migrateLatestPreferences(value){return {...clone(value),prompt:migrateLatestPrompt(value.prompt)};}
 export function defaultLatestPreferences(){return {enabled:false,recentFloors:6,prompt:DEFAULT_LATEST_PROMPT};}
 export function emptyLatest(){return {schema:1,revision:0,preferences:defaultLatestPreferences(),records:[]};}
 export function assertLatestPreferences(value){

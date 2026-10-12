@@ -5,6 +5,19 @@ export const WORKSHOP_KINDS = ['prompt', 'collect', 'sync'];
 export const WORKSHOP_GENERATION_SOURCES = ['story', 'background'];
 export const generationSourceOf = module => module.lifecycle === 'prompt' ? 'story' : module.generationSource ?? 'story';
 export const WORKSHOP_SCOPES = ['global', 'character', 'chat'];
+export const DEFAULT_WORKSHOP_SYNC_REQUIREMENTS='没有变化的信息维持原样，发生变化的内容更新为当前最新状态，并补充本轮新增的追踪信息。输出更新后的完整记录。';
+// Legacy modules retain their exact saved content. Once the user edits the
+// projected full requirements, the marker makes their edits authoritative,
+// including removing the default common requirements altogether.
+export function workshopSyncContent(module){
+ if(module.syncContentVersion===1)return module.content;
+ return DEFAULT_WORKSHOP_SYNC_REQUIREMENTS+(module.content?'\n'+module.content:'');
+}
+export function workshopEditableModule(module){
+ const result=clone(module);
+ if(module.lifecycle==='sync'){result.content=workshopSyncContent(module);result.syncContentVersion=1;}
+ return result;
+}
 export function emptyWorkshop() { return { schema: 1, revision: 0, modules: [], results: [], imports: [], captureCounters: { global: 0, character: 0, chat: 0 } }; }
 export function validateModule(value) {
   if (!value || !text(value.id) || !text(value.name) || typeof value.content !== 'string'
@@ -15,6 +28,7 @@ export function validateModule(value) {
     throw new Error('工坊模块字段无效');
   }
   if(value.generationSource!==undefined&&(!WORKSHOP_GENERATION_SOURCES.includes(value.generationSource)||value.lifecycle==='prompt'&&value.generationSource!=='story'))throw new Error('工坊生成来源无效');
+  if(value.syncContentVersion!==undefined&&(value.lifecycle!=='sync'||value.syncContentVersion!==1))throw new Error('工坊追踪要求版本无效');
   if(value.moveVersion!==undefined&&(!Number.isSafeInteger(value.moveVersion)||value.moveVersion<0))throw new Error('模块移动版本无效');
   if(value.captureAliases!==undefined&&(!Array.isArray(value.captureAliases)||value.captureAliases.some(alias=>!text(alias?.rootId)||! /^[gch][1-9]\d*$/.test(alias?.tag))))throw new Error('历史回收标签无效');
   if (value.scope === 'character' && !text(value.characterKey)) throw new Error('请选择角色');
