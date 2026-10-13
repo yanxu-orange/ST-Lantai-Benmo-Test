@@ -4,12 +4,14 @@ import {storyDate} from './point.js';
 import {createCalendar,normalizeCalendar} from './calendar.js';
 import {normalizeChronology} from './chronology.js';
 import {recognitionSettings} from './source.js';
+import {durableSourceMessages} from '../summary/source.js';
+import {assertScheduleCandidate,assertScheduleLedger,reconcileScheduleLedger,retainScheduleSummarySources} from './schedule-model.js';
 const clone=structuredClone;
 const integer=value=>Number.isSafeInteger(value)&&value>=0;
 const text=value=>typeof value==='string'&&!!value.trim();
 export function emptyTime(){return {schema:1,revision:0,calendars:[],activeCalendarId:null,recognition:recognitionSettings(),chronology:{eras:[]},items:[],currentDate:null,manualAnchor:null};}
 export function assertTime(value){
- const keys=['schema','revision','calendars','activeCalendarId','recognition','chronology','items','currentDate','manualAnchor'];
+ const keys=['schema','revision','calendars','activeCalendarId','recognition','chronology','items','currentDate','manualAnchor',...['candidates','scheduleTracking'].filter(key=>Object.hasOwn(value??{},key))];
  if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).length!==keys.length||keys.some(key=>!Object.hasOwn(value,key)))throw new Error('时间数据字段无效');
  if(!value||value.schema!==1||!integer(value.revision)||!Array.isArray(value.calendars)||!Array.isArray(value.items))throw new Error('时间数据结构无效');
  const calendars=new Map(),normalizedCalendars=[];
@@ -25,8 +27,8 @@ export function assertTime(value){
   for(const message of anchor.boundary){if(!message||!integer(message.floor)||message.floor<=previous||message.floor>=anchor.nextFloor||!text(message.identity)||typeof message.text!=='string'||!['user','assistant','system','tool'].includes(message.role))throw new Error('手动日期边界无效');previous=message.floor;}
  }
  const ids=new Set();
- for(const item of value.items){
-  if(!item||!text(item.id)||ids.has(item.id)||!['schedule','anniversary','holiday'].includes(item.kind)||!text(item.title)||!calendars.has(item.calendarId))throw new Error('时间事项身份无效');ids.add(item.id);
+ const validateItem=item=>{
+  if(!item||!text(item.id)||!['schedule','anniversary','holiday'].includes(item.kind)||!text(item.title)||!calendars.has(item.calendarId))throw new Error('时间事项身份无效');
   const calendar=calendars.get(item.calendarId);
   if(item.dateRule){
    const rule=normalizeDateRule(item.dateRule);
@@ -35,11 +37,18 @@ export function assertTime(value){
    if(item.repeat==='once'&&(!Number.isSafeInteger(item.startYear)||!ruleDate(calendar,rule,item.startYear)))throw new Error('单次规则须有有效起始年份');
   }else calendar.validate(item.startDate);
   if(item.startYear!=null&&(!Number.isSafeInteger(item.startYear)||item.startYear<1||item.startYear>9999))throw new Error('起始年份无效');
+  if(item.status!==undefined&&!['active','completed','cancelled'].includes(item.status))throw new Error('日程状态无效');
   if(item.show!=null&&typeof item.show!=='boolean')throw new Error('日历显示开关无效');
   if(!['once','yearly'].includes(item.repeat)||!Number.isSafeInteger(item.durationDays)||item.durationDays<1||item.durationDays>366||(item.advanceDays===null?item.kind==='schedule':!integer(item.advanceDays)||item.advanceDays>365))throw new Error('时间事项区间无效');
   if(item.kind==='anniversary'&&item.durationDays!==1)throw new Error('纪念日持续天数须为1');
   if(typeof item.enabled!=='boolean'||typeof item.remind!=='boolean'||typeof item.description!=='string'||typeof item.instruction!=='string')throw new Error('时间事项字段无效');
  }
+ for(const item of value.items){validateItem(item);if(ids.has(item.id))throw new Error('时间事项身份重复');ids.add(item.id);}
+ if(Object.hasOwn(value,'candidates')){
+  if(!Array.isArray(value.candidates))throw new Error('日程候选列表无效');
+  for(const candidate of value.candidates){assertScheduleCandidate(candidate,{calendars,validateItem});if(ids.has(candidate?.id))throw new Error('日程候选身份重复');ids.add(candidate.id);}
+ }
+ if(Object.hasOwn(value,'scheduleTracking'))assertScheduleLedger(value.scheduleTracking,{validateItem,calendars});
  const result={...clone(value),calendars:normalizedCalendars,recognition:recognitionSettings(value.recognition),chronology:normalizeChronology(value.chronology)};
  if(result.currentDate!==null)result.currentDate=storyDate(calendars.get(value.activeCalendarId),result.currentDate);
  if(result.manualAnchor!==null)result.manualAnchor.date=storyDate(calendars.get(value.activeCalendarId),result.manualAnchor.date);
@@ -48,8 +57,11 @@ export function assertTime(value){
 }
 export function timeOf(root){return Object.hasOwn(root,'time')?assertTime(root.time):emptyTime();}
 // The caller must prove the full anchor boundary in the actual child before reuse.
-export function inheritTime(value,{messages=null}={}){
+export function inheritTime(value,{messages=null,floor=Infinity,retainedSummaryBatchIds=[]}={}){
  const result=assertTime(value),anchor=result.manualAnchor,definition=result.calendars.find(item=>item.id===result.activeCalendarId);
+ const proven=saved=>Array.isArray(messages)&&saved.rawMessages.every(original=>{if(original.floor>=floor)return false;const current=messages.find((row,index)=>(row.floor??index)===original.floor);if(!current)return false;const comparable={...current,floor:original.floor,system:current.role==='system',swipeId:original.swipeId};return JSON.stringify(durableSourceMessages([comparable]))===JSON.stringify([original]);});
+ reconcileScheduleLedger(result,{isRetained:proven,isActive:proven});
+ retainScheduleSummarySources(result,retainedSummaryBatchIds);
  result.revision=0;result.currentDate=null;
  result.manualAnchor=anchor&&definition&&Array.isArray(messages)&&resolveManualAnchor(createCalendar(definition),anchor,messages,{branch:true})?anchor:null;
  return result;

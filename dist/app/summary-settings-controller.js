@@ -10,7 +10,7 @@ const message = error => error?.code === 'SETTINGS_COMMIT_UNCONFIRMED'
   : error?.code === 'SETTINGS_CONFLICT' ? '设置已变化，请重新读取后编辑。' : '设置无法保存，请检查内容或重新读取。';
 
 // One host-owned instance. A view may unmount without discarding this session.
-export function createSummarySettingsController({ settings, exclusions, isCurrent = () => true,
+export function createSummarySettingsController({ settings, exclusions, getControls, isCurrent = () => true,
   onBack = () => {}, onClose = () => {}, uuid = () => globalThis.crypto.randomUUID() } = {}) {
   if (!settings?.captureEventGeneration || !settings?.saveEventGeneration) throw new TypeError('总结设置接口不可用');
   const listeners = new Set();
@@ -18,8 +18,10 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
   let state = { status: 'loading', route: 'settings', draft: null, excludedFloors: [], promptDrafts: {}, customDrafts: {},
     libraryDraft: null, libraryOpen: null, librarySelection: [], libraryMulti: false, ruleDraft: null, ruleId: null,
     quickOpen: false, autoSaving: false, opened: {}, scroll: {}, message: '', error: null };
-  const inspect = () => frozenSettingsCopy(state);
+  const trackingAllowed = key => { try { return !getControls || getControls()?.allowed(key) === true; } catch { return false; } };
+  const inspect = () => frozenSettingsCopy({ ...state, trackingAvailability: { trackingItemsEnabled: trackingAllowed('item'), trackingNpcsEnabled: trackingAllowed('npc') } });
   const notify = () => { if(!listeners.size)return;const snapshot=inspect();for (const listener of [...listeners]) { try { listener(snapshot); } catch { /* Isolated views. */ } } };
+  const unsubscribeControls = getControls?.()?.subscribe?.(() => { if (!disposed) notify(); });
   const current = () => { if (disposed) return false; try { return isCurrent() === true && !disposed; } catch { return false; } };
   const editable = () => !disposed && !busy && !!baseline && state.status === 'ready' && current() && (state.autoSaving || validateBaseline());
   const fail = error => { state.status = error?.code === 'SETTINGS_COMMIT_UNCONFIRMED' ? 'unconfirmed' : 'error'; state.error = error?.code ?? 'INVALID_SETTINGS'; state.message = message(error); };
@@ -156,6 +158,11 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       if (!['fast', 'quality', 'enhanced'].includes(mode)) return Promise.resolve(false);
       return lightChange(draft => { draft.generationMode = mode; });
     },
+    toggleTracking(key) {
+      if (!['trackingItemsEnabled', 'trackingNpcsEnabled'].includes(key)) return Promise.resolve(false);
+      if (state.draft?.[key] !== true && !trackingAllowed(key === 'trackingItemsEnabled' ? 'item' : 'npc')) return Promise.resolve(false);
+      return lightChange(draft => { draft[key] = !draft[key]; });
+    },
     editPrompt(key, text) { if (!SUMMARY_PROMPT_KEYS.includes(key) || typeof text !== 'string') return false; return edit(() => { state.promptDrafts[key] = text; }); },
     restorePrompt(key) { return this.editPrompt(key, summaryPromptDefault(key)); },
     cancelPrompt(key) { return edit(() => { delete state.promptDrafts[key]; state.opened[key] = false; }); },
@@ -240,6 +247,6 @@ export function createSummarySettingsController({ settings, exclusions, isCurren
       state.promptDrafts = {}; state.customDrafts = {}; onBack(); return true;
     },
     close() { if (!disposed) { onClose(); return true; } return false; },
-    dispose() { if (disposed) return; disposed = true; discardLightWriter(); unsubscribeSettings?.(); state.status = 'disposed'; state.error = null; state.message = ''; listeners.clear(); },
+    dispose() { if (disposed) return; disposed = true; discardLightWriter(); unsubscribeSettings?.(); unsubscribeControls?.(); state.status = 'disposed'; state.error = null; state.message = ''; listeners.clear(); },
   });
 }

@@ -7,8 +7,9 @@ import {rebaseSummaryPositions} from '../summary/source-positions.js';
 import {assertChatControls,defaultChatControls} from '../controls/model.js';
 import {workshopOf,assertWorkshop} from '../workshop/model.js';
 import {timeOf,assertTime} from '../time/data.js';
+import {importSummaryCandidates} from '../time/summary-candidates.js';
 import { assertRoot, validateEvent, validateEventForSave, activeEvents } from './model.js';
-import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence} from '../summary/data.js';
+import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence,normalizedSummarySettingsEvidence} from '../summary/data.js';
 import {matchesStoredSummarySource} from '../summary/source.js';
 import {cumulativeOf,assertCumulativePreferences,assertCumulativeExclusions,assertCumulativePending,assertCumulativeVersion,baseSnapshotOf,cumulativeCoverage} from '../cumulative/data.js';
 export function sameTarget(a, b) { return !!a && !!b && !!a.chatId && !!a.rootId && Number.isSafeInteger(a.epoch) && a.chatId === b.chatId && a.rootId === b.rootId && a.epoch === b.epoch; }
@@ -71,10 +72,12 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     if(!snapshot||!sameTarget(target,snapshot.target)||!equal(summaryOf(root),snapshot.summary))throw new Error('总结参数或批历史已变化');
     if(snapshot.batch){const batch=summaryOf(root).batches.find(item=>item.id===snapshot.batch.id);if(!equal(batch,snapshot.batch)||!equal(root.events.filter(event=>batch.eventIds.includes(event.id)),snapshot.events))throw new Error('所属批成员已变化');}
   };
-  const summaryGuard=(target,snapshot,options)=>current=>{if(typeof options.isCurrent!=='function'||options.isCurrent()!==true)throw new Error('总结来源或配置已失效');matchSummary(current,target,snapshot);return true;};
+  const summaryGuard=(target,snapshot,options)=>current=>{if(typeof options.isCurrent!=='function'||options.isCurrent()!==true)throw new Error('总结来源或配置已失效');matchSummary(current,target,snapshot);if(options.trackingUpdate&&trackingOf(current).revision!==options.trackingUpdate.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');return true;};
+  const summaryTracking=(root,options)=>{if(!options.trackingUpdate)return {};const current=trackingOf(root),update=options.trackingUpdate;if(current.revision!==update.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');const tracking=assertTracking(update.value);if(equal(current,tracking))return {};if(tracking.revision<current.revision||tracking.revision>current.revision+1)throw new Error('同步追踪版本无效');return {tracking};};
+  const summaryTime=(root,batch)=>{const current=timeOf(root),next=importSummaryCandidates(current,[batch]);return equal(current,next)?{}:{time:{...next,revision:current.revision+1}};};
   const consumePending=(summary,options,draft,candidates)=>{
     if(summary.pending){const pending=summary.pending;
-      if(options.pendingId!==pending.id||draft.id!==pending.batchId||draft.sourceType!==pending.origin||draft.generationMode!==pending.generationMode||draft.hideOriginal!==pending.params.hideOriginal||!equal(draft.generatedCandidates,pending.generatedCandidates)||!equal(publicSummarySettingsEvidence(draft.settingsEvidence),pending.settingsEvidence)||!equal(draft.requestedRange,pending.sourceSnapshot.requestedRange)||!equal(draft.actualRange,pending.sourceSnapshot.actualRange)||draft.sourceSnapshot?.includeUser!==pending.sourceSnapshot.includeUser||!equal(draft.sourceSnapshot?.excludedFloors,pending.sourceSnapshot.excludedFloors)||!matchesStoredSummarySource(pending.sourceSnapshot,{epoch:draft.sourceSnapshot?.epoch,messages:draft.sourceSnapshot?.rawMessages})||candidates.some(event=>!pending.events.some(previous=>previous.id===event.id)))throw new Error('待审核草稿身份或证据不符，不得覆盖');}
+      if(options.pendingId!==pending.id||draft.id!==pending.batchId||draft.sourceType!==pending.origin||draft.generationMode!==pending.generationMode||draft.hideOriginal!==pending.params.hideOriginal||!equal(draft.generatedCandidates,pending.generatedCandidates)||!equal(normalizedSummarySettingsEvidence(draft.settingsEvidence),normalizedSummarySettingsEvidence(pending.settingsEvidence))||!equal(draft.requestedRange,pending.sourceSnapshot.requestedRange)||!equal(draft.actualRange,pending.sourceSnapshot.actualRange)||draft.sourceSnapshot?.includeUser!==pending.sourceSnapshot.includeUser||!equal(draft.sourceSnapshot?.excludedFloors,pending.sourceSnapshot.excludedFloors)||!matchesStoredSummarySource(pending.sourceSnapshot,{epoch:draft.sourceSnapshot?.epoch,messages:draft.sourceSnapshot?.rawMessages})||candidates.some(event=>!pending.events.some(previous=>previous.id===event.id)))throw new Error('待审核草稿身份或证据不符，不得覆盖');}
     else if(options.pendingId!==undefined)throw new Error('待审核草稿已变化');
     const result={...summary};delete result.pending;return result;
   };
@@ -138,6 +141,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         return {status:'committed',root:saved,selection:freeze({target:frozen,narrative:narrativeOf(saved)})};
       });
     },
+    matchesTrackingRevision(target,revision){try{requireTarget(target);return trackingOf(assertRoot(adapter.peekConfirmed(target),target)).revision===revision;}catch{return false;}},
     async captureTracking(target){const frozen=copy(target);return freeze({target:frozen,tracking:trackingOf(await read(frozen))});},
     updateTracking(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertTracking(value);
@@ -187,7 +191,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
       });
     },
     async captureTime(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,time:timeOf(root)});},
-    updateTime(target,selection,value,{isCurrent=()=>true}={}){
+    updateTime(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertTime(value);
       const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(timeOf(root),snapshot.time))throw new Error('时间来源或配置已变化');return true;};
       return enqueue(async()=>{
@@ -195,7 +199,48 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         const nextTime={...candidate,revision:current.revision};
         if(equal(current,nextTime))return {status:'unchanged',root,selection:freeze({target:frozen,time:current})};
         nextTime.revision++;
-        const saved=await commit(frozen,root,{...root,revision:root.revision+1,time:nextTime},guard);
+        const saved=await commit(frozen,root,{...root,revision:root.revision+1,time:nextTime},guard,{requireConfirmation});
+        return {status:'committed',root:saved,selection:freeze({target:frozen,time:timeOf(saved)})};
+      });
+    },
+    // Merge at the queued read boundary, so unrelated time progress and edits
+    // are not replaced by a request's old whole-domain snapshot.
+    updateSchedule(target,{apply,isCurrent=()=>true,requireConfirmation=true}={}){
+      if(typeof apply!=='function')throw new Error('日程保存缺少更新函数');
+      const frozen=copy(target);
+      return enqueue(async()=>{
+        const root=await read(frozen),current=timeOf(root);
+        if(isCurrent()!==true)throw new Error('日程任务已取消或来源已失效');
+        const applied=apply(copy(current)),candidate=assertTime(applied?.time??applied),nextTime={...candidate,revision:current.revision};
+        if(equal(current,nextTime))return {status:'unchanged',root,selection:freeze({target:frozen,time:current}),...(applied?.receipt?{receipt:copy(applied.receipt)}:{})};
+        nextTime.revision++;
+        // The adapter may delay before actually writing. Re-run the pure guard
+        // against authority; generated IDs are allocated only once.
+        const guard=stored=>{requireTarget(frozen);if(isCurrent()!==true)throw new Error('日程任务已取消或来源已失效');const latest=timeOf(stored);if(typeof applied?.validate==='function'){if(applied.validate(latest)!==true)throw new Error('日程资料已变化，请重新读取');}else if(!equal(latest,current))throw new Error('日程资料已变化，请重新读取');return true;};
+        const saved=await commit(frozen,root,{...root,revision:root.revision+1,time:nextTime},guard,{requireConfirmation});
+        return {status:'committed',root:saved,selection:freeze({target:frozen,time:timeOf(saved)}),...(applied?.receipt?{receipt:copy(applied.receipt)}:{})};
+      });
+    },
+    updateTimeDate(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
+      const frozen=copy(target),snapshot=copy(selection),candidate=assertTime(value),fields=['calendars','activeCalendarId','recognition','chronology','manualAnchor','currentDate'];
+      const relevant=time=>Object.fromEntries(fields.map(key=>[key,time[key]]));
+      const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(relevant(timeOf(root)),relevant(snapshot.time)))throw new Error('故事日期来源或配置已变化');return true;};
+      return enqueue(async()=>{
+        const root=await read(frozen);guard(root);const current=timeOf(root),nextTime={...current,currentDate:copy(candidate.currentDate),manualAnchor:copy(candidate.manualAnchor)};
+        if(equal(current,nextTime))return {status:'unchanged',root,selection:freeze({target:frozen,time:current})};
+        nextTime.revision++;
+        const saved=await commit(frozen,root,{...root,revision:root.revision+1,time:nextTime},guard,{requireConfirmation});
+        return {status:'committed',root:saved,selection:freeze({target:frozen,time:timeOf(saved)})};
+      });
+    },
+    importSummaryTimeCandidates(target,{isCurrent=()=>true}={}){
+      const frozen=copy(target);
+      return enqueue(async()=>{
+        const root=await read(frozen),current=timeOf(root),batches=summaryOf(root).batches,nextTime=importSummaryCandidates(current,batches);
+        const guard=stored=>{requireTarget(frozen);if(isCurrent()!==true||!equal(timeOf(stored),current)||!equal(summaryOf(stored).batches,batches))throw new Error('纪念日补录来源已变化');return true;};guard(root);
+        if(equal(current,nextTime))return {status:'unchanged',root,selection:freeze({target:frozen,time:current})};
+        nextTime.revision=current.revision+1;
+        const saved=await commit(frozen,root,{...root,revision:root.revision+1,time:nextTime},guard,{requireConfirmation:true});
         return {status:'committed',root:saved,selection:freeze({target:frozen,time:timeOf(saved)})};
       });
     },
@@ -282,7 +327,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     saveSummaryPending(target,selection,pending,options={}) {
       const frozen=copy(target),snapshot=copy(selection),draft=assertSummaryPending(pending);
       return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot);const summary=summaryOf(root);
-        if(summary.pending){const previous=summary.pending;if(previous.id!==draft.id||previous.batchId!==draft.batchId||previous.createdAt!==draft.createdAt||previous.origin!==draft.origin||previous.generationMode!==draft.generationMode||!equal(previous.params,draft.params)||!equal(previous.generatedCandidates,draft.generatedCandidates)||!equal(previous.sourceSnapshot.excludedFloors,draft.sourceSnapshot.excludedFloors)||!equal(previous.settingsEvidence,draft.settingsEvidence)||!equal(previous.sourceSnapshot.requestedRange,draft.sourceSnapshot.requestedRange)||!equal(previous.sourceSnapshot.actualRange,draft.sourceSnapshot.actualRange)||!matchesStoredSummarySource(previous.sourceSnapshot,{epoch:draft.sourceSnapshot.epoch,messages:draft.sourceSnapshot.rawMessages})||previous.completedStages.length>draft.completedStages.length||draft.events.some(event=>!previous.events.some(item=>item.id===event.id)))throw new Error('已有其他、变化或更新阶段待审核草稿');}
+        if(summary.pending){const previous=summary.pending;if(previous.id!==draft.id||previous.batchId!==draft.batchId||previous.createdAt!==draft.createdAt||previous.origin!==draft.origin||previous.generationMode!==draft.generationMode||!equal(previous.params,draft.params)||!equal(previous.tracking,draft.tracking)||!equal(previous.generatedCandidates,draft.generatedCandidates)||!equal(previous.sourceSnapshot.excludedFloors,draft.sourceSnapshot.excludedFloors)||!equal(previous.settingsEvidence,draft.settingsEvidence)||!equal(previous.sourceSnapshot.requestedRange,draft.sourceSnapshot.requestedRange)||!equal(previous.sourceSnapshot.actualRange,draft.sourceSnapshot.actualRange)||!matchesStoredSummarySource(previous.sourceSnapshot,{epoch:draft.sourceSnapshot.epoch,messages:draft.sourceSnapshot.rawMessages})||previous.completedStages.length>draft.completedStages.length||draft.events.some(event=>!previous.events.some(item=>item.id===event.id)))throw new Error('已有其他、变化或更新阶段待审核草稿');}
         const nextSummary={...summary,revision:summary.revision+1,pending:draft};
         const committed=await commit(frozen,root,{...root,revision:root.revision+1,summary:nextSummary},summaryGuard(frozen,snapshot,options));
         return {status:'committed',root:committed,selection:freeze({target:copy(frozen),revision:committed.revision,summary:summaryOf(committed)})};
@@ -322,7 +367,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         const record=assertBatch({...draft,ordinal:summary.progress.nextBatchOrdinal,eventIds:created.map(event=>event.id),createdAt:timestamp,completedAt:timestamp,generatedCandidates:assertGeneratedEvidence(draft.generatedCandidates)});
         if(record.sourceType==='auto'&&record.actualRange.start!==(summary.progress.lastProcessedFloor===null?summary.preferences.auto.startFloor:summary.progress.lastProcessedFloor+1))throw new Error('自动批次不从当前未完成处开始');
         const nextSummary={...consumePending(summary,options,draft,candidates),revision:summary.revision+1,batches:[...summary.batches,record],progress:{...summary.progress,lastProcessedFloor:Math.max(summary.progress.lastProcessedFloor??-1,record.actualRange.end),nextBatchOrdinal:record.ordinal+1}};
-        return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,events:[...root.events,...created],summary:nextSummary},summaryGuard(frozen,snapshot,options)),batch:copy(record),events:copy(created)};
+        return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,events:[...root.events,...created],summary:nextSummary,...summaryTracking(root,options),...summaryTime(root,record)},summaryGuard(frozen,snapshot,options),{requireConfirmation:true}),batch:copy(record),events:copy(created)};
       });
     },
     replaceBatch(target,selection,events,batch,options={}) {
@@ -334,7 +379,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         const record=assertBatch({...draft,id:previous.id,ordinal:previous.ordinal,sourceType:previous.sourceType,eventIds:created.map(event=>event.id),createdAt:previous.createdAt,completedAt:now(),generatedCandidates:assertGeneratedEvidence(draft.generatedCandidates)});
         const nextSummary={...consumePending(summary,options,draft,candidates),revision:summary.revision+1,batches:summary.batches.map(item=>item.id===previous.id?record:item)};
         if(nextSummary.sourcePositions){nextSummary.sourcePositions={...nextSummary.sourcePositions};delete nextSummary.sourcePositions[previous.id];if(!Object.keys(nextSummary.sourcePositions).length)delete nextSummary.sourcePositions;}
-        return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,events:[...root.events.filter(event=>!previous.eventIds.includes(event.id)),...created],summary:nextSummary},summaryGuard(frozen,snapshot,options)),batch:copy(record),events:copy(created)};
+        return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,events:[...root.events.filter(event=>!previous.eventIds.includes(event.id)),...created],summary:nextSummary,...summaryTracking(root,options),...summaryTime(root,record)},summaryGuard(frozen,snapshot,options),{requireConfirmation:true}),batch:copy(record),events:copy(created)};
       });
     },
     matchesSelection(target, snapshot, { hidden = false } = {}) {

@@ -1,5 +1,5 @@
 import { trackingExclusionsOf, assertTrackingExclusions, effectiveTrackingExclusions, filterTrackingChanges, normalizeTrackingName } from './exclusions.js';
-import { assertRawSummarySource, durableSourceMessages } from '../summary/source.js';
+import { assertRawSummarySource, durableSourceMessages, sourceFingerprint, matchesStoredSummarySource } from '../summary/source.js';
 import { prepareLatestSource, storedLatestSource, assertLatestSource, matchesLatestSource, matchesStoredLatestSource } from '../latest/source.js';
 import { assertTrackingRecord, blankTrackingRecord, assertTrackingPatch, assertTrackingChanges, applyTrackingCustomFieldValues, trackingExact, trackingText, trackingInteger, npcAbsenceTurns, TRACKING_FIELDS } from './model.js';
 const clone = structuredClone;
@@ -17,11 +17,25 @@ export function assertTracking(value) {
   if (Object.hasOwn(value, 'exclusions')) assertTrackingExclusions(value.exclusions);
   const ids = new Set(), replies = new Set();
   for (const snapshot of value.snapshots) {
-    if (!trackingExact(snapshot, ['id', 'sourceSnapshot', 'aiTurn', 'baseKey', 'changes']) || !trackingText(snapshot.id) || ids.has(snapshot.id)
+    if (!trackingExact(snapshot, ['id', 'sourceSnapshot', 'aiTurn', 'baseKey', 'changes', ...(snapshot?.sourceSnapshot?.kind === 'batch' ? ['batchId'] : []), ...(Object.hasOwn(snapshot ?? {}, 'batchRebases') ? ['batchRebases'] : [])]) || !trackingText(snapshot.id) || ids.has(snapshot.id)
       || !trackingInteger(snapshot.aiTurn) || snapshot.aiTurn < 1 || !(snapshot.baseKey === null || trackingText(snapshot.baseKey)) || snapshot.baseKey === snapshot.id) throw new Error('追踪版本无效');
-    assertLatestSource(snapshot.sourceSnapshot); assertTrackingChanges(snapshot.changes, { stored: true });
-    if (replies.has(snapshot.sourceSnapshot.replyId)) throw new Error('追踪回复版本重复');
-    ids.add(snapshot.id); replies.add(snapshot.sourceSnapshot.replyId);
+    if (Object.hasOwn(snapshot, 'batchRebases')) {
+      if (!Array.isArray(snapshot.batchRebases) || !snapshot.batchRebases.length) throw new Error('批追踪恢复证据无效');
+      const rebases = new Set();
+      for (const proof of snapshot.batchRebases) {
+        if (!trackingExact(proof, ['batchSnapshotId', 'baseKey', 'changes', ...(Object.hasOwn(proof ?? {}, 'protectedChanges') ? ['protectedChanges'] : [])]) || !trackingText(proof.batchSnapshotId) || rebases.has(proof.batchSnapshotId) || !(proof.baseKey === null || trackingText(proof.baseKey))) throw new Error('批追踪恢复证据无效');
+        assertTrackingChanges(proof.changes, { stored: true });
+        if (proof.protectedChanges) assertTrackingChanges(proof.protectedChanges, { stored: true });
+        rebases.add(proof.batchSnapshotId);
+      }
+    }
+    const batch = snapshot.sourceSnapshot?.kind === 'batch';
+    if (batch) { assertBatchTrackingSource(snapshot.sourceSnapshot); if (!trackingText(snapshot.batchId)) throw new Error('批追踪身份无效'); } else assertLatestSource(snapshot.sourceSnapshot);
+    assertTrackingChanges(snapshot.changes, { stored: true });
+    if (snapshot.changes.npcs.some(change => change.lastAppearanceTurn != null && change.lastAppearanceTurn > snapshot.aiTurn)) throw new Error('NPC 出场回合超出追踪版本');
+    const replyKey = batch ? `batch:${snapshot.batchId}` : snapshot.sourceSnapshot.replyId;
+    if (replies.has(replyKey)) throw new Error('追踪回复版本重复');
+    ids.add(snapshot.id); replies.add(replyKey);
   }
   const recordIds = new Map();
   for (const snapshot of value.snapshots) for (const [list, kind] of [['items', 'item'], ['npcs', 'npc']]) for (const change of snapshot.changes[list]) {
@@ -45,7 +59,7 @@ export function countTrackingAiTurns(raw, { beforeFloor = Infinity } = {}) {
   if (!(beforeFloor === Infinity || trackingInteger(beforeFloor))) throw new Error('追踪楼层无效');
   return assertRawSummarySource(raw).messages.filter(row => row.floor < beforeFloor && row.role === 'assistant' && !row.system).length;
 }
-function applyChanges(records, changes, aiTurn, { mutate = false, index = null, stored = false } = {}) {
+export function applyChanges(records, changes, aiTurn, { mutate = false, index = null, stored = false } = {}) {
   const next = mutate ? records : clone(records);
   index ??= new Map(next.map((row, at) => [row.id, at]));
   for (const [list, kind] of [['items', 'item'], ['npcs', 'npc']]) for (const change of changes[list]) {
@@ -108,12 +122,17 @@ export function currentTracking(value, raw, { beforeFloor = Infinity } = {}) {
       records[at] = assertTrackingRecord({ ...records[at], ...row.patch });
     }
   };
-  let baseKey = null; applyManual(null);
-  const snapshots = domain.snapshots.filter(row => row.sourceSnapshot.assistantFloor < beforeFloor).sort((a, b) => a.sourceSnapshot.assistantFloor - b.sourceSnapshot.assistantFloor);
+  let baseKey = null; const activeKeys = new Set([null]); applyManual(null);
+  const invalidBatches = new Set(domain.snapshots.filter(row => row.sourceSnapshot.kind === 'batch' && (row.aiTurn !== indexed.turns.get(row.sourceSnapshot.assistantFloor) || !matchesBatchTrackingSource(row.sourceSnapshot, source))).map(row => row.id));
+  const snapshots = restoreTrackingBatchRebases(domain.snapshots, invalidBatches).filter(row => row.sourceSnapshot.assistantFloor < beforeFloor).sort((a, b) => a.sourceSnapshot.assistantFloor - b.sourceSnapshot.assistantFloor);
   for (const snapshot of snapshots) {
     if (snapshot.baseKey !== baseKey || snapshot.aiTurn !== indexed.turns.get(snapshot.sourceSnapshot.assistantFloor)
-      || !matchesStoredLatestSource(snapshot.sourceSnapshot, indexed.relevant(snapshot.sourceSnapshot))) continue;
-    applyChanges(records, snapshot.changes, snapshot.aiTurn, { mutate: true, index, stored: true }); applyManual(snapshot.id); baseKey = snapshot.id;
+      || !(snapshot.sourceSnapshot.kind === 'batch' ? matchesBatchTrackingSource(snapshot.sourceSnapshot, source) : matchesStoredLatestSource(snapshot.sourceSnapshot, indexed.relevant(snapshot.sourceSnapshot)))) continue;
+    applyChanges(records, snapshot.changes, snapshot.aiTurn, { mutate: true, index, stored: true });
+    // A manual anchor is not an edit timestamp. Historical backfill cannot
+    // overwrite corrections merely because they were anchored to an old reply.
+    if (snapshot.sourceSnapshot.kind === 'batch') for (const key of activeKeys) applyManual(key);
+    applyManual(snapshot.id); activeKeys.add(snapshot.id); baseKey = snapshot.id;
   }
   const visible = records.filter(record => !manualById.get(record.id)?.deleted).map(record => {
     const edit = manualById.get(record.id);
@@ -123,13 +142,16 @@ export function currentTracking(value, raw, { beforeFloor = Infinity } = {}) {
     absenceTurns: Object.fromEntries(visible.filter(row => row.kind === 'npc').map(row => [row.id, npcAbsenceTurns(row, indexed.aiTurn)])) };
 }
 export function prepareTrackingUpdate(value, raw, { floor, rules } = {}) {
-  const domain = assertTracking(value), source = prepareLatestSource(raw, { floor, rules });
+  const domain = assertTracking(value);
+  if (domain.snapshots.some(row => row.sourceSnapshot.kind === 'batch' && floor >= row.sourceSnapshot.requestedRange.start && floor <= row.sourceSnapshot.requestedRange.end && matchesBatchTrackingSource(row.sourceSnapshot, raw))) throw new Error('该楼层已属于批追踪，请重跑整批以保留完整来源');
+  const source = prepareLatestSource(raw, { floor, rules });
   const prior = currentTracking(domain, raw, { beforeFloor: floor }), current = currentTracking(domain, raw, { beforeFloor: floor + 1 });
   return freeze({ source, aiTurn: countTrackingAiTurns(raw, { beforeFloor: floor + 1 }), baseKey: prior.baseKey,
     revision: domain.revision, current: current.records, preferences: domain.preferences, exclusions: effectiveTrackingExclusions(domain, current.records) });
 }
 export function applyTrackingResponse(value, ticket, response, raw, { makeId = generatedId, errors = {} } = {}) {
   const domain = assertTracking(value); let changes = assertTrackingChanges(response);
+  if (domain.snapshots.some(row => row.sourceSnapshot.kind === 'batch' && ticket?.source?.assistantFloor >= row.sourceSnapshot.requestedRange.start && ticket.source.assistantFloor <= row.sourceSnapshot.requestedRange.end && matchesBatchTrackingSource(row.sourceSnapshot, raw))) throw new Error('该楼层已属于批追踪，请重跑整批以保留完整来源');
   if (!ticket || ticket.revision !== domain.revision || (ticket.exclusions?.epoch ?? 0) !== trackingExclusionsOf(domain).epoch || !matchesLatestSource(ticket.source, raw)
     || ticket.aiTurn !== countTrackingAiTurns(raw, { beforeFloor: ticket.source.assistantFloor + 1 })
     || currentTracking(domain, raw, { beforeFloor: ticket.source.assistantFloor }).baseKey !== ticket.baseKey) throw new Error('追踪来源或资料已变化，请重新运行');
@@ -189,7 +211,7 @@ export function deleteTrackingRecord(value, raw, id) {
 export function inheritTracking(value, floor) {
   if (!trackingInteger(floor)) throw new Error('分支楼层无效');
   const domain = assertTracking(value); domain.revision = 0;
-  domain.snapshots = domain.snapshots.filter(row => row.sourceSnapshot.rawMessages.every(message => message.floor < floor));
+  domain.snapshots = restoreTrackingBatchRebases(domain.snapshots, new Set(domain.snapshots.filter(row => row.sourceSnapshot.rawMessages.some(message => message.floor >= floor)).map(row => row.id)));
   const ids = new Set([...domain.manual.filter(row => row.record).map(row => row.id), ...domain.snapshots.flatMap(row => [...row.changes.items, ...row.changes.npcs].map(change => change.id))]);
   domain.manual = domain.manual.filter(row => ids.has(row.id)); return domain;
 }
@@ -197,9 +219,7 @@ export function invalidateTrackingFloors(value, floors) {
   if (!Array.isArray(floors) || floors.some(floor => !trackingInteger(floor))) throw new Error('追踪失效楼层无效');
   const domain = assertTracking(value), affected = new Set(floors), removed = new Set();
   for (const row of domain.snapshots) if (row.sourceSnapshot.rawMessages.some(message => affected.has(message.floor))) removed.add(row.id);
-  let changed = true;
-  while (changed) { changed = false; for (const row of domain.snapshots) if (removed.has(row.baseKey) && !removed.has(row.id)) { removed.add(row.id); changed = true; } }
-  domain.snapshots = domain.snapshots.filter(row => !removed.has(row.id)); return domain;
+  domain.snapshots = restoreTrackingBatchRebases(domain.snapshots, removed); return domain;
 }
 // Parse errors and unknown/mismatched IDs are isolated by category. A failed
 // category keeps its existing same-reply version instead of erasing its facts.
@@ -224,15 +244,18 @@ export function pruneTrackingSnapshots(value, raw, { replyVersions = raw?.replyV
   if (replyVersions !== undefined && (!Array.isArray(replyVersions) || replyVersions.some(row => !trackingText(row?.replyId) || !trackingInteger(row.floor) || !trackingInteger(row.swipeId) || typeof row.text !== 'string'))) throw new Error('追踪回复版本证据无效');
   const counts = new Map(), byReply = new Map();
   for (const row of replyVersions ?? []) { counts.set(row.replyId, (counts.get(row.replyId) ?? 0) + 1); byReply.set(row.replyId, row); }
-  domain.snapshots = domain.snapshots.filter(snapshot => {
+  const retained = domain.snapshots.filter(snapshot => {
     const saved = snapshot.sourceSnapshot;
     if (snapshot.aiTurn !== indexed.turns.get(saved.assistantFloor)) return false;
+    if (saved.kind === 'batch') return matchesBatchTrackingSource(saved, source);
     if (matchesStoredLatestSource(saved, indexed.relevant(saved))) return replyVersions === undefined || counts.get(saved.replyId) === 1;
     const current = byFloor.get(saved.assistantFloor), version = byReply.get(saved.replyId), original = saved.rawMessages.at(-1);
     if (!current || current.role !== 'assistant' || current.system || current.replyId === saved.replyId || !version || counts.get(saved.replyId) !== 1 || version.floor !== saved.assistantFloor || version.text !== original.text) return false;
     const user = saved.userFloor === null ? null : saved.rawMessages[0], currentUser = user ? byFloor.get(user.floor) : null;
     return !user || !!currentUser && !currentUser.specialPayload && JSON.stringify(durableSourceMessages([currentUser])) === JSON.stringify([user]);
   });
+  const retainedIds = new Set(retained.map(row => row.id));
+  domain.snapshots = restoreTrackingBatchRebases(domain.snapshots, new Set(domain.snapshots.filter(row => !retainedIds.has(row.id)).map(row => row.id)));
   let changed = true;
   while (changed) { const ids = new Set(domain.snapshots.map(row => row.id)), length = domain.snapshots.length;
     domain.snapshots = domain.snapshots.filter(row => row.baseKey === null || ids.has(row.baseKey)); changed = length !== domain.snapshots.length; }
@@ -262,4 +285,64 @@ export function setTrackingRecordExcluded(value, raw, kind, id, excluded) {
   } else delete labels[id];
   if (Object.keys(labels).length) exclusions[kind].labels = labels; else delete exclusions[kind].labels;
   exclusions.epoch++; domain.exclusions = assertTrackingExclusions(exclusions); domain.revision++; return domain;
+}
+
+// Batch snapshots retain every raw floor, including excluded/cleaned evidence.
+export function assertBatchTrackingSource(value) {
+  if (!trackingExact(value, ['kind', 'assistantFloor', 'requestedRange', 'actualRange', 'rawMessages', 'sentFloors', 'fingerprint', 'replyIds']) || value.kind !== 'batch') throw new Error('批追踪来源无效');
+  for (const range of [value.requestedRange, value.actualRange]) if (!trackingExact(range, ['start', 'end']) || !trackingInteger(range.start) || !trackingInteger(range.end) || range.end < range.start) throw new Error('批追踪范围无效');
+  if (value.actualRange.start !== value.requestedRange.start || value.actualRange.end > value.requestedRange.end || value.assistantFloor !== value.actualRange.end) throw new Error('批追踪范围不符');
+  assertRawSummarySource({ epoch: 0, messages: value.rawMessages });
+  assertRawSummarySource({ epoch: 0, messages: value.sentFloors });
+  if (value.rawMessages.length !== value.requestedRange.end - value.requestedRange.start + 1 || value.rawMessages.some((row, index) => row.floor !== value.requestedRange.start + index) || value.fingerprint !== sourceFingerprint(value.rawMessages)) throw new Error('批追踪来源指纹不符');
+  if (!Array.isArray(value.replyIds) || value.replyIds.some(row => !trackingExact(row, ['floor', 'replyId']) || !trackingInteger(row.floor) || !(row.replyId === null || trackingText(row.replyId))) || new Set(value.replyIds.map(row => row.floor)).size !== value.replyIds.length) throw new Error('批追踪回复证据无效');
+  const endpoint = value.rawMessages.find(row => row.floor === value.assistantFloor);
+  if (endpoint?.role !== 'assistant' || endpoint.system || !value.sentFloors.some(row => row.role === 'assistant' && !row.system)) throw new Error('批追踪缺少 AI 正文');
+  for (const row of value.sentFloors) {
+    const original = value.rawMessages.find(item => item.floor === row.floor);
+    if (!original || row.floor > value.actualRange.end || row.system || row.role === 'system' || !row.text.trim() || ['identity', 'role', 'system', 'date', 'swipeId'].some(key => row[key] !== original[key])) throw new Error('批追踪发送正文无效');
+  }
+  return clone(value);
+}
+export function storedBatchTrackingSource(source) {
+  return assertBatchTrackingSource({ kind: 'batch', assistantFloor: source.actualRange.end, requestedRange: clone(source.requestedRange), actualRange: clone(source.actualRange), rawMessages: durableSourceMessages(source.rawMessages), sentFloors: durableSourceMessages(source.sentFloors), fingerprint: source.fingerprint, replyIds: source.rawMessages.filter(row => row.role === 'assistant' && !row.system).map(row => ({ floor: row.floor, replyId: row.replyId ?? null })) });
+}
+export function matchesBatchTrackingSource(source, raw) {
+  try {
+    assertBatchTrackingSource(source);
+    return matchesStoredSummarySource(source, raw) && source.replyIds.every(row => (raw.messages.find(message => message.floor === row.floor)?.replyId ?? null) === row.replyId);
+  } catch { return false; }
+}
+
+// Inserting a historical batch must not make pre-existing later facts depend
+// irreversibly on its source. Unwind saved rebase layers before cascading.
+export function restoreTrackingBatchRebases(snapshots, removedIds) {
+  const result = clone(snapshots), removed = new Set(removedIds), byId = new Map(result.map(row => [row.id, row]));
+  const retainedInsertionBefore = (id, seen = new Set()) => {
+    if (seen.has(id)) return null; seen.add(id);
+    const predecessor = byId.get(id)?.batchRebases?.at(-1)?.batchSnapshotId;
+    if (!predecessor) return null;
+    return removed.has(predecessor) ? retainedInsertionBefore(predecessor, seen) : predecessor;
+  };
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of result) {
+      if (removed.has(row.id)) continue;
+      while (row.batchRebases?.length && removed.has(row.batchRebases.at(-1).batchSnapshotId)) {
+        const proof = row.batchRebases.pop();
+        const retained = retainedInsertionBefore(proof.batchSnapshotId);
+        row.baseKey = retained ?? proof.baseKey;
+        row.changes = clone(retained ? (proof.protectedChanges ?? proof.changes) : proof.changes);
+        // An earlier batch inserted through the now-invalid batch is still
+        // authoritative. Transfer the restoration proof to that surviving
+        // insertion, instead of creating a competing old-base branch.
+        if (retained) row.batchRebases.push({ ...proof, batchSnapshotId: retained });
+        changed = true;
+        if (!row.batchRebases.length) delete row.batchRebases;
+      }
+      if (removed.has(row.baseKey)) { removed.add(row.id); changed = true; }
+    }
+  }
+  return result.filter(row => !removed.has(row.id));
 }

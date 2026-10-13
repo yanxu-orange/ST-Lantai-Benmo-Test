@@ -18,6 +18,7 @@ import {createWorkshopRuntime} from './workshop-runtime.js';
 import {createWorkshopController} from '../../app/workshop-controller.js';
 import {mountWorkshopView} from '../../app/workshop-view.js';
 import {createTrackingRuntime} from './tracking-runtime.js';
+import {createScheduleRuntime} from './schedule-runtime.js';
 import {createTimeController} from '../../app/time-controller.js';
 import {mountTimeView} from '../../app/time-view.js';
 import {createTimePromptRuntime} from './time-prompts.js';
@@ -80,7 +81,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   let hostReloadSequence=0,timeRuntime,timePrompts,timeController,timeView,timeTarget;
   let sourceDeletionRuntime,sourceDeletionNotices,narrativeRuntime,latestRuntime,latestDisplay,workshopBackgroundDisplay;
   let benmoController,benmoView,benmoSubscription,benmoTarget,benmoNavigation=null,benmoPolicyKey='';
-  let workshopRegex,workshopRegexError=null,workshopRuntime,workshopController,workshopView,trackingRuntime;
+  let workshopRegex,workshopRegexError=null,workshopRuntime,workshopController,workshopView,trackingRuntime,scheduleRuntime;
   // Area-owned views stay here with their settings round trip. Runtime services
   // are deliberately not page resources: closing a page must not stop a task.
   const areaPages = {
@@ -234,20 +235,23 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         notices=createManagementNotifications({document:doc,controller:runtime.controller,styles:notificationStyles,openTask});
         summaryNotices=createSummaryNotifications({document:doc,service:runtime.summaryService,styles:notificationStyles,openTask:openSummaryTask});
         timePrompts=createTimePromptRuntime({repository,settings:runtime.settings,getControls:()=>controls,dateRuntime:timeRuntime,getContext,captureSource:target=>adapter.captureTimeSource?.(target)??adapter.captureChatSource?.(target)??adapter.captureSummarySource(target),matchesSource:typeof (adapter.matchesTimeSource??adapter.matchesChatSource)==='function'?(target,source)=>(adapter.matchesTimeSource??adapter.matchesChatSource)(target,source):null});
-        recallRuntime=createRecallRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,dateRuntime:timeRuntime,captureSource:target=>adapter.captureSummarySource(target)});
+        // Recall uses visible-source proof, so hide/unhide invalidates an in-flight
+        // result even though event summaries may read hidden original story rows.
+        recallRuntime=createRecallRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,dateRuntime:timeRuntime,captureSource:target=>adapter.captureChatSource(target)});
         if(runtime.settings?.captureWorkshop)workshopRegex=createWorkshopRegexInstaller({settings:runtime.settings,getContext,fetchImpl:request,...runtimeOptions.workshopRegexOptions,isCurrent:()=>!disposed&&!lifetime.signal.aborted&&allowed('workshop')});
         if(workshopRegex&&allowed('workshop')){try{await workshopRegex.ensure({settingsReady:true});}catch(error){workshopRegexError=error;}}
         if(disposed){value.dispose();return null;}
         if(runtime.settings?.captureWorkshop)workshopRuntime=createWorkshopRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,captureSource:t=>adapter.captureChatSource(t),matchesSource:(t,s)=>adapter.matchesChatSource(t,s)});
         trackingRuntime=createTrackingRuntime({repository,adapter,settings:runtime.settings,getContext,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t),onChange:()=>{void latestRuntime.refresh().catch(()=>{});}});
-        latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime});
+        scheduleRuntime=createScheduleRuntime({repository,settings:runtime.settings,dateRuntime:timeRuntime,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t)});
+        latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime});
         narrativeRuntime=createNarrativeRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
         benmoController=createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime,repository,adapter,getContext,getControls:()=>controls});
         benmoSubscription=benmoController.subscribeAvailability(syncBenmoAvailability);
         await benmoController.load().catch(()=>{});
         const displayCoordinator=createFloorDisplayCoordinator({document:doc,runtime:latestRuntime,MutationObserver:Observer,formatter:createWorkshopDisplayFormatter({getContext})});
         latestDisplay=mountLatestSummaryDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator});
-        workshopBackgroundDisplay=mountWorkshopBackgroundDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator});
+        workshopBackgroundDisplay=mountWorkshopBackgroundDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator,onOpenSchedule:()=>void openSchedule()});
         cumulativeRuntime=createCumulativeRuntime({repository,settings:runtime.settings,getContext});
         cumulativeHistory=createCumulativeHistoryHook({repository,settings:runtime.settings,getContext,getReplacementProof:()=>cumulativeRuntime.getReplacementProof()});
         const seen=new Set();
@@ -277,6 +281,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     cumulativeRuntime?.setEnabled(next.cumulative);latestRuntime?.setEnabled(next.enabled);
     if(!next.enabled)trackingRuntime?.clear();
     if(!before||['enabled','item','npc'].some(key=>before[key]!==next[key]))trackingRuntime?.controlsChanged?.();
+    if(!before||['enabled','time','schedule'].some(key=>before[key]!==next[key]))scheduleRuntime?.controlsChanged?.();
     if(!before||['enabled','self','outline'].some(key=>before[key]!==next[key]))narrativeRuntime?.controlsChanged?.();
     benmoController?.refreshAvailability();
     if(!next.time){timeRuntime?.pause();timePrompts?.clear();}
@@ -387,7 +392,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       const current=()=>sameTarget(target,repository.captureTarget());
       const read=async()=>{const capture=await repository.captureSummary(target);return capture.summary.excludedFloors;};
       const change=async(floor,remove)=>{const capture=await repository.captureSummary(target),records=structuredClone(capture.summary.excludedFloors);if(remove){const index=records.findIndex(item=>item.floor===Number(floor));if(index>=0)records.splice(index,1);}else{const message=adapter.captureSummarySource(target).messages.find(item=>item.floor===Number(floor));if(!message)throw new Error('楼层不存在');if(!records.some(item=>item.floor===message.floor))records.push({floor:message.floor,identity:message.identity});}await repository.setSummaryExcludedFloors(target,records,{expectedSummaryRevision:capture.summary.revision,isCurrent:current});};
-      summarySettingsController=createSummarySettingsController({settings:runtime.settings,exclusions:{read,add:floor=>change(floor,false),remove:floor=>change(floor,true)},isCurrent:current,onBack:()=>{if(summarySettingsFromMemory)void returnFromSummary();else void showSummary(runtime.summaryController.inspect().origin);},onClose:close});
+      summarySettingsController=createSummarySettingsController({settings:runtime.settings,getControls:()=>controls,exclusions:{read,add:floor=>change(floor,false),remove:floor=>change(floor,true)},isCurrent:current,onBack:()=>{if(summarySettingsFromMemory)void returnFromSummary();else void showSummary(runtime.summaryController.inspect().origin);},onClose:close});
     }
     if(!panel||serial!==ticket||!sameTarget(target,repository.captureTarget()))return;
     summarySettingsFromMemory=fromMemory;summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();
@@ -421,8 +426,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(panel&&serial===ticket&&request===pageRequest&&recallController===controller&&sameTarget(target,repository.captureTarget()))void controller.init();
     });return true;
   }
-  async function openTime(){
-    if(!allowed('time'))return false;
+  async function openTime({allowReadOnly=false,route=null,candidates=false}={}){
+    if(!allowed('time')&&!(allowReadOnly&&allowed('enabled')))return false;
     if(!panel||settingsOpen||!runtime?.settings)return false;
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
     unmountPages();app?.suspendCumulative();
@@ -432,7 +437,14 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     }
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;summaryContent.inert=false;
     timeController.resume();timeView=mountTimeView({container:summaryContent,controller:timeController,availability});
-    afterPageFrame(()=>{if(panel&&serial===ticket&&request===pageRequest&&sameTarget(target,repository.captureTarget()))void timeController.init();});return true;
+    afterPageFrame(()=>{if(panel&&serial===ticket&&request===pageRequest&&sameTarget(target,repository.captureTarget())){const controller=timeController;void controller.init().then(ready=>{if(ready&&panel&&serial===ticket&&request===pageRequest&&controller===timeController&&sameTarget(target,repository.captureTarget())){if(candidates)controller.openCandidates();else if(route)controller.open(route);}});}});return true;
+  }
+  async function openSchedule({candidates=false,fromSettings=false}={}){
+    if(disposed||settingsOpen&&!fromSettings)return false;
+    if(!panel){const opening=open(),openingTicket=ticket;await opening;if(ticket!==openingTicket)return false;}
+    if(!panel||!allowed('enabled'))return false;
+    if(settingsOpen){settingsRootView?.dispose();settingsRootView=null;settingsOpen=false;settingsContent.replaceChildren();settingsContent.hidden=true;returnFocus=returnTarget=null;}
+    return openTime({allowReadOnly:true,route:'schedules',candidates});
   }
   async function openWorkshop({kind='prompt'}={}){
     if(!allowed('workshop'))return false;
@@ -516,7 +528,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function mountSettingsRoot(focusAction=null){
     if(!panel||closing||replacingPage)return;
     settingsRootView?.dispose();apiView?.dispose();apiView=null;
-    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,availability,focusAction,onApi:openApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
+    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,availability,focusAction,onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
     syncAppearance();
   }
   function openApiSettings(){
@@ -784,7 +796,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   const observer = new Observer(installEntry);
   observer.observe(doc.documentElement, { childList: true, subtree: true });
   return {
-    open, close, openSettings, openTask,openBenmo,openLatestSummary,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,openTime,openWorkshop,openTracking,openCumulative:showCumulative,openCumulativeSettings,
+    open, close, openSettings, openTask,openBenmo,openLatestSummary,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,openTime,openSchedule,openWorkshop,openTracking,openCumulative:showCumulative,openCumulativeSettings,
     async interceptPrompt(...args){
       if(disposed)return;
       const request=++recallEntryRequest;let entryTarget;
@@ -814,7 +826,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>summaryHistory?.inspect()??{status:'retained',reason:'not-initialized',removed:0},
     dispose() {
-      if(disposed)return;disposed = true;workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeHistory?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();summaryHistory?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      if(disposed)return;disposed = true;workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeHistory?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();summaryHistory?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;if(closeError)throw closeError;
     },

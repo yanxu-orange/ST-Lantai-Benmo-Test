@@ -67,7 +67,9 @@ export function createSummaryController({repository,service,captureSource,contro
     state.task=task;
     if(task.status==='awaiting-user'&&task.candidate&&!state.drafts){state.drafts=structuredClone(task.candidate.events);state.entries={};if(task.snapshot.params.reviewBeforeCommit||task.candidate.incomplete||task.snapshot.selection.summary.pending)state.route='review';}
     if(task.status==='awaiting-user'&&task.candidate?.incomplete)state.error=task.errorMessage||'后续阶段尚未完成，正文草稿已保留。';
-    if(task.status==='succeeded'){state.message='已保存本批记忆';state.route=state.origin;state.drafts=null;const serial=ticket;void refresh().then(current=>{if(current&&visible&&serial===ticket)onCommitted();});}
+    const trackingWarnings=(task.diagnostics??[]).filter(row=>row.kind==='tracking').map(row=>`${row.category==='items'?'物品':'角色'}追踪未保存：${row.message}`);
+    if(task.status==='awaiting-user'&&task.snapshot.tracking){const enabled=task.snapshot.tracking.ticket.preferences;state.message=`${enabled.itemsEnabled?'物品':''}${enabled.itemsEnabled&&enabled.npcsEnabled?'与':''}${enabled.npcsEnabled?'角色':''}追踪结果将在采用本批时一起保存。`;if(trackingWarnings.length)state.error=[task.candidate?.incomplete?(task.errorMessage||'后续阶段尚未完成，正文草稿已保留。'):'',...new Set(trackingWarnings)].filter(Boolean).join('；');}
+    if(task.status==='succeeded'){state.message=trackingWarnings.length?'已保存本批记忆；'+[...new Set(trackingWarnings)].join('；'):'已保存本批记忆';state.route=state.origin;state.drafts=null;const serial=ticket;void refresh().then(current=>{if(current&&visible&&serial===ticket)onCommitted();});}
     if(['failed','stale','cancelled'].includes(task.status)){state.error=task.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':task.errorMessage||'本批未完成，请重新发起';}
     notify();
   }
@@ -108,8 +110,9 @@ export function createSummaryController({repository,service,captureSource,contro
     togglePreview(){state.previewOpen=!state.previewOpen;notify();},
     previewView(view){state.previewView=view;notify();},
     changeDrafts(mutator){if(state.busy||!state.drafts)return;mutator(state.drafts);state.error='';},
+    removeDraft(index){if(state.busy||!state.drafts?.[index])return false;const [removed]=state.drafts.splice(index,1);state.openTerms=Object.fromEntries(Object.entries(state.openTerms).filter(([key])=>Number(key)!==index).map(([key,value])=>[Number(key)>index?Number(key)-1:Number(key),value]));for(const key of Object.keys(state.entries))if(key.startsWith(`${removed.id}:`))delete state.entries[key];state.error='';return true;},
     setEntry(index,key,value){const id=state.drafts?.[index]?.id;if(id)state.entries[`${id}:${key}`]=value;},
-    openTerm(index,id){state.openTerms[index]=state.openTerms[index]===id?null:id;notify();},
+    openTerm(index,id,{notify:shouldNotify=true}={}){state.openTerms[index]=state.openTerms[index]===id?null:id;if(shouldNotify)notify();},
     async confirm(){if(state.busy||!state.taskId)return;const taskId=state.taskId,drafts=structuredClone(state.drafts);await action(async current=>{const result=await service.confirm(taskId,drafts);if(!current())return;if(result.status==='invalid')state.error=result.error;else if(result.status==='succeeded')runner.afterReview();else state.error=result.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':'未能采用本批结果';});},
     async read(){if(state.busy)return;cancelParameterTimer();const target=state.target;await action(async current=>{await parameterQueue;await repository.read(target);if(!current())return;await refresh();if(!current())return;if(state.parametersUnconfirmed||parameterDrafts[state.origin]?.readRequired){state.parametersUnconfirmed=false;parameterFailure=null;selectParameters(state.summary,state.origin,false);}if(state.task?.outcome==='unconfirmed'){state.task=null;state.taskId=null;state.drafts=null;state.route=state.origin;runner.discard();if(state.summary.pending){const id=await service.restorePending(state.origin);if(!current())return;state.taskId=id;taskChanged(service.inspect(id));}}state.message='已重新读取';});},
     async discardPending(){if(state.busy)return;await action(async current=>{await service.discardPending();if(current())await refresh();});},

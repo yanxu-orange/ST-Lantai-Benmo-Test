@@ -1,10 +1,11 @@
 export const LEGACY_FEATURES=Object.freeze(['event','cumulative','time','prompt','collect','sync']);
 const PREVIOUS_BENMO_FEATURES=Object.freeze(['summary','item','npc']);
+const PREVIOUS_FEATURES=Object.freeze([...LEGACY_FEATURES,...PREVIOUS_BENMO_FEATURES,'self','outline']);
 export const BENMO_FEATURES=Object.freeze([...PREVIOUS_BENMO_FEATURES,'self','outline']);
-export const FEATURES=Object.freeze([...LEGACY_FEATURES,...BENMO_FEATURES]);
-export const FEATURE_GROUPS=Object.freeze([['记忆',['event','cumulative']],['时间',['time']],['本末',BENMO_FEATURES],['工坊',['prompt','collect','sync']]]);
-export const FEATURE_LABELS=Object.freeze({event:'事件记忆',cumulative:'古法总结',time:'时间管理',prompt:'提示词注入',collect:'内容收集',sync:'长期追踪',summary:'最新摘要',item:'物品追踪',npc:'角色追踪',self:'角色自述',outline:'故事大纲'});
-export function defaultControls(){return {enabled:true,features:Object.fromEntries(FEATURES.map(key=>[key,!['item','npc','self','outline'].includes(key)]))};}
+export const FEATURES=Object.freeze([...LEGACY_FEATURES,...BENMO_FEATURES,'schedule']);
+export const FEATURE_GROUPS=Object.freeze([['记忆',['event','cumulative']],['时间',['time']],['本末',[...PREVIOUS_BENMO_FEATURES,'schedule','self','outline']],['工坊',['prompt','collect','sync']]]);
+export const FEATURE_LABELS=Object.freeze({event:'事件记忆',cumulative:'古法总结',time:'时间管理',prompt:'提示词注入',collect:'内容收集',sync:'长期追踪',summary:'最新摘要',item:'物品追踪',npc:'角色追踪',self:'角色自述',outline:'故事大纲',schedule:'日程追踪'});
+export function defaultControls(){return {enabled:true,features:Object.fromEntries(FEATURES.map(key=>[key,!['item','npc','self','outline','schedule'].includes(key)]))};}
 export function defaultChatControls(){return {enabled:true};}
 function exact(value,keys){return value&&Object.getPrototypeOf(value)===Object.prototype&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));}
 export function assertControls(value){
@@ -13,8 +14,8 @@ export function assertControls(value){
 }
 // Upgrade only global settings. Never derive new paid-task switches from a chat.
 export function normalizeControls(value){
- if(exact(value,['enabled','features'])&&(exact(value.features,LEGACY_FEATURES)||exact(value.features,[...LEGACY_FEATURES,...PREVIOUS_BENMO_FEATURES]))){
-  return assertControls({...value,features:{...Object.fromEntries(BENMO_FEATURES.map(key=>[key,key==='summary'])),...value.features}});
+ if(exact(value,['enabled','features'])&&(exact(value.features,LEGACY_FEATURES)||exact(value.features,[...LEGACY_FEATURES,...PREVIOUS_BENMO_FEATURES])||exact(value.features,PREVIOUS_FEATURES))){
+  return assertControls({...value,features:{schedule:false,...Object.fromEntries(BENMO_FEATURES.map(key=>[key,key==='summary'])),...value.features}});
  }
  return assertControls(value);
 }

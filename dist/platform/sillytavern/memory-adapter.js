@@ -329,7 +329,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
             const points = live?.parent === parentName && live.rootId === raw.rootId ? [live.floor]
               : rows.slice(1).flatMap((message, floor) => Array.isArray(message.extra?.branches) && message.extra.branches.includes(current.name) ? [floor] : []);
             if (points.length !== 1 || rows[0].chat_metadata[MEMORY_KEY]?.rootId !== raw.rootId) throw new Error('无法确认准确分支楼层，未猜测继承记忆');
-            prepared = { ...inheritMemoryRoot(raw,uuid(),points[0],{timeMessages:raw.time?.manualAnchor?chatSourceMessages(true):null}), binding: current };
+            prepared = { ...inheritMemoryRoot(raw,uuid(),points[0],{timeMessages:(raw.time?.manualAnchor||raw.time?.scheduleTracking)?chatSourceMessages(true):null}), binding: current };
           }
           await persist(targetFor(prepared, current), prepared);
         }
@@ -406,8 +406,8 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
   if(context.eventTypes.GENERATION_STARTED)on('GENERATION_STARTED',(type,_options,dryRun)=>{const tail=getContext()?.chat?.at(-1);regenerationRemoval=type==='regenerate'&&dryRun!==true&&tail?.is_user===false?tail:null;});
   for(const name of ['GENERATION_ENDED','GENERATION_STOPPED'])if(context.eventTypes[name])on(name,()=>{regenerationRemoval=null;refreshDeletionBaseline(true);});
   function sourceRole(message,includeHidden=false){
-    // Native visibility is not story chronology. TIME retains the original
-    // speaker for hidden narrative messages, while summary keeps its old filter.
+    // Native visibility is not the speaker. Explicit system/tool records stay
+    // outside story sources even when hidden user/assistant rows are included.
     return (includeHidden||message.is_system!==true)&&typeof message.is_user==='boolean'&&!message.extra?.type&&!message.extra?.tool_invocations&&(!includeHidden||message.role!=='system'&&message.role!=='tool')?(message.is_user?'user':'assistant'):'system';
   }
   function chatSourceMessages(includeHidden=false,messages=getContext().chat){
@@ -425,6 +425,13 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       const messages=chatSourceMessages(includeHidden);
       check(target);return copy({epoch:sourceEpoch,messages});
   }
+   function captureSummarySource(target) {
+     const source=captureChatSource(target,true);
+     // SillyTavern also sets is_system when a normal chat row is hidden. Event
+     // summaries use the semantic role. Old system-only rows cannot safely
+     // prove the hidden speaker or an unchanged regeneration input set.
+     return {...source,messages:source.messages.map(message=>({...message,system:message.role==='system'}))};
+   }
   function matchesSource(target,snapshot,includeHidden=false) {
       try {
         const current=check(target);requireConfirmed(current);
@@ -477,7 +484,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     hasTimeCalendar() {
       try {observe();const root=getContext().chatMetadata[MEMORY_KEY]??prepared;return !!root?.time?.activeCalendarId&&Array.isArray(root.time.calendars)&&root.time.calendars.some(item=>item.id===root.time.activeCalendarId);}catch{return false;}
     },
-    captureChatSource, captureSummarySource: captureChatSource,observeSourceVisibility,
+     captureChatSource, captureSummarySource,observeSourceVisibility,
     // Storage ownership only: never pass this visibility-neutral source to a
     // generation or prompt consumer. Hidden story replies still own summaries.
     captureLatestRetentionSource(target){const source=captureChatSource(target,true);return {...source,messages:source.messages.map(message=>({...message,system:message.role==='system'}))};},

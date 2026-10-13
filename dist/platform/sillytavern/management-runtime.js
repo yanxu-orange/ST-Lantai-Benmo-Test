@@ -1,3 +1,4 @@
+import {promptIdentities} from '../../domain/latest/requests.js';
 import {featureGate} from '../../domain/controls/gate.js';
 import { createSillyTavernSettingsAdapter } from './settings-adapter.js';
 import { createSillyTavernAiTransport, mainSnapshot } from './ai-provider.js';
@@ -176,7 +177,7 @@ export async function createManagementRuntime({ repository, getContext, document
   controller = createManagementController({ service, repository, originalAvailable, getOriginalSnapshot,
     getSettingsEpoch: () => getGenerationSettings().epoch });
   if(typeof captureSummarySource==='function') {
-    summaryService=createEventSummaryService({repository,manager,provider,getGenerationSettings:eventGeneration,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
+    summaryService=createEventSummaryService({repository,manager,provider,getGenerationSettings:eventGeneration,getTrackingContext:()=>{const context=getContext(),character=context.characters?.[context.characterId];return {identities:promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name}),allowed:{itemsEnabled:allowed('item'),npcsEnabled:allowed('npc')},proofs:{items:getControls?.()?.capture('item')??null,npcs:getControls?.()?.capture('npc')??null}};},control:featureGate(getControls,'event'),captureSource:captureSummarySource});
     summaryController=createSummaryController({repository,service:summaryService,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
     cumulativeService=createCumulativeSummaryService({repository,manager,provider,getGenerationSettings:cumulativeGeneration,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     cumulativeRunner=createAutomaticCumulativeRunner({repository,service:cumulativeService,captureSource:captureSummarySource});

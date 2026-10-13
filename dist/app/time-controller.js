@@ -1,3 +1,4 @@
+import {adoptScheduleCandidate,ignoreScheduleCandidate,markScheduleManual} from '../domain/time/schedule.js';
 import {recognizeRecentDate} from '../domain/time/tracker.js';
 import {normalizeChronology,toUnifiedYear} from '../domain/time/chronology.js';
 import {sameTarget} from '../domain/memory/repository.js';
@@ -11,10 +12,16 @@ import {defaultTimeReminders} from '../shared/settings/time-reminders.js';
 import {createLatestSettingsWrite} from './latest-settings-write.js';
 const copy=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const names={schedule:'日程',anniversary:'纪念日',holiday:'节日'};
+function validatedItemDraft(draft){
+ const item={...draft,title:typeof draft.title==='string'?draft.title.trim():''};
+ if(!item.title||item.title.length>160)throw new Error('名称须为1–160个字符');
+ if(item.kind==='anniversary'&&item.startYear!=null&&item.startDate&&item.startYear>item.startDate.year)throw new Error('发生年份不能晚于所填日期');
+ return item;
+}
 export function createTimeController({repository,settings,dateRuntime,captureSource,matchesSource,onMemory=()=>{},onSettings=()=>{},onWorkshop=()=>{},onBenmo=()=>{},onClose=()=>{},id=()=>globalThis.crypto.randomUUID()}={}){
  let disposed=false,ticket=0,target=null,baseline=null,config=null,writer=null,visible=true,navigation=0,refreshTicket=0,previewSerial=0,quickJob=null;
  const listeners=new Set(),stack=[];let pendingNavigation=null;
- let state={route:'home',status:'loading',time:null,reminders:null,draft:null,cursor:null,filter:'all',query:'',error:'',recognitionResult:false,saved:0,saving:false,scroll:{},opened:{},pendingCalendar:null,editorOriginal:null,editorTime:null,draftBaseline:null,confirm:null};
+ let state={route:'home',status:'loading',time:null,reminders:null,draft:null,cursor:null,filter:'all',query:'',error:'',recognitionResult:false,saved:0,saving:false,scroll:{},opened:{},pendingCalendar:null,editorOriginal:null,candidateOriginal:null,editorTime:null,draftBaseline:null,confirm:null};
  const current=(t=target,n=ticket)=>{try{return !disposed&&n===ticket&&sameTarget(t,repository.captureTarget());}catch{return false;}};
  const notify=()=>{if(!disposed&&visible)for(const fn of listeners)try{fn(copy(state));}catch{}};
  const calendar=()=>{const definition=state.time?.calendars.find(item=>item.id===state.time.activeCalendarId);return definition?createCalendar(definition):null;};
@@ -23,17 +30,22 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   if(disposed)return false;
   const nextTarget=repository.captureTarget();if(target&&sameTarget(target,nextTarget)&&baseline)return refresh();
   target=nextTarget;const request=++ticket;resetWriter();stack.length=0;state={...state,status:'loading',draft:null,pendingCalendar:null,error:'',recognitionResult:false,route:'home',cursor:null,saving:false};notify();
-  try{const selection=await repository.captureTime(target);if(!current(nextTarget,request))return false;baseline=selection;config=settings.captureTimeReminders();state.time=copy(selection.time);state.reminders=copy(config.reminders);state.status='ready';setCursor();notify();return true;}
+  try{const selection=await repository.captureTime(target);if(!current(nextTarget,request))return false;baseline=selection;config=settings.captureTimeReminders();state.time=copy(selection.time);state.reminders=copy(config.reminders);state.status='ready';setCursor();notify();void importCandidates(nextTarget,request);return true;}
   catch(error){if(current(nextTarget,request)){state.status='failed';state.error=error.message;notify();}return false;}
  }
- async function refresh(){
+ async function importCandidates(t,n){
+  if(!repository.importSummaryTimeCandidates)return;
+  try{const receipt=await repository.importSummaryTimeCandidates(t,{isCurrent:()=>current(t,n)});if(receipt.status==='committed'&&current(t,n)&&!state.draft&&!state.saving)await refresh(false);}
+  catch(error){if(current(t,n)&&!state.draft)fail(error);}
+ }
+ async function refresh(importSummary=true){
   if(!current()||state.saving||writer?.inspect().saving)return false;
   const t=copy(target),n=ticket,refreshId=++refreshTicket;
-  try{const selection=await repository.captureTime(t);if(!current(t,n)||refreshId!==refreshTicket||state.saving||writer?.inspect().saving)return false;resetWriter();baseline=selection;state.time=copy(selection.time);state.status='ready';state.error='';setCursor();notify();return true;}catch(error){if(current(t,n))fail(error);return false;}
+  try{const selection=await repository.captureTime(t);if(!current(t,n)||refreshId!==refreshTicket||state.saving||writer?.inspect().saving)return false;resetWriter();baseline=selection;state.time=copy(selection.time);state.status='ready';state.error='';setCursor();notify();if(importSummary)void importCandidates(t,n);return true;}catch(error){if(current(t,n))fail(error);return false;}
  }
  const unsubscribeDate=dateRuntime.subscribe?.(()=>{if(visible&&!state.draft&&!state.saving&&!writer?.inspect().saving&&baseline)void refresh();});
  function setCursor(){const cal=calendar(),date=state.time?.currentDate;if(!cal){state.cursor=null;return;}const candidate=state.cursor?.calendarId===cal.definition.id?state.cursor:date?{...date,month:date.month??1,day:date.day??1}:{calendarId:cal.definition.id,year:1,month:1,day:1};try{state.cursor=cal.validate(candidate);}catch{state.cursor={calendarId:cal.definition.id,year:date?.year??1,month:1,day:1};}}
- function navigate(route,draft=null){navigation++;state.recognitionResult=false;stack.push({route:state.route,draft:copy(state.draft),filter:state.filter,query:state.query,cursor:copy(state.cursor),pendingCalendar:copy(state.pendingCalendar),editorOriginal:copy(state.editorOriginal),editorTime:copy(state.editorTime),draftBaseline:copy(state.draftBaseline)});state.route=route;if(['schedules','anniversaries','holidays'].includes(route)){state.filter='all';state.query='';}state.draft=copy(draft);state.draftBaseline=copy(draft);state.editorTime=copy(baseline?.time);state.editorOriginal=draft?.id?copy(state.time?.items.find(item=>item.id===draft.id)??null):null;state.error='';notify();}
+ function navigate(route,draft=null){navigation++;state.recognitionResult=false;stack.push({route:state.route,draft:copy(state.draft),filter:state.filter,query:state.query,cursor:copy(state.cursor),pendingCalendar:copy(state.pendingCalendar),editorOriginal:copy(state.editorOriginal),candidateOriginal:copy(state.candidateOriginal),editorTime:copy(state.editorTime),draftBaseline:copy(state.draftBaseline)});state.route=route;if(['schedules','anniversaries','holidays'].includes(route)){state.filter='all';state.query='';}state.draft=copy(draft);state.draftBaseline=copy(draft);state.editorTime=copy(baseline?.time);state.candidateOriginal=null;state.editorOriginal=draft?.id?copy(state.time?.items.find(item=>item.id===draft.id)??null):null;state.error='';notify();}
  function back(force=false){if(!force&&requestDiscard(()=>back(true)))return;navigation++;const previous=stack.pop();if(previous)Object.assign(state,previous);else{state.route='home';state.draft=null;state.pendingCalendar=null;}setCursor();state.recognitionResult=false;state.error='';notify();}
  function requestDiscard(action){if(!state.saving&&state.draft&&!equal(state.draft,state.draftBaseline)){pendingNavigation=action;state.confirm='discard';notify();return true;}return false;}
  const fail=error=>{state.error=error?.message??'未能保存，请重试';notify();return false;};
@@ -67,6 +79,23 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   const original=state.time.items.find(item=>item.id===itemId),start=copy(state.cursor);
   navigate(`edit/${kind}`,original??{id:id(),kind,calendarId:start.calendarId,title:'',startDate:start,repeat:kind==='schedule'?'once':'yearly',durationDays:1,advanceDays:kind==='schedule'?3:null,enabled:true,remind:false,show:true,description:'',instruction:'',...(kind==='holiday'?{category:'自定义节日',dateRule:{type:'fixed',month:start.month,day:start.day,...(calendar().definition.type==='dynasty'?{monthId:calendar().months(start.year)[start.month-1].id}:{})},startDate:null}:{})});
  }
+ function openCandidate(candidateId){
+  if(state.saving||!current())return false;
+  const candidate=state.time?.candidates?.find(row=>row.id===candidateId&&row.status==='pending');if(!candidate)return false;
+  if(!writer?.inspect().saving)resetWriter();
+  const calendarId=state.time.calendars.some(row=>row.id===candidate.calendarId)?candidate.calendarId:state.time.activeCalendarId;
+  const startDate=candidate.startDate&&candidate.startDate.calendarId===calendarId?copy(candidate.startDate):{calendarId,year:null,month:null,day:null};
+  const original=candidate.targetItem?copy(candidate.targetItem):null;
+  navigate(`candidate/${candidate.kind}`,{...(original??{}),id:original?.id??id(),kind:candidate.kind,title:candidate.title,calendarId,startDate,repeat:['once','yearly'].includes(candidate.repeat)?candidate.repeat:(original?.repeat??(candidate.kind==='anniversary'?'yearly':'once')),durationDays:candidate.durationDays,advanceDays:original?.advanceDays??(candidate.kind==='anniversary'?null:3),enabled:original?.enabled??true,remind:original?.remind??true,show:original?.show??true,description:candidate.description,instruction:original?.instruction??''});
+  state.candidateOriginal=copy(candidate);notify();return true;
+ }
+ async function ignoreCandidate(candidateId=state.candidateOriginal?.id){
+  const original=copy(state.time?.candidates?.find(row=>row.id===candidateId&&row.status==='pending'));if(!original)return false;
+  const editing=state.route.startsWith('candidate/');
+  const operation=async()=>persist(time=>{if(!equal(time.candidates?.find(row=>row.id===candidateId),original))throw new Error('候选已变化，请重新打开');return ignoreScheduleCandidate(time,candidateId);});
+  if(editing)return explicit(operation);
+  if(state.saving||!current())return false;state.saving=true;notify();try{await operation();state.saved++;return true;}catch(error){return fail(error);}finally{state.saving=false;notify();}
+ }
  async function save({confirmCalendar=false}={}){
   const route=state.route,editor=state.draft,draft=copy(state.draft);if(!draft)return false;
   if(route==='calendar'){
@@ -85,9 +114,21 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
     navigate('calibrate',{date:{calendarId:definition.id,year:null,month:null,day:null},recognition:copy(state.time.recognition),chronology:copy(state.time.chronology),current:copy(state.reminders.current)});return true;
    }catch(error){return fail(error);}
   }
+  if(route.startsWith('candidate/')){
+   const original=copy(state.candidateOriginal),before=copy(state.editorTime);
+   return explicit(async()=>{await persist(time=>{
+    if(!equal(time.candidates?.find(row=>row.id===original?.id),original))throw new Error('候选已变化，请重新打开');
+    const definition=time.calendars.find(row=>row.id===draft.calendarId);
+    if(!definition||!equal(definition,before.calendars.find(row=>row.id===draft.calendarId)))throw new Error('请先设置历法，或重新打开候选');
+    if(!draft.startDate||!['year','month','day'].every(key=>Number.isSafeInteger(draft.startDate[key])))throw new Error('启用前请补全完整日期');
+    const item={...validatedItemDraft(draft),enabled:true};
+    if(['completed','cancelled'].includes(item.status))item.status='active';
+    return adoptScheduleCandidate(time,original.id,item);
+   });});
+  }
   if(route.startsWith('edit/')){
    const original=state.editorOriginal??undefined;
-   return explicit(async()=>{await persist(time=>{const found=time.items.find(item=>item.id===draft.id);if(!equal(found,original))throw new Error('此事项已变化，请重新打开');const item={...draft,title:draft.title.trim()};if(item.dateRule?.type==='fixed'&&calendar().definition.type==='dynasty'&&!item.dateRule.monthId){const month=calendar().months(state.cursor.year)[item.dateRule.month-1];if(!month)throw new Error('月份不存在');item.dateRule={...item.dateRule,monthId:month.id};}if(!item.title||item.title.length>160)throw new Error('名称须为1–160个字符');if(item.kind==='anniversary'&&item.startYear!=null&&item.startDate&&item.startYear>item.startDate.year)throw new Error('发生年份不能晚于所填日期');time.items=found?time.items.map(row=>row.id===item.id?item:row):[...time.items,item];return time;});});
+   return explicit(async()=>{await persist(time=>{const found=time.items.find(item=>item.id===draft.id);if(!equal(found,original))throw new Error('此事项已变化，请重新打开');const item=validatedItemDraft(draft);if(item.enabled&&original?.enabled===false&&['completed','cancelled'].includes(item.status))item.status='active';if(item.dateRule?.type==='fixed'&&calendar().definition.type==='dynasty'&&!item.dateRule.monthId){const month=calendar().months(state.cursor.year)[item.dateRule.month-1];if(!month)throw new Error('月份不存在');item.dateRule={...item.dateRule,monthId:month.id};}time.items=found?time.items.map(row=>row.id===item.id?item:row):[...time.items,item];return found?markScheduleManual(time,item.id):time;});});
   }
   if(route.startsWith('reminders/'))return explicit(async({guard})=>{const kind=route.split('/')[1],latest=settings.captureTimeReminders();if(!settings.matchesTimeReminders(config))throw new Error('提醒设置已变化，请重新打开');const receipt=await settings.saveTimeReminders({...latest.reminders,[kind]:draft},{expectedEpoch:latest.epoch,isCurrent:guard});if(receipt.status!=='committed')throw new Error('提醒设置保存尚未确认');config=settings.captureTimeReminders();state.reminders=copy(config.reminders);});
   if(route==='calibrate'&&state.pendingCalendar&&state.time.activeCalendarId&&!confirmCalendar){state.confirm='calendar';notify();return false;}
@@ -118,13 +159,14 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
    let confirmed=flagsOf(state.time);
    writer=createLatestSettingsWrite({initial:confirmed,isCurrent:()=>current(t,n),persist:async flags=>{
     const changes=Object.keys(flags).filter(key=>!equal(flags[key],confirmed[key]));
-    await persist(time=>{for(const key of changes){const collection=key.startsWith('calendar:')?time.calendars:time.items,id=key.slice(key.indexOf(':')+1),item=collection.find(row=>row.id===id);if(!item||!equal(flagsOf(time)[key],confirmed[key]))throw new Error('事项状态已变化，请重新打开');Object.assign(item,flags[key]);}return time;},{guard:()=>current(t,n)});
+    await persist(time=>{for(const key of changes){const collection=key.startsWith('calendar:')?time.calendars:time.items,id=key.slice(key.indexOf(':')+1),item=collection.find(row=>row.id===id);if(!item||!equal(flagsOf(time)[key],confirmed[key]))throw new Error('事项状态已变化，请重新打开');const reactivate=key.startsWith('item:')&&item.enabled===false&&flags[key].enabled===true&&['completed','cancelled'].includes(item.status);Object.assign(item,flags[key]);if(reactivate)item.status='active';if(key.startsWith('item:'))time=markScheduleManual(time,id);}return time;},{guard:()=>current(t,n)});
     confirmed=copy(flags);return flags;
    },onChange(snapshot){if(!current(t,n))return;for(const [prefix,items]of [['item',state.time.items],['calendar',state.time.calendars]])for(const item of items)if(snapshot.value[`${prefix}:${item.id}`])Object.assign(item,snapshot.value[`${prefix}:${item.id}`]);if(snapshot.error)state.time=copy(baseline.time);state.error=snapshot.error?.message??'';notify();}});
   }
   const key=`${calendarFlag?'calendar':'item'}:${itemId}`;quickJob=writer.change(flags=>{if(!flags[key])return;flags[key][field]=!flags[key][field];});return quickJob;
  }
- return {init,refresh,async recover(){const t=copy(target),n=ticket;if(!current(t,n)||state.saving)return false;try{await settings.read();if(!current(t,n))return false;config=settings.captureTimeReminders();state.reminders=copy(config.reminders);return refresh();}catch(error){return current(t,n)?fail(error):false;}},open,openItem,save,back,edit,toggleItem,confirm(){const kind=state.confirm;state.confirm=null;if(kind==='discard'){const next=pendingNavigation;pendingNavigation=null;next?.();}else if(kind==='calendar')return save({confirmCalendar:true});notify();},cancelConfirm(){state.confirm=null;pendingNavigation=null;notify();},toggleCalendar:field=>toggleItem(state.time.activeCalendarId,field,true),inspect:()=>copy(state),subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},calendar,
+ return {init,refresh,async recover(){const t=copy(target),n=ticket;if(!current(t,n)||state.saving)return false;try{await settings.read();if(!current(t,n))return false;config=settings.captureTimeReminders();state.reminders=copy(config.reminders);return refresh();}catch(error){return current(t,n)?fail(error):false;}},open,openItem,openCandidate,ignoreCandidate,openCandidates(kind=null){kind??=(state.time?.candidates?.some(row=>row.status==='pending'&&row.kind==='schedule')?'schedule':state.time?.candidates?.some(row=>row.status==='pending'&&row.kind==='anniversary')?'anniversary':'schedule');open(kind==='anniversary'?'anniversaries':'schedules');state.filter='candidate';notify();},save,back,edit,toggleItem,confirm(){const kind=state.confirm;state.confirm=null;if(kind==='discard'){const next=pendingNavigation;pendingNavigation=null;next?.();}else if(kind==='calendar')return save({confirmCalendar:true});notify();},cancelConfirm(){state.confirm=null;pendingNavigation=null;notify();},toggleCalendar:field=>toggleItem(state.time.activeCalendarId,field,true),inspect:()=>copy(state),subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},calendar,
+  selectCandidateCalendar(calendarId){if(!state.route.startsWith('candidate/')||!state.draft||state.saving||!state.time.calendars.some(row=>row.id===calendarId))return false;state.draft.calendarId=calendarId;state.draft.startDate={calendarId,year:null,month:null,day:null};state.editorTime=copy(state.time);notify();return true;},
   refreshDraft(){notify();},mutateDraft(change){if(state.draft&&!state.saving){change(state.draft);state.recognitionResult=false;notify();}},
   selectCalendar(calendarId){const found=state.time.calendars.find(item=>item.id===calendarId);if(found){state.draft={...copy(found),importStart:found.importedYears?.[0]?.sourceYear??2025,importEnd:found.importedYears?.at(-1)?.sourceYear??2026};notify();}},
   switchCalendarType(type){if(!['modern','custom','dynasty'].includes(type))return;const retained=state.time.calendars.findLast(item=>item.type===type);if(retained){this.selectCalendar(retained.id);return;}const previousId=state.draft.id;state.draft={id:previousId,type,name:type==='modern'?'现代历法':type==='dynasty'?'架空王朝历':'自定义历法',...(type==='custom'?{months:[{name:'一月',days:30}]}:{}),...(type==='dynasty'?{importStart:2025,importEnd:2026,includeTerms:false}:{})};notify();},
@@ -144,7 +186,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
     notify();return !!result.date;
    }catch(error){return stillCurrent()?fail(error):false;}
   },
-  remove(){if(state.draft?.catalogId)return Promise.resolve(fail(new Error('内置节日请恢复默认，不直接删除')));const draft=copy(state.draft),original=state.editorOriginal??undefined;return explicit(async()=>{await persist(time=>{if(!equal(time.items.find(item=>item.id===draft.id),original))throw new Error('事项已变化，请重新打开');return {...time,items:time.items.filter(item=>item.id!==draft.id)};});});},
+  remove(){if(state.draft?.catalogId)return Promise.resolve(fail(new Error('内置节日请恢复默认，不直接删除')));const draft=copy(state.draft),original=state.editorOriginal??undefined;return explicit(async()=>{await persist(time=>{if(!equal(time.items.find(item=>item.id===draft.id),original))throw new Error('事项已变化，请重新打开');time=markScheduleManual(time,draft.id);return {...time,items:time.items.filter(item=>item.id!==draft.id)};});});},
   resetItem(){const original=state.editorOriginal;return explicit(async()=>{const replacement=initialHolidayItems(calendar()).find(item=>item.catalogId===original?.catalogId);if(!replacement)throw new Error('当前历法没有此默认条目');await persist(time=>{if(!equal(time.items.find(item=>item.id===original.id),original))throw new Error('事项已变化，请重新打开');return {...time,items:time.items.map(item=>item.id===original.id?replacement:item)};});});},
   jump(date){try{state.cursor=calendar().validate(date);notify();}catch{}},
   day(day){if(state.cursor){state.cursor={...state.cursor,day};notify();}},month(delta){const cal=calendar();if(!cal||!state.cursor)return;const next=cal.shiftMonths(state.cursor,delta);if(next){state.cursor=next;notify();}},today(){if(state.time.currentDate?.day!=null){state.cursor=copy(state.time.currentDate);notify();}},

@@ -1,3 +1,4 @@
+.lt-settings{position:relative}
 .lt-settings-main{display:flex;flex-direction:column;gap:var(--ui-space-section)}
 .lt-settings-group{display:grid;align-content:start;gap:var(--ui-space-control)}
 .lt-settings-group h2{margin:0;font-family:var(--ui-type-ui-family);font-size:var(--ui-type-ui-section-title-size);font-weight:var(--ui-type-ui-section-title-weight)}

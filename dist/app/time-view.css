@@ -31,13 +31,13 @@
 .lt-time .time-field .ui-input{inline-size:100%;min-inline-size:0}
 .lt-time .time-fields-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--ui-space-control)}
 .lt-time .time-date-fields{display:grid;grid-template-columns:1.1fr 1fr .8fr;gap:var(--ui-space-control)}
-.lt-time .time-textarea{min-block-size:7rem;resize:vertical;white-space:pre-wrap}
-.lt-time .time-check{display:flex;align-items:center;gap:var(--ui-space-inline);min-block-size:var(--ui-interaction-target-min)}
+:is(.lt-time,.lt-settings) .time-textarea{min-block-size:7rem;resize:vertical;white-space:pre-wrap}
+:is(.lt-time,.lt-settings) .time-check{display:flex;align-items:center;gap:var(--ui-space-inline);min-block-size:var(--ui-interaction-target-min)}
 .lt-time .time-month-editor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.7fr) auto;gap:var(--ui-space-control);align-items:end}
 .lt-time .time-tag-group{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--ui-space-control);align-items:end}
 .lt-time .time-category>summary{min-block-size:var(--ui-interaction-target-min);cursor:pointer;padding-block:var(--ui-space-control)}
-.lt-time .time-confirm{position:absolute;inset:30% var(--ui-space-group) auto;z-index:2;display:grid;gap:var(--ui-space-group);padding:var(--ui-space-group);background:var(--ui-color-surface-base);border:var(--ui-border-strong-width) solid var(--ui-color-border-default);border-radius:var(--ui-shape-surface-radius);box-shadow:var(--ui-elevation-low-shadow)}
-.lt-time .time-confirm>div{display:flex;justify-content:end;gap:var(--ui-space-control)}
+:is(.lt-time,.lt-settings) .time-confirm:not([hidden]){position:absolute;inset:30% var(--ui-space-group) auto;z-index:2;display:grid;gap:var(--ui-space-group);padding:var(--ui-space-group);background:var(--ui-color-surface-base);border:var(--ui-border-strong-width) solid var(--ui-color-border-default);border-radius:var(--ui-shape-surface-radius);box-shadow:var(--ui-elevation-low-shadow)}
+:is(.lt-time,.lt-settings) .time-confirm>div{display:flex;justify-content:end;gap:var(--ui-space-control)}
 
 .lt-time .time-marker--term{background:transparent;border:1px solid var(--ui-color-text-secondary);border-radius:50%;inline-size:6px;block-size:6px}
 
@@ -90,3 +90,8 @@
 .lt-time .time-group-body{padding-inline:var(--ui-space-row);display:grid}
 .lt-time .time-management-row:last-child{border-bottom:0}
 .lt-time .time-holiday-record{margin-inline:var(--ui-space-row)}
+
+.time-candidate-evidence{font-size:var(--ui-type-ui-body-size);color:var(--ui-color-text-meta)}
+.time-candidate-evidence summary{cursor:pointer;min-height:var(--ui-interaction-target-min)}
+.time-evidence-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.time-candidate-record{padding-block:var(--ui-space-control)}

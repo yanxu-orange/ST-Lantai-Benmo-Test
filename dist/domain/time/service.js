@@ -21,7 +21,7 @@ export function createTimeService({repository,source,now=()=>new Date().toISOStr
     const {target,selection,snapshot}=await capture(),calendar=calendarOf(selection.time);
     if(!calendar)throw new Error('请先选择历法');
     const next={...selection.time,currentDate:storyDate(calendar,date),manualAnchor:createManualAnchor(calendar,date,snapshot.messages,{now})};
-    const result=await repository.updateTime(target,selection,next,{isCurrent:current(target,snapshot,ticket)});tracker=null;trackerKey=null;return result;
+    const result=await (repository.updateTimeDate??repository.updateTime).call(repository,target,selection,next,{isCurrent:current(target,snapshot,ticket)});tracker=null;trackerKey=null;return result;
    })();
    manualJob=job;const clear=()=>{if(manualJob===job)manualJob=null;};job.then(clear,clear);return job;
   },
@@ -38,7 +38,7 @@ export function createTimeService({repository,source,now=()=>new Date().toISOStr
    if(result.status==='needs-calibration')return result;
    if(reidentify&&result.date===null)return {status:'not-found',date:copy(time.currentDate)};
    const next={...time,currentDate:result.date,...(reidentify?{manualAnchor:null}:{})};
-   const saved=await repository.updateTime(target,selection,next,{isCurrent:current(target,snapshot,ticket)});
+   const saved=await (repository.updateTimeDate??repository.updateTime).call(repository,target,selection,next,{isCurrent:current(target,snapshot,ticket)});
    return {status:saved.status,date:saved.root.time?.currentDate??null,parsedMessages:result.parsedMessages,historical:result.historical??false};
   },
  };

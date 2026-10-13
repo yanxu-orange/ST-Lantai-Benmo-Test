@@ -51,7 +51,7 @@ function assertField(key, value) {
 }
 export function assertTrackingPatch(kind, value, { model = false, stored = false } = {}) {
   if (!TRACKING_KINDS.includes(kind) || !trackingObject(value)) throw new Error('追踪修改无效');
-  const allowed = ['name', 'aliases', ...TRACKING_FIELDS[kind], 'customFields', ...(model ? [] : ['pinned', ...(kind === 'npc' ? ['lastAppearanceTurn'] : [])])];
+  const allowed = ['name', 'aliases', ...TRACKING_FIELDS[kind], 'customFields', ...(model ? (stored && kind === 'npc' ? ['lastAppearanceTurn'] : []) : ['pinned', ...(kind === 'npc' ? ['lastAppearanceTurn'] : [])])];
   for (const [key, field] of Object.entries(value)) {
     if (!allowed.includes(key)) throw new Error('追踪修改包含未知字段');
     if (key === 'customFields') assertTrackingCustomFields(field, { model: model && !stored });
@@ -78,7 +78,7 @@ export function assertTrackingChanges(value, { stored = false } = {}) {
   if (!trackingExact(value, ['items', 'npcs'])) throw new Error('追踪输出须包含 items 和 npcs');
   const ids = new Set();
   for (const [list, kind] of [['items', 'item'], ['npcs', 'npc']]) {
-    if (!Array.isArray(value[list]) || value[list].length > 50) throw new Error('追踪输出列表无效');
+    if (!Array.isArray(value[list]) || !stored && value[list].length > 50) throw new Error('追踪输出列表无效');
     for (const change of value[list]) {
       if (!trackingObject(change) || !own(change, 'id') || !(trackingText(change.id) || !stored && change.id === null)
         || stored && typeof change.create !== 'boolean') throw new Error('追踪输出身份无效');

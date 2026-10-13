@@ -1,3 +1,4 @@
+import {migrateSummaryPromptOverrides} from '../../shared/settings/summary-prompts.js';
 import {sourceFingerprint} from './source.js';
 import {validateEvent} from '../memory/event-model.js';
 const copy=value=>structuredClone(value);
@@ -41,15 +42,17 @@ export function assertGeneratedEvidence(candidates) {
 }
 export function publicSummarySettingsEvidence(value) {
   if(!value||Object.getPrototypeOf(value)!==Object.prototype)throw new Error('总结配置证据无效');
-  const keys=['generationMode','promptOverrides','customPrompts','eventWords','summaryCleaning'];
+  const keys=['generationMode','promptOverrides','customPrompts','eventWords','summaryCleaning','trackingItemsEnabled','trackingNpcsEnabled'];
   if(Object.keys(value).some(key=>!keys.includes(key)&&!['epoch','generationEpoch'].includes(key)))throw new Error('待审核证据不得包含 AI 私有配置');
   const result=Object.fromEntries(keys.filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]]));
   const noPrivate=item=>{if(Array.isArray(item)){item.forEach(noPrivate);return;}if(item&&typeof item==='object')for(const [key,child] of Object.entries(item)){if(/^(ai|api|apiKey|password|credentials|credentialEpoch|authorization|secret|secretId|secretValue|endpoint|model|presets|activePresetId)$/i.test(key))throw new Error('待审核证据不得包含 AI 私有配置');noPrivate(child);}};
   noPrivate(result);
   jsonEvidence(result);return copy(result);
 }
+// These two optional flags were absent in already saved pending batches.
+export function normalizedSummarySettingsEvidence(value){const result=publicSummarySettingsEvidence(value);return {...result,...(result.promptOverrides?{promptOverrides:migrateSummaryPromptOverrides(result.promptOverrides)}:{}),trackingItemsEnabled:result.trackingItemsEnabled===true,trackingNpcsEnabled:result.trackingNpcsEnabled===true};}
 export function assertSummaryPending(value) {
-  exact(value,['schema','id','batchId','origin','generationMode','completedStages','nextStage','failedStage','events','generatedCandidates','sourceSnapshot','settingsEvidence','params','createdAt','updatedAt']);
+  exact(value,['schema','id','batchId','origin','generationMode','completedStages','nextStage','failedStage','events','generatedCandidates','sourceSnapshot','settingsEvidence','params','createdAt','updatedAt',...(Object.hasOwn(value??{},'tracking')?['tracking']:[])]);
   if(value.schema!==1||!text(value.id)||!text(value.batchId)||!['manual','auto'].includes(value.origin)||!text(value.createdAt)||!text(value.updatedAt))throw new Error('待审核身份无效');
   const stages={one:['fast'],two:['qualitySummary','qualityIndexes'],three:['enhancedSummary','enhancedKeywords','aliases']}[value.generationMode];
   const publicSettings=publicSummarySettingsEvidence(value.settingsEvidence);
@@ -61,6 +64,7 @@ export function assertSummaryPending(value) {
   if(value.sourceSnapshot?.includeUser!==value.params.includeUser)throw new Error('待审核来源策略不符');
   assertBatch({id:value.batchId,taskId:value.id,ordinal:1,sourceType:value.origin,requestedRange:value.sourceSnapshot?.requestedRange,actualRange:value.sourceSnapshot?.actualRange,sourceSnapshot:value.sourceSnapshot,settingsEvidence:publicSummarySettingsEvidence(value.settingsEvidence),generationMode:value.generationMode,hideOriginal:value.params.hideOriginal,generatedCandidates:value.generatedCandidates,eventIds:value.events.map(event=>event.id),createdAt:value.createdAt,completedAt:value.updatedAt});
   jsonEvidence(value.events);
+  if(Object.hasOwn(value,'tracking')){exact(value.tracking,['ticket','context','parts']);if(!value.tracking.ticket||!integer(value.tracking.ticket.revision)||!value.tracking.context||!value.tracking.parts)throw new Error('待审核追踪证据无效');jsonEvidence(value.tracking);}
   return {...copy(value),settingsEvidence:publicSummarySettingsEvidence(value.settingsEvidence)};
 }
 export function assertBatch(batch) {

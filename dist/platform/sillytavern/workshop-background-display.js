@@ -7,7 +7,7 @@ const bodyKey = info => JSON.stringify(info.tasks.map(task => [taskKey(task), ta
 const text = (node, value) => { if (node.textContent !== value) node.textContent = value; };
 const busy = info => info.batchRunning === true || info.tasks.some(task => task.status === 'running');
 // Results are independent floor-tail nodes, never rewritten into story mes.
-export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.document, runtime, formatter, coordinator,
+export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.document, runtime, formatter, coordinator, onOpenSchedule,
   MutationObserver: Observer = globalThis.MutationObserver } = {}) {
   let disposed = false;
   const rendered = new WeakMap(), mounted = new Set();
@@ -61,12 +61,14 @@ export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.docu
             try { Promise.resolve(runtime.generate(floor, { workshopOnly: true, taskId: task.id })).catch(() => {}); }
             catch { /* Runtime reports errors. */ }
           });
-          actions.append(status, retry); detail.append(heading, display.body, actions); box.append(detail);
-          entry = { ...display, detail, heading, status, retry }; state.entries.set(key, entry);
+          const manage = doc.createElement('button'); manage.type='button';manage.className='menu_button';manage.textContent='查看日程与候选';
+          manage.addEventListener('click',()=>{if(current()&&!manage.hidden)onOpenSchedule?.();});
+          actions.append(status, retry, manage); detail.append(heading, display.body, actions); box.append(detail);
+          entry = { ...display, detail, heading, status, retry, manage }; state.entries.set(key, entry);
         }
         text(entry.heading, task.name);
         text(entry.status, task.status === 'running' ? '正在生成…' : task.error || (!task.body ? '尚未生成' : ''));
-        text(entry.retry, task.body ? '重新生成' : task.status === 'failed' ? '重试' : '生成'); entry.retry.disabled = task.status === 'running';
+        text(entry.retry, task.body ? '重新生成' : task.status === 'failed' ? '重试' : '生成'); entry.retry.disabled = task.status === 'running'||task.canRetry===false;entry.retry.hidden=task.canRetry===false;entry.manage.hidden=task.openSchedule!==true||typeof onOpenSchedule!=='function';
         // Tracking remains plain text and never enters the Helper formatter.
         if (task.kind !== 'workshop') { text(entry.body, task.body ?? ''); entry.body.hidden = !task.body; }
       }

@@ -1,9 +1,10 @@
+import {DEFAULT_SCHEDULE_INSTRUCTIONS,assertScheduleTrackingConfig} from '../../domain/time/schedule-prompts.js';
 import {assertTrackingPrompts, DEFAULT_TRACKING_PROMPTS, migrateTrackingPrompts} from '../../domain/tracking/prompts.js';
 import {normalizeControls, assertControls, defaultControls} from '../../domain/controls/model.js';
 import {assertWorkshop, emptyWorkshop} from '../../domain/workshop/model.js';
 import {validateTimeReminders, defaultTimeReminders, reviseTimeRemindersDefaults} from './time-reminders.js';
 import { createDefaultEventWords } from './default-event-words.js';
-import { SUMMARY_PROMPT_KEYS, LEGACY_SUMMARY_PROMPT_DEFAULTS, summaryPromptDefault } from './summary-prompts.js';
+import { SUMMARY_PROMPT_KEYS, migrateSummaryPromptOverrides } from './summary-prompts.js';
 import { createDefaultCleaningRules, normalizeCleaningRule } from '../../domain/summary/cleaning.js';
 
 export const SETTINGS_KEY = 'lantai_benmo';
@@ -47,8 +48,12 @@ function ai(value) {
   return value;
 }
 function generation(value) {
-  const legacy = value && Object.keys(value).length === 2;
-  exact(value, legacy ? ['eventWords', 'promptOverrides'] : ['eventWords', 'promptOverrides', 'generationMode', 'customPrompts', 'summaryCleaning']);
+  if (!value || Object.getPrototypeOf(value) !== Object.prototype) invalid();
+  const trackingKeys = ['trackingItemsEnabled', 'trackingNpcsEnabled'];
+  const legacy = Object.keys(value).filter(key => !trackingKeys.includes(key)).length === 2;
+  value = { trackingItemsEnabled: false, trackingNpcsEnabled: false, ...value };
+  exact(value, [...(legacy ? ['eventWords', 'promptOverrides'] : ['eventWords', 'promptOverrides', 'generationMode', 'customPrompts', 'summaryCleaning']), ...trackingKeys]);
+  if (trackingKeys.some(key => typeof value[key] !== 'boolean')) invalid();
   if (!Array.isArray(value.eventWords)) invalid();
   const ids = new Set(), names = new Set();
   for (const word of value.eventWords) {
@@ -110,7 +115,7 @@ export function assertRecallSettings(value) {
 }
 export function emptySettings() {
   return { schema: 2, revision: 0, domainRevisions: { ai: 0, eventGeneration: 0,recall:0 },recall:defaultRecallSettings(), credentials: [], ai: { source: null, activePresetId: null, presets: [] },
-    eventGeneration: { eventWords: createDefaultEventWords(), promptOverrides: {}, generationMode: 'quality', customPrompts: [], summaryCleaning: { rules: createDefaultCleaningRules() } } };
+    eventGeneration: { trackingItemsEnabled: false, trackingNpcsEnabled: false, eventWords: createDefaultEventWords(), promptOverrides: {}, generationMode: 'quality', customPrompts: [], summaryCleaning: { rules: createDefaultCleaningRules() } } };
 }
 export function assertCumulativeGeneration(value) {
   try {
@@ -123,6 +128,8 @@ export function assertCumulativeGeneration(value) {
     return frozenSettingsCopy(value);
   }catch{throw new SettingsError();}
 }
+export function defaultScheduleTracking(){return {categories:['schedule','anniversary'],instructions:DEFAULT_SCHEDULE_INSTRUCTIONS};}
+export function assertScheduleTracking(value){try{return frozenSettingsCopy(assertScheduleTrackingConfig(value));}catch{throw new SettingsError();}}
 export function assertTimeReminders(value){try{return frozenSettingsCopy(validateTimeReminders(value));}catch{throw new SettingsError();}}
 export function assertSettings(value) {
   try {
@@ -144,13 +151,10 @@ export function assertSettings(value) {
     // This is a normalized read view, not a persistence operation. Match the
     // complete known old default; near-matches, edits and explicit blanks are
     // user content and must survive both loading and unrelated settings saves.
-    const eventGeneration = { ...validatedGeneration, promptOverrides: Object.fromEntries(
-      Object.entries(validatedGeneration.promptOverrides).map(([key, content]) => [key,
-        Object.hasOwn(LEGACY_SUMMARY_PROMPT_DEFAULTS, key) && content === LEGACY_SUMMARY_PROMPT_DEFAULTS[key]
-          ? summaryPromptDefault(key) : content]),
-    ) };
+    const eventGeneration = { ...validatedGeneration, promptOverrides: migrateSummaryPromptOverrides(validatedGeneration.promptOverrides) };
     if(!hasRecall&&(value.domainRevisions.recall??0)!==0)invalid();
     const migrated = { ...value, schema: 2, credentials: legacy ? [] : value.credentials, eventGeneration,domainRevisions:{...value.domainRevisions,recall:value.domainRevisions.recall??0},recall:hasRecall?assertRecallSettings(value.recall):defaultRecallSettings() };
+    if(present('scheduleTracking'))migrated.scheduleTracking=assertScheduleTracking(value.scheduleTracking);
     if(hasTracking)migrated.trackingPrompts=migrateTrackingPrompts(assertTrackingPrompts(value.trackingPrompts));
     if(hasControls)migrated.controls=normalizeControls(value.controls);
     if(hasWorkshop)migrated.workshop=assertWorkshop(value.workshop);
@@ -178,6 +182,7 @@ export const SETTINGS_DOMAINS = Object.freeze(Object.fromEntries(Object.entries(
   timeReminders: { validate: assertTimeReminders, optional: true, fingerprintAbsent: true, readDefault: defaultTimeReminders, noOpDefault: defaultTimeReminders },
   workshop: { validate: assertWorkshop, optional: true, fingerprintAbsent: true, readDefault: emptyWorkshop, noOpDefault: emptyWorkshop },
   controls: { validate: assertControls, optional: true, fingerprintAbsent: true, readDefault: defaultControls, noOpDefault: defaultControls },
+  scheduleTracking: { validate: assertScheduleTracking, optional: true, fingerprintAbsent: true, readDefault: defaultScheduleTracking, noOpDefault: defaultScheduleTracking },
   trackingPrompts: { validate: assertTrackingPrompts, optional: true, fingerprintAbsent: true, readDefault: () => DEFAULT_TRACKING_PROMPTS },
 }).map(([field, definition]) => [field, Object.freeze(definition)])));
 export const SETTINGS_DOMAIN_KEYS = Object.freeze(Object.keys(SETTINGS_DOMAINS));

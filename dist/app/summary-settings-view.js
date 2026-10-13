@@ -1,5 +1,5 @@
 import { surfaceTheme } from './styles/theme.js';
-import { SUMMARY_PROMPT_GROUPS, MERGE_PROMPT_FIELDS, SUMMARY_MODE_DESCRIPTIONS, summaryPromptDefault } from '../shared/settings/summary-prompts.js';
+import { SUMMARY_PROMPT_GROUPS, MERGE_PROMPT_FIELDS, SUMMARY_MODE_DESCRIPTIONS, summaryPromptDefault, hasCustomSummaryFieldRules } from '../shared/settings/summary-prompts.js';
 import { BUILTIN_SUMMARY_CLEANING_SHORTCUTS } from '../domain/summary/cleaning.js';
 import { createDefaultEventWords } from '../shared/settings/default-event-words.js';
 
@@ -7,6 +7,7 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&a
 const button = (label, action, extra = '', secondary = false) => `<button type="button" class="ui-button ui-button--${secondary ? 'secondary' : 'tertiary'}" data-ss-action="${action}" ${extra}>${label}</button>`;
 const icon = (name, label, action, extra = '') => `<button type="button" class="ui-icon-button ui-button--tertiary" data-ss-action="${action}" aria-label="${escape(label)}" ${extra}><img class="lt-icon" src="${new URL(`./icons/${name}.svg`, import.meta.url)}" alt=""></button>`;
 const switchControl = (checked, action, label, extra = '') => `<button type="button" class="ui-switch" role="switch" aria-checked="${checked}" aria-label="${escape(label)}" data-ss-action="${action}" ${extra}><span class="ui-switch__track" aria-hidden="true"><span class="ui-switch__knob"></span></span></button>`;
+const trackingOptions = [['trackingItemsEnabled', '同步追踪物品', '物品追踪已关闭'], ['trackingNpcsEnabled', '同步追踪 NPC', '角色追踪已关闭']];
 const labels = { exclude: '排除', extract: '提取', replace: '替换' };
 const routeLink = (label, action, extraClass = '') => `<button type="button" class="ui-button ui-button--tertiary ui-row lt-summary-link ${extraClass}" data-ss-action="${action}"><span>${label}</span><span aria-hidden="true">›</span></button>`;
 const promptTitle = (name, readonly = false) => `<summary><span class="lt-summary-label"><span class="lt-summary-label-text">${escape(name)}</span>${readonly ? '<span class="lt-summary-readonly-tag">只读</span>' : ''}</span><svg class="lt-summary-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>`;
@@ -49,7 +50,9 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
       return `<details class="lt-summary-prompt" data-ss-open="${item.key}"${opened}>${promptTitle(item.name, true)}<pre class="lt-summary-readonly" tabindex="0">${escape(text)}</pre></details>`;
     }
     const dirty = Object.hasOwn(s.promptDrafts, item.key), text = dirty ? s.promptDrafts[item.key] : s.draft.promptOverrides[item.key] ?? summaryPromptDefault(item.key);
-    return `<details class="lt-summary-prompt" data-ss-open="${item.key}"${opened}>${promptTitle(item.name)}<form data-ss-form="prompt" data-key="${item.key}" class="lt-summary-prompt-body"><textarea class="lt-textarea lt-prompt-editor" data-ss-field="prompt" data-key="${item.key}" aria-label="${escape(item.name)}" rows="8">${escape(text)}</textarea><p class="lt-status" data-ss-dirty="${item.key}">${dirty ? '尚未保存' : ''}</p><div class="lt-summary-editor-actions">${button('恢复默认', 'restore-prompt', `data-key="${item.key}"`)}${button('取消', 'cancel-prompt', `data-key="${item.key}"`)}<button type="submit" class="ui-button ui-button--secondary" ${dirty ? '' : 'disabled'}>保存</button></div></form></details>`;
+    const compatibility = item.key === 'informationTracking' && !Object.hasOwn(s.draft.promptOverrides, 'informationTracking') && hasCustomSummaryFieldRules(s.draft, s.draft.generationMode)
+      ? '<p class="lt-meta" data-ss-tracking-compatibility>已保留你自定义的字段填写规则；其中明确写出的纪念日要求优先于这里的默认要求。可将相关要求整理到此处统一编辑。</p>' : '';
+    return `<details class="lt-summary-prompt" data-ss-open="${item.key}"${opened}>${promptTitle(item.name)}<form data-ss-form="prompt" data-key="${item.key}" class="lt-summary-prompt-body">${compatibility}<textarea class="lt-textarea lt-prompt-editor" data-ss-field="prompt" data-key="${item.key}" aria-label="${escape(item.name)}" rows="8">${escape(text)}</textarea><p class="lt-status" data-ss-dirty="${item.key}">${dirty ? '尚未保存' : ''}</p><div class="lt-summary-editor-actions">${button('恢复默认', 'restore-prompt', `data-key="${item.key}"`)}${button('取消', 'cancel-prompt', `data-key="${item.key}"`)}<button type="submit" class="ui-button ui-button--secondary" ${dirty ? '' : 'disabled'}>保存</button></div></form></details>`;
   }
   function custom(s) {
     const list = [...s.draft.customPrompts];
@@ -60,7 +63,7 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     }).join('') : '<p class="lt-status lt-summary-custom-empty">暂无自定义提示词</p>';
   }
   function settings(s) {
-    return `<section class="lt-summary-section"><h2>总结内容</h2><div class="lt-summary-panel lt-summary-content-panel"><div class="lt-stack"><h3 class="ui-field__label">不参与总结的楼层</h3><div class="lt-entry"><input class="ui-input" data-ss-floor type="number" min="0" step="1" aria-label="输入要排除的楼层" placeholder="输入楼层">${button('添加', 'add-floor', '', true)}</div><div class="lt-tags">${s.excludedFloors.map(value => typeof value === 'number' ? value : value.floor).sort((a, b) => a - b).map(n => `<span class="ui-tag lt-summary-floor"><span>${n}</span>${icon('close', `移除第 ${n} 楼`, 'remove-floor', `data-floor="${n}"`)}</span>`).join('')}</div></div><div class="lt-summary-divider">${routeLink('总结文本清洗', 'cleaning')}</div></div></section><section class="lt-summary-section"><fieldset class="lt-summary-modes"><legend>生成次数</legend><div>${[['fast', '一次生成'], ['quality', '两次生成'], ['enhanced', '三次生成']].map(([mode, name]) => `<label class="lt-mode" ><input type="radio" name="summary-mode" value="${mode}" ${s.draft.generationMode === mode ? 'checked' : ''}>${name}</label>`).join('')}</div><p class="lt-meta">${SUMMARY_MODE_DESCRIPTIONS[s.draft.generationMode]}</p></fieldset></section><section class="lt-summary-section"><h2>总结记忆提示词</h2>${SUMMARY_PROMPT_GROUPS[s.draft.generationMode].map(group => `<section class="lt-summary-prompt-group" data-prompt-stage="${group.stage}" data-prompt-mode="${s.draft.generationMode}"><h3>${group.title}</h3>${group.items.map(item => prompt(item, s, group.stage)).join('')}</section>`).join('')}</section><section class="lt-summary-section"><h2>合并记忆提示词</h2><div class="lt-summary-prompt-group" data-prompt-stage="merge"><h3>记忆合并</h3>${MERGE_PROMPT_FIELDS.map(item => prompt(item, s)).join('')}</div></section><section class="lt-summary-section"><div class="lt-summary-heading"><h2>自定义提示词</h2>${button('＋ 新建', 'new-custom')}</div><div class="lt-summary-panel lt-summary-custom-panel">${custom(s)}</div></section><section class="lt-summary-section"><h2>事件词库</h2>${routeLink('事件词库管理', 'library', 'lt-summary-library-link')}</section>`;
+    return `<section class="lt-summary-section"><h2>总结内容</h2><div class="lt-summary-panel lt-summary-content-panel"><div class="lt-stack"><h3 class="ui-field__label">不参与总结的楼层</h3><div class="lt-entry"><input class="ui-input" data-ss-floor type="number" min="0" step="1" aria-label="输入要排除的楼层" placeholder="输入楼层">${button('添加', 'add-floor', '', true)}</div><div class="lt-tags">${s.excludedFloors.map(value => typeof value === 'number' ? value : value.floor).sort((a, b) => a - b).map(n => `<span class="ui-tag lt-summary-floor"><span>${n}</span>${icon('close', `移除第 ${n} 楼`, 'remove-floor', `data-floor="${n}"`)}</span>`).join('')}</div></div><div class="lt-summary-divider">${routeLink('总结文本清洗', 'cleaning')}</div><div class="lt-summary-divider lt-stack"><p class="lt-meta">在批量总结中同步提取追踪信息，随本批总结一起保存。</p>${trackingOptions.map(([key, label, unavailable]) => `<div class="lt-stack"><div class="lt-summary-heading"><span>${label}</span>${switchControl(s.draft[key] === true, 'toggle-tracking', label, `data-key="${key}" ${s.trackingAvailability?.[key] === false && s.draft[key] !== true ? 'disabled' : ''}`)}</div><p class="lt-meta" data-ss-tracking-hint="${key}" ${s.trackingAvailability?.[key] === false ? '' : 'hidden'}>${unavailable}${s.draft[key] === true ? '，可取消同步' : ''}</p></div>`).join('')}</div></div></section><section class="lt-summary-section"><fieldset class="lt-summary-modes"><legend>生成次数</legend><div>${[['fast', '一次生成'], ['quality', '两次生成'], ['enhanced', '三次生成']].map(([mode, name]) => `<label class="lt-mode" ><input type="radio" name="summary-mode" value="${mode}" ${s.draft.generationMode === mode ? 'checked' : ''}>${name}</label>`).join('')}</div><p class="lt-meta">${SUMMARY_MODE_DESCRIPTIONS[s.draft.generationMode]}</p></fieldset></section><section class="lt-summary-section"><h2>总结记忆提示词</h2>${SUMMARY_PROMPT_GROUPS[s.draft.generationMode].map(group => `<section class="lt-summary-prompt-group" data-prompt-stage="${group.stage}" data-prompt-mode="${s.draft.generationMode}"><h3>${group.title}</h3>${group.items.map(item => prompt(item, s, group.stage)).join('')}</section>`).join('')}</section><section class="lt-summary-section"><h2>合并记忆提示词</h2><div class="lt-summary-prompt-group" data-prompt-stage="merge"><h3>记忆合并</h3>${MERGE_PROMPT_FIELDS.map(item => prompt(item, s)).join('')}</div></section><section class="lt-summary-section"><div class="lt-summary-heading"><h2>自定义提示词</h2>${button('＋ 新建', 'new-custom')}</div><div class="lt-summary-panel lt-summary-custom-panel">${custom(s)}</div></section><section class="lt-summary-section"><h2>事件词库</h2>${routeLink('事件词库管理', 'library', 'lt-summary-library-link')}</section>`;
   }
   function library(s) {
     const words = s.libraryDraft ?? [];
@@ -90,11 +93,12 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
       const save = form.querySelector('[type=submit]'); if (save) save.disabled = !dirty || s.autoSaving;
     }
   }
-  function contentKey(s, omitRules = false, omitMode = false) {
+  function contentKey(s, omitRules = false, omitMode = false, omitTracking = false) {
     const draft = s.draft && { ...s.draft,
       ...(omitRules ? { summaryCleaning: null } : {}),
-      ...(omitMode ? { generationMode: null } : {}) };
-    return JSON.stringify([s.route, draft, s.excludedFloors, s.promptDrafts, s.customDrafts,
+      ...(omitMode ? { generationMode: null } : {}),
+      ...(omitTracking ? { trackingItemsEnabled: null, trackingNpcsEnabled: null } : {}) };
+    return JSON.stringify([s.route, draft, s.trackingAvailability, s.excludedFloors, s.promptDrafts, s.customDrafts,
       s.libraryDraft, s.libraryOpen, s.librarySelection, s.libraryMulti,
       s.ruleDraft, s.ruleId, s.quickOpen]);
   }
@@ -117,6 +121,20 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
         const action = row.querySelector('[data-ss-action=cycle-rule]');
         action.textContent = labels[item.action] + (item.enabled ? '中' : '');
         action.disabled = item.action === 'replace';
+      }
+      patchStatus(s); return true;
+    }
+    if (s.route === 'settings' && contentKey(before, false, false, true) === contentKey(s, false, false, true)) {
+      for (const [key, , unavailable] of trackingOptions) {
+        const toggle = container.querySelector(`[data-ss-action=toggle-tracking][data-key=${key}]`);
+        if (!toggle) return false;
+        toggle.setAttribute('aria-checked', String(s.draft[key] === true));
+        toggle.disabled = s.trackingAvailability?.[key] === false && s.draft[key] !== true;
+        const hint = container.querySelector(`[data-ss-tracking-hint=${key}]`);
+        if (hint) {
+          hint.hidden = s.trackingAvailability?.[key] !== false;
+          hint.textContent = unavailable + (s.draft[key] === true ? '，可取消同步' : '');
+        }
       }
       patchStatus(s); return true;
     }
@@ -192,6 +210,7 @@ export function mountSummarySettingsView(container, controller, { readonlyConten
     const b = event.target.closest('button[data-ss-action]'); if (!b || b.disabled) return;
     const a = b.dataset.ssAction, id = b.dataset.id, key = b.dataset.key, s = state();
     const actions = { back: () => controller.back(), close: () => controller.close(), read: () => controller.read(), cleaning: () => controller.navigate('cleaning'), library: () => controller.navigate('library'),
+      'toggle-tracking': () => controller.toggleTracking(key),
       'restore-prompt': () => controller.restorePrompt(key), 'cancel-prompt': () => controller.cancelPrompt(key), 'new-custom': () => controller.newCustom(), 'cancel-custom': () => controller.cancelCustom(id), 'delete-custom': () => controller.deleteCustom(id),
       'open-word': () => controller.openWord(id), 'new-word': () => controller.newWord(), 'word-enabled': () => controller.editWord(id, 'enabled', !s.libraryDraft.find(word => word.id === id).enabled),
       'move-word-up': () => controller.moveWord(id, -1), 'move-word-down': () => controller.moveWord(id, 1), 'delete-word': () => controller.deleteWords([id]), 'restore-words': () => controller.restoreWords(), 'multi-words': () => controller.toggleWordMulti(),

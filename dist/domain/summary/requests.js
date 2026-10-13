@@ -1,7 +1,9 @@
-import { SUMMARY_PROMPT_GROUPS } from '../../shared/settings/summary-prompts.js';
+import { SUMMARY_PROMPT_GROUPS, hasCustomSummaryFieldRules, migrateSummaryPromptOverrides } from '../../shared/settings/summary-prompts.js';
 import { INDEX_SCHEMA } from '../memory/management-prompt-defaults.js';
 import { fixedFacts } from '../memory/management-prompts.js';
 import { summarySchema } from './candidates.js';
+import { bindPromptNames } from '../latest/requests.js';
+import { buildBatchTrackingTask } from '../tracking/requests.js';
 
 const editableKeys={
   fast:['fastIdentity','fastTaskOrder','fastSummaryRules','fastFieldRules','fastIndexBasis','fastEventRules','fastDetailRules','fastAliasRules'],
@@ -23,8 +25,8 @@ function indexSchema(stage) {
   return schema;
 }
 const stageSchema=stage=>stage==='fast'||stage.endsWith('Summary')?summarySchema(stage==='fast'):indexSchema(stage);
-function formatContent(stage) {
-  const schema=stageSchema(stage),root=schema.value.properties,fields=(root.memories??root.indexes).items.properties;
+function formatContent(stage,schema=stageSchema(stage)) {
+  const root=schema.value.properties,fields=(root.memories??root.indexes).items.properties;
   const rules=['只返回符合此 JSON Schema 的对象，不输出 Markdown 或解释。'];
   if(Object.hasOwn(fields,'classificationTags'))rules.push('classificationTags 固定为空数组。');
   if(Object.hasOwn(fields,'draftId'))rules.push('每个输入 draftId 恰好出现一次，并按输入顺序返回。');
@@ -46,8 +48,9 @@ export function summaryStages(mode) {
   if(mode==='fast')return ['fast'];if(mode==='quality')return ['qualitySummary','qualityIndexes'];if(mode==='enhanced')return ['enhancedSummary','enhancedKeywords','aliases'];
   throw new Error('总结生成模式无效');
 }
-export function buildSummaryRequest(stage,{source,events=[],settings}={}) {
+export function buildSummaryRequest(stage,{source,events=[],settings,tracking=null,identities=tracking?.identities??{}}={}) {
   if(!Object.hasOwn(editableKeys,stage))throw new Error('总结阶段无效');
+  settings={...settings,promptOverrides:migrateSummaryPromptOverrides(settings.promptOverrides??{})};
   const parts=[],add=(name,role,content,fixed=true,key=null)=>parts.push({name,role,content,fixed,key});
   const custom=position=>(settings.customPrompts??[]).filter(item=>item.position===position).forEach(item=>add(item.name,'system',item.content,false));
   add('总结任务边界','system',taskBoundary);
@@ -60,13 +63,33 @@ export function buildSummaryRequest(stage,{source,events=[],settings}={}) {
     if(!events.length)throw new Error('上一阶段尚未生成');
     schema=indexSchema(stage);
   }
+  let batchTracking=null;
+  if(tracking&&(stage==='fast'||stage.endsWith('Summary'))){
+    if(!tracking.ticket?.source?.sentFloors?.length||JSON.stringify(summarySourcePayload(source))!==JSON.stringify(summarySourcePayload(tracking.ticket?.source??{})))throw new Error('总结与批量追踪必须使用同一份正文');
+    const task=buildBatchTrackingTask({...tracking,identities});
+    if(task.schema.required.length){batchTracking=task;schema.value.properties.tracking=task.schema;schema.value.required.push('tracking');}
+  }
   const group=Object.values(SUMMARY_PROMPT_GROUPS).flat().find(group=>group.items.some(item=>item.key===editableKeys[stage][0]));
   for(const item of group.items){
-    if(!item.readonly){const overridden=Object.hasOwn(settings.promptOverrides,item.key);add(item.name,'system',overridden?settings.promptOverrides[item.key]:item.defaultText,!overridden,item.key);if(item.key===editableKeys[stage][0])custom('after');continue;}
-    add(item.name,item.kind==='format'?'system':'user',readonlyContent(item,{stage,source,events,settings}),true,item.key);
+    if(!item.readonly){
+      const overridden=Object.hasOwn(settings.promptOverrides,item.key),content=overridden?settings.promptOverrides[item.key]:item.defaultText;
+      add(item.name,'system',item.key==='informationTracking'?bindPromptNames(content,identities):content,!overridden,item.key);
+      if(item.key==='informationTracking'){
+        const enabled=batchTracking?.schema.required??[];
+        add('本次信息追踪启用范围','system',`纪念日候选启用；NPC 追踪${enabled.includes('npcs')?'启用':'关闭'}；物品追踪${enabled.includes('items')?'启用':'关闭'}。这些开关由程序提供，与可编辑文本的标题或章节名称无关；仅执行启用类别的要求，输出字段以 JSON Schema 为准。`);
+        const mode={fast:'fast',qualitySummary:'quality',enhancedSummary:'enhanced'}[stage];
+        if(!overridden&&hasCustomSummaryFieldRules(settings,mode))add('自定义字段规则优先边界','system','你已自定义字段填写规则，且尚未自定义信息追踪要求。若默认信息追踪要求与自定义字段填写规则冲突，以自定义字段填写规则为准。');
+      }
+      if(item.key===editableKeys[stage][0])custom('after');continue;
+    }
+    add(item.name,item.kind==='format'?'system':'user',batchTracking&&item.kind==='format'?formatContent(stage,schema):readonlyContent(item,{stage,source,events,settings}),true,item.key);
+  }
+  if(batchTracking){
+    add('本批追踪专属资料','user',JSON.stringify(batchTracking.materials,null,2));
+    parts.push(...batchTracking.parts);
   }
   return {task:`event.summary.${stage}`,jsonSchema:schema,messages:parts.map(({role,content})=>({role,content})),previewParts:parts,title:names[stage]};
 }
-export function summaryPreview(source,settings) {
-  return {source,stages:summaryStages(settings.generationMode).map((stage,index)=>index?{stage,title:names[stage],pending:true}: {stage,...buildSummaryRequest(stage,{source,settings}),pending:false})};
+export function summaryPreview(source,settings,tracking=null,identities=tracking?.identities??{}) {
+  return {source,stages:summaryStages(settings.generationMode).map((stage,index)=>index?{stage,title:names[stage],pending:true}: {stage,...buildSummaryRequest(stage,{source,settings,tracking,identities}),pending:false})};
 }
