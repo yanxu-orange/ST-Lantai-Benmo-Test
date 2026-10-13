@@ -37,9 +37,8 @@ export function transformLatestMessages({messages,sourceMap,raw,latest}={}){
     // A summary that covered a hidden or unrepresentable user floor would leak
     // that omitted content back into the send copy. Keep the original reply.
     if(userFloor!==null&&(userIndex===undefined||userIndex>=index||!plainMessage(messages[userIndex],byFloor.get(userFloor))))continue;
-    const summary=formatLatestSummary(record.body),existing=messages[index][key];
-    if(floor>=recentStart){output[index][key]=existing.endsWith(`\n\n${summary}`)?existing:`${existing}\n\n${summary}`;continue;}
-    output[index][key]=summary;
+    if(floor>=recentStart)continue;
+    output[index][key]=record.body;
     if(userFloor!==null&&userFloor<recentStart&&userIndex!==undefined&&userIndex<index&&plainMessage(messages[userIndex],byFloor.get(userFloor))&&byFloor.get(userFloor)?.role==='user')removed.add(userIndex);
   }
   return output.filter((_,index)=>!removed.has(index));
