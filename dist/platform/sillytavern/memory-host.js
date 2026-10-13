@@ -1,4 +1,5 @@
 import { ensureBookThemeFont } from '../../app/styles/book-font.js';
+import { MEMORY_SHELL_CSS } from './memory-shell-style.js';
 import {createNarrativeRuntime} from './narrative-runtime.js';
 import {mountWorkshopBackgroundDisplay} from './workshop-background-display.js';
 import {createWorkshopDisplayFormatter} from './workshop-display-formatter.js';
@@ -57,7 +58,7 @@ import { createAppearanceSession } from '../../app/appearance-session.js';
 export function createMemoryHost({ document: doc = globalThis.document, getContext = getSillyTavernContext, fetch: request = globalThis.fetch,
   runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter } = {}) {
   let adapter, repository, app, panel, content, memoryContent, benmoContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
-    runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, stylePromise,
+    runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, openingTicket = null, stylePromise, baseCss, sharedCssCache,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryHistory,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
@@ -76,11 +77,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   const availability=()=>{
     const global=controls?.inspect(),local=benmoController?.availability(),master=controls?.allowed('enabled')===true;
     let localCurrent=false;try{localCurrent=!!local?.target&&sameTarget(local.target,repository.captureTarget());}catch{/* Preparing a new chat. */}
-    return {...global?.policy,...Object.fromEntries(['summary','item','npc','self','outline','benmo'].map(key=>[key,master&&local?.policy?.[key]===true])),memory:!!controls?.allowed('memory'),settings:true,transient:global?.status!=='ready'||local?.status==='loading'||!localCurrent};
+    return {...global?.policy,...Object.fromEntries(['summary','item','npc','self','outline','benmo'].map(key=>[key,master&&local?.policy?.[key]===true])),memory:!!controls?.allowed('memory'),settings:true,transient:global?.status!=='ready'||!localCurrent};
   };
   let hostReloadSequence=0,timeRuntime,timePrompts,timeController,timeView,timeTarget;
   let sourceDeletionRuntime,sourceDeletionNotices,narrativeRuntime,latestRuntime,latestDisplay,workshopBackgroundDisplay;
   let benmoController,benmoView,benmoSubscription,benmoTarget,benmoNavigation=null,benmoPolicyKey='';
+  let benmoWarmupRequested=false,benmoWarmupScheduled=false;
   let workshopRegex,workshopRegexError=null,workshopRuntime,workshopController,workshopView,trackingRuntime,scheduleRuntime;
   // Area-owned views stay here with their settings round trip. Runtime services
   // are deliberately not page resources: closing a page must not stop a task.
@@ -177,7 +179,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summaryHistory=createSummaryHistoryHook({repository,captureSource:target=>adapter.captureSummarySource(target),getContext,getReplacementProof:()=>recallRuntime?.getReplacementProof()});
     unsubscribe = adapter.subscribe(kind => {
       const sequence=++hostReloadSequence;
-      if(controls){controls.invalidate();void controls.ensure().then(()=>{if(panel)syncControls();else void benmoController?.ensure().catch(()=>{});});}
+      if(controls){controls.invalidate();void controls.ensure().then(()=>{if(disposed||sequence!==hostReloadSequence)return;if(panel)syncControls();requestBenmoWarmup();});}
       if (!panel) return;
       if (kind === 'reload' && (app||workshopController||workshopView||benmoView)) {
         const current=app,visiblePanel=panel,previousTarget=runtime?.cumulativeController?.inspect().target;
@@ -202,7 +204,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     let cleanupError;
     const cleanup = action => { try { action(); } catch (error) { cleanupError ??= error; } };
     try {
-      ticket++;pageRequest++;hostReloadSequence++;
+      ticket++;pageRequest++;hostReloadSequence++;openingTicket=null;
       settingsRootView?.dispose();settingsRootView=null;settingsOpen=false;
       const currentApiView=apiView,currentApiSession=apiSession;apiView=null;apiSession=null;
       cleanup(()=>currentApiView?.dispose());cleanup(()=>currentApiSession?.exit('close'));
@@ -223,12 +225,13 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     } finally {
       const currentPanel=panel;panel=null;content=memoryContent=benmoContent=settingsContent=summaryContent=null;
       cleanup(()=>currentPanel?.remove());cleanup(()=>entry?.focus());closing=false;
+      requestBenmoWarmup(false);
     }
     if(cleanupError)throw cleanupError;
   }
   async function ensureRuntime() {
-    if (!runtimePromise) runtimePromise = createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, signal: lifetime.signal,getControls:()=>controls,captureSummarySource:target=>adapter.captureSummarySource(target) })
-      .then(async value => { if (disposed) { value.dispose(); return null; } runtime = value;
+    if (!runtimePromise) runtimePromise = new Promise(afterPageFrame).then(()=>disposed||lifetime.signal.aborted?null:createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, signal: lifetime.signal,getControls:()=>controls,captureSummarySource:target=>adapter.captureSummarySource(target) }))
+      .then(async value => { if(!value)return null;if (disposed) { value.dispose(); return null; } runtime = value;
         controls=createControlSession({settings:runtime.settings,repository,prepareTarget:()=>adapter.prepare()});
         await controls.ensure();
         if(disposed){controls.dispose();value.dispose();return null;}
@@ -244,11 +247,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(runtime.settings?.captureWorkshop)workshopRuntime=createWorkshopRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,captureSource:t=>adapter.captureChatSource(t),matchesSource:(t,s)=>adapter.matchesChatSource(t,s)});
         trackingRuntime=createTrackingRuntime({repository,adapter,settings:runtime.settings,getContext,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t),onChange:()=>{void latestRuntime.refresh().catch(()=>{});}});
         scheduleRuntime=createScheduleRuntime({repository,settings:runtime.settings,dateRuntime:timeRuntime,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t)});
-        latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime});
+        latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,autoInitialize:false});
         narrativeRuntime=createNarrativeRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
         benmoController=createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime,repository,adapter,getContext,getControls:()=>controls});
         benmoSubscription=benmoController.subscribeAvailability(syncBenmoAvailability);
-        await benmoController.load().catch(()=>{});
         const displayCoordinator=createFloorDisplayCoordinator({document:doc,runtime:latestRuntime,MutationObserver:Observer,formatter:createWorkshopDisplayFormatter({getContext})});
         latestDisplay=mountLatestSummaryDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator});
         workshopBackgroundDisplay=mountWorkshopBackgroundDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator,onOpenSchedule:()=>void openSchedule()});
@@ -269,8 +271,24 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         });}};
         cumulativeNotices=createManagementNotifications({document:doc,controller:noticeController,styles:notificationStyles,openTask:openCumulativeTask});
         controlSubscription=controls.subscribe(syncControls);syncControls();
+        // Service readiness owns subscriptions and background displays. Record
+        // readiness belongs to Benmo and must not hold up the main memory page.
+        requestBenmoWarmup();
         return value; });
     return runtimePromise;
+  }
+  function requestBenmoWarmup(requested=true){
+    if(requested)benmoWarmupRequested=true;
+    if(disposed||!benmoController||openingTicket!==null||benmoWarmupScheduled||!benmoWarmupRequested)return;
+    benmoWarmupScheduled=true;
+    afterPageFrame(()=>{
+      benmoWarmupScheduled=false;
+      if(disposed||openingTicket!==null||!benmoWarmupRequested)return;
+      benmoWarmupRequested=false;
+      // ensure joins in-flight reads and retains an unconfirmed/error state on
+      // failure. The real Benmo entry still awaits it and exposes local retry.
+      void benmoController.ensure().catch(()=>{});
+    });
   }
   function syncControls(){
     const next=availability(),before=previousPolicy;previousPolicy=next;
@@ -368,10 +386,15 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(!valid())return null;activate();
       return loading??=mountWorkshopLoading(benmoContainer,{titleText:'本末',messageText:'正在读取本末记录…',onBack:()=>void returnFromSummary(),onClose:close,onRetry:()=>void openBenmo({kind})});
     };
-    // Keep the current page until a real wait is established. A proof-checked
-    // cached ensure finishes in microtasks and never paints a loading page.
-    afterPageFrame(()=>{if(!settled&&valid())showLoading();});
-    try{const view=await mountBenmoView({container:benmoContainer,controller:benmoController,availability,isCurrent:valid,initialState:initialState??{},onClose:close,onNavigate:(area,snapshot)=>{
+    try{
+    if(benmoController.availability().dataStatus!=='ready'){
+      showLoading();await new Promise(afterPageFrame);if(!valid())return false;
+    }else{
+      // A proof-checked warm ensure completes without replacing the current
+      // surface with loading. A genuinely pending reread still gets feedback.
+      afterPageFrame(()=>{if(!settled&&valid())showLoading();});
+    }
+    const view=await mountBenmoView({container:benmoContainer,controller:benmoController,availability,isCurrent:valid,initialState:initialState??{},onClose:close,onNavigate:(area,snapshot)=>{
       benmoNavigation=snapshot;
       if(area==='settings'){openSettings();return;}
       if(area==='memory')void returnFromSummary();else if(area==='time')void openTime();else if(area==='workshop')void openWorkshop();
@@ -404,8 +427,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(panel&&serial===ticket&&request===pageRequest&&summarySettingsController===controller&&sameTarget(target,repository.captureTarget()))void controller.init();
     });
   }
-  // Paint the existing locked loading surface before starting reads/computation.
-  function afterPageFrame(work){const frame=doc.defaultView?.requestAnimationFrame;if(frame)frame.call(doc.defaultView,()=>setTimeout(work,0));else setTimeout(work,0);}
+  // Give the existing locked surface a rendering opportunity before heavy work.
+  function afterPageFrame(work){const frame=doc.defaultView?.requestAnimationFrame;if(frame&&doc.visibilityState!=='hidden')frame.call(doc.defaultView,()=>setTimeout(work,0));else setTimeout(work,0);}
   async function openRecall() {
     if(!allowed('event'))return false;
     if(!panel||settingsOpen||!recallRuntime)return false;unmountAreas();if(app?.memoryType()==='cumulative')app.suspendCumulative();
@@ -557,7 +580,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       const response = await request(url);
       if (!response.ok) throw new Error('兰台界面样式未能加载，请关闭后重试');
       return response.text();
-    })).then(parts => parts.map(css => css.replace(/:root\b/g, ':host')).join('\n')).catch(error => { stylePromise = null; throw error; });
+    })).then(parts => {baseCss=parts.map(css => css.replace(/:root\b/g, ':host')).join('\n');return baseCss;}).catch(error => { stylePromise = null; throw error; });
     return stylePromise;
   }
   async function openCumulativeTask(taskId){
@@ -627,7 +650,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   async function sharedStyles() {
     if(!sharedStylePromise)sharedStylePromise=Promise.all(SHARED_STYLE_ENTRIES.map(async ({url})=>{const response=await request(url);if(!response.ok)throw new Error('共用界面样式未能加载');return response.text();}))
-      .then(parts=>parts.map(css=>css.replace(/:root\b/g,':host')).join('\n'))
+      .then(parts=>{sharedCssCache=parts.map(css=>css.replace(/:root\b/g,':host')).join('\n');return sharedCssCache;})
       .catch(error=>{sharedStylePromise=null;throw error;});
     return sharedStylePromise;
   }
@@ -654,7 +677,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     return springStylePromise;
   }
   async function bookStyles(theme) {
-    const font = ensureBookThemeFont(doc,theme);
+    // The font has display:swap and owns its own retry. Decoration cannot hold
+    // the selected theme, loading shell or business readiness hostage.
+    void ensureBookThemeFont(doc,theme);
     let bundle = bookStylesByTheme.get(theme);
     if (!bundle) { bundle = {promise:null,css:null,style:null};bookStylesByTheme.set(theme,bundle); }
     if (!bundle.promise) bundle.promise = Promise.all(BOOK_THEME_STYLE_ENTRIES[theme].map(async ({url}) => {
@@ -665,8 +690,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       bundle.promise = null;
       throw Object.assign(new Error('皮肤资源未能加载'),{code:'APPEARANCE_STYLE_UNAVAILABLE'});
     });
-    const [css] = await Promise.all([bundle.promise,font]);
-    return css;
+    return bundle.promise;
   }
   function syncAppearance() {
     if (!panel || !sharedStyle) return;
@@ -710,15 +734,27 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const exit = doc.createElement('button'); exit.type = 'button'; exit.className = 'ui-button ui-button--tertiary'; exit.textContent = '返回聊天'; exit.addEventListener('click', close);
     main.append(message, retry, exit); surface.append(main); memoryContent.append(surface); retry.focus();
   }
+  function installPanelStyles(){
+    if(!panel)return;
+    const shadow=panel.shadowRoot;
+    if(baseCss&&!shadow.querySelector('[data-host-base]')){
+      const style=doc.createElement('style');style.setAttribute('data-host-base','');style.textContent=baseCss;shadow.prepend(style);
+    }
+    if(sharedCssCache&&!sharedStyle){
+      sharedStyle=doc.createElement('style');sharedStyle.media='not all';sharedStyle.textContent=sharedCssCache;shadow.append(sharedStyle);
+    }
+    if(baseCss&&sharedStyle)shadow.querySelector('[data-host-shell]')?.remove();
+  }
   async function open() {
     if (disposed) return;
-    const currentTicket = ++ticket;
+    const currentTicket = ++ticket,currentPageRequest=++pageRequest;openingTicket=currentTicket;
     app?.dispose(); app = null;unmountPages();areaPages.time.settingsReturn=false;
     if(panel){settingsRootView?.dispose();settingsRootView=null;settingsOpen=false;summaryContent.replaceChildren();summaryContent.hidden=true;summaryContent.inert=false;memoryContent.hidden=false;memoryContent.inert=false;apiView?.dispose();apiView=null;const previous=apiSession;apiSession=null;replacingPage=true;try{previous?.exit('back');}finally{replacingPage=false;}settingsContent.replaceChildren();settingsContent.hidden=true;}
     if (!panel) {
       panel = doc.createElement('lantai-benmo-host'); panel.id = 'lantai-benmo-panel';
       panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', '兰台本末');
       const shadow = panel.attachShadow({ mode: 'open' });
+      const shellStyle=doc.createElement('style');shellStyle.setAttribute('data-host-shell','');shellStyle.textContent=MEMORY_SHELL_CSS;shadow.prepend(shellStyle);
       let composing = false;
       shadow.addEventListener('compositionstart', () => { composing = true; });
       shadow.addEventListener('compositionend', () => { composing = false; });
@@ -742,26 +778,33 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       shadow.append(content); doc.body.append(panel);
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
+    installPanelStyles();syncAppearance();
+    const visiblePanel=panel,valid=()=>!disposed&&currentTicket===ticket&&panel===visiblePanel;
     try {
-      const [css,sharedCss] = await Promise.all([styles(),sharedStyles(),appearance.ensure()]);
-      if (disposed || currentTicket !== ticket || !panel) return;
-      if (!panel.shadowRoot.querySelector('style')) { const style = doc.createElement('style'); style.textContent = css; panel.shadowRoot.prepend(style); }
-      if(!sharedStyle){sharedStyle=doc.createElement('style');sharedStyle.media='not all';sharedStyle.textContent=sharedCss;panel.shadowRoot.append(sharedStyle);}
+      // A promise/microtask yield cannot expose the shell before synchronous
+      // host preparation. Continue only in a task after a rendering opportunity.
+      await new Promise(afterPageFrame);
+      if(!valid())return;
+      const appearanceReady=appearance.ensure();
+      await Promise.all([styles(),sharedStyles()]);
+      if(!valid())return;
+      installPanelStyles();syncAppearance();
+      await appearanceReady;
+      if(!valid())return;
       // A failed settings read still uses the real default theme. Do not mount
       // business pages with Spring attributes before its stylesheet is ready.
       if (appearance.inspect().theme === DEFAULT_THEME && !springCss) await springStyles();
-      if (disposed || currentTicket !== ticket || !panel) return;
+      if (!valid()) return;
       // Seed the presentation owner before any view creates its first root.
       syncAppearance();
       if(!sharedObserver&&Observer){sharedObserver=new Observer(syncAppearance);sharedObserver.observe(content,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});}
       ensureAdapter();
       await adapter.prepare();
-      if (disposed || currentTicket !== ticket || !panel) return;
+      if (!valid()) return;
       await ensureRuntime();
-      if (disposed || currentTicket !== ticket || !panel) return;
+      if (!valid()) return;
       await controls.ensure();
-      await benmoController?.ensure().catch(()=>{});
-      if(disposed||currentTicket!==ticket||!panel)return;
+      if(!valid())return;
       if(!allowed('memory')){if(allowed('time'))await openTime();else if(allowed('workshop'))await openWorkshop();else if(allowed('benmo'))await openBenmo();else openSettings();syncAppearance();return;}
       if(!allowed(memoryType))memoryType=allowed('event')?'event':'cumulative';
       app = mountMemoryApp(memoryContent, repository, { history: null, window: null, onClose: close,
@@ -769,10 +812,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         getSettingsEpoch: () => runtime.getGenerationSettings().epoch,
         getOriginalSnapshot: runtime?.getOriginalSnapshot, originalAvailable: runtime?.originalAvailable, openSettings,
         openBenmo:()=>void openBenmo(),openWorkshop:()=>void openWorkshop(),openTime:()=>void openTime(),openSummary:origin=>void showSummary(origin),openSummarySettings:()=>void openSummarySettings(true),openRecall:()=>void openRecall(),regenerateBatch:id=>void showSummary('manual',id),cumulativeController:runtime.cumulativeController,initialMemoryType:memoryType,availability,onMemoryType:type=>{memoryType=type;cumulativePage='root';},openCumulative:origin=>void showCumulative(origin),openCumulativeSettings:()=>void openCumulativeSettings('root') });
-      const reopenPage=cumulativePage,reopenTarget=cumulativePageTarget;await app.ready;
+      const mountedApp=app,reopenPage=cumulativePage,reopenTarget=cumulativePageTarget;await mountedApp.ready;
+      if(!valid()||app!==mountedApp||currentPageRequest!==pageRequest)return;
       if(memoryType==='cumulative'&&sameTarget(reopenTarget,repository.captureTarget())){if(['manual','auto'].includes(reopenPage))await showCumulative(reopenPage);else if(reopenPage==='settings'||reopenPage==='cleaning'){await openCumulativeSettings(cumulativeReturnPage,true);if(reopenPage==='cleaning')await openCumulativeCleaning();}}
-      syncAppearance();
-    } catch (error) { if (!disposed && currentTicket === ticket && panel) errorView(error); }
+      if(valid())syncAppearance();
+    } catch (error) { if (valid()&&currentPageRequest===pageRequest) errorView(error); }
+    finally {if(openingTicket===currentTicket){openingTicket=null;requestBenmoWarmup(false);}}
   }
   function installEntry() {
     if (disposed) return;

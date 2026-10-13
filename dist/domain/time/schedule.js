@@ -1,7 +1,7 @@
 import {assertTime} from './data.js';
 import {createCalendar} from './calendar.js';
-import {assertRawSummarySource,durableSourceMessages} from '../summary/source.js';
-import {storedLatestSource,latestSourceKey,matchesLatestSource,matchesStoredLatestSource} from '../latest/source.js';
+import {durableSourceMessages} from '../summary/source.js';
+import {storedLatestSource,latestSourceKey,matchesLatestSource,createStoredLatestSourceMatcher} from '../latest/source.js';
 import {calendarCandidateKey,hasScheduleDateClue,emptyScheduleLedger,reconcileScheduleLedger,sameScheduleValue as equal} from './schedule-model.js';
 export {calendarCandidateKey} from './schedule-model.js';
 const clone=structuredClone,text=value=>typeof value==='string'&&!!value.trim();
@@ -12,22 +12,24 @@ const setRow=(time,collection,id,value)=>{time[collection]??=[];const index=time
 const lastChange=(time,id)=>ledger(time).receipts.findLast(row=>row.active&&row.changes.some(change=>change.id===id));
 const owned=(time,id)=>ledger(time).receipts.some(row=>row.changes.some(change=>change.id===id&&change.before===null));
 
-function sourceRetained(saved,raw,replyVersions){
- if(matchesStoredLatestSource(saved,raw))return replyVersions===undefined||replyVersions.filter(row=>row.replyId===saved.replyId).length===1;
- if(replyVersions===undefined)return raw.messages.some(row=>row.floor===saved.assistantFloor&&row.role==='assistant'&&!row.system&&row.replyId!==saved.replyId);
- const versions=replyVersions.filter(row=>row.replyId===saved.replyId),version=versions[0],original=saved.rawMessages.at(-1),current=raw.messages.find(row=>row.floor===saved.assistantFloor);
+function sourceRetained(saved,source,versionsByReply){
+ if(source.matches(saved))return versionsByReply===undefined||versionsByReply.get(saved.replyId)?.length===1;
+ const current=source.messageAt(saved.assistantFloor);
+ if(versionsByReply===undefined)return !!current&&current.role==='assistant'&&!current.system&&current.replyId!==saved.replyId;
+ const versions=versionsByReply.get(saved.replyId)??[],version=versions[0],original=saved.rawMessages.at(-1);
  if(versions.length!==1||version.floor!==saved.assistantFloor||version.text!==original.text||!current||current.role!=='assistant'||current.system||current.replyId===saved.replyId)return false;
- const user=saved.userFloor===null?null:saved.rawMessages[0],currentUser=user?raw.messages.find(row=>row.floor===user.floor):null;
+ const user=saved.userFloor===null?null:saved.rawMessages[0],currentUser=user?source.messageAt(user.floor):null;
  return !user||!!currentUser&&!currentUser.specialPayload&&equal(durableSourceMessages([currentUser]),[user]);
 }
 // Roll back only changes still equal to our saved output, then replay currently
 // proven sources and predecessor links. Manual changes are never overwritten.
 export function pruneScheduleSources(value,raw,{replyVersions=raw?.replyVersions,invalidatedFloors=[]}={}){
  const time=assertTime(value);if(!time.scheduleTracking)return time;
- raw=assertRawSummarySource(raw);
+ const source=createStoredLatestSourceMatcher(raw);
  if(!Array.isArray(invalidatedFloors)||invalidatedFloors.some(floor=>!Number.isSafeInteger(floor)||floor<0)||replyVersions!==undefined&&(!Array.isArray(replyVersions)||replyVersions.some(row=>!text(row?.replyId)||!Number.isSafeInteger(row.floor)||row.floor<0||!Number.isSafeInteger(row.swipeId)||row.swipeId<0||typeof row.text!=='string')))throw new Error('日程来源版本证据无效');
- const invalid=new Set(invalidatedFloors);
- reconcileScheduleLedger(time,{isRetained:saved=>!saved.rawMessages.some(message=>invalid.has(message.floor))&&sourceRetained(saved,raw,replyVersions),isActive:saved=>matchesStoredLatestSource(saved,raw)});
+ const invalid=new Set(invalidatedFloors),versionsByReply=replyVersions===undefined?undefined:new Map();
+ for(const version of replyVersions??[]){const versions=versionsByReply.get(version.replyId)??[];versions.push(version);versionsByReply.set(version.replyId,versions);}
+ reconcileScheduleLedger(time,{isRetained:saved=>!saved.rawMessages.some(message=>invalid.has(message.floor))&&sourceRetained(saved,source,versionsByReply),isActive:saved=>source.matches(saved)});
  return assertTime(time);
 }
 export function scheduleState(value,raw){

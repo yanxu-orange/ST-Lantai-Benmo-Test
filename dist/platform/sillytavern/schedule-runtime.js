@@ -65,27 +65,30 @@ export function createScheduleRuntime({repository,settings,getControls,captureSo
     if(valid())notify();
     return {receipt:saved.receipt,errors:saved.errors??result.errors??{}};
   }
-  async function reconcile(target,{invalidatedFloors=[],replyVersions,isCurrent=()=>true}={}){
+  async function reconcile(target,{invalidatedFloors=[],replyVersions,isCurrent=()=>true,readView,raw}={}){
     if(!current(target)||!isCurrent())return null;
     // Maintenance runs with generation disabled. Old automatic facts must not
     // survive deleted/edited sources merely because the switch was turned off.
+    const captured=await repository.captureTime(target,readView),source=raw??captureSource(target),next=pruneScheduleSources(captured.time,source,{replyVersions,invalidatedFloors});
+    if(!current(target)||!isCurrent())return null;
+    if(equal(next,captured.time))return captured;
     const saved=await repository.updateSchedule(target,{
       apply:time=>pruneScheduleSources(time,captureSource(target),{replyVersions,invalidatedFloors}),
       isCurrent:()=>current(target)&&isCurrent(),requireConfirmation:true,
     });
     return saved.selection;
   }
-  async function backgroundState(target){
-    const captured=await repository.captureTime(target);
+  async function backgroundState(target,{readView,raw:source,captured:provided}={}){
+    const captured=provided??await repository.captureTime(target,readView);
     if(!current(target))throw new Error('聊天已变化');
-    const raw=captureSource(target);
+    const raw=source??captureSource(target);
     return {target:copy(target),...scheduleState(captured.time,raw),sourceSignature:JSON.stringify(raw)};
   }
   function displayState(captured,raw,invalidatedFloors=[]){
     if(!captured)return null;
     if(!invalidatedFloors.length&&captured.sourceSignature===JSON.stringify(raw))return captured;
     const time=pruneScheduleSources(captured.time,raw,{invalidatedFloors});
-    return {...captured,...scheduleState(time,raw),sourceSignature:JSON.stringify(raw)};
+    return {...captured,...scheduleState(time),sourceSignature:JSON.stringify(raw)};
   }
   function floorTasks(captured,raw,_floor,replyId,status={}){
     if(!captured)return [];

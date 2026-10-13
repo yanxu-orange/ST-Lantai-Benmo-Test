@@ -57,9 +57,9 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     for(const kind of stale)state[kind]={...state[kind],sourceStale:true,status:'stale',error:'来源已变化，保留内容供查看；请更新后再注入',materialReport:null};
     if(publish)notify();
   }
-  async function load(){
-    const ticket=serial,readTicket=++readSerial,t=await adapter.prepare();
-    const captured=await repository.captureNarrative(t);
+  async function load({target:prepared,readView}={}){
+    const ticket=serial,readTicket=++readSerial,t=prepared??await adapter.prepare();
+    const captured=await repository.captureNarrative(t,readView);
     if(disposed||ticket!==serial||readTicket!==readSerial||!current(t))throw new Error('聊天已变化，请重新读取本末');
     unconfirmed=false;return adopt(t,captured);
   }

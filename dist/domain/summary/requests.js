@@ -76,9 +76,9 @@ export function buildSummaryRequest(stage,{source,events=[],settings,tracking=nu
       add(item.name,'system',item.key==='informationTracking'?bindPromptNames(content,identities):content,!overridden,item.key);
       if(item.key==='informationTracking'){
         const enabled=batchTracking?.schema.required??[];
-        add('本次信息追踪启用范围','system',`纪念日候选启用；NPC 追踪${enabled.includes('npcs')?'启用':'关闭'}；物品追踪${enabled.includes('items')?'启用':'关闭'}。这些开关由程序提供，与可编辑文本的标题或章节名称无关；仅执行启用类别的要求，输出字段以 JSON Schema 为准。`);
+        add('本次信息追踪启用范围','system',`纪念日候选启用；NPC 追踪${enabled.includes('npcs')?'启用':'关闭'}；物品追踪${enabled.includes('items')?'启用':'关闭'}。仅执行启用类别的要求，按 JSON Schema 输出结果。`);
         const mode={fast:'fast',qualitySummary:'quality',enhancedSummary:'enhanced'}[stage];
-        if(!overridden&&hasCustomSummaryFieldRules(settings,mode))add('自定义字段规则优先边界','system','你已自定义字段填写规则，且尚未自定义信息追踪要求。若默认信息追踪要求与自定义字段填写规则冲突，以自定义字段填写规则为准。');
+        if(!overridden&&hasCustomSummaryFieldRules(settings,mode))add('自定义字段规则优先边界','system','若字段填写规则与信息追踪要求冲突，以字段填写规则为准。');
       }
       if(item.key===editableKeys[stage][0])custom('after');continue;
     }

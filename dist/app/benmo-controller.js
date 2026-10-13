@@ -4,28 +4,30 @@ const BENMO_FEATURES=['summary','item','npc','self','outline'];
 const copy=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 export function createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime,repository,adapter,getControls}={}) {
   let summaryCache=null,trackingCache=null,narrativeCache=null;
-  let disposed=false,target=null,status='loading',error='',busy=null,sequence=0,loading=null,sourceProof=null,projectionProof=null;
+  let disposed=false,target=null,status='loading',error='',busy=null,sequence=0,loading=null,sourceProof=null,projectionProof=null,dataView=null;
   const listeners=new Set(),availabilityListeners=new Set();
   const current=()=>{try{return !disposed&&target&&sameTarget(target,repository.captureTarget());}catch{return false;}};
   const master=()=>!getControls||getControls()?.allowed('enabled')===true;
   // Navigation must not build record lists or inspect full global settings.
   function availability(){
-    const control=getControls?.(),info=control?.inspect?.(),active=current()&&master();
+    const control=getControls?.(),info=control?.inspect?.();let navigationTarget=target;try{navigationTarget=control?.capture?.('enabled')?.target??target??repository.captureTarget();}catch{/* Unconfirmed controls cannot grant navigation. */}
+    let active=false;try{active=!disposed&&master()&&!!navigationTarget&&sameTarget(navigationTarget,repository.captureTarget());}catch{/* No confirmed target. */}
     const enabled=Object.fromEntries(BENMO_FEATURES.map(key=>[key,info?.controls?.features?.[key]===true]));
     const policy={...Object.fromEntries(BENMO_FEATURES.map(key=>[key,active&&control?.allowed(key)===true&&(!['self','outline'].includes(key)||!!narrativeRuntime)])),enabled:active};
     policy.benmo=BENMO_FEATURES.some(key=>policy[key]);
-    return {enabled,policy,status,busy,error,target:target&&copy(target)};
+    return {enabled,policy,status,dataStatus:status,busy,error,target:navigationTarget&&copy(navigationTarget)};
   }
-  function snapshot(){
-    const latest=latestRuntime.library(),tracked=trackingRuntime.snapshot(),narrated=narrativeRuntime?.snapshot();
+  function snapshotWithSummary(projection){
+    const latest=projection??latestRuntime.library(),tracked=trackingRuntime.snapshot(),narrated=narrativeRuntime?.snapshot();
     let binding=target;try{binding??=repository.captureTarget();}catch{/* Unavailable bindings own no source data. */}
     if(binding&&sameTarget(latest.target,binding))summaryCache=latest;
     if(binding&&sameTarget(tracked.target,binding))trackingCache=tracked;
     if(binding&&narrated&&sameTarget(narrated.target,binding))narrativeCache=narrated;
     const summary=summaryCache??{records:[],missing:[],running:[],preferences:{enabled:false,recentFloors:6,prompt:latestRuntime.defaultPrompt??''}},tracking=trackingCache??{records:[],preferences:{itemsEnabled:false,npcsEnabled:false}};
     const narrative=narrativeCache??{self:{},outline:{}};
-    return copy({summary,tracking,narrative,...availability(),error:error||tracking.error||narrative.error||'',writeBlocked:!current()||!master()||status==='unconfirmed'||tracking.writeBlocked===true||narrative.writeBlocked===true});
+    return copy({summary,tracking,narrative,...availability(),error:error||tracking.error||narrative.error||'',writeBlocked:!current()||!master()||status!=='ready'||tracking.writeBlocked===true||narrative.writeBlocked===true});
   }
+  const snapshot=()=>snapshotWithSummary();
   const publish=()=>{
     if(disposed)return;
     if(availabilityListeners.size)try{const value=availability();for(const fn of availabilityListeners)try{fn(copy(value));}catch{/* Navigation cannot break saved facts. */}}catch{/* Unavailable state cannot break a runtime publication. */}
@@ -36,13 +38,25 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     if(disposed)throw new Error('本末已关闭');if(loading)return loading;
     const ticket=sequence;status='loading';error='';publish();
     const job=(async()=>{
-      const next=await adapter.prepare(),proof=adapter.captureChatSource?.(next);await latestRuntime.read();await latestRuntime.refresh();const projection=latestRuntime.captureSource?.(next);await trackingRuntime.load();await narrativeRuntime?.load();
-      if(disposed||ticket!==sequence||!sameTarget(next,repository.captureTarget()))throw new Error('聊天已变化，请重新打开本末');
-      target=copy(next);sourceProof=proof;projectionProof=projection;status='ready';error='';publish();return snapshot();
+      const next=await adapter.prepare(),proof=adapter.captureChatSource?.(next);
+      // Modern runtimes coalesce their automatic initialization with this pass.
+      if(!latestRuntime.panelReadView)await latestRuntime.read();
+      await (latestRuntime.ensureData?.()??latestRuntime.refresh());
+      let readView=latestRuntime.panelReadView?.()??await repository.capturePanelData?.(next),projection;
+      do{
+        projection=latestRuntime.captureSource?.(next);
+        await trackingRuntime.load({target:next,readView,raw:projection});await narrativeRuntime?.load({target:next,readView});
+        if(disposed||ticket!==sequence||!sameTarget(next,repository.captureTarget()))throw new Error('聊天已变化，请重新打开本末');
+        if(!readView||repository.matchesPanelData(next,readView))break;
+        // Never stamp a new proof on projections from an earlier root. Refresh
+        // every domain together when a concurrent write changed the fixed view.
+        readView=await repository.capturePanelData(next);await latestRuntime.read({target:next,readView});
+      }while(true);
+      target=copy(next);sourceProof=proof;projectionProof=projection;dataView=readView;const sourceCurrent=(!proof||adapter.matchesChatSource?.(next,proof)!==false)&&(!latestRuntime.matchesSource||latestRuntime.matchesSource(next,projection));status=sourceCurrent?'ready':'unconfirmed';error=sourceCurrent?'':'来源在读取期间已变化，请重新读取本末';publish();return snapshot();
     })().catch(failure=>{if(!disposed&&ticket===sequence){status='unconfirmed';error=failure.message;publish();}throw failure;}).finally(()=>{if(loading===job)loading=null;});
     loading=job;return job;
   }
-  function writable(kind){if(!current()||!master()||status==='unconfirmed'||trackingRuntime.snapshot().writeBlocked===true)throw new Error(error||trackingRuntime.snapshot().error||'聊天已变化，请重新读取本末');if(kind&&!snapshot().policy[kind])throw new Error('该功能已关闭');if(['self','outline'].includes(kind)&&narrativeRuntime?.snapshot().writeBlocked)throw new Error(narrativeRuntime.snapshot().error||'请重新读取本末');}
+  function writable(kind){if(!current()||!master()||status!=='ready'||trackingRuntime.snapshot().writeBlocked===true)throw new Error(error||trackingRuntime.snapshot().error||'聊天已变化，请重新读取本末');if(kind&&!snapshot().policy[kind])throw new Error('该功能已关闭');if(['self','outline'].includes(kind)&&narrativeRuntime?.snapshot().writeBlocked)throw new Error(narrativeRuntime.snapshot().error||'请重新读取本末');}
   async function write(kind,operation){
     writable(kind);const ticket=sequence,t=copy(target);busy=kind;publish();
     try{await operation();if(disposed||ticket!==sequence||!sameTarget(t,repository.captureTarget()))throw new Error('聊天已变化，请重新读取本末');error='';return snapshot();}
@@ -53,8 +67,9 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     if(loading)return loading;
     // Reuse subscribed runtime state only while the exact chat source is current.
     // Adapters without a source proof keep the conservative reload path.
-    if(current()&&status==='ready'&&sourceProof&&adapter.matchesChatSource?.(target,sourceProof)&&(!latestRuntime.captureSource||equal(projectionProof,latestRuntime.captureSource(target)))){
-      const value=snapshot();if(!value.writeBlocked)return Promise.resolve(value);
+    if(current()&&status==='ready'&&sourceProof&&adapter.matchesChatSource?.(target,sourceProof)&&(latestRuntime.matchesSource?latestRuntime.matchesSource(target,projectionProof):adapter.matchesChatSource?.(target,sourceProof)&&(!latestRuntime.captureSource||equal(projectionProof,latestRuntime.captureSource(target))))){
+      const summary=dataView&&latestRuntime.projectPanel?latestRuntime.projectPanel(dataView):undefined;
+      if(summary!==null){const value=snapshotWithSummary(summary);if(!value.writeBlocked)return Promise.resolve(value);}
     }
     return load();
   }

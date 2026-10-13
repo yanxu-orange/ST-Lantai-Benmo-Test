@@ -58,15 +58,25 @@ export function matchesLatestSource(snapshot,raw) {
     return current.messages.find(item=>item.floor===snapshot.assistantFloor)?.replyId===snapshot.replyId&&JSON.stringify(ordered(current.messages.filter(item=>floors.has(item.floor))))===JSON.stringify(snapshot.rawMessages);
   } catch {return false;}
 }
-export function matchesStoredLatestSource(snapshot,raw) {
-  try {
-    assertLatestSource(snapshot);const current=assertRawSummarySource(raw),floors=new Set(snapshot.rawMessages.map(item=>item.floor));
-    const reply=current.messages.find(item=>item.floor===snapshot.assistantFloor),messages=ordered(current.messages.filter(item=>floors.has(item.floor)));
-    if(reply?.replyId!==snapshot.replyId||messages.some(item=>item.role==='user'&&item.specialPayload===true))return false;
-    // The persistent per-swipe UUID survives deletion/reindexing of another
-    // swipe. Keep the original slot as provenance, not as identity authority.
-    const comparable=messages.map(item=>item.floor===snapshot.assistantFloor?{...item,swipeId:snapshot.rawMessages.at(-1).swipeId}:item);
-    return latestSourceKey({replyId:reply.replyId,rawMessages:comparable})===latestSourceKey(snapshot);
-  } catch {return false;}
+// Capture only for one synchronous calculation. The validated copy and index
+// stay private; callers cannot mark arbitrary input as trusted or mutate it.
+export function createStoredLatestSourceMatcher(raw) {
+  const current=assertRawSummarySource(raw),byFloor=new Map(current.messages.map(message=>[message.floor,message]));
+  return Object.freeze({
+    matches(snapshot) {
+      try {
+        assertLatestSource(snapshot);
+        const reply=byFloor.get(snapshot.assistantFloor),messages=snapshot.rawMessages.map(item=>byFloor.get(item.floor)).filter(Boolean);
+        if(reply?.replyId!==snapshot.replyId||messages.some(item=>item.role==='user'&&item.specialPayload===true))return false;
+        // The persistent per-swipe UUID survives deletion/reindexing of another
+        // swipe. Keep the original slot as provenance, not as identity authority.
+        const comparable=messages.map(item=>item.floor===snapshot.assistantFloor?{...item,swipeId:snapshot.rawMessages.at(-1).swipeId}:item);
+        return latestSourceKey({replyId:reply.replyId,rawMessages:comparable})===latestSourceKey(snapshot);
+      } catch {return false;}
+    },
+    messageAt(floor) {const message=byFloor.get(floor);return message?clone(message):undefined;},
+  });
 }
-
+export function matchesStoredLatestSource(snapshot,raw) {
+  try {return createStoredLatestSourceMatcher(raw).matches(snapshot);} catch {return false;}
+}

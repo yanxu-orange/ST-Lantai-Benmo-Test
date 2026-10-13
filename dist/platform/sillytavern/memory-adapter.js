@@ -477,9 +477,15 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     const stop=()=>{if(stopped)return;stopped=true;clearInterval(timer);observer?.disconnect();doc?.removeEventListener?.('visibilitychange',schedule);globalThis.removeEventListener?.('focus',schedule);visibilityObservers.delete(stop);};
     visibilityObservers.add(stop);return stop;
   }
+  const readTokens=new WeakMap();
+  const tokenRoot=target=>{const current=check(target);requireConfirmed(current);const root=getContext().chatMetadata[MEMORY_KEY]??prepared;if(!sameBinding(root.binding,current))throw new Error('记忆聊天归属已变化，请重新读取');return root;};
   snapshotMessages();refreshDeletionBaseline(true);
   return {
     prepare, captureTarget,
+    // Exact, read-only authority proof. Never a substitute for transaction reads
+    // or source guards: host extensions can mutate a root without a revision.
+    captureReadToken(target){const root=tokenRoot(target),token=Object.freeze({});readTokens.set(token,{target:copy(target),root,revision:root.revision,content:JSON.stringify(root)});return token;},
+    matchesReadToken(target,token){try{const proof=readTokens.get(token),root=tokenRoot(target);return !!proof&&sameTarget(proof.target,target)&&proof.root===root&&proof.revision===root.revision&&proof.content===JSON.stringify(root);}catch{return false;}},
     subscribeSourceDeletions(listener){deletionListeners.add(listener);return()=>deletionListeners.delete(listener);},
     hasTimeCalendar() {
       try {observe();const root=getContext().chatMetadata[MEMORY_KEY]??prepared;return !!root?.time?.activeCalendarId&&Array.isArray(root.time.calendars)&&root.time.calendars.some(item=>item.id===root.time.activeCalendarId);}catch{return false;}

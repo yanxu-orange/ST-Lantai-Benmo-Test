@@ -23,12 +23,12 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
   async function collect(){
     if(disposed)return;
     const collectSerial=serial;
-    const target=repository.captureTarget(),config=settings.captureWorkshop(),selection=await repository.captureWorkshop(target);
+    const target=repository.captureTarget(),config=settings.captureWorkshop(),readView=await repository.capturePanelData?.(target),selection=await repository.captureWorkshop(target,readView);
     if(disposed||serial!==collectSerial||!sameTarget(target,repository.captureTarget())||!settings.matchesWorkshop(config))return;
-    const root=await repository.read(target);
+    const root=readView?await repository.readPanelRoot(target,readView):await repository.read(target);
     const modules=applicableModules(config.workshop,selection.workshop,root.binding?.kind==='character'?root.binding.owner:null).filter(module=>gates[module.lifecycle].allowed());
     const collectors=modules.filter(module=>module.lifecycle!=='prompt'&&generationSourceOf(module)==='story');
-    if(!modules.some(module=>module.lifecycle!=='prompt')&&!selection.workshop.results.some(row=>row.generationSource==='background'))return {target,selection,config,modules};
+    if(!modules.some(module=>module.lifecycle!=='prompt')&&!selection.workshop.results.some(row=>row.generationSource==='background'))return {target,selection,config,modules,readView};
     if(disposed||serial!==collectSerial||!sameTarget(target,repository.captureTarget())||!settings.matchesWorkshop(config))return;
     const prepared=prepareWorkshopIdentities(getContext().chat.map(message=>pendingProjection(message)?null:message),{allowPendingLast:true});
     if(prepared.changed)identityUnconfirmed=true;
@@ -58,7 +58,7 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     catch(error){identityUnconfirmed=true;throw error;}
     if(!guard())return;
     if(saved.status==='committed')identityUnconfirmed=false;
-    return {target,selection:saved.selection,config,modules};
+    return {target,selection:saved.selection,config,modules,readView};
   }
   function request(){
     if(!gates.collect.allowed()&&!gates.sync.allowed()&&!gates.prompt.allowed())return Promise.resolve(null);
@@ -83,8 +83,8 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
       }
     }catch{if(!disposed&&serial===ticket)clear();}
   }
-  async function backgroundState(target){
-    const config=settings.captureWorkshop(),selection=await repository.captureWorkshop(target),root=await repository.read(target);
+  async function backgroundState(target,{readView,captured}={}){
+    const config=settings.captureWorkshop(),selection=captured??await repository.captureWorkshop(target,readView),root=readView?await repository.readPanelRoot(target,readView):await repository.read(target);
     if(disposed||!sameTarget(target,repository.captureTarget()))throw new Error('聊天已变化');
     const modules=applicableModules(config.workshop,selection.workshop,root.binding?.kind==='character'?root.binding.owner:null).filter(module=>gates[module.lifecycle].allowed());
     return {target,config,selection,modules:backgroundModules(modules)};
@@ -114,9 +114,10 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     return repository.updateWorkshop(plan.target,current.selection,next,{isCurrent:()=>isCurrent()&&taskAllowed(plan,task),requireConfirmation:true});
   }
   async function reconcileBackground(target,source,options={}){
-    const state=await backgroundState(target),next={...state.selection.workshop,results:reconcileBackgroundResults(state.selection.workshop.results,source,options)};
-    if(!equal(next,state.selection.workshop))await repository.updateWorkshop(target,state.selection,next,{isCurrent:()=>!disposed&&sameTarget(target,repository.captureTarget())&&(!options.isCurrent||options.isCurrent())});
-    return backgroundState(target);
+    const state=options.state??await backgroundState(target,{readView:options.readView}),next={...state.selection.workshop,results:reconcileBackgroundResults(state.selection.workshop.results,source,options)};
+    if(equal(next,state.selection.workshop))return state;
+    const saved=await repository.updateWorkshop(target,state.selection,next,{isCurrent:()=>!disposed&&sameTarget(target,repository.captureTarget())&&(!options.isCurrent||options.isCurrent())});
+    return {...state,selection:saved.selection};
   }
   if(settings.subscribe)releases.push(settings.subscribe(changed));
   const context=getContext();let timer;

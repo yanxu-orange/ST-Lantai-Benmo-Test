@@ -52,10 +52,36 @@ export function mergeParticipants(events) {
 }
 export function createRepository(adapter, now = () => new Date().toISOString()) {
   let queue = Promise.resolve();
+  const panelReads=new WeakMap();
   const sourceDeletionReceipts=new Map();
   const requireTarget = target => { if (!sameTarget(target, adapter.captureTarget())) throw new Error('聊天目标已变化，请返回列表重新进入'); };
   const enqueue = action => { const work = queue.then(action); queue = work.catch(() => {}); return work; };
   const read = async target => { requireTarget(target); const root = assertRoot(await adapter.read(target), target); requireTarget(target); return root; };
+  // One explicit display/maintenance pass may share a validated root. The
+  // private proof checks exact host content, including same-revision edits.
+  // No mutation method accepts this view; its read/commit path stays fresh.
+  async function capturePanelData(target){
+    if(!adapter.captureReadToken||!adapter.matchesReadToken)return undefined;
+    const frozen=copy(target);
+    let token;try{token=adapter.captureReadToken(frozen);}catch{/* Resolve uncertain persistence through the ordinary read first. */}
+    let root=await read(frozen);
+    if(!token){token=adapter.captureReadToken(frozen);root=await read(frozen);}
+    if(!adapter.matchesReadToken(frozen,token))throw new Error('聊天资料读取期间已变化，请重新读取');
+    const view=Object.freeze({target:freeze(frozen)});panelReads.set(view,{root:freeze(root),token});return view;
+  }
+  // The view is one fixed read snapshot, never silently advanced underneath
+  // consumers that already projected an earlier domain. Awaiting coordinators
+  // check its exact proof once before adoption and recapture all domains if stale.
+  function readPanelRoot(target,view){
+    requireTarget(target);
+    const captured=panelReads.get(view);
+    if(!captured||!sameTarget(view.target,target))throw new Error('聊天读取快照无效');
+    return captured.root;
+  }
+  function matchesPanelData(target,view){
+    try{requireTarget(target);const captured=panelReads.get(view);return !!captured&&sameTarget(view.target,target)&&adapter.matchesReadToken(target,captured.token);}catch{return false;}
+  }
+  const panelRead=(target,view)=>view===undefined?read(target):readPanelRoot(target,view);
   const commit = async (target, root, next, guard = () => true, options = {}) => {
     const check = current => { requireTarget(target); if (guard(current) !== true) throw new Error('任务已取消或来源已失效'); return true; };
     assertRoot(next, target); check(root);
@@ -128,7 +154,8 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     });
   };
   return {
-    async captureNarrative(target){const frozen=copy(target);return freeze({target:frozen,narrative:narrativeOf(await read(frozen))});},
+    capturePanelData,readPanelRoot,matchesPanelData,
+    async captureNarrative(target,readView){const frozen=copy(target);return freeze({target:frozen,narrative:narrativeOf(await panelRead(frozen,readView))});},
     matchesNarrative(target,selection){try{requireTarget(target);const root=assertRoot(adapter.peekConfirmed(target),target);return !!selection&&sameTarget(target,selection.target)&&equal(narrativeOf(root),selection.narrative);}catch{return false;}},
     updateNarrative(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertNarrative(value);
@@ -142,7 +169,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
       });
     },
     matchesTrackingRevision(target,revision){try{requireTarget(target);return trackingOf(assertRoot(adapter.peekConfirmed(target),target)).revision===revision;}catch{return false;}},
-    async captureTracking(target){const frozen=copy(target);return freeze({target:frozen,tracking:trackingOf(await read(frozen))});},
+    async captureTracking(target,readView){const frozen=copy(target);return freeze({target:frozen,tracking:trackingOf(await panelRead(frozen,readView))});},
     updateTracking(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertTracking(value);
       const guard=root=>{requireTarget(frozen);if(!isCurrent()||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(trackingOf(root),snapshot.tracking))throw new Error('追踪来源或资料已变化');return true;};
@@ -154,7 +181,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         return {status:'committed',root:saved,selection:freeze({target:frozen,tracking:trackingOf(saved)})};
       });
     },
-    async captureLatest(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,latest:latestOf(root)});},
+    async captureLatest(target,readView){const frozen=copy(target),root=await panelRead(frozen,readView);return freeze({target:frozen,latest:latestOf(root)});},
     matchesLatest(target,selection){try{requireTarget(target);const current=assertRoot(adapter.peekConfirmed(target),target);return !!selection&&sameTarget(target,selection.target)&&equal(latestOf(current),selection.latest);}catch{return false;}},
     updateLatest(target,selection,value,options={}){const candidate=assertLatest(value);return latestMutation(target,selection,options,()=>candidate);},
     updateLatestPreferences(target,selectionOrPatch,patchOrOptions={},options={}){
@@ -190,7 +217,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         return {status:'committed',selection:freeze({target:frozen,controls:candidate})};
       });
     },
-    async captureTime(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,time:timeOf(root)});},
+    async captureTime(target,readView){const frozen=copy(target),root=await panelRead(frozen,readView);return freeze({target:frozen,time:timeOf(root)});},
     updateTime(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertTime(value);
       const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(timeOf(root),snapshot.time))throw new Error('时间来源或配置已变化');return true;};
@@ -244,7 +271,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         return {status:'committed',root:saved,selection:freeze({target:frozen,time:timeOf(saved)})};
       });
     },
-    async captureWorkshop(target){const frozen=copy(target);return freeze({target:frozen,workshop:workshopOf(await read(frozen))});},
+    async captureWorkshop(target,readView){const frozen=copy(target);return freeze({target:frozen,workshop:workshopOf(await panelRead(frozen,readView))});},
     updateWorkshop(target,selection,value,{isCurrent=()=>true,workshopProof,forceSave=false,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertWorkshop(value);
       const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(workshopOf(root),snapshot.workshop))throw new Error('工坊来源或配置已变化');return true;};

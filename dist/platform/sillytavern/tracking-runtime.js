@@ -20,12 +20,12 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
   const contentOf=domain=>{const {revision,preferences,...content}=domain;return content;};
   const current=t=>{try{return !disposed&&sameTarget(t,repository.captureTarget());}catch{return false;}};
   const snapshot=()=>clone({...state,exclusions:state.exclusions??trackingExclusionsOf(null),prompts:settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS,writeBlocked:state.writeBlocked||!gate.allowed()}),notify=()=>{for(const fn of listeners)try{fn(snapshot());}catch{/* Observer cannot break data. */}};
-  function adopt(t,captured){
+  function adopt(t,captured,raw=captureSource(t)){
     if(selection&&!equal(trackingExclusionsOf(selection.tracking),trackingExclusionsOf(captured.tracking))){exclusionEpoch++;clear();}
-    const projected=currentTracking(captured.tracking,captureSource(t)),exclusions=effectiveTrackingExclusions(captured.tracking,projected.records);target=clone(t);lastTarget=clone(t);selection=captured;
-    state={records:projected.records.map(row=>({...row,excluded:trackingRecordExcluded(row,exclusions),...(row.kind==='npc'?{absentTurns:projected.absenceTurns[row.id]}:{})})),preferences:captured.tracking.preferences,exclusions:trackingExclusionsOf(captured.tracking),writeBlocked:false,error:'',target:clone(t),aiTurn:projected.aiTurn};notify();return snapshot();
+    const previous=state,projected=currentTracking(captured.tracking,raw),exclusions=effectiveTrackingExclusions(captured.tracking,projected.records);target=clone(t);lastTarget=clone(t);selection=captured;
+    state={records:projected.records.map(row=>({...row,excluded:trackingRecordExcluded(row,exclusions),...(row.kind==='npc'?{absentTurns:projected.absenceTurns[row.id]}:{})})),preferences:captured.tracking.preferences,exclusions:trackingExclusionsOf(captured.tracking),writeBlocked:false,error:'',target:clone(t),aiTurn:projected.aiTurn};if(!equal(previous,state))notify();return snapshot();
   }
-  async function load(){const ticket=serial,t=await adapter.prepare(),captured=await repository.captureTracking(t);if(disposed||ticket!==serial||!current(t))throw new Error('聊天已变化，请重新打开追踪');return adopt(t,captured);}
+  async function load({target:prepared,readView,raw}={}){const ticket=serial,t=prepared??await adapter.prepare(),captured=await repository.captureTracking(t,readView);if(disposed||ticket!==serial||!current(t))throw new Error('聊天已变化，请重新打开追踪');return adopt(t,captured,raw);}
   function clear({invalidate=true}={}){if(invalidate)serial++;try{getContext().setExtensionPrompt(KEY,'',1,0,false,0);return true;}catch{return false;}}
   function mutate(change,{fresh=false,requireConfirmation=true,requireEnabled=true,category=null}={}){
     const requestedTarget=clone(target),requested=selection,ticket=serial,controlProof=gate.capture(),categoryGate=categoryGates[category],categoryProof=categoryGate?.capture();
@@ -122,17 +122,17 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     if(commitValid())adopt(plan.target,saved.selection);
     return {errors:Object.fromEntries(['items','npcs'].map(key=>[key,preferences[`${key}Enabled`]?applied.errors[key]:null]))};
   }
-  async function reconcile(t,{invalidatedFloors=[],replyVersions,isCurrent=()=>true}={}){
-    const captured=await repository.captureTracking(t);
+  async function reconcile(t,{invalidatedFloors=[],replyVersions,isCurrent=()=>true,readView,raw}={}){
+    const captured=await repository.captureTracking(t,readView);
     if(!current(t)||!isCurrent())return null;
-    const next=pruneTrackingSnapshots(invalidateTrackingFloors(captured.tracking,invalidatedFloors),captureSource(t),{replyVersions});
+    const next=pruneTrackingSnapshots(invalidateTrackingFloors(captured.tracking,invalidatedFloors),raw??captureSource(t),{replyVersions});
     const saved=equal(next,captured.tracking)?{selection:captured}:await repository.updateTracking(t,captured,next,{isCurrent:()=>current(t)&&isCurrent(),requireConfirmation:true});
-    if(current(t)&&isCurrent())adopt(t,saved.selection);
+    if(current(t)&&isCurrent())adopt(t,saved.selection,raw);
     return saved.selection;
   }
-  async function backgroundState(t){
-    const captured=await repository.captureTracking(t);if(!current(t))throw new Error('聊天已变化');
-    const raw=captureSource(t),projected=currentTracking(captured.tracking,raw),byId=new Map(captured.tracking.snapshots.map(row=>[row.id,row])),activeIds=new Set();
+  async function backgroundState(t,{readView,raw:source,captured:provided}={}){
+    const captured=provided??await repository.captureTracking(t,readView);if(!current(t))throw new Error('聊天已变化');
+    const raw=source??captureSource(t),projected=currentTracking(captured.tracking,raw),byId=new Map(captured.tracking.snapshots.map(row=>[row.id,row])),activeIds=new Set();
     let key=projected.baseKey;while(key&&!activeIds.has(key)){activeIds.add(key);key=byId.get(key)?.baseKey;}
     return {target:t,...captured,projected,activeIds,sourceSignature:JSON.stringify(raw),enabled:gate.allowed()};
   }

@@ -4,7 +4,7 @@ import {latestArchivedFloors} from '../../domain/latest/coverage.js';
 import {cleanSummaryFloors,createDefaultCleaningRules,normalizeCleaningRule} from '../../domain/summary/cleaning.js';
 import {sameTarget} from '../../domain/memory/repository.js';
 import {DEFAULT_LATEST_PROMPT,emptyLatest,pruneLatestRecords} from '../../domain/latest/data.js';
-import {prepareLatestSource,prepareManualLatestSource,storedLatestSource,matchesLatestSource,matchesStoredLatestSource} from '../../domain/latest/source.js';
+import {prepareLatestSource,prepareManualLatestSource,storedLatestSource,matchesLatestSource,matchesStoredLatestSource,createStoredLatestSourceMatcher} from '../../domain/latest/source.js';
 import {buildLatestRequest,promptIdentities} from '../../domain/latest/requests.js';
 import {planLatestBackfill,buildLatestBackfillRequest,parseLatestBackfillResponse} from '../../domain/latest/backfill.js';
 import {buildBackgroundRoundRequest,parseBackgroundRoundResponse} from '../../domain/background/round.js';
@@ -35,9 +35,10 @@ export function captureLatestPromptIdentities(context={}){
   return promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name});
 }
 // Latest owns neither provider configuration nor event/ancient summary progress.
-export function createLatestSummaryRuntime({repository,adapter,settings,provider,getGenerationSettings,getContext,getControls,workshopRuntime,trackingRuntime,scheduleRuntime}={}) {
+export function createLatestSummaryRuntime({repository,adapter,settings,provider,getGenerationSettings,getContext,getControls,workshopRuntime,trackingRuntime,scheduleRuntime,autoInitialize=true}={}) {
   let latestEpoch=0,disposed=false,serial=0,readSerial=0,target=null,selection=null,pending=null,receipt=null,enabled=true,generationQueue=Promise.resolve(),foregroundStopped=false,foregroundType=null,foregroundEnded=false;
   let workshopState=null,workshopFloorStates={},trackingState=null,trackingFloorStates={},scheduleState=null,scheduleFloorStates={};
+  let libraryCache=null,displayEpoch=0,lastReadView=null,displayReadDirty=false,initialized=autoInitialize;
   const automaticReceipts=new Map(),displayBatches=new Map(),failureReports=[];
   let state={...emptyLatest(),status:'idle',error:'',floorStates:{}};
   let backfillState={status:'idle',id:null,total:0,completed:0,skipped:0,failed:0,error:''},backfillController=null;
@@ -47,7 +48,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   const summaryAllowed=()=>allowed()&&getControls?.()?.allowed('summary')===true;
   const summaryMatches=proof=>summaryAllowed()&&getControls?.()?.matches(proof)===true;
   const current=t=>{try{return !disposed&&sameTarget(t,repository.captureTarget());}catch{return false;}};
-  const publish=()=>{for(const listener of listeners)try{listener(inspect());}catch{/* UI cannot break a write. */}};
+  const publish=()=>{displayEpoch++;libraryCache=null;for(const listener of listeners)try{listener(inspect());}catch{/* UI cannot break a write. */}};
   const identities=()=>captureLatestPromptIdentities(getContext());
   const currentFailures=()=>failureReports.filter(row=>target&&current(target)&&row.target.chatId===target.chatId&&row.target.rootId===target.rootId);
   function retainFailure({requestId,target:owner,replyIds,taskIds,rawResponse,error}){
@@ -70,6 +71,14 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     });
     return snapshot;
   }
+  function matchesRaw(t,source){
+    if(!source||!adapter.matchesChatSource(t,source))return false;
+    const chat=getContext().chat;
+    return source.messages.every(item=>{const message=chat[item.floor],swipes=message?.swipes,current=message?.swipe_id??0;
+      const unsettled=Array.isArray(swipes)&&swipes.length&&typeof swipes[current]!=='string'||pendingProjection(message);
+      return item.replyId===(unsettled?null:message?.extra?.[WORKSHOP_REPLY_KEY]??null)&&item.specialPayload===!!special(message);
+    });
+  }
   const archivedFloor=(t,floor)=>latestArchivedFloors(adapter.peekConfirmed(t),raw(t,true)).has(floor);
   function cleaningRules(){const generation=settings?.captureEventGeneration?settings.captureEventGeneration().generation:getGenerationSettings();return normalizedRules(generation.summaryCleaning?.rules);}
   function versions(){return (getContext().chat??[]).flatMap((message,floor)=>{
@@ -78,16 +87,20 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     return swipes.map((text,swipeId)=>({replyId:message.swipe_info?.[swipeId]?.extra?.[WORKSHOP_REPLY_KEY]??((message.swipe_id??0)===swipeId?message.extra?.[WORKSHOP_REPLY_KEY]:null),floor,swipeId,text})).filter(item=>item.replyId);
   });}
   workshopRuntime?.setBackgroundSourceReader?.(t=>({...raw(t),invalidatedFloors:[...invalidatedFloors]}));
-  async function read(){
-    const token=++readSerial,t=await adapter.prepare();
-    const captured=await repository.captureLatest(t),workshop=await workshopRuntime?.backgroundState(t),tracking=await trackingRuntime?.backgroundState(t),schedule=await scheduleRuntime?.backgroundState(t);
+  async function read({target:prepared,readView:provided}={}){
+    initialized=true;
+    const token=++readSerial,t=prepared??await adapter.prepare();
+    const readView=provided??await repository.capturePanelData?.(t),source=raw(t);
+    const captured=await repository.captureLatest(t,readView),workshop=await workshopRuntime?.backgroundState(t,{readView}),tracking=await trackingRuntime?.backgroundState(t,{readView,raw:source}),schedule=await scheduleRuntime?.backgroundState(t,{readView,raw:source});
     if(disposed||token!==readSerial||!current(t))return inspect();
+    if(readView&&!repository.matchesPanelData(t,readView))return read({target:t});
     if(target&&!sameTarget(target,t)){cancel();resetBackfill();state.floorStates={};invalidatedFloors.clear();}
-    target=t;selection=captured;workshopState=workshop??null;trackingState=tracking??null;scheduleState=schedule??null;state={...captured.latest,status:state.status==='running'?'running':'ready',error:'',floorStates:state.floorStates};publish();return inspect();
+    lastReadView=readView;target=t;selection=captured;workshopState=workshop??null;trackingState=tracking??null;scheduleState=schedule??null;state={...captured.latest,status:state.status==='running'?'running':'ready',error:'',floorStates:state.floorStates};publish();return inspect();
   }
   async function reconcile(){
-    const ticket=serial,t=await adapter.prepare();await workshopRuntime?.request();let captured=await repository.captureLatest(t);
-    const workshop=await workshopRuntime?.backgroundState(t),tracking=await trackingRuntime?.backgroundState(t),schedule=await scheduleRuntime?.backgroundState(t);
+    const ticket=serial,t=await adapter.prepare(),workshopPass=await workshopRuntime?.request();
+    const readView=workshopPass?.readView??await repository.capturePanelData?.(t);let captured=await repository.captureLatest(t,readView);
+    const sharedSource=raw(t),workshop=await workshopRuntime?.backgroundState(t,{readView}),tracking=await trackingRuntime?.backgroundState(t,{readView,raw:sharedSource}),schedule=await scheduleRuntime?.backgroundState(t,{readView,raw:sharedSource});
     if(disposed||ticket!==serial||!current(t))return;
     // Disabling generation must not disable ownership maintenance for saved
     // summaries: ST copies extension metadata into newly generated swipes.
@@ -110,19 +123,29 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       }
       return retained;
     });
-    const valid=()=>{try{return !disposed&&ticket===serial&&current(t)&&adapter.matchesChatSource(t,source)&&(!rebound||equal(cleaningRules(),rules));}catch{return false;}};
+    const valid=()=>{try{return !disposed&&ticket===serial&&current(t)&&matchesRaw(t,source)&&(!rebound||equal(cleaningRules(),rules));}catch{return false;}};
     if(prepared.changed||!equal(next,captured.latest)){
       const saved=await repository.updateLatest(t,captured,next,{isCurrent:valid,forceSave:prepared.changed,workshopProof:prepared.selected.map(({floor,swipeId,replyId})=>({floor,swipeId,replyId}))});
       captured=saved.selection;
     }
-    const maintained=valid()?await workshopRuntime?.reconcileBackground(t,source,{replyVersions:versions(),invalidatedFloors:[...invalidatedFloors],isCurrent:valid}):null;
-    if(valid())await trackingRuntime?.reconcile(t,{replyVersions:versions(),invalidatedFloors:[...invalidatedFloors],isCurrent:valid});
-    if(valid())await scheduleRuntime?.reconcile(t,{replyVersions:versions(),invalidatedFloors:[...invalidatedFloors],isCurrent:valid});
-    const tracked=valid()?await trackingRuntime?.backgroundState(t):null,scheduled=valid()?await scheduleRuntime?.backgroundState(t):null;
-    if(valid()){invalidatedFloors.clear();target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};publish();}
+    const replyVersions=versions(),options={readView,raw:source,replyVersions,invalidatedFloors:[...invalidatedFloors],isCurrent:valid};
+    const maintained=valid()?await workshopRuntime?.reconcileBackground(t,source,{...options,state:workshop}):null;
+    const trackingSelection=valid()?await trackingRuntime?.reconcile(t,options):null;
+    const scheduleSelection=valid()?await scheduleRuntime?.reconcile(t,options):null;
+    const tracked=valid()?await trackingRuntime?.backgroundState(t,{readView,raw:source,captured:trackingSelection??undefined}):null,scheduled=valid()?await scheduleRuntime?.backgroundState(t,{readView,raw:source,captured:scheduleSelection??undefined}):null;
+    if(valid()&&readView&&!repository.matchesPanelData(t,readView)){invalidatedFloors.clear();await read({target:t});return;}
+    if(valid()){invalidatedFloors.clear();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};publish();}
   }
   function refresh(){
-    const work=(pending??Promise.resolve()).catch(()=>{}).then(()=>reconcile());pending=work;
+    initialized=true;
+    // Explicit refreshes retain their own queued pass and failure. Only the
+    // panel's ensureData joins existing initialization, so an old chat's failed
+    // pass cannot consume a later chat's initialization or hide its own error.
+    const work=(pending??Promise.resolve()).catch(()=>{}).then(async()=>{
+      const ticket=serial;displayReadDirty=false;await reconcile();
+      // Notifications received during a pass coalesce into a current read.
+      while(!disposed&&ticket===serial&&displayReadDirty){displayReadDirty=false;await read({target,readView:lastReadView});}
+    });pending=work;
     work.finally(()=>{if(pending===work)pending=null;}).catch(()=>{});return work;
   }
   async function savePreferences(preferences){
@@ -372,20 +395,25 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     return result;
   }
   function workshopFloorInfo(floor){return workshopFloorInfos([floor]).get(floor)??null;}
-  function library(){
+  const sameVersions=(left,right)=>left.length===right.length&&left.every((row,index)=>['replyId','floor','swipeId','text'].every(key=>row[key]===right[index][key]));
+  function library(readView){
+    let rules=[];try{rules=settings?.captureEventGeneration?settings.captureEventGeneration().generation.summaryCleaning.rules:getGenerationSettings().summaryCleaning.rules;}catch{/* Saved facts do not require a model. */}
+    const context=getContext(),processor=context?.streamingProcessor;
+    const stream=JSON.stringify([(context.chat??[]).map(row=>[row?.gen_started??null,row?.gen_finished??null]),processor?[processor.messageId,processor.isFinished,processor.isStopped,!!processor.abortController?.signal?.aborted,processor.toolCalls?.length??0]:null]);
+    if(libraryCache&&libraryCache.epoch===displayEpoch&&current(target)&&equal(rules,libraryCache.rules)&&stream===libraryCache.stream&&(readView?libraryCache.readView===readView:libraryCache.readView?repository.matchesPanelData(target,libraryCache.readView):adapter.matchesReadToken?.(target,libraryCache.rootToken))&&matchesRaw(target,libraryCache.source)&&sameVersions(versions(),libraryCache.versions))return copy(libraryCache.result);
     const result={records:[],missing:[],running:[],currentRows:[],historyRecords:[],preferences:copy(state.preferences),target:copy(target),automatic:copy(automaticState),backfill:copy(backfillState),failureReports:copy(currentFailures())};
     if(!target||!current(target))return result;
     try{
-      let cleaningRules=[];try{cleaningRules=settings?.captureEventGeneration?settings.captureEventGeneration().generation.summaryCleaning.rules:getGenerationSettings().summaryCleaning.rules;}catch{/* Reading saved facts never requires a connected model. */}
-      const source=raw(target),retainedSource=raw(target,true),archived=latestArchivedFloors(adapter.peekConfirmed(target),retainedSource),byFloor=new Map(source.messages.map(row=>[row.floor,row])),byReply=new Map(pruneLatestRecords({schema:state.schema,revision:state.revision,preferences:state.preferences,records:state.records},retainedSource,{replyVersions:versions(),retainStale:true}).records.map(row=>[row.sourceSnapshot.replyId,row])),processor=getContext()?.streamingProcessor;
+      if(!readView&&lastReadView&&repository.matchesPanelData(target,lastReadView))readView=lastReadView;
+      const cleaningRules=rules,rootToken=readView?null:adapter.captureReadToken?.(target),replyVersions=versions();
+      const source=raw(target),retainedSource=raw(target,true),matcher=createStoredLatestSourceMatcher(source),archived=latestArchivedFloors(readView?repository.readPanelRoot(target,readView):adapter.peekConfirmed(target),retainedSource),byReply=new Map(pruneLatestRecords({schema:state.schema,revision:state.revision,preferences:state.preferences,records:state.records},retainedSource,{replyVersions,retainStale:true}).records.map(row=>[row.sourceSnapshot.replyId,row]));
       for(const row of retainedSource.messages){
         if(row.role!=='assistant'||row.system||!row.replyId||!row.text.trim())continue;
         const hostMessage=getContext().chat?.[row.floor];
         if(hostMessage?.gen_started&&!hostMessage?.gen_finished)continue;
         if(processor&&processor.messageId===row.floor&&(processor.isFinished!==true||processor.isStopped===true||processor.abortController?.signal?.aborted||processor.toolCalls?.length))continue;
         const record=byReply.get(row.replyId),snapshot=record?.sourceSnapshot,run=state.floorStates[row.replyId]??{status:'idle',error:''};
-        const pair={epoch:source.epoch,messages:snapshot?.rawMessages.flatMap(item=>byFloor.has(item.floor)?[byFloor.get(item.floor)]:[])??[]};
-        const valid=record&&!record.stale&&!snapshot.rawMessages.some(item=>invalidatedFloors.has(item.floor))&&matchesStoredLatestSource(snapshot,pair);
+        const valid=record&&!record.stale&&!snapshot.rawMessages.some(item=>invalidatedFloors.has(item.floor))&&matcher.matches(snapshot);
         const nativeHidden=hostMessage?.is_system===true;
         const entry=record?{id:record.id,floor:row.floor,replyId:row.replyId,body:record.body,edited:record.edited===true,manual:record.sourceSnapshot.manual===true,...(!valid&&!nativeHidden?{stale:true}:{}),nativeHidden,status:run.status,error:run.error??''}:{floor:row.floor,replyId:row.replyId,nativeHidden,status:run.status,error:run.error??''};
         if(record)result.records.push(entry);
@@ -397,6 +425,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         if(record||run.status==='running'||result.missing.at(-1)===entry)result.currentRows.push(entry);
       }
       result.records.sort((a,b)=>a.floor-b.floor);result.currentRows.sort((a,b)=>a.floor-b.floor);result.historyRecords.sort((a,b)=>a.floor-b.floor);
+      if(rootToken||readView)libraryCache={epoch:displayEpoch,readView,rootToken,source,rules:copy(rules),stream,versions:replyVersions,result:copy(result)};
     }catch{/* Pending host persistence cannot authorize guessed source rows. */}
     return result;
   }
@@ -543,21 +572,21 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   // this order. Both receipts are required, with successful-stream evidence.
   on('GENERATION_ENDED',()=>{foregroundEnded=true;if(!receipt&&automaticState.status==='waiting')automaticStatus('waiting','已收到结束信号，等待宿主正文回执');flushReceipt();});
   for(const name of ['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,payload=>{const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;if(name==='MESSAGE_EDITED'){for(const [index,message] of (getContext().chat??[]).entries())if(!Number.isSafeInteger(floor)||index===floor||index===floor+1){const id=message?.extra?.[WORKSHOP_REPLY_KEY];if(id){delete state.floorStates[id];delete workshopFloorStates[id];delete trackingFloorStates[id];delete scheduleFloorStates[id];}}if(Number.isSafeInteger(floor)&&floor>=0)invalidatedFloors.add(floor);else for(const record of [...state.records,...(workshopState?.selection.workshop.results.filter(row=>row.generationSource==='background')??[]),...(trackingState?.tracking.snapshots??[]),...(scheduleState?.receipts??[])])for(const row of record.sourceSnapshot.rawMessages)invalidatedFloors.add(row.floor);}cancel();publish();void refresh().catch(()=>{});});
-  for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{cancel();resetBackfill();readSerial++;invalidatedFloors.clear();target=null;selection=null;state={...emptyLatest(),status:'idle',error:'',floorStates:{}};workshopState=null;workshopFloorStates={};trackingState=null;trackingFloorStates={};scheduleState=null;scheduleFloorStates={};scheduleRuntime?.reset?.();automaticReceipts.clear();automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};publish();void read().then(()=>refresh()).catch(()=>{});});
+  for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{cancel();resetBackfill();readSerial++;invalidatedFloors.clear();target=null;selection=null;state={...emptyLatest(),status:'idle',error:'',floorStates:{}};workshopState=null;workshopFloorStates={};trackingState=null;trackingFloorStates={};scheduleState=null;scheduleFloorStates={};scheduleRuntime?.reset?.();automaticReceipts.clear();automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};publish();void refresh().catch(()=>{});});
   let displayReadQueued=false;
-  const updateWorkshopDisplay=()=>{if(disposed||displayReadQueued)return;displayReadQueued=true;queueMicrotask(()=>{displayReadQueued=false;if(!disposed)void read().catch(()=>{});});};
+  const updateWorkshopDisplay=()=>{if(disposed||!initialized)return;if(pending){displayReadDirty=true;return;}if(displayReadQueued)return;displayReadQueued=true;queueMicrotask(()=>{displayReadQueued=false;if(!disposed){if(pending)displayReadDirty=true;else void read().catch(()=>{});}});};
   if(workshopRuntime?.subscribe)releases.push(workshopRuntime.subscribe(updateWorkshopDisplay));
   if(trackingRuntime?.subscribe)releases.push(trackingRuntime.subscribe(updateWorkshopDisplay));
   if(scheduleRuntime?.subscribe)releases.push(scheduleRuntime.subscribe(updateWorkshopDisplay));
   if((workshopRuntime||trackingRuntime||scheduleRuntime)&&adapter.subscribe)releases.push(adapter.subscribe(updateWorkshopDisplay));
   // Never generate on initial load, enabling, edits, or selecting old swipes.
-  void read().then(()=>refresh()).catch(()=>{});
+  if(autoInitialize)void refresh().catch(()=>{});
   return {inspect,read,savePreferences,clear,subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},defaultPrompt:DEFAULT_LATEST_PROMPT,
     observeVisibility(options){
       const off=adapter.observeSourceVisibility?.(change=>{if(disposed)return;if(change?.visibilityChanged!==false)cancel();else publish();},options)??(()=>{});
       const stop=()=>{off();visibilityReleases.delete(stop);};visibilityReleases.add(stop);return stop;
     },
-    library,editRecord,manualRecord,estimateBackfill,startBackfill,stopBackfill,generate:(floor,options={})=>enqueueGeneration(floor,{workshopOnly:options.workshopOnly===true,...(typeof options.taskId==='string'?{taskId:options.taskId}:{})}),intercept,floorInfo,floorInfos,workshopFloorInfo,workshopFloorInfos,refresh,captureSource:(t=target)=>raw(t),
+    library:()=>library(),projectPanel(readView){if(!readView||!current(target)||!repository.matchesPanelData(target,readView))return null;return library(readView);},editRecord,manualRecord,estimateBackfill,startBackfill,stopBackfill,generate:(floor,options={})=>enqueueGeneration(floor,{workshopOnly:options.workshopOnly===true,...(typeof options.taskId==='string'?{taskId:options.taskId}:{})}),intercept,floorInfo,floorInfos,workshopFloorInfo,workshopFloorInfos,refresh,ensureData:()=>pending??refresh(),panelReadView:()=>lastReadView,matchesSource:(t,proof)=>matchesRaw(t,proof),captureSource:(t=target)=>raw(t),
     setEnabled(value){enabled=!!value;if(!enabled)cancel();publish();},
     dispose(){if(disposed)return;for(const stop of [...visibilityReleases])stop();cancel();disposed=true;readSerial++;for(const release of releases)release();listeners.clear();}};
 }
