@@ -1,3 +1,4 @@
+import {changeGenerationDraft,createGenerationPreview,sameGenerationParams as sameParams} from './generation-preview.js';
 import {sameTarget} from '../domain/memory/repository.js';
 import {automaticCumulativePlan} from '../domain/cumulative/auto-runner.js';
 import {buildCumulativeRequest} from '../domain/cumulative/requests.js';
@@ -5,13 +6,13 @@ import {buildCumulativeRequest} from '../domain/cumulative/requests.js';
 const copy=value=>structuredClone(value);
 const patchOf=version=>({body:version.body,startTime:version.startTime,endTime:version.endTime});
 const active=task=>['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(task?.status);
-const sameParams=(a,b)=>!!a&&!!b&&Object.keys(a).length===Object.keys(b).length&&Object.keys(a).every(key=>Object.is(a[key],b[key]));
 const PARAMETER_SAVE_DELAY=250;
 // Host owns the controller, service and runner. Unmounting a page is independent.
 export function createCumulativeController({repository,service,runner,captureSource,control=null,onCommitted=()=>{}}={}) {
   const listeners=new Set(),retiredTasks=new Set();let parameterDrafts={},parameterTimer=null;let disposed=false,serial=0,opening=0,queue=Promise.resolve(),parameterError=null,visible=false,reloadBinding=null,reloadSequence=0,taskError=null;
   const state={target:null,selection:null,cumulative:null,route:'root',origin:'manual',params:null,latestFloor:null,taskId:null,task:null,draft:null,editDraft:null,editSelection:null,restore:null,preview:null,previewOpen:false,previewView:'source',busy:false,unconfirmed:false,error:'',message:'',noticeSequence:0,scroll:{},opened:{}};
   const inspect=()=>copy({...state,reloadInvalidated:!!reloadBinding,parameterReadRequired:parameterDrafts[state.origin]?.readRequired===true,automatic:runner.inspect()});
+  const generationPreview=createGenerationPreview(state);
   const notify=()=>{if(!disposed)for(const listener of [...listeners])try{listener(inspect());}catch{/* display only */}};
   const current=(ticket,target)=>{try{return !disposed&&!reloadBinding&&ticket===serial&&sameTarget(target,state.target)&&sameTarget(target,repository.captureTarget());}catch{return false;}};
   const adopt=selection=>{
@@ -108,7 +109,7 @@ export function createCumulativeController({repository,service,runner,captureSou
       state.unconfirmed=false;selectParameters(state.origin);
       if(state.editDraft)state.editSelection=selection;
       if(state.restore){const index=selection.cumulative.versions.findIndex(version=>version.id===state.restore.id);state.restore=index<0||index===selection.cumulative.versions.length-1?null:{id:state.restore.id,version:copy(selection.cumulative.versions[index]),removed:selection.cumulative.versions.length-index-1,selection};}
-      state.task=null;state.taskId=null;state.preview=null;state.previewOpen=false;
+      state.task=null;state.taskId=null;generationPreview.invalidate({close:true});
       if(restoredTask){state.taskId=restoredTask;taskChanged(service.inspect(restoredTask));}
       else if(state.draft){state.draft=null;state.route=state.origin;}
       state.error='';feedback(receipt?.reviewResolution==='discarded'?'已确认放弃本批草稿':receipt?.outcome==='recovered-committed'?'已确认本批总结保存成功':receipt?.outcome==='recovered-previous'?'已确认保留原版，本批未保存':selection.cumulative.pending?'已恢复待采用草稿':'已重新读取');return true;
@@ -129,11 +130,11 @@ export function createCumulativeController({repository,service,runner,captureSou
           // Root viewing never changes the task's mode, parameters or review draft.
           // Restore the registered task rather than starting a task for the clicked mode.
           taskChanged(observed);state.route=observed.status==='awaiting-user'&&observed.candidate?'review':state.origin;
-        }else{state.origin=route;state.route=route;selectParameters(route);state.preview=null;state.previewOpen=false;}
+        }else{state.origin=route;state.route=route;selectParameters(route);generationPreview.invalidate({close:true});}
         notify();return true;
       }
       const ticket=++serial;reloadBinding=null;state.target=next;state.busy=true;state.task=null;state.taskId=null;state.draft=null;state.editDraft=null;state.editSelection=null;state.restore=null;state.error='';state.message='';state.unconfirmed=false;state.scroll={};state.opened={};notify();
-      try{const selected=await repository.captureCumulative(next);if(!current(ticket,next))return false;resetParameters(selected);adopt(selected);state.latestFloor=captureSource(next).messages.at(-1)?.floor??0;state.route=route;state.origin=route==='auto'?'auto':'manual';selectParameters(state.origin);state.preview=null;state.previewOpen=false;parameterError=null;
+      try{const selected=await repository.captureCumulative(next);if(!current(ticket,next))return false;resetParameters(selected);adopt(selected);state.latestFloor=captureSource(next).messages.at(-1)?.floor??0;state.route=route;state.origin=route==='auto'?'auto':'manual';selectParameters(state.origin);generationPreview.invalidate({close:true});parameterError=null;
         const narrativeId=await service.restorePendingNarrative?.(state.origin);if(!current(ticket,next))return false;if(narrativeId){state.taskId=narrativeId;taskChanged(service.inspect(narrativeId));return true;}
         if(selected.cumulative.pending){try{state.taskId=await service.restorePending();if(!current(ticket,next))return false;taskChanged(service.inspect(state.taskId));}catch(error){if(current(ticket,next))state.error=error.message;}}return true;
       }catch(error){if(current(ticket,next))state.error=error.message;return false;}finally{if(current(ticket,next)){state.busy=false;notify();}}
@@ -141,9 +142,8 @@ export function createCumulativeController({repository,service,runner,captureSou
     refresh:()=>action(async valid=>{await refresh();if(valid()){if(parameterError)state.error=state.unconfirmed?'保存结果尚未确认，请重新读取':parameterError.message;return true;}}),
     changeParams(mutator,{defer=false}={}){
       if(reloadBinding||state.busy||state.unconfirmed||!current(serial,state.target)||active(state.task)||['running','waiting','awaiting-user'].includes(runner.inspect().status))return queue;
-      const previous=copy(state.params);mutator(state.params);
-      if(!sameParams(previous,state.params)){
-        const draft=parameterDraft();draft.revision++;draft.error=null;draft.readRequired=false;parameterError=null;state.preview=null;state.error='';
+      if(changeGenerationDraft(state.params,mutator,()=>generationPreview.invalidate())){
+        const draft=parameterDraft();draft.revision++;draft.error=null;draft.readRequired=false;parameterError=null;state.error='';
         if(defer){cancelParameterTimer();parameterTimer=setTimeout(()=>{parameterTimer=null;void queueParams();},PARAMETER_SAVE_DELAY);return queue;}
       }
       return defer?queue:queueParams();
@@ -159,8 +159,8 @@ export function createCumulativeController({repository,service,runner,captureSou
     },
     start(){if(active(state.task))return false;return action(async valid=>{await controller.saveParams();if(!valid())return false;state.draft=null;if(state.origin==='auto')return runner.start();const id=await service.start('manual',copy(state.params));if(valid()&&acceptTask(id))taskChanged(service.inspect(id));return true;});},
     regenerate(versionId){if(active(state.task))return false;return action(async valid=>{await queueParams();if(!valid()||state.unconfirmed)return false;state.draft=null;const id=await service.start('regeneration',{versionId});if(valid()&&acceptTask(id))taskChanged(service.inspect(id));return true;});},
-    preview(){return action(async valid=>{if(active(state.task)&&state.task.snapshot?.settings){const snapshot=state.task.snapshot;state.preview={...buildCumulativeRequest({source:snapshot.source,previousSummary:snapshot.baseSnapshot?.body??null,settings:snapshot.settings.generation}),snapshot};state.previewOpen=true;return true;}await controller.saveParams();if(!valid())return false;let options=copy(state.params);if(state.origin==='auto'){const plan=automaticCumulativePlan(state.cumulative,captureSource(state.target));if(plan.status!=='ready')throw new Error('尚无可总结的完整批次');options={...options,...plan};}const preview=await service.preview(state.origin,options);if(valid()){state.preview=preview;state.previewOpen=true;}return true;});},
-    togglePreview(){state.previewOpen=!state.previewOpen;notify();},previewView(value){if(['source','prompt'].includes(value)){state.previewView=value;notify();}},
+    preview(){return action(async valid=>{if(active(state.task)&&state.task.snapshot?.settings){const snapshot=state.task.snapshot;state.preview={...buildCumulativeRequest({source:snapshot.source,previousSummary:snapshot.baseSnapshot?.body??null,settings:snapshot.settings.generation}),snapshot};state.previewOpen=true;return true;}await controller.saveParams();if(!valid())return false;let options=copy(state.params);if(state.origin==='auto'){const plan=automaticCumulativePlan(state.cumulative,captureSource(state.target));if(plan.status!=='ready')throw new Error('尚无可总结的完整批次');options={...options,...plan};}await generationPreview.prepare(()=>service.preview(state.origin,options),valid);return true;});},
+    togglePreview(){generationPreview.toggle();notify();},previewView(value){if(['source','prompt'].includes(value)){generationPreview.view(value);notify();}},
     changeDraft(mutator){if(!state.busy&&state.draft&&state.task?.outcome!=='unconfirmed')mutator(state.draft);},
     confirm(){return action(async valid=>{const result=await service.confirm(state.taskId,copy(state.draft));if(!valid())return false;if(result.status==='invalid')state.error=result.error;else if(result.status==='succeeded'){runner.afterReview();await refresh();}else if(result.status==='narrative-failed')state.error=service.inspect(state.taskId).errorMessage;else state.error=result.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':'未能采用本批结果';return result.status==='succeeded';});},
     retryNarrative(){return action(async valid=>{const id=state.taskId,result=await service.retryNarrative(id);if(!valid())return false;if(!result)throw new Error('当前批次不能重试');taskChanged(service.inspect(id));if(result.status==='succeeded')runner.afterNarrative();return result.status==='succeeded';});},

@@ -1,3 +1,4 @@
+import {summaryPreviewSource,summaryPreviewPrompt,summaryPreviewStage,summaryPreviewTabs,summaryPreviewPanel} from './shared-ui/summary-preview.js';
 import { surfaceTheme } from './styles/theme.js';
 import { splitWords } from '../domain/memory/model.js';
 import { eventEditorSections } from './event-editor-sections.js';
@@ -17,12 +18,12 @@ const previewDetails=new WeakMap();
 const progressText=summary=>summary?.progress?.lastProcessedFloor==null?'尚未总结':`第${summary.progress.lastProcessedFloor}楼`;
 function preview(state) {
   const value=state.preview;if(!state.previewOpen||!value)return '';
-  const tabs=`<nav class="lt-summary-switches ui-preview-tabs" aria-label="预览视图">${['source','prompt'].map(view=>`<button type="button" class="ui-button ui-button--tertiary ui-segment" data-summary-preview-view="${view}" aria-pressed="${state.previewView===view}">${view==='source'?'上下文预览':'提示词预览'}</button>`).join('')}</nav>`;
-  const content=state.previewView==='source'?value.source.sentFloors.map(item=>`<details class="lt-summary-source"><summary><span>第 ${item.floor} 楼 · ${item.role==='user'?'用户':'AI'}</span></summary><p>${esc(item.text)}</p></details>`).join(''):value.stages.map(stage=>{
-    const parts=stage.pending?'<p class="lt-meta">尚待生成</p>':stage.previewParts.map(part=>`<details class="lt-summary-prompt"><summary><span class="lt-summary-prompt-label"><span>${esc(part.name)}</span><small class="lt-meta">${part.role.toUpperCase()}</small></span></summary><pre>${esc(part.content)}</pre></details>`).join('');
-    return value.stages.length===1?parts:`<details class="lt-summary-stage"><summary><span>${stage.title}</span></summary>${parts}</details>`;
+  const tabs=summaryPreviewTabs([['source','上下文预览'],['prompt','提示词预览']],state.previewView,id=>`data-summary-preview-view="${id}"`);
+  const content=state.previewView==='source'?value.source.sentFloors.map(item=>summaryPreviewSource(`第 ${item.floor} 楼 · ${item.role==='user'?'用户':'AI'}`,item.text)).join(''):value.stages.map(stage=>{
+    const parts=stage.pending?'<p class="lt-meta">尚待生成</p>':stage.previewParts.map(part=>summaryPreviewPrompt(part)).join('');
+    return value.stages.length===1?parts:summaryPreviewStage(stage.title,parts);
   }).join('');
-  return `<section class="lt-summary-preview ui-preview-panel">${tabs}${content}</section>`;
+  return summaryPreviewPanel(tabs,content);
 }
 function history(state) {
   return `<details class="lt-summary-history ui-disclosure" ${state.historyOpen?'open':''}><summary>总结记录与重新生成</summary>${(state.summary?.batches??[]).map(batch=>`<div class="lt-summary-history-row ui-disclosure-body"><span>${batch.actualRange.start}—${batch.actualRange.end} 楼</span>${batch.eventIds?.length&&!batch.eventIds.some(id=>state.formalIds?.includes(id))?'<span class="lt-meta">记忆已删除</span>':''}<button type="button" class="ui-button ui-button--tertiary" data-summary-regenerate="${esc(batch.id)}">重新生成</button></div>`).join('')||'<p class="lt-meta ui-disclosure-body">暂无总结记录</p>'}</details>`;

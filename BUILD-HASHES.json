@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "6909344579003CEF1B76F69A732F181A401EB3804DE02645C316C971F1B42682"
+    "sha256": "51A18039C595AC1AFDB34D315E572152D2C2C4AACF8E06B8857C2E55ED208BA2"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -41,7 +41,7 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "321A6F018A8A62D8F333F93758863F2F6641479E1CBAD7D1675318768A186FA0"
+    "sha256": "86DA54C81B77A2A6F1E57D0AEEE88D137F64DD0A9051C62EFBD5931991DCD58E"
   },
   {
     "path": "dist/app/book-themes/assets/PinyonScript-OFL.txt",
@@ -77,7 +77,7 @@
   },
   {
     "path": "dist/app/cumulative-controller.js",
-    "sha256": "457B5A94999BE6EDDC2B0AC872E7216C5D923581393FC7E9E65187CFEF4B1DB4"
+    "sha256": "0543F3EAA48E10F60149E9A3D4CAEB69689CD8B2E2C673B3C62DD6CFB1118BB2"
   },
   {
     "path": "dist/app/cumulative-root-view.js",
@@ -93,11 +93,15 @@
   },
   {
     "path": "dist/app/cumulative-view.js",
-    "sha256": "46D5D07E1D03A535F049CC75F0D4C7B4A56959DD61FC9F172BD4AC856E5275C4"
+    "sha256": "DD4E2E52D9A9AF4833371A9EC8A9EF4F46D685D8ABD018A9F57B792A7B650517"
   },
   {
     "path": "dist/app/event-editor-sections.js",
     "sha256": "DE0F0ABA5BC6C7CA93FA1A4B4F4AECA0FF612605A45753FB3AF7D2973614AEED"
+  },
+  {
+    "path": "dist/app/generation-preview.js",
+    "sha256": "D5AD212FBDF34AB763DD272A8FA6B1022A335ACE76D7F7B74CCFA3ABC49B2410"
   },
   {
     "path": "dist/app/icons/add.svg",
@@ -246,6 +250,10 @@
   {
     "path": "dist/app/shared-ui/manifest.json",
     "sha256": "1CD16F70700570C0CD0BB9B76040EF1B5A8C90043E9FF7B6F9636C2A7DD54BE7"
+  },
+  {
+    "path": "dist/app/shared-ui/summary-preview.js",
+    "sha256": "6F8574AFFDA824A8F06C6E65AF1A8B8D09C23F933435BA4E25F817B3BAEE7B5F"
   },
   {
     "path": "dist/app/snow-ermine/appearance-tokens.css",
@@ -441,7 +449,7 @@
   },
   {
     "path": "dist/app/summary-controller.js",
-    "sha256": "499C8B30BC58FF7C50907C2CF76B1CCA301BA4F54F4B2A0D73C1507CDBE230EB"
+    "sha256": "B6920AFAF84779EEB6AE28AE316F2177EAEBC7CF4C2BE03167463EE4F753C275"
   },
   {
     "path": "dist/app/summary-settings-controller.js",
@@ -461,7 +469,7 @@
   },
   {
     "path": "dist/app/summary-view.js",
-    "sha256": "C64DEFCBD52F2A9923E615B2FE3BE79A441EA87FB40726E4C47CC86AE6016272"
+    "sha256": "97120DD364C9C7A55C34C62F6659E35FD8E1F4710178C2F9FC10EA6F33F6B0B5"
   },
   {
     "path": "dist/app/tag-palette.css",
@@ -489,7 +497,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "CE63EFFE07974529BDF658D90283E4DA60DBC00E54799CC9D91870352D896D89"
+    "sha256": "FF0E3A350AA048A8256AC15589674470BAE376AEA9273FC71FABD03BC181A9BA"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -609,15 +617,15 @@
   },
   {
     "path": "dist/domain/narrative/prompts.js",
-    "sha256": "6433282325AB1944B88E657F47514885DF3BFA7AB30C33C8406A5CC5CD30C303"
+    "sha256": "B8A1F0428F654929817F022E5570CFAF15492E5C75C5D07EA7DC98E22DCD0F21"
   },
   {
     "path": "dist/domain/narrative/requests.js",
-    "sha256": "0D0A157434D0477F9E89DF74C673D79956EA165C5387A9B7E4D47B83D93925FD"
+    "sha256": "C8872505BBDDCC8028102C84A0D0A86ADCBFB53DC360EEF27FBD86876AE4A176"
   },
   {
     "path": "dist/domain/narrative/source.js",
-    "sha256": "EB6222512ABA9284904B2676DC02045CE2C67E1C7E4468495C5454CCBC1A1981"
+    "sha256": "184970B680863F134805B7102D6CEF9AA848C8E2194856BAC1FFF34142DD828D"
   },
   {
     "path": "dist/domain/recall/alias-parent.js",
@@ -937,7 +945,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "8E79C8EC943804BC2E585529CD04F5E254415158FD69E73765FC657A4CBB7CAE"
+    "sha256": "95522521CB40AB973C767D816D980D54BC5A3B614EAD2C1E389BCBBB8D63D9B2"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -945,11 +953,11 @@
   },
   {
     "path": "dist/platform/sillytavern/narrative-preparation.js",
-    "sha256": "731336FACE07B557AC6865CAB8D76B9D8734AFC206CBE3FFCE1379487D98ED40"
+    "sha256": "77422B8186A30D3EF8387EC8E984DCB3A8976C8BBAA4AF2F564FFF119CC96DE9"
   },
   {
     "path": "dist/platform/sillytavern/narrative-runtime.js",
-    "sha256": "AAFD28029D8892FBED7994E379FA64402359E9FDBA2D9C2FB6C81CB0B098072A"
+    "sha256": "A69B399DC00B5013C66CB942C83BDCB028E2C65601574A590FF878A7C9C5EECB"
   },
   {
     "path": "dist/platform/sillytavern/pending-settings-saves.js",
@@ -1093,10 +1101,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "2E642D020431C20B4D4F85DC5A96C3FC44672BB54B81AD8D19F8630B86D4BAC0"
+    "sha256": "CFFDD7C40DCAA34A2955FA0E394958FAE3AFC1A77EF1C9DD19A4D60CDAA1D994"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "64F77D6D4977FAC7DE87F725498FBEE40DC9F80E385ABDAD1132AE7EE6A1942A"
+    "sha256": "407A7666F67A99EE48A5D1D48CF1251B5EE455C0F4E1BD79C44C5DB179FCF865"
   }
 ]

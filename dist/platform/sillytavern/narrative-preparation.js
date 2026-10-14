@@ -29,16 +29,25 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,restart
   // Capture all data before the first tokenizer await, including retry inputs.
   const captured=structuredClone({domain,root,raw,range,kinds,restart,index,summary,summarySource,jointBudget,sentFloors,regenerateLatest,card,rules});
   ({domain,root,raw,range,kinds,card,rules,sentFloors}=captured);
+  // Exact-text memoization is local to this preparation only. A host tokenizer
+  // need not be additive; every distinct budget decision is still counted.
+  const counts=new Map(),hostCount=countTokens;
+  const count=typeof hostCount==='function'?async text=>{
+    guard();if(counts.has(text))return counts.get(text);
+    const value=await hostCount(text);guard();
+    if(Number.isFinite(value)&&value>=0)counts.set(text,value);
+    return value;
+  }:null;
   const projected=projectNarrativeBatchBase(domain,raw,{kinds,restart,index,regenerateLatest});
   const events=projectNarrativeMemory(root,raw),tasks=[];
   for(const kind of kinds){
     const originalOnly=(summarySource??projected.preferences[kind].autoSource)==='cumulative';
     const taskRange=summary?{...range,startFloor:Math.max(range.startFloor,narrativeHighWater(domain,kind)+1)}:range;
-    tasks.push(await prepareNarrativeUpdate(projected,raw,{kind,...taskRange,events,card,originalOnly,...(jointBudget!==undefined?{jointBudget}:{}),...(originalOnly&&sentFloors?{sentFloors}:{}),rules,countTokens,isCurrent:()=>{guard();return true;}}));
+    tasks.push(await prepareNarrativeUpdate(projected,raw,{kind,...taskRange,events,card,originalOnly,...(jointBudget!==undefined?{jointBudget}:{}),...(originalOnly&&sentFloors?{sentFloors}:{}),rules,countTokens:count,deferAccounting:jointBudget!==undefined,isCurrent:()=>{guard();return true;}}));
   }
   guard();
   if(jointBudget!==undefined){
-    const combined=await prepareCombinedNarrativeRequest(tasks,{jointBudget,countTokens,isCurrent:()=>{guard();return true;}});
+    const combined=await prepareCombinedNarrativeRequest(tasks,{jointBudget,countTokens:count,isCurrent:()=>{guard();return true;}});
     guard();
     // This exact envelope includes final joint pruning and shared-material dedup.
     return {projected,tasks:combined.tickets,request:combined.request,usage:combined.usage};
@@ -47,7 +56,7 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,restart
   let inputTokens;const estimated=tasks.some(task=>task.usage.estimated)||typeof countTokens!=='function';
   if(!estimated){
     try{
-      inputTokens=await countTokens(encoded);guard();
+      inputTokens=await count(encoded);guard();
       if(!Number.isFinite(inputTokens)||inputTokens<0)throw new TypeError('宿主 token 计数不可用');
       inputTokens=Math.ceil(inputTokens);
     }catch(error){

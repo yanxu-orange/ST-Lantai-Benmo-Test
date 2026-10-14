@@ -58,7 +58,7 @@ function memoryPayload(row, originalRanges) {
   }
   return {...clone(row), overlapsOriginal: mergeRanges(overlaps)};
 }
-export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endFloor, events = [], card = null, countTokens = null, rules, originalOnly = false, sentFloors: suppliedFloors, jointBudget, isCurrent = () => true} = {}) {
+export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endFloor, events = [], card = null, countTokens = null, rules, originalOnly = false, sentFloors: suppliedFloors, jointBudget, deferAccounting = false, isCurrent = () => true} = {}) {
   assertKind(kind);
   if (jointBudget !== undefined && !integer(jointBudget, 1)) throw new Error('联合材料预算无效');
   const deferredBudget = jointBudget !== undefined;
@@ -177,6 +177,9 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     const outputReserve = Math.max(1024, existingOutputTokens + incrementalOutputTokens + 256);
     return {...draft, memorySnapshot: selected.map(item => item.row), usage: {budget: jointBudget ?? preferences.budget, tokens, estimated: !useHost, trimmed: omittedMemoryCount > 0, originalRanges, memoryRanges: mergeRanges(selected.flatMap(item => item.row.sources)), omittedMemoryCount, unavailableMemoryCount, requiredTokens, promptTokens, outputReserve, tokenMethod: useHost ? 'host' : 'estimate'}};
   };
+  // Joint selection retains all eligible memories; its final envelope owns the
+  // actual count/pruning pass. Avoid host counts that it immediately replaces.
+  if (deferredBudget && deferAccounting) return freeze(await select(false));
   if (typeof countTokens === 'function') {
     try { return freeze(await select(true)); } catch (error) { if (error.code?.startsWith('NARRATIVE_')) throw error; }
   }

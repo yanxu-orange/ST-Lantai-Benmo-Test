@@ -56,6 +56,17 @@ import { DEFAULT_THEME, applyTheme, resolveStyleAssets } from '../../app/styles/
 import { createAppearanceAdapter } from './appearance-adapter.js';
 import { createAppearanceSession } from '../../app/appearance-session.js';
 
+// A shared manager includes independently gated feature owners. Ask the
+// existing services whether they own a task; absence of cumulative data is not
+// evidence that it belongs to event memory.
+export function cancelDisabledManagedTasks(runtime,policy){
+  for(const task of runtime.manager.list()){
+    if(!['starting','running','committing'].includes(task.status))continue;
+    if(!policy.event&&(runtime.summaryService?.inspect(task.taskId)||runtime.service?.inspect(task.taskId)))runtime.manager.cancel(task.taskId);
+    if(!policy.cumulative&&runtime.cumulativeService?.inspect(task.taskId))runtime.manager.cancel(task.taskId);
+  }
+}
+
 // Only this platform module touches the host document. Shadow DOM prevents
 // host skins from changing the approved UI and prevents our UI CSS leakage.
 export function createMemoryHost({ document: doc = globalThis.document, getContext = getSillyTavernContext, fetch: request = globalThis.fetch,
@@ -285,7 +296,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         trackingRuntime=createTrackingRuntime({repository,adapter,settings:runtime.settings,getContext,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t),onChange:()=>{void latestRuntime.refresh().catch(()=>{});}});
         scheduleRuntime=createScheduleRuntime({repository,settings:runtime.settings,dateRuntime:timeRuntime,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t)});
         latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,autoInitialize:false});
-        narrativeRuntime=createNarrativeRuntime({repository,adapter,getSummaryActive:()=>runtime.summaryService.isBusy()||runtime.cumulativeService?.isBusy(),settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
+        narrativeRuntime=createNarrativeRuntime({repository,adapter,manager:runtime.manager,getSummaryActive:()=>runtime.summaryService.isBusy()||runtime.cumulativeService?.isBusy(),settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
         const summaryNarrativeActions={event:createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.summaryService,runner:runtime.summaryController.runner}),cumulative:createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.cumulativeService,runner:runtime.cumulativeRunner})};
         const narrativeActions=Object.fromEntries(['retry','resume','skip','pause'].map(action=>[action,()=>summaryNarrativeActions[narrativeRuntime.snapshot().run?.summarySource==='cumulative'?'cumulative':'event'][action]()]));
         benmoController=createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime:{...narrativeRuntime,...narrativeActions},repository,adapter,getContext,getControls:()=>controls});
@@ -331,8 +342,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   function syncControls(){
     const next=availability(),before=previousPolicy;previousPolicy=next;
-    if(!next.event){runtime.summaryController?.stop();recallRuntime?.clear();for(const task of runtime.manager.list().filter(task=>['starting','running','committing'].includes(task.status))){if(!Object.hasOwn(task.snapshot,'versionId'))runtime.manager.cancel(task.taskId);}}
-    if(!next.cumulative){runtime.cumulativeRunner?.stop();for(const task of runtime.manager.list().filter(task=>['starting','running','committing'].includes(task.status)))if(Object.hasOwn(task.snapshot,'versionId'))runtime.manager.cancel(task.taskId);}
+    if(!next.event){runtime.summaryController?.stop();recallRuntime?.clear();}
+    if(!next.cumulative)runtime.cumulativeRunner?.stop();
+    cancelDisabledManagedTasks(runtime,next);
     if(before&&!before.event&&next.event)runtime.summaryService?.resumeAutoConfirm();
     if(before&&!before.cumulative&&next.cumulative)runtime.cumulativeService?.resumeAutoConfirm();
     cumulativeRuntime?.setEnabled(next.cumulative);latestRuntime?.setEnabled(next.enabled);

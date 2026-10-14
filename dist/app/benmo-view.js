@@ -1,3 +1,5 @@
+import {summaryPreviewSource,summaryPreviewPrompt,summaryPreviewStage,summaryPreviewTabs,summaryPreviewPanel} from './shared-ui/summary-preview.js';
+import {changeGenerationDraft,createGenerationPreview} from './generation-preview.js';
 import {replaceSurfaceMarkup} from './stable-surface.js';
 import {mainNavigation,rootTitle} from './navigation.js';
 import {surfaceTheme} from './styles/theme.js';
@@ -25,7 +27,8 @@ export async function mountBenmoView({container: app, controller, availability =
   let disposed = false, suspended = false, acting = false, composing = false;
   let error = '', dialog = null, draft = null, baseline = null, original = null, narrativeRecovery = null, narrativeDraftTarget = null, invalidated = false, renderedPolicy = '';
   let narrativeRange = null, narrativePlanning = false, narrativeKinds = null;
-  let requestPreview = null, previewOpen = false, previewTab = 'memory', previewSequence = 0, previewLoading = false;
+  const previewState={preview:null,previewOpen:false,previewView:'memory',previewBusy:false};
+  const generationPreview=createGenerationPreview(previewState);
   let returnRoute = 'list', epoch = 0, toastTimer, redirectTimer;
   let backfillJob = null, summaryVisibilityDisposer = null, observingSummaryVisibility = false;
   const generating = new Map(), narrativeJobs = new Map();
@@ -272,12 +275,12 @@ export async function mountBenmoView({container: app, controller, availability =
     if (run.status === 'paused') return button('继续生成', 'continue-narrative', '', 'secondary');
     return '';
   }
-  function narrativeReport() {
+  function narrativeReport({ranges = true} = {}) {
     const info = narrativeStatus(), progress = narrativeData().progress?.[state.tab], report = info.materialReport ?? progress?.materialsReport;
     const run = narrativeRun(), active = ['running','paused','failed','awaiting-review'].includes(run.status) && run.kinds?.includes(state.tab), joint = active ? (run.kinds.length > 1 ? run.usage : null) : report?.joint;
     const single = active && run.kinds.length === 1 ? run.usage : null;
     const jointMarkup = joint ? `<p class="meta">联合用量：输入 ${esc(joint.inputTokens)} ＋ 输出预留 ${esc(joint.outputReserve)} ＝ 总计 ${esc(joint.totalTokens)} / 上限 ${esc(joint.budget)} token${joint.estimated ? '（估算）' : ''}</p>` : single ? `<p class="meta">请求输入：${single.estimated ? '约 ' : ''}${esc(single.inputTokens)} token · 输出预留：${esc(single.outputReserve)} token</p>` : '';
-    if (!report) return jointMarkup;
+    if (!report || !ranges) return jointMarkup;
     return `<details class="section benmo-material-report"><summary>本次读取范围</summary>${jointMarkup}<p class="meta">原文：${esc(rangesText(report.originalRanges))}</p><p class="meta">记忆：${esc(rangesText(report.memoryRanges))}</p><p class="meta">材料用量：${report.estimated ? '估算约 ' : ''}${esc(report.tokens)} / ${esc(report.budget)} token</p>${report.trimmed ? `<p class="meta">已略过 ${esc(report.omittedMemoryCount ?? 0)} 条较早记忆。</p>` : ''}${report.unavailableMemoryCount > 0 ? `<p class="meta">已跳过 ${esc(report.unavailableMemoryCount)} 条来源范围无法确认的记忆。</p>` : ''}</details>`;
   }
   function narrativeView() {
@@ -287,7 +290,7 @@ export async function mountBenmoView({container: app, controller, availability =
     const entryMarkup = entry => `<article class="record benmo-narrative-entry"><div class="row"><span class="meta">${esc(rangesText(entry.sources))}</span>${button('编辑', 'edit-narrative', `data-id="${esc(entry.id)}"`)}</div><p class="reading">${esc(entry.text)}</p></article>`;
     return `<div class="row"><span class="meta">${Number.isSafeInteger(floor) ? `已处理至第 ${floor} 楼` : hasEntries ? '当前聊天' : '尚未生成'}</span><div class="actions">${textEntry('设置', 'settings-narrative')}${button('生成', 'generate-narrative', '', 'secondary')}</div></div>${narrativeRunStatus() ? `<p class="meta" role="status">${esc(narrativeRunStatus())}</p><div class="actions">${narrativeRunActions()}</div>` : ''}${info.error && info.error !== (error || value.error) ? `<p class="lt-error" role="alert">${esc(info.error)}</p>` : ''}<div class="section">${kind === 'self' ? result.filter(character => character.entries?.length).map(character => { const selected = preferences.characters?.find(row => row.id === character.id); return `<section class="section benmo-narrative-group"><div class="row"><h2>${esc(character.name)}</h2><span class="meta">${selected ? selected.inject ? '每轮注入' : '未选择注入' : '保留的历史自述'}</span></div>${character.entries.map(entryMarkup).join('')}</section>`; }).join('') : result.map(entryMarkup).join('')}${hasEntries ? '' : `<p class="meta">暂无${TABS[kind]}</p>`}</div>${narrativeReport()}`;
   }
-  function clearNarrativePreview() { requestPreview = null; previewOpen = false; previewLoading = false; previewSequence++; }
+  function clearNarrativePreview() { generationPreview.invalidate({close:true}); }
   const activeNarrativeKinds = () => ['running','paused','failed','awaiting-review'].includes(narrativeRun().status) ? narrativeRun().kinds ?? narrativeKinds ?? [state.tab] : narrativeKinds ?? [state.tab];
   function narrativeHistory() {
     const kinds = activeNarrativeKinds(), data = narrativeData(), latest = data.latestGeneration ?? {};
@@ -302,24 +305,27 @@ export async function mountBenmoView({container: app, controller, availability =
     const jointLatest = kinds.length === 1 || (latest.self?.pairId && latest.self.pairId === latest.outline?.pairId && same(latest.self.range,latest.outline.range));
     return `<details class="lt-summary-history ui-disclosure"><summary>总结记录与重新生成</summary>${records.map(row => `<div class="lt-summary-history-row ui-disclosure-body"><span>${kinds.length > 1 ? `${TABS[row.kind]} · ` : ''}${row.legacy ? '旧数据最近处理范围 · ' : ''}${esc(row.startFloor ?? row.range?.start)}—${esc(row.endFloor ?? row.range?.end)} 楼${row.legacy && narrativeStatus(row.kind).sourceStale ? ' · 来源已变化' : ''}${row.legacy ? ' · 无可用重做基版' : ''}</span>${!row.legacy && validLatest && jointLatest && row.id === latest[row.kind]?.recordId && row.kind === kinds[0] ? button('重新生成', 'regenerate-narrative', `data-id="${esc(row.id)}" ${narrativeBusy() || ['paused','failed','awaiting-review'].includes(narrativeRun().status) ? 'disabled' : ''}`) : ''}</div>`).join('') || '<p class="lt-meta ui-disclosure-body">暂无总结记录</p>'}</details>`;
   }
-  const previewText = value => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
   function narrativePreviewPanel() {
-    if (!previewOpen) return '';
-    if (previewLoading) return '<section class="lt-summary-preview ui-preview-panel"><p role="status">正在读取发送内容…</p></section>';
-    if (!requestPreview) return '';
-    const tasks = requestPreview.tasks ?? [], kinds = requestPreview.kinds ?? activeNarrativeKinds();
-    const jointBudget = kinds.length > 1 || tasks.some(task => task.usage?.joint);
-    const tabs = [['memory','记忆总结'],['original','历史正文'],['materials',kinds.includes('self') ? '角色信息' : '现有大纲'],['prompt','提示词']];
-    const detail = (label,text) => `<details class="lt-summary-source"><summary><span>${esc(label)}</span></summary><pre>${esc(previewText(text))}</pre></details>`;
-    const materialRows = task => {
-      const materials = task.materials ?? {};
-      if (previewTab === 'memory') return (materials.memory ?? []).map((row,index) => detail(row.title ?? `记忆 ${index+1}`,row)).join('') || '<p class="lt-meta">本项未发送记忆总结</p>';
-      if (previewTab === 'original') return (materials.original ?? []).map(row => detail(`第 ${row.floor} 楼 · ${row.speaker ?? ''}`,row.text)).join('') || '<p class="lt-meta">本项未发送历史正文</p>';
-      return detail('角色卡与补充背景',materials.background ?? {}) + (task.kind === 'self' ? (materials.previous ?? []).map(row => detail(`${row.name} · 历史自述`,row.entries)).join('') : detail('现有大纲',materials.previous ?? []));
+    if (!previewState.previewOpen) return '';
+    const requestPreview=previewState.preview;if (!requestPreview) return '';
+    const tasks=requestPreview.tasks??[], kinds=requestPreview.kinds??activeNarrativeKinds();
+    const jointBudget=kinds.length>1||tasks.some(task=>task.usage?.joint);
+    const tabs=summaryPreviewTabs([['memory','记忆总结'],['original','历史正文'],['materials',kinds.includes('self')?'角色信息':'现有大纲'],['prompt','提示词']],previewState.previewView,id=>`data-action="narrative-preview-tab" data-id="${id}"`);
+    const materialRows=task=>{
+      const materials=task.materials??{};
+      if(previewState.previewView==='memory')return (materials.memory??[]).map((row,index)=>summaryPreviewSource(row.title??`记忆 ${index+1}`,row.body??row.text??'')).join('')||'<p class="lt-meta">本项未发送记忆总结</p>';
+      if(previewState.previewView==='original')return (materials.original??[]).map(row=>summaryPreviewSource(`第 ${row.floor} 楼 · ${row.speaker??''}`,row.text)).join('')||'<p class="lt-meta">本项未发送历史正文</p>';
+      const background=materials.background??{},card=background.initialCharacter;
+      const fields=card?[['description','角色描述'],['personality','性格'],['scenario','初始情境']].filter(([key])=>card[key]).map(([key,label])=>summaryPreviewSource(`${card.name?`${card.name} · `:''}${label}`,card[key])).join(''):'';
+      const supplement=background.supplement?summaryPreviewSource('补充背景',background.supplement):'';
+      const previous=task.kind==='self'?(materials.previous??[]).map(row=>summaryPreviewSource(`${row.name} · 历史自述`,(row.entries??[]).join('\n\n'))).join(''):summaryPreviewSource('现有大纲',(materials.previous??[]).join('\n\n'));
+      return fields+supplement+previous;
     };
-    const content = previewTab === 'prompt' ? (requestPreview.request?.previewParts ?? requestPreview.request?.messages ?? []).map((part,index) => detail(`${part.name ?? `消息 ${index+1}`} · ${part.role ?? ''}`,part.content)).join('') : tasks.map(task => kinds.length > 1 ? `<section class="ui-section"><h3>${TABS[task.kind] ?? ''}</h3>${materialRows(task)}</section>` : materialRows(task)).join('');
-    const usage = requestPreview.usage;
-    return `<section class="lt-summary-preview ui-preview-panel"><nav class="lt-summary-switches ui-preview-tabs" aria-label="预览视图">${tabs.map(([id,label]) => button(label,'narrative-preview-tab',`data-id="${id}" aria-pressed="${previewTab === id}"`).replace('ui-button--tertiary','ui-button--tertiary ui-segment')).join('')}</nav>${content}${usage ? `<p class="lt-meta">${usage.estimated ? '估算' : '实际计数'}：输入 ${esc(usage.inputTokens)} token · 输出预留 ${esc(usage.outputReserve)} token${jointBudget ? ` · 总计 ${esc(usage.totalTokens)} / 联合预算 ${esc(usage.budget)} token` : ` · 材料预算 ${esc(usage.budget)} token`}</p>` : ''}</section>`;
+    // Prompt disclosure is exact outgoing text. Reading tabs use the prepared,
+    // pruned material fields rather than rendering their JSON serialization.
+    const body=previewState.previewView==='prompt'?(requestPreview.request?.previewParts??requestPreview.request?.messages??[]).map((part,index)=>summaryPreviewPrompt({...part,name:part.name??`消息 ${index+1}`})).join(''):tasks.map(task=>kinds.length>1?summaryPreviewStage(TABS[task.kind],materialRows(task)):materialRows(task)).join('');
+    const usage=requestPreview.usage;
+    return summaryPreviewPanel(tabs,body+(usage?`<p class="lt-meta">${usage.estimated?'预计输入约':'输入 '}${esc(usage.inputTokens)} token · 输出预留 ${esc(usage.outputReserve)} token${jointBudget?` · 总计 ${esc(usage.totalTokens)} / 联合预算 ${esc(usage.budget)} token`:` · 材料预算 ${esc(usage.budget)} token`}</p>`:''));
   }
   function narrativeReview() {
     const review = narrativeRun().review;
@@ -335,22 +341,57 @@ export async function mountBenmoView({container: app, controller, availability =
     return button('开始生成', 'start-narrative', narrativePlanning || !narrativeRange || blocked() ? 'disabled' : '', 'primary');
   }
   function narrativeConnection(locked = false) {
-    const kinds = activeNarrativeKinds(), live = ['running','paused','failed'].includes(narrativeRun().status) ? value.narrative?.requestPreview : null, usage = requestPreview?.usage ?? (locked ? live?.usage : null);
+    const kinds = activeNarrativeKinds(), live = ['running','paused','failed'].includes(narrativeRun().status) ? value.narrative?.requestPreview : null;
     const progress = kinds.map(kind => { const floor = narrativeData().progress?.[kind]?.lastProcessedFloor; return `${kinds.length > 1 ? `${TABS[kind]}：` : ''}${Number.isSafeInteger(floor) ? `第${floor}楼` : '尚未总结'}`; }).join('；');
-    return `<div class="lt-summary-connection" data-preview-open="${previewOpen}"><div class="lt-summary-access ui-status-grid"><div class="ui-status-cell" data-selected="${previewOpen}"><span>发送内容</span><span class="lt-meta">${usage ? `预计输入：${usage.estimated ? '约 ' : ''}${esc(usage.inputTokens)} token` : '预计输入：待预览'}</span>${button(previewOpen ? '收起' : '预览','preview-narrative',locked && !live ? 'disabled' : '')}</div><div class="ui-status-cell"><span>总结进度</span><span class="ui-progress-text">${esc(progress)}</span></div><div class="ui-status-cell"><span>设置</span>${button('打开','settings-narrative',locked ? 'disabled' : '')}</div></div>${narrativePreviewPanel()}</div>`;
+    return `<div class="lt-summary-connection" data-preview-open="${previewState.previewOpen}"><div class="lt-summary-access ui-status-grid"><div class="ui-status-cell" data-selected="${previewState.previewOpen}"><span>发送内容</span>${button(previewState.previewOpen ? '收起' : '预览','preview-narrative',`${locked && !live || previewState.previewBusy ? 'disabled' : ''} ${previewState.previewBusy ? 'aria-busy="true"' : ''}`)}</div><div class="ui-status-cell"><span>总结进度</span><span class="ui-progress-text">${esc(progress)}</span></div><div class="ui-status-cell"><span>设置</span>${button('打开','settings-narrative',locked ? 'disabled' : '')}</div></div>${narrativePreviewPanel()}</div>`;
   }
   function narrativeGeneration() {
     const run = narrativeRun(), kinds = activeNarrativeKinds(), locked = narrativeBusy() || ['paused','failed','awaiting-review'].includes(run.status);
     if (run.status === 'awaiting-review') return narrativeReview();
-    if (['running','paused','failed'].includes(run.status)) return `<section class="ui-section"><h2>${kinds.map(kind => TABS[kind]).join('与')}</h2><p class="meta" role="status">${esc(narrativeRunStatus())}</p>${run.error ? `<p class="lt-error" role="alert">${esc(run.error)}</p>` : ''}${narrativeReport()}</section>${narrativeHistory()}${narrativeConnection(true)}`;
+    if (['running','paused','failed'].includes(run.status)) return `<section class="ui-section"><h2>${kinds.map(kind => TABS[kind]).join('与')}</h2><p class="meta" role="status">${esc(narrativeRunStatus())}</p>${run.error ? `<p class="lt-error" role="alert">${esc(run.error)}</p>` : ''}${narrativeReport({ranges:false})}</section>${narrativeHistory()}${narrativeConnection(true)}`;
     if (narrativePlanning && !narrativeRange) return '<p class="meta" role="status">正在读取生成范围…</p>';
     if (!narrativeRange) return button('重新读取范围', 'generate-narrative');
     const other = state.tab === 'self' ? 'outline' : 'self';
     const choice = (name,attribute,label,checked,disabled=false) => `<label class="ui-choice ui-choice--control-only ui-hit-owner"><input class="ui-input" type="checkbox" name="${name}" ${attribute} ${checked ? 'checked' : ''} ${blocked() || acting || locked || disabled ? 'disabled' : ''}><span>${label}</span><span class="ui-hit-area" aria-hidden="true"></span></label>`;
-    const number = (key,label,min=0) => `<label class="ui-field"><span>${label}</span><input class="ui-input" type="number" min="${min}" step="1" inputmode="numeric" name="${key}" value="${esc(narrativeRange[key])}" ${locked ? 'disabled' : ''}></label>`;
+    const number = (key,label,min=0) => `<label class="ui-field"><span>${label}</span><input class="ui-input" type="number" min="${min}" step="1" inputmode="numeric" name="${key}" value="${esc(narrativeRange[key])}" ${locked || blocked() ? 'disabled' : ''}></label>`;
 
-    return `<form id="benmo-narrative-generate-form" class="lt-summary-main"><section class="lt-summary-section ui-section"><h2>楼层范围</h2><div class="lt-summary-range ui-field-grid">${number('startFloor','开始楼')}${number('endFloor','结束楼')}</div></section><section class="lt-summary-section ui-section"><h2>生成选项</h2><div class="lt-summary-choices ui-choice-group" data-ui-interaction-profile="compact-group-candidate">${choice('narrativeTogether','data-narrative-together',`同时生成${TABS[other]}`,kinds.length > 1,!policy()[other])}${choice('narrativeReview','data-narrative-review','入库前检查',narrativeRange.reviewBeforeCommit)}${choice('narrativeBatching','data-narrative-batching','批量生成',narrativeRange.batching)}</div>${!policy()[other] ? `<p class="meta">${TABS[other]}已关闭，暂不可同时生成。</p>` : ''}${narrativeRange.batching ? number('batchSize','每隔多少楼总结',1) : ''}${kinds.length > 1 ? `${number('jointBudget','联合预算（token）',1)}<div class="actions">${button('保存预算','save-narrative-budget',locked || acting ? 'disabled' : '')}</div>` : ''}</section>${narrativeHistory()}${narrativeConnection(locked)}${narrativeRunStatus() ? `<p class="meta" role="status">${esc(narrativeRunStatus())}</p>` : ''}${run.error ? `<p class="lt-error" role="alert">${esc(run.error)}</p>` : ''}${!locked && Number(narrativeRange.startFloor) > Number(narrativeRange.endFloor) ? '<p class="meta" role="status">暂无新内容，可选择其他楼层范围。</p>' : ''}</form>${narrativeReport()}`;
+    return `<form id="benmo-narrative-generate-form" class="lt-summary-main"><section class="lt-summary-section ui-section"><h2>楼层范围</h2><div class="lt-summary-range ui-field-grid">${number('startFloor','开始楼')}${number('endFloor','结束楼')}</div></section><section class="lt-summary-section ui-section"><h2>生成选项</h2><div class="lt-summary-choices ui-choice-group" data-ui-interaction-profile="compact-group-candidate">${choice('narrativeTogether','data-narrative-together',`同时生成${TABS[other]}`,kinds.length > 1,!policy()[other])}${choice('narrativeReview','data-narrative-review','入库前检查',narrativeRange.reviewBeforeCommit)}${choice('narrativeBatching','data-narrative-batching','批量生成',narrativeRange.batching)}</div>${!policy()[other] ? `<p class="meta">${TABS[other]}已关闭，暂不可同时生成。</p>` : ''}${narrativeRange.batching ? number('batchSize','每隔多少楼总结',1) : ''}${kinds.length > 1 ? `${number('jointBudget','联合预算（token）',1)}<div class="actions">${button('保存预算','save-narrative-budget',locked || acting ? 'disabled' : '')}</div>` : ''}</section>${narrativeHistory()}${narrativeConnection(locked)}<div data-narrative-draft-status ${narrativeDraftStatus() ? '' : 'hidden'}>${narrativeDraftStatus()}</div></form>`;
   }
+  function narrativeDraftStatus() {
+    return `${narrativeRunStatus() ? `<p class="meta" role="status">${esc(narrativeRunStatus())}</p>` : ''}${narrativeRun().error ? `<p class="lt-error" role="alert">${esc(narrativeRun().error)}</p>` : ''}${Number(narrativeRange?.startFloor) > Number(narrativeRange?.endFloor) ? '<p class="meta" role="status">暂无新内容，可选择其他楼层范围。</p>' : ''}`;
+  }
+  const generationDraftVisible = () => state.route === 'narrative-generate' && narrativeRange && !loading && !loadFailed && !narrativeBusy() && !['paused','failed','awaiting-review'].includes(narrativeRun().status);
+  // Like summary parameter editing, keep raw drafts and update only dependent
+  // chrome. Replacing the form and restoring focus closes Android's keyboard.
+  function syncNarrativeDraft({receipt = false} = {}) {
+    if (disposed || suspended || !generationDraftVisible()) return;
+    const replaceRegion = (selector, markup) => {
+      const node = app.querySelector(selector);
+      if (!node) return;
+      const staging = app.ownerDocument.createElement('div'); staging.innerHTML = markup;
+      const next = staging.children[0];
+      if (!node.isEqualNode(next)) node.parentNode.replaceChild(next, node);
+    };
+    replaceRegion('.lt-summary-connection', narrativeConnection());
+    const status = app.querySelector('[data-narrative-draft-status]');
+    if (status) { const markup = narrativeDraftStatus(); status.innerHTML = markup; status.hidden = !markup; }
+    if (receipt) {
+      const history = app.querySelector('.lt-summary-history'), opened = history?.open;
+      replaceRegion('.lt-summary-history', narrativeHistory());
+      const updated = app.querySelector('.lt-summary-history'); if (updated) updated.open = opened;
+      const errors = app.querySelector('[data-narrative-errors]');
+      if (errors) { const markup = narrativeErrors(); errors.innerHTML = markup; errors.hidden = !markup; }
+    }
+    for (const node of app.querySelectorAll('#benmo-narrative-generate-form input')) {
+      node.disabled = blocked() || (node.type === 'checkbox' && (acting || (node.dataset.narrativeTogether !== undefined && !policy()[state.tab === 'self' ? 'outline' : 'self'])));
+    }
+    for (const action of ['start-narrative','save-narrative-budget','preview-narrative','settings-narrative']) {
+      const node = app.querySelector(`[data-action="${action}"]`);
+      if (node) node.disabled = blocked() || (action === 'start-narrative' ? narrativePlanning : action === 'preview-narrative' ? previewState.previewBusy : action === 'save-narrative-budget' && acting);
+    }
+    renderedMarkup = null;
+  }
+  function narrativeErrors() { return error || value.error ? `<p class="lt-error" role="alert">${esc(error || value.error)}</p>${button('重新读取', 'reload')}` : ''; }
   const narrativeScope = () => narrativeKinds?.length > 1 ? {kinds: [...narrativeKinds]} : {kind: narrativeKinds?.[0] ?? state.tab};
   async function openNarrativeGeneration() {
     if (blocked() || !NARRATIVES.includes(state.tab)) return;
@@ -498,7 +539,8 @@ export async function mountBenmoView({container: app, controller, availability =
     if (blocked() || narrativeBusy() || ['paused','failed','awaiting-review'].includes(narrativeRun().status)) return;
     clearNarrativePreview(); const operationEpoch = epoch, token = {}; narrativeJobs.set('run', token); remember(); render();
     try {
-      if (options.kinds?.length > 1) {
+      const preferences=narrativeData().preferences??{},savedBudget=preferences.run?.jointBudget??Math.max(preferences.self?.budget??30000,preferences.outline?.budget??30000);
+      if (options.kinds?.length > 1 && options.jointBudget!==savedBudget) {
         apply(await controller.saveNarrativeRunPreferences({jointBudget: options.jointBudget}));
         if (disposed || suspended || epoch !== operationEpoch || blocked()) return;
       }
@@ -538,7 +580,7 @@ export async function mountBenmoView({container: app, controller, availability =
     const focused = app.getRootNode().activeElement;
     const focusName = focused?.name, focusValue = focused?.value, focusData = focused?.dataset ? JSON.stringify({...focused.dataset}) : null;
     const subpage = state.route !== 'list';
-    const markup = `<section class="lantai ${state.route === 'narrative-generate' ? 'lt-summary-workspace' : 'workshop'} benmo ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}" data-benmo-route="${state.route}" data-benmo-tab="${state.tab}" data-benmo-kind="${state.kind}">${subpage ? `<header class="lt-header ui-header ${state.route === 'narrative-generate' ? 'ui-header--centered' : 'subpage-header'}">${icon(draft && returnRoute === 'detail' ? '返回记录详情' : `返回${state.tab === 'records' ? KINDS[state.kind] : TABS[state.tab]}`, 'back', 'back')}<h1 class="ui-page-title">${pageTitle()}</h1>${icon('关闭兰台', 'close', 'close')}</header>` : `<header class="lt-header lt-header--root ui-header"><div class="lt-root-top">${rootTitle('benmo')}${icon('关闭兰台', 'close', 'close')}</div><nav class="ui-tablist" aria-label="本末分区">${enabledTabs().map(id => selectButton(id, TABS[id], state.tab, 'tab')).join('')}</nav></header>`}<main class="lt-main ui-main${state.route === 'narrative-generate' ? ' lt-summary-main ui-main--summary' : ''}" tabindex="-1">${error || value.error ? `<p class="lt-error" role="alert">${esc(error || value.error)}</p>${button('重新读取', 'reload')}` : ''}${loading ? '<p class="wk-empty" role="status" aria-live="polite">正在读取本末记录…</p>' : loadFailed ? '' : content()}</main><footer class="lt-footer${state.route === 'narrative-generate' ? ' ui-action-footer' : ''}">${state.route === 'narrative-generate' ? narrativeFooter() : draft ? formActions() : mainNavigation({policy: policy(), current: 'benmo', actions: {memory: 'area', time: 'area', workshop: 'area', benmo: 'area', settings: 'area'}, attributes: Object.fromEntries(['memory', 'time', 'workshop', 'benmo', 'settings'].map(area => [area, `data-id="${area}"`]))})}</footer>${dialog ? `<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending ? '正在处理，请稍候…' : dialog.text)}</p>${(dialog.details ?? []).map(item => `<section class="section"><label class="ui-field"><span>后台新内容</span><textarea class="lt-textarea" rows="3" readonly aria-label="后台${esc(item.label)}">${esc(item.latest)}</textarea></label><label class="ui-field"><span>你的草稿</span><textarea class="lt-textarea" rows="3" readonly aria-label="草稿${esc(item.label)}">${esc(item.local)}</textarea></label></section>`).join('')}<div class="wk-dialog-actions">${button(dialog.cancelLabel ?? '取消', 'cancel-dialog', dialog.pending ? 'disabled' : '')}${button(dialog.pending ? '处理中…' : dialog.confirmLabel ?? '确认', 'confirm-dialog', dialog.pending ? 'disabled aria-busy="true"' : '', 'primary')}</div></div></div>` : ''}</section>`;
+    const markup = `<section class="lantai ${state.route === 'narrative-generate' ? 'lt-summary-workspace' : 'workshop'} benmo ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}" data-benmo-route="${state.route}" data-benmo-tab="${state.tab}" data-benmo-kind="${state.kind}">${subpage ? `<header class="lt-header ui-header ${state.route === 'narrative-generate' ? 'ui-header--centered' : 'subpage-header'}">${icon(draft && returnRoute === 'detail' ? '返回记录详情' : `返回${state.tab === 'records' ? KINDS[state.kind] : TABS[state.tab]}`, 'back', 'back')}<h1 class="ui-page-title">${pageTitle()}</h1>${icon('关闭兰台', 'close', 'close')}</header>` : `<header class="lt-header lt-header--root ui-header"><div class="lt-root-top">${rootTitle('benmo')}${icon('关闭兰台', 'close', 'close')}</div><nav class="ui-tablist" aria-label="本末分区">${enabledTabs().map(id => selectButton(id, TABS[id], state.tab, 'tab')).join('')}</nav></header>`}<main class="lt-main ui-main${state.route === 'narrative-generate' ? ' lt-summary-main ui-main--summary' : ''}" tabindex="-1">${state.route === 'narrative-generate' ? `<div data-narrative-errors ${error || value.error ? '' : 'hidden'}>${narrativeErrors()}</div>` : narrativeErrors()}${loading ? '<p class="wk-empty" role="status" aria-live="polite">正在读取本末记录…</p>' : loadFailed ? '' : content()}</main><footer class="lt-footer${state.route === 'narrative-generate' ? ' ui-action-footer' : ''}">${state.route === 'narrative-generate' ? narrativeFooter() : draft ? formActions() : mainNavigation({policy: policy(), current: 'benmo', actions: {memory: 'area', time: 'area', workshop: 'area', benmo: 'area', settings: 'area'}, attributes: Object.fromEntries(['memory', 'time', 'workshop', 'benmo', 'settings'].map(area => [area, `data-id="${area}"`]))})}</footer>${dialog ? `<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending ? '正在处理，请稍候…' : dialog.text)}</p>${(dialog.details ?? []).map(item => `<section class="section"><label class="ui-field"><span>后台新内容</span><textarea class="lt-textarea" rows="3" readonly aria-label="后台${esc(item.label)}">${esc(item.latest)}</textarea></label><label class="ui-field"><span>你的草稿</span><textarea class="lt-textarea" rows="3" readonly aria-label="草稿${esc(item.label)}">${esc(item.local)}</textarea></label></section>`).join('')}<div class="wk-dialog-actions">${button(dialog.cancelLabel ?? '取消', 'cancel-dialog', dialog.pending ? 'disabled' : '')}${button(dialog.pending ? '处理中…' : dialog.confirmLabel ?? '确认', 'confirm-dialog', dialog.pending ? 'disabled aria-busy="true"' : '', 'primary')}</div></div></div>` : ''}</section>`;
   // Repeated runtime receipts must not replace an unchanged surface.
   if (markup !== renderedMarkup) { replaceSurfaceMarkup(app, markup, renderedMarkup); renderedMarkup = markup; }
     const main = app.querySelector('.lt-main');
@@ -669,7 +711,7 @@ export async function mountBenmoView({container: app, controller, availability =
   }, {signal: lifetime.signal});
   app.addEventListener('input', event => {
     if (state.route !== 'narrative-generate' || !event.target?.name || !['startFloor','endFloor','batchSize','jointBudget'].includes(event.target.name)) return;
-    readDraft(); clearNarrativePreview(); narrativePlanning = false; epoch++; render();
+    if(changeGenerationDraft(narrativeRange,params=>{params[event.target.name]=event.target.value;},clearNarrativePreview)){narrativePlanning=false;epoch++;syncNarrativeDraft();}
   }, {signal: lifetime.signal});
   app.addEventListener('submit', event => event.preventDefault(), {signal: lifetime.signal});
   app.addEventListener('compositionstart', () => { composing = true; }, {signal: lifetime.signal});
@@ -706,21 +748,21 @@ export async function mountBenmoView({container: app, controller, availability =
       if (action === 'tab' && enabledTabs().includes(id)) { leave(() => { remember(); epoch++; state.tab = id; state.route = 'list'; clearDraft(); render(); }); return; }
       if (action === 'kind' && enabledKinds().includes(id)) { leave(() => { remember(); epoch++; state.kind = id; state.route = 'list'; state.selected = state.selections[id] ?? null; clearDraft(); render(); }); return; }
       if (action === 'narrative-cleaning' && state.route === 'narrative-settings' && onOpenCleaning) { remember(); clearNarrativePreview(); await onOpenCleaning(); return; }
-      if (action === 'narrative-preview-tab' && ['memory','original','materials','prompt'].includes(id)) { remember(); previewTab = id; render(); return; }
-      if (action === 'preview-narrative' && state.route === 'narrative-generate' && !blocked()) {
+      if (action === 'narrative-preview-tab' && ['memory','original','materials','prompt'].includes(id)) { remember(); generationPreview.view(id); render(); return; }
+      if (action === 'preview-narrative' && state.route === 'narrative-generate' && !blocked() && !previewState.previewBusy) {
         remember();
-        if (previewOpen) { previewOpen = false; previewLoading = false; previewSequence++; render(); return; }
+        if (previewState.previewOpen) { generationPreview.toggle(); render(); return; }
         const current = controller.snapshot?.().narrative;
         const live = current && Object.hasOwn(current,'requestPreview') ? current.requestPreview : value.narrative?.requestPreview;
         if (current && Object.hasOwn(current,'requestPreview') && !live) clearNarrativePreview();
         if (narrativeBusy() || ['paused','failed','awaiting-review'].includes(narrativeRun().status)) {
           if (!live) return;
-          requestPreview = clone(live); previewOpen = true; previewLoading = false; render(); return;
+          previewState.preview = clone(live); previewState.previewOpen = true; previewState.previewBusy = false; render(); return;
         }
-        if (requestPreview) { previewOpen = true; render(); return; }
-        const options = narrativeOptions(), request = ++previewSequence, token = epoch; previewOpen = true; previewLoading = true; error = ''; render();
-        try { const result = await controller.previewNarrativeRequest(options); if (!disposed && !suspended && request === previewSequence && token === epoch) requestPreview = result; }
-        finally { if (!disposed && !suspended && request === previewSequence && token === epoch) { previewLoading = false; render(); } }
+        if (previewState.preview) { previewState.previewOpen = true; render(); return; }
+        const options = narrativeOptions(), token = epoch; error = '';
+        const work=generationPreview.prepare(()=>controller.previewNarrativeRequest(options),()=>!disposed&&!suspended&&token===epoch);render();
+        try { await work; } finally { if (!disposed&&!suspended&&token===epoch) syncNarrativeDraft({receipt:true}); }
         return;
       }
       if (action === 'regenerate-narrative' && state.route === 'narrative-generate' && !narrativeBusy() && !['paused','failed','awaiting-review'].includes(narrativeRun().status)) {
@@ -826,7 +868,7 @@ export async function mountBenmoView({container: app, controller, availability =
       }
       if (action === 'save' && !blocked()) { acting = ownsAction = true; syncWriteControls(); await save(); }
     } catch (failure) {
-      if (!disposed && !suspended && actionEpoch === epoch) { remember(); dialog = null; error = failure.message || '操作未完成，请重试'; value = {...value, writeBlocked: controller.snapshot?.().writeBlocked ?? value.writeBlocked}; acting = false; render(); }
+      if (!disposed && !suspended && actionEpoch === epoch) { remember(); dialog = null; error = failure.message || '操作未完成，请重试'; value = {...value, writeBlocked: controller.snapshot?.().writeBlocked ?? value.writeBlocked}; acting = false; if (action === 'preview-narrative' && generationDraftVisible()) syncNarrativeDraft({receipt:true}); else render(); }
     } finally { if (ownsAction) { acting = false; syncWriteControls(); } }
   }, {signal: lifetime.signal});
   app.addEventListener('keydown', event => {
@@ -842,15 +884,16 @@ export async function mountBenmoView({container: app, controller, availability =
   let unsubscribe;
   function subscribe() { unsubscribe = controller.subscribe?.(next => {
     if (disposed) return;
-    if ((requestPreview || previewLoading) && (!same(value.target,next.target) || !same(value.narrative?.narrative,next.narrative?.narrative) || (requestPreview && next.narrative && Object.hasOwn(next.narrative,'requestPreview') && !next.narrative.requestPreview))) clearNarrativePreview();
-    if (previewOpen && next.narrative?.requestPreview && ['running','paused','failed'].includes(next.narrative?.run?.status)) requestPreview = clone(next.narrative.requestPreview);
+    if ((previewState.preview || previewState.previewBusy) && (!same(value.target,next.target) || !same(value.narrative?.narrative,next.narrative?.narrative) || (previewState.preview && next.narrative && Object.hasOwn(next.narrative,'requestPreview') && !next.narrative.requestPreview))) clearNarrativePreview();
+    if (previewState.previewOpen && next.narrative?.requestPreview && ['running','paused','failed'].includes(next.narrative?.run?.status)) previewState.preview = clone(next.narrative.requestPreview);
     value = next;
     const automaticStatus=app.querySelector('[data-latest-automatic-status]');
     if(automaticStatus){const message=value.summary?.automatic?.message;automaticStatus.textContent=message?`自动生成：${message}`:'';automaticStatus.hidden=!message;}
     reconcileGenerating();
     reconcileBackfill();
     // A background receipt must never rebuild an active input or its baseline.
-    if (!draft && !acting && !dialog && !suspended) { remember(); render(); }
+    if (generationDraftVisible() && app.querySelector('#benmo-narrative-generate-form') && policy()[state.tab] && !dialog && !suspended) { readDraft(); syncNarrativeDraft({receipt:true}); }
+    else if (!draft && !acting && !dialog && !suspended) { remember(); render(); }
     else for (const node of app.querySelectorAll('[data-action="save"],[data-action="delete-record"],[data-action="toggle-excluded"],[data-action="restore-excluded"]')) node.disabled = blocked() || acting;
   }); }
   function startSummaryVisibility() {
@@ -874,7 +917,7 @@ export async function mountBenmoView({container: app, controller, availability =
     back() { if (!dialog && !acting) back(); },
     blocking() { return acting || dirty() || !!dialog; },
     snapshotNavigation,
-    refreshAvailability() { if (JSON.stringify(policy()) !== renderedPolicy || externalPolicy().transient) { remember(); render(); } },
+    refreshAvailability() { if (JSON.stringify(policy()) !== renderedPolicy || externalPolicy().transient) { remember(); if (generationDraftVisible() && policy()[state.tab]) syncNarrativeDraft({receipt:true}); else render(); } },
     invalidate(message) { remember(); clearNarrativePreview(); epoch++; invalidated = true; error = message; value = {...value, writeBlocked: true}; render(); },
     suspend() { if (disposed || suspended) return; remember(); clearNarrativePreview(); suspended = true; epoch++; app.inert = true; stopSummaryVisibility(); },
     loading() { if (disposed) return; remember(); loading = true; loadFailed = false; error = ''; suspended = false; app.inert = false; render(); },
