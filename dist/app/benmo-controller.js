@@ -17,23 +17,25 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     policy.benmo=BENMO_FEATURES.some(key=>policy[key]);
     return {enabled,policy,status,dataStatus:status,busy,error,target:navigationTarget&&copy(navigationTarget)};
   }
-  function snapshotWithSummary(projection){
-    const latest=projection??latestRuntime.library(),tracked=trackingRuntime.snapshot(),narrated=narrativeRuntime?.snapshot();
+  function snapshotWithSummary(projection,{tracking:trackingProjection,narrative:narrativeProjection}={}){
+    const latest=projection??latestRuntime.library(),tracked=trackingProjection??trackingRuntime.snapshot(),narrated=narrativeProjection??narrativeRuntime?.snapshot();
     let binding=target;try{binding??=repository.captureTarget();}catch{/* Unavailable bindings own no source data. */}
     if(binding&&sameTarget(latest.target,binding))summaryCache=latest;
-    if(binding&&sameTarget(tracked.target,binding))trackingCache=tracked;
-    if(binding&&narrated&&sameTarget(narrated.target,binding))narrativeCache=narrated;
+    if(binding&&sameTarget(tracked.target,binding))trackingCache=trackingProjection?copy(tracked):tracked;
+    if(binding&&narrated&&sameTarget(narrated.target,binding))narrativeCache=narrativeProjection?copy(narrated):narrated;
     const summary=summaryCache??{records:[],missing:[],running:[],preferences:{enabled:false,recentFloors:6,prompt:latestRuntime.defaultPrompt??''}},tracking=trackingCache??{records:[],preferences:{itemsEnabled:false,npcsEnabled:false}};
     const narrative=narrativeCache??{self:{},outline:{}};
     return copy({summary,tracking,narrative,...availability(),error:error||tracking.error||narrative.error||'',writeBlocked:!current()||!master()||status!=='ready'||tracking.writeBlocked===true||narrative.writeBlocked===true});
   }
   const snapshot=()=>snapshotWithSummary();
-  const publish=()=>{
+  const publish=(projections)=>{
     if(disposed)return;
     if(availabilityListeners.size)try{const value=availability();for(const fn of availabilityListeners)try{fn(copy(value));}catch{/* Navigation cannot break saved facts. */}}catch{/* Unavailable state cannot break a runtime publication. */}
-    if(listeners.size)try{const value=snapshot();for(const fn of listeners)try{fn(copy(value));}catch{/* Rendering cannot break saved facts. */}}catch{/* Unavailable state cannot break a runtime publication. */}
+    if(listeners.size)try{const value=snapshotWithSummary(undefined,projections);for(const fn of listeners)try{fn(copy(value));}catch{/* Rendering cannot break saved facts. */}}catch{/* Unavailable state cannot break a runtime publication. */}
   };
-  const offLatest=latestRuntime.subscribe(publish),offTracking=trackingRuntime.subscribe(publish),offNarrative=narrativeRuntime?.subscribe(publish);
+  // Domain notifications already carry a snapshot for this synchronous publication.
+  // Latest notifications carry inspect state instead, so its library stays a fresh read.
+  const offLatest=latestRuntime.subscribe(()=>publish()),offTracking=trackingRuntime.subscribe(tracking=>publish({tracking})),offNarrative=narrativeRuntime?.subscribe(narrative=>publish({narrative}));
   async function load(){
     if(disposed)throw new Error('本末已关闭');if(loading)return loading;
     const ticket=sequence;status='loading';error='';publish();
@@ -56,7 +58,7 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     })().catch(failure=>{if(!disposed&&ticket===sequence){status='unconfirmed';error=failure.message;publish();}throw failure;}).finally(()=>{if(loading===job)loading=null;});
     loading=job;return job;
   }
-  function writable(kind){if(!current()||!master()||status!=='ready'||trackingRuntime.snapshot().writeBlocked===true)throw new Error(error||trackingRuntime.snapshot().error||'聊天已变化，请重新读取本末');if(kind&&!snapshot().policy[kind])throw new Error('该功能已关闭');if(['self','outline'].includes(kind)&&narrativeRuntime?.snapshot().writeBlocked)throw new Error(narrativeRuntime.snapshot().error||'请重新读取本末');}
+  function writable(kind){if(!current()||!master()||status!=='ready'||trackingRuntime.snapshot().writeBlocked===true)throw new Error(error||trackingRuntime.snapshot().error||'聊天已变化，请重新读取本末');if(kind&&!availability().policy[kind])throw new Error('该功能已关闭');if(['self','outline'].includes(kind)&&narrativeRuntime?.snapshot().writeBlocked)throw new Error(narrativeRuntime.snapshot().error||'请重新读取本末');}
   async function write(kind,operation){
     writable(kind);const ticket=sequence,t=copy(target);busy=kind;publish();
     try{await operation();if(disposed||ticket!==sequence||!sameTarget(t,repository.captureTarget()))throw new Error('聊天已变化，请重新读取本末');error='';return snapshot();}
@@ -85,6 +87,8 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     saveNarrativePreferences(kind,patch,options){return write(kind,()=>narrativeRuntime.savePreferences(kind,patch,options));},
     saveNarrativeEntries(kind,entries,options){return write(kind,()=>narrativeRuntime.saveEntries(kind,entries,options));},
     previewNarrative(options){writable();return narrativeRuntime.preview(options);},
+    previewNarrativeRequest(options){writable();return narrativeRuntime.previewRequest(options);},
+    confirmNarrativeReview(){return write(null,()=>narrativeRuntime.confirmReview());},
     startNarrative(options){return write(null,()=>narrativeRuntime.start(options));},
     saveNarrativeRunPreferences(patch){return write(null,()=>narrativeRuntime.saveRunPreferences(patch));},
     pauseNarrative(){return narrativeRuntime.pause();},

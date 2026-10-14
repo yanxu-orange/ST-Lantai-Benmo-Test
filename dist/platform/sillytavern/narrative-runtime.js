@@ -1,8 +1,9 @@
 import {sameTarget} from '../../domain/memory/repository.js';
 import {sourceFingerprint,durableSourceMessages} from '../../domain/summary/source.js';
-import {matchesStoredNarrativeSource} from '../../domain/narrative/core.js';
+import {matchesStoredNarrativeSource,narrativeMemoryRows} from '../../domain/narrative/core.js';
+import {prepareNarrativeBatch,projectNarrativeBatchBase} from './narrative-preparation.js';
 import {summaryOf} from '../../domain/summary/data.js';
-import {emptyNarrative,assertNarrative,applyNarrativeResponse,reconcileNarrativeSource,narrativeHighWater,narrativeJointBudget} from '../../domain/narrative/data.js';
+import {emptyNarrative,assertNarrative,applyNarrativeResponse,reconcileNarrativeSource,narrativeHighWater,narrativeJointBudget,recordNarrativeGeneration} from '../../domain/narrative/data.js';
 import {prepareNarrativeUpdate,prepareCombinedNarrativeRequest,matchesNarrativeSource,matchesNarrativeMemory,projectNarrativeMemory} from '../../domain/narrative/source.js';
 import {buildNarrativeRequest,parseNarrativeResponse,buildCombinedNarrativeRequest,parseCombinedNarrativeResponse} from '../../domain/narrative/requests.js';
 import {DEFAULT_NARRATIVE_PROMPTS,NARRATIVE_OUTLINE_INJECTION,narrativeSelfInjection} from '../../domain/narrative/prompts.js';
@@ -13,6 +14,10 @@ const clone=value=>structuredClone(value),equal=(a,b)=>JSON.stringify(a)===JSON.
 const emptyStatus=()=>({status:'idle',error:'',materialReport:null,sourceStale:false,addedCount:null,changedCount:null});
 const assertKind=kind=>{if(!kinds.includes(kind))throw new Error('本末类别无效');return kind;};
 const content=(domain,kind)=>kind==='self'?domain.self:domain.outline;
+const stable=value=>value&&typeof value==='object'?Array.isArray(value)?value.map(stable):Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):value;
+async function digest(value){const bytes=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(stable(value))));return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');}
+const durableGeneration=value=>Object.fromEntries(Object.entries(value).filter(([key])=>!['epoch','generationEpoch'].includes(key)));
+
 // A host generateRaw/tokenizer promise can ignore AbortSignal indefinitely.
 // Settle our logical task on cancellation so the existing queue advances; the
 // abandoned host promise remains observed and never regains write authority.
@@ -35,13 +40,14 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
   let receipt=null,foregroundEnded=false,foregroundStopped=false,foregroundType=null,foregroundActive=false,quietDepth=0;
   let state={target:null,narrative:emptyNarrative(),self:emptyStatus(),outline:emptyStatus(),writeBlocked:false,error:''};
   const listeners=new Set(),releases=[],jobs=new Set(),epochs={self:0,outline:0},seenReceipts=new Set(),automaticPaused=new Set(),runners=new Map();
-  let unconfirmed=false;
+  let unconfirmed=false,currentRequestPreview=null,previewGuard=null,reviewGuards=null;
   const controls=()=>getControls?.();
   const allowed=kind=>!disposed&&controls()?.allowed('enabled')===true&&controls()?.allowed(kind)===true;
   const current=t=>{try{return !disposed&&sameTarget(t,repository.captureTarget());}catch{return false;}};
   const source=t=>(captureSource??adapter.captureSummarySource?.bind(adapter))(t);
   const generation=()=>getGenerationSettings?.()??settings?.captureEventGeneration?.().generation??{epoch:0,summaryCleaning:{rules:[]}};
-  const snapshot=()=>clone({...state,preferencesWriteBlocked:unconfirmed||!target||!current(target),writeBlocked:state.writeBlocked||unconfirmed||controls()?.allowed('enabled')!==true});
+  const durableConfig=config=>({generation:durableGeneration(config),ai:settings?.captureAi?.()?.ai??null});
+  const snapshot=()=>clone({...state,requestPreview:currentRequestPreview&&previewGuard?.()?currentRequestPreview:null,preferencesWriteBlocked:unconfirmed||!target||!current(target),writeBlocked:state.writeBlocked||unconfirmed||controls()?.allowed('enabled')!==true});
   const notify=()=>{for(const listener of listeners)try{listener(snapshot());}catch{/* Display observers cannot change task ownership. */}};
   const categoryStatus=(kind,patch)=>{state={...state,[kind]:{...state[kind],...patch}};notify();};
   function adopt(t,captured){
@@ -62,11 +68,11 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const captured=await repository.captureNarrative(t,readView);
     if(disposed||ticket!==serial||readTicket!==readSerial||!current(t))throw new Error('聊天已变化，请重新读取本末');
     unconfirmed=false;
-    if(!sequencePromise){const pending=captured.narrative.pendingRun;sequenceRun=pending?{...clone(pending),...(pending.kinds.length>1?{jointBudget:pending.jointBudget??narrativeJointBudget(captured.narrative)}:{}),target:clone(t),stage:pending.status,error:pending.status==='failed'?'上次叙事批次未完成，请重试或跳过':'已保留完成的批次，请继续',pauseRequested:false,skipped:0}:null;}
+    if(!sequencePromise){const pending=captured.narrative.pendingRun;sequenceRun=pending?{...clone(pending),...(pending.kinds.length>1?{jointBudget:pending.jointBudget??narrativeJointBudget(captured.narrative)}:{}),target:clone(t),stage:pending.status,error:pending.status==='failed'?'上次叙事批次未完成，请重试或跳过':'已保留完成的批次，请继续',pauseRequested:pending.pauseRequested===true,skipped:0}:null;reviewGuards=null;}
     const result=adopt(t,captured);publishRun();return snapshot();
   }
   function clearSlots(){
-    injectionSerial++;let cleared=true;
+    currentRequestPreview=null;previewGuard=null;injectionSerial++;let cleared=true;
     for(const key of Object.values(NARRATIVE_PROMPT_KEYS))try{getContext().setExtensionPrompt(key,'',1,0,false,0);}catch{cleared=false;}
     return cleared;
   }
@@ -188,7 +194,8 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       const applied=applyNarrativeResponse(projected,task,response,source(t),{events:projectNarrativeMemory(latestRoot,source(t))});
       // Projection is read-only. Generating one category never deletes the
       // other category's retained data, even when that other source is stale.
-      const next={...latest.narrative,[kind]:applied[kind],progress:{...latest.narrative.progress,[kind]:applied.progress[kind]},highWater:{self:narrativeHighWater(latest.narrative,'self')<0?null:narrativeHighWater(latest.narrative,'self'),outline:narrativeHighWater(latest.narrative,'outline')<0?null:narrativeHighWater(latest.narrative,'outline'),[kind]:Math.max(narrativeHighWater(latest.narrative,kind),applied.progress[kind].lastProcessedFloor)}};
+      let next={...latest.narrative,[kind]:applied[kind],progress:{...latest.narrative.progress,[kind]:applied.progress[kind]},highWater:{self:narrativeHighWater(latest.narrative,'self')<0?null:narrativeHighWater(latest.narrative,'self'),outline:narrativeHighWater(latest.narrative,'outline')<0?null:narrativeHighWater(latest.narrative,'outline'),[kind]:Math.max(narrativeHighWater(latest.narrative,kind),applied.progress[kind].lastProcessedFloor)}};
+      next=recordNarrativeGeneration(next,projected,kind,{range:plan,pairId:crypto.randomUUID(),source:projected.preferences[kind].autoSource==='cumulative'?'cumulative':'event'});
       const saved=await repository.updateNarrative(t,latest,next,{isCurrent:valid,requireConfirmation:true});
       if(!valid())throw new Error('聊天或功能开关已变化，生成已停止');
       categoryStatus(kind,{status:'ready',error:'',materialReport:clone(next.progress[kind]?.materialsReport??task.usage)});
@@ -201,17 +208,17 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     }finally{jobs.delete(job);}
   }
   function generate(kind,options={}){
-    assertKind(kind);if(sequencePromise) return Promise.reject(new Error('当前叙事批次尚未结束'));automaticPaused.delete(kind);const received=proof(kind);
+    assertKind(kind);if(sequencePromise||sequenceRun&&['paused','failed','awaiting-review'].includes(sequenceRun.status)) return Promise.reject(new Error('当前叙事批次尚未结束'));automaticPaused.delete(kind);const received=proof(kind);
     const copied=clone(options);return queue(()=>run(received,copied));
   }
   const runPreferences=domain=>domain.preferences.run??{auto:true,batchSize:10};
   let sequenceRun=null,sequencePromise=null;
-  const publishRun=()=>{state={...state,run:sequenceRun?{status:sequenceRun.status,stage:sequenceRun.stage,kinds:[...sequenceRun.kinds],jointBudget:sequenceRun.jointBudget??null,target:clone(sequenceRun.target),summary:sequenceRun.summary===true,summarySource:sequenceRun.summarySource??'event',range:clone(sequenceRun.ranges[sequenceRun.index]??null),index:sequenceRun.index,total:sequenceRun.ranges.length,error:sequenceRun.error,pauseRequested:sequenceRun.pauseRequested,failedKinds:[...sequenceRun.failedKinds],skipped:sequenceRun.skipped,usage:clone(sequenceRun.usage??null)}:null};notify();};
+  const publishRun=()=>{state={...state,run:sequenceRun?{status:sequenceRun.status,stage:sequenceRun.stage,kinds:[...sequenceRun.kinds],jointBudget:sequenceRun.jointBudget??null,review:clone(sequenceRun.review??null),reviewBeforeCommit:sequenceRun.reviewBeforeCommit===true,target:clone(sequenceRun.target),summary:sequenceRun.summary===true,summarySource:sequenceRun.summarySource??'event',range:clone(sequenceRun.ranges[sequenceRun.index]??null),index:sequenceRun.index,total:sequenceRun.ranges.length,error:sequenceRun.error,pauseRequested:sequenceRun.pauseRequested,failedKinds:[...sequenceRun.failedKinds],skipped:sequenceRun.skipped,usage:clone(sequenceRun.usage??null)}:null};notify();};
   function pendingCheckpoint(active,completedKind=null){
     let failedKinds=active.failedKinds.filter(kind=>kind!==completedKind),index=active.index;
     if(completedKind&&!failedKinds.length){index++;failedKinds=[];}
     if(index>=active.ranges.length)return null;
-    return {ranges:clone(active.ranges),index,kinds:[...active.kinds],failedKinds,...(active.jointBudget!==undefined?{jointBudget:active.jointBudget}:{}),restart:active.restart===true,summary:active.summary===true,status:active.status==='failed'?'failed':'paused',...(active.summarySource?{summarySource:active.summarySource}:{}),...(active.sentFloors?{sentFloors:clone(active.sentFloors),summarySnapshot:clone(active.summarySnapshot)}:{})};
+    return {ranges:clone(active.ranges),index,kinds:[...active.kinds],failedKinds,...(active.jointBudget!==undefined?{jointBudget:active.jointBudget}:{}),...(active.pairId&&index===active.index?{pairId:active.pairId}:{}),...(active.reviewBeforeCommit?{reviewBeforeCommit:true}:{}),...(active.regenerateLatest?{regenerateLatest:true}:{}),...(active.pauseRequested?{pauseRequested:true}:{}),...(active.review&&index===active.index?{review:clone(active.review)}:{}),restart:active.restart===true,summary:active.summary===true,status:active.review&&index===active.index?'awaiting-review':active.status==='failed'?'failed':'paused',...(active.summarySource?{summarySource:active.summarySource}:{}),...(active.sentFloors?{sentFloors:clone(active.sentFloors),summarySnapshot:clone(active.summarySnapshot)}:{})};
   }
   async function persistCheckpoint(active){
     const t=active.target,ticket=serial;
@@ -235,6 +242,13 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     selected.forEach(assertKind);
     const active=selected.filter(allowed);
     if(!current(t))throw new Error('聊天已变化，请重新选择范围');
+    if(options.regenerateLatest===true){
+      const latest=active.map(kind=>domain.latestGeneration?.[kind]);
+      if(!active.length||latest.some((row,index)=>!row||domain.generationRecords?.[active[index]]?.at(-1)?.id!==row.recordId||!matchesStoredNarrativeSource(row.sourceSnapshot,raw)))throw new Error('缺少有效的最新生成前基版，不能重新生成');
+      if(latest.length>1&&latest.some(row=>row.pairId!==latest[0].pairId||!equal(row.range,latest[0].range)))throw new Error('两项最新生成并非同一批，请分别重新生成');
+      const range=clone(latest[0].range);
+      return {status:'ready',kinds:active,...range,latestFloor:raw.messages.filter(completeFloor).at(-1)?.floor??-1,batchSize:range.endFloor-range.startFloor+1,ranges:[range],restart:false,regenerateLatest:true,...(active.length>1?{jointBudget:options.jointBudget??narrativeJointBudget(domain)}:{})};
+    }
     const latestFloor=raw.messages.filter(completeFloor).at(-1)?.floor??-1;
     const batchSize=options.batchSize??runPreferences(domain).batchSize;
     const processed=active.length?Math.max(...active.map(kind=>narrativeHighWater(domain,kind))):-1;
@@ -250,52 +264,79 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       const boundary=boundaries.filter(floor=>floor>=start&&floor<endpoint.floor).sort((a,b)=>a-b)[0],end=boundary??endpoint.floor;
       ranges.push({startFloor:start,endFloor:end});start=end+1;
     }
-    return {status:active.length&&ranges.length?'ready':'waiting',kinds:active,startFloor,endFloor,latestFloor,batchSize,ranges,restart,...(active.length>1?{jointBudget:narrativeJointBudget(domain)}:{})};
+    return {status:active.length&&ranges.length?'ready':'waiting',kinds:active,startFloor,endFloor,latestFloor,batchSize,ranges,restart,...(active.length>1?{jointBudget:options.jointBudget??narrativeJointBudget(domain)}:{})};
+  }
+  async function previewRequest(options={}){
+    if(currentRequestPreview&&previewGuard?.()&&sequenceRun?.status==='running')return clone(currentRequestPreview);
+    const t=repository.captureTarget(),ticket=serial,captured=await repository.captureNarrative(t);
+    const pending=sequenceRun&&['running','paused','failed','awaiting-review'].includes(sequenceRun.status)?sequenceRun:null;
+    const plan=pending??await preview(options),range=plan.ranges[plan.index??0];
+    if(!range)throw new Error('尚无可预览的完整楼层范围');
+    const selected=plan.failedKinds?.length?[...plan.failedKinds]:[...plan.kinds],proofs=selected.map(kind=>proof(kind,t));
+    const root=await repository.read(t),raw=source(t),config=clone(generation());
+    const usesCard=selected.includes('self')&&captured.narrative.preferences.self.readCard,card=usesCard?cardSnapshot():null;
+    const previewMemory=selected.some(kind=>captured.narrative.preferences[kind].readMemory&&(plan.summarySource??captured.narrative.preferences[kind].autoSource)!=='cumulative')?narrativeMemoryRows(projectNarrativeMemory(root,raw),range.endFloor):null;
+    let prepared;
+    const valid=()=>{
+      try{return !unconfirmed&&ticket===serial&&current(t)&&proofs.every(matches)&&equal(config,generation())&&(!usesCard||equal(card,cardSnapshot()))&&(!repository.matchesNarrative||repository.matchesNarrative(t,captured))&&(previewMemory===null||typeof adapter.peekConfirmed!=='function'||equal(previewMemory,narrativeMemoryRows(projectNarrativeMemory(adapter.peekConfirmed(t),source(t)),range.endFloor)))&&(!prepared||prepared.tasks.every(task=>matchesNarrativeSource(task.source,source(t))&&(typeof adapter.peekConfirmed!=='function'||matchesNarrativeMemory(task,projectNarrativeMemory(adapter.peekConfirmed(t),source(t))))));}catch{return false;}
+    };
+    prepared=await prepareNarrativeBatch({domain:captured.narrative,root,raw,range,kinds:selected,restart:plan.restart,index:plan.index??0,summary:plan.summary,summarySource:plan.summarySource,jointBudget:options.jointBudget??plan.jointBudget,sentFloors:plan.sentFloors,regenerateLatest:plan.regenerateLatest,card,rules:config.summaryCleaning?.rules??[],countTokens:typeof getContext().getTokenCountAsync==='function'?text=>getContext().getTokenCountAsync(text):null,isCurrent:valid});
+    if(!valid())throw new Error('材料、设置或聊天已变化，请重新预览');
+    currentRequestPreview={range:clone(range),kinds:selected,request:clone(prepared.request),tasks:clone(prepared.tasks),usage:clone(prepared.usage)};previewGuard=valid;
+    notify();return clone(currentRequestPreview);
   }
   async function runBatch(active,range,options={}){
-    active.usage=null;publishRun();
+    active.usage=null;currentRequestPreview=null;previewGuard=null;active.pairId??=crypto.randomUUID();publishRun();
     const t=active.target,captured=await repository.captureNarrative(t),rawAtStart=source(t),projectedAtStart=reconcileNarrativeSource(captured.narrative,rawAtStart).domain;
-    const proofs=active.kinds.filter(kind=>allowed(kind)&&(!active.summary||(captured.narrative.preferences[kind].autoSource??'event')===(active.summarySource??'event'))&&(!options.only||options.only.includes(kind))&&(active.restart||(active.summary?narrativeHighWater(captured.narrative,kind):(projectedAtStart.progress[kind]?.lastProcessedFloor??-1))<range.endFloor)).map(kind=>proof(kind,t));
+    const proofs=active.kinds.filter(kind=>allowed(kind)&&(!active.summary||(captured.narrative.preferences[kind].autoSource??'event')===(active.summarySource??'event'))&&(!options.only||options.only.includes(kind))&&(active.restart||active.regenerateLatest||(active.summary?narrativeHighWater(captured.narrative,kind):(projectedAtStart.progress[kind]?.lastProcessedFloor??-1))<range.endFloor)).map(kind=>proof(kind,t));
     if(!proofs.length)return;
     if(active.summarySnapshot&&!matchesStoredNarrativeSource(active.summarySnapshot,rawAtStart))throw new Error('已保存总结的原文来源已变化，请跳过本批');
     const controller=new AbortController(),job={kind:proofs[0].kind,kinds:proofs.map(row=>row.kind),controller,received:proofs[0],proofs};jobs.add(job);
-    let config,card,original,projected;const tasks=[];
+    let config,card,original,projected,usesCard=false;const tasks=[];
     const valid=()=>{
-      try{return !unconfirmed&&!controller.signal.aborted&&proofs.every(matches)&&(!config||equal(generation(),config))&&(!card||equal(cardSnapshot(),card))&&tasks.every(task=>matchesNarrativeSource(task.source,source(t))&&(typeof adapter.peekConfirmed!=='function'||matchesNarrativeMemory(task,projectNarrativeMemory(adapter.peekConfirmed(t),source(t)))));}catch{return false;}
+      try{return !unconfirmed&&!controller.signal.aborted&&proofs.every(matches)&&(!config||equal(generation(),config))&&(!usesCard||equal(cardSnapshot(),card))&&tasks.every(task=>matchesNarrativeSource(task.source,source(t))&&(typeof adapter.peekConfirmed!=='function'||matchesNarrativeMemory(task,projectNarrativeMemory(adapter.peekConfirmed(t),source(t)))));}catch{return false;}
     };
     active.failedKinds=proofs.map(row=>row.kind);active.stage='preparing';publishRun();
     for(const {kind} of proofs)categoryStatus(kind,{status:'running',error:'',addedCount:null,changedCount:null});
     try{
-      original=captured;const root=await repository.read(t),raw=source(t);
-      projected=reconcileNarrativeSource(original.narrative,raw).domain;config=clone(generation());
-      if(active.restart&&active.index===0){projected=clone(projected);for(const kind of active.kinds){projected[kind]=[];projected.progress[kind]=null;}}
-      const events=projectNarrativeMemory(root,raw),context=getContext();
-      if(proofs.some(row=>row.kind==='self')&&projected.preferences.self.readCard)card=cardSnapshot();
-      for(const {kind} of proofs){
-        const originalOnly=(active.summarySource??projected.preferences[kind].autoSource)==='cumulative';
-        const taskRange=active.summary?{...range,startFloor:Math.max(range.startFloor,narrativeHighWater(captured.narrative,kind)+1)}:range;
-        const task=await abortable(()=>prepareNarrativeUpdate(projected,raw,{kind,...taskRange,events,card,originalOnly,...(active.jointBudget!==undefined?{jointBudget:active.jointBudget}:{}),...(originalOnly&&active.sentFloors?{sentFloors:active.sentFloors}:{}),rules:config.summaryCleaning?.rules??[],countTokens:typeof context.getTokenCountAsync==='function'?text=>context.getTokenCountAsync(text):null,isCurrent:()=>!unconfirmed&&!controller.signal.aborted&&proofs.every(matches)}),controller.signal);
-        tasks.push(task);categoryStatus(kind,{materialReport:clone(task.usage)});
-      }
+      original=captured;const root=await repository.read(t),raw=source(t);config=clone(generation());
+      usesCard=proofs.some(row=>row.kind==='self')&&captured.narrative.preferences.self.readCard;if(usesCard)card=cardSnapshot();
+      const prepared=await abortable(()=>prepareNarrativeBatch({domain:captured.narrative,root,raw,range,kinds:proofs.map(row=>row.kind),restart:active.restart,index:active.index,summary:active.summary,summarySource:active.summarySource,jointBudget:active.jointBudget,sentFloors:active.sentFloors,regenerateLatest:active.regenerateLatest,card,rules:config.summaryCleaning?.rules??[],countTokens:typeof getContext().getTokenCountAsync==='function'?text=>getContext().getTokenCountAsync(text):null,isCurrent:()=>!unconfirmed&&!controller.signal.aborted&&proofs.every(matches)}),controller.signal);
+      projected=prepared.projected;tasks.push(...prepared.tasks);
       if(!valid())throw new Error('材料、设置或聊天已变化，生成已停止');
+      active.usage=clone(prepared.usage);const request=prepared.request;
+      currentRequestPreview={range:clone(range),kinds:tasks.map(task=>task.kind),request:clone(request),tasks:clone(tasks),usage:clone(prepared.usage)};previewGuard=valid;
+      for(const task of tasks)categoryStatus(task.kind,{materialReport:clone(task.usage)});
       active.stage='generating';publishRun();
-      let request=buildCombinedNarrativeRequest(tasks);
-      if(active.jointBudget!==undefined){
-        const combined=await abortable(()=>prepareCombinedNarrativeRequest(tasks,{jointBudget:active.jointBudget,countTokens:typeof context.getTokenCountAsync==='function'?text=>context.getTokenCountAsync(text):null,isCurrent:valid}),controller.signal);
-        tasks.splice(0,tasks.length,...combined.tickets);request=combined.request;active.usage=combined.usage;
-        for(const task of tasks)categoryStatus(task.kind,{materialReport:clone(task.usage)});publishRun();
-      }
       const output=await abortable(()=>provider.generateText({...request,maxOutputTokens:tasks.reduce((sum,task)=>sum+task.usage.outputReserve,0),signal:controller.signal,isCurrent:valid}),controller.signal);
       if(!valid())throw new Error('材料、设置或聊天已变化，生成已停止');
       const responses=parseCombinedNarrativeResponse(output.text,proofs.map(row=>row.kind)),errors=[];
       active.stage='saving';publishRun();
+      if(active.reviewBeforeCommit&&!active.summary){
+        const latest=await repository.captureNarrative(t),latestRoot=await repository.read(t),results={},progress={},categories={};
+        if(!valid())throw new Error('材料、设置或聊天已变化，生成已停止');
+        for(const task of tasks){
+          const kind=task.kind;
+          if(!equal(latest.narrative.preferences[kind],original.narrative.preferences[kind])||!equal(latest.narrative[kind],original.narrative[kind])||!equal(latest.narrative.progress[kind],original.narrative.progress[kind]))throw new Error('本末内容已变化，请重试');
+          const applied=applyNarrativeResponse(projected,task,responses[kind],source(t),{events:projectNarrativeMemory(latestRoot,source(t))});
+          results[kind]=applied[kind];progress[kind]=applied.progress[kind];
+          categories[kind]={preferences:await digest(latest.narrative.preferences[kind]),entries:await digest(latest.narrative[kind]),progress:await digest(latest.narrative.progress[kind]),latestGeneration:await digest(latest.narrative.latestGeneration?.[kind]??null),memory:await digest(task.memorySnapshot),memoryIds:task.memorySnapshot.map(row=>row.id),readMemory:task.preferences.readMemory};
+        }
+        const review={kinds:tasks.map(task=>task.kind),range:clone(range),results,progress,bindings:{generation:await digest(durableConfig(config)),card:proofs.some(row=>row.kind==='self')&&captured.narrative.preferences.self.readCard?await digest(card):null,categories},pairId:active.pairId};
+        if(!valid())throw new Error('材料、设置或聊天已变化，生成已停止');
+        active.review=review;active.status='awaiting-review';active.stage='awaiting-review';reviewGuards={active,valid};
+        try{const saved=await repository.updateNarrative(t,latest,{...latest.narrative,pendingRun:pendingCheckpoint(active)},{isCurrent:valid,requireConfirmation:true});adopt(t,saved.selection);}
+        catch(error){active.review=null;reviewGuards=null;if(error.code==='COMMIT_UNCONFIRMED')blockWrites(error);throw error;}
+        for(const task of tasks)categoryStatus(task.kind,{status:'awaiting-review',error:''});publishRun();return {awaitingReview:true};
+      }
       for(const task of tasks){
         const kind=task.kind;
         try{
           const latest=await repository.captureNarrative(t),latestRoot=await repository.read(t);
           if(!valid()||!equal(latest.narrative.preferences[kind],original.narrative.preferences[kind])||!equal(latest.narrative[kind],original.narrative[kind])||!equal(latest.narrative.progress[kind],original.narrative.progress[kind]))throw new Error('本末内容已变化，请重试');
           const applied=applyNarrativeResponse(projected,task,responses[kind],source(t),{events:projectNarrativeMemory(latestRoot,source(t))});
-          const next={...latest.narrative,[kind]:applied[kind],progress:{...latest.narrative.progress,[kind]:applied.progress[kind]},highWater:{self:narrativeHighWater(latest.narrative,'self')<0?null:narrativeHighWater(latest.narrative,'self'),outline:narrativeHighWater(latest.narrative,'outline')<0?null:narrativeHighWater(latest.narrative,'outline'),[kind]:Math.max(narrativeHighWater(latest.narrative,kind),applied.progress[kind].lastProcessedFloor)},pendingRun:pendingCheckpoint(active,kind)};
+          let next={...latest.narrative,[kind]:applied[kind],progress:{...latest.narrative.progress,[kind]:applied.progress[kind]},highWater:{self:narrativeHighWater(latest.narrative,'self')<0?null:narrativeHighWater(latest.narrative,'self'),outline:narrativeHighWater(latest.narrative,'outline')<0?null:narrativeHighWater(latest.narrative,'outline'),[kind]:Math.max(narrativeHighWater(latest.narrative,kind),applied.progress[kind].lastProcessedFloor)},pendingRun:pendingCheckpoint(active,kind)};
+          next=recordNarrativeGeneration(next,projected,kind,{range:{startFloor:task.source.requestedRange.start,endFloor:task.source.requestedRange.end},pairId:active.pairId,source:(active.summarySource??task.preferences.autoSource)==='cumulative'?'cumulative':'event',regenerateLatest:active.regenerateLatest===true});
           const saved=await repository.updateNarrative(t,latest,next,{isCurrent:valid,requireConfirmation:true});
           if(!valid())throw new Error('聊天或功能开关已变化，生成已停止');
           active.failedKinds=active.failedKinds.filter(item=>item!==kind);
@@ -312,17 +353,17 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       if(current(t)&&sequenceRun===active)for(const kind of active.failedKinds)categoryStatus(kind,{status:'failed',error:error.message});throw error;
     }finally{jobs.delete(job);}
   }
-  async function drive(active){
+  async function drive(active,{checkpointPersisted=false}={}){
     if(sequencePromise)throw new Error('当前叙事批次尚未结束');
     const work=(async()=>{
       active.status='running';active.error='';publishRun();
-      try{await persistCheckpoint(active);}catch(error){active.status='failed';active.error=error.message;publishRun();throw error;}
+      try{if(!checkpointPersisted)await persistCheckpoint(active);}catch(error){active.status='failed';active.error=error.message;publishRun();throw error;}
       while(sequenceRun===active&&active.index<active.ranges.length){
         if(active.pauseRequested){active.status='paused';await persistCheckpoint(active);break;}
         const only=active.failedKinds.length?[...active.failedKinds]:null;
-        try{await runBatch(active,active.ranges[active.index],{only});}
+        try{const result=await runBatch(active,active.ranges[active.index],{only});if(result?.awaitingReview)break;}
         catch(error){active.status='failed';active.error=error.message;active.stage='failed';if(current(active.target)&&sequenceRun===active&&!unconfirmed)try{await persistCheckpoint(active);}catch(saveError){if(saveError.code==='COMMIT_UNCONFIRMED')blockWrites(saveError);}publishRun();throw error;}
-        active.index++;active.failedKinds=[];active.usage=null;publishRun();
+        active.index++;active.pairId=null;active.failedKinds=[];active.usage=null;currentRequestPreview=null;previewGuard=null;publishRun();
       }
       if(active.index>=active.ranges.length){active.status='complete';active.stage='complete';await persistCheckpoint(active);}
       publishRun();return snapshot();
@@ -330,7 +371,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     sequencePromise=work;try{return await work;}finally{if(sequencePromise===work)sequencePromise=null;}
   }
   async function start(options={}){
-    if(sequencePromise||sequenceRun&&['paused','failed'].includes(sequenceRun.status))throw new Error('请先继续、重试或跳过当前批次');
+    if(sequencePromise||sequenceRun&&['paused','failed','awaiting-review'].includes(sequenceRun.status))throw new Error('请先继续、重试或跳过当前批次');
     if(getSummaryActive?.())throw new Error('请先完成当前记忆总结');
     // Reserve synchronously before the first read, so repeated clicks cannot overlap.
     const reservation={},requestedTarget=repository.captureTarget(),requestedSerial=serial;sequencePromise=reservation;
@@ -344,7 +385,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     if(plan.restart&&options.restart!==true){const error=new Error('所选范围已有处理结果，请确认替换所选类别的结果');error.code='NARRATIVE_REPLACE_CONFIRMATION';throw error;}
     if(!plan.kinds.length)return snapshot();
     if(!plan.ranges.length)throw new Error('尚无新的完整 AI 回复可生成');
-    sequenceRun={...plan,target:clone(requestedTarget),index:0,status:'running',stage:'preparing',error:'',failedKinds:[],pauseRequested:false,skipped:0};
+    sequenceRun={...plan,reviewBeforeCommit:options.reviewBeforeCommit===true,target:clone(requestedTarget),index:0,status:'running',stage:'preparing',error:'',failedKinds:[],pauseRequested:false,skipped:0};
     return drive(sequenceRun);
   }
   async function afterSummaryCommit({target:t,startFloor,endFloor,summarySource='event',sentFloors}){
@@ -353,7 +394,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const active=kinds.filter(kind=>allowed(kind)&&(captured.narrative.preferences[kind].autoSource??'event')===summarySource);
     if(!active.length)return {skipped:true};
     if(!current(t))throw new Error('聊天已变化，生成已停止');
-    if(sequencePromise||sequenceRun&&['failed','paused'].includes(sequenceRun.status))throw new Error('请先处理当前叙事批次');
+    if(sequencePromise||sequenceRun&&['failed','paused','awaiting-review'].includes(sequenceRun.status))throw new Error('请先处理当前叙事批次');
     // Freeze the shared continuation start once. A newly enabled category
     // does not trigger historical catch-up, and partial retries retain this
     // exact range instead of advancing past an unsaved category.
@@ -363,12 +404,72 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     sequenceRun={target:clone(t),kinds:active,...(active.length>1?{jointBudget:narrativeJointBudget(captured.narrative)}:{}),summarySource,...(sentFloors?{sentFloors:durableSourceMessages(sentFloors),summarySnapshot:(()=>{const rawMessages=durableSourceMessages(source(t).messages.filter(row=>row.floor<=endFloor));return {requestedRange:{start:0,end:endFloor},rawMessages,fingerprint:sourceFingerprint(rawMessages)};})()}:{}),ranges,index:0,restart:false,status:'running',stage:'preparing',error:'',failedKinds:[],pauseRequested:false,skipped:0,summary:true};
     return drive(sequenceRun);
   }
-  function pause(){if(sequenceRun){sequenceRun.pauseRequested=true;if(!sequencePromise&&sequenceRun.status!=='failed')sequenceRun.status='paused';publishRun();}return snapshot();}
+  async function confirmReview(){
+    if(sequencePromise)throw new Error('请等待当前批次结束');
+    const active=sequenceRun,review=active?.review;
+    if(!active||active.status!=='awaiting-review'||!review)return snapshot();
+    if(unconfirmed)throw new Error('保存结果尚未确认，请重新读取后再操作');
+    const reservation={};sequencePromise=reservation;
+    const t=active.target,proofs=review.kinds.map(kind=>proof(kind,t)),config=clone(generation()),card=review.bindings.card===null?null:cardSnapshot();
+    let latest,raw,events;
+    const valid=()=>{
+      try{return !unconfirmed&&sequenceRun===active&&active.review===review&&current(t)&&proofs.every(matches)&&equal(config,generation())&&(review.bindings.card===null||equal(card,cardSnapshot()))&&(!reviewGuards||reviewGuards.active!==active||reviewGuards.valid())&&review.kinds.every(kind=>matchesStoredNarrativeSource(review.progress[kind].sourceSnapshot,source(t)))&&(!events||typeof adapter.peekConfirmed!=='function'||review.kinds.every(kind=>{const binding=review.bindings.categories[kind];return !binding.readMemory||equal(narrativeMemoryRows(projectNarrativeMemory(adapter.peekConfirmed(t),source(t)),review.range.endFloor).filter(row=>binding.memoryIds.includes(row.id)),events[kind]);}));}catch{return false;}
+    };
+    try{
+      latest=await repository.captureNarrative(t);const root=await repository.read(t);raw=source(t);
+      if(!valid()||!equal(latest.narrative.pendingRun?.review,review))throw new Error('待采用内容、材料或设置已变化，请放弃本批后重新生成');
+      if(await digest(durableConfig(config))!==review.bindings.generation||review.bindings.card!==null&&await digest(card)!==review.bindings.card)throw new Error('生成设置或角色资料已变化，请重新生成');
+      events={};
+      for(const kind of review.kinds){
+        const binding=review.bindings.categories[kind];
+        if(await digest(latest.narrative.preferences[kind])!==binding.preferences||await digest(latest.narrative[kind])!==binding.entries||await digest(latest.narrative.progress[kind])!==binding.progress||await digest(latest.narrative.latestGeneration?.[kind]??null)!==binding.latestGeneration)throw new Error('本末内容或设置已变化，请重新生成');
+        events[kind]=narrativeMemoryRows(projectNarrativeMemory(root,raw),review.range.endFloor).filter(row=>binding.memoryIds.includes(row.id));
+        if(binding.readMemory&&await digest(events[kind])!==binding.memory)throw new Error('记忆材料已变化，请重新生成');
+      }
+      if(!valid())throw new Error('材料、设置或聊天已变化，请重新生成');
+      const baseline=projectNarrativeBatchBase(latest.narrative,raw,{kinds:review.kinds,restart:active.restart,index:active.index,regenerateLatest:active.regenerateLatest});
+      let next=clone(latest.narrative);
+      for(const kind of review.kinds){
+        next[kind]=clone(review.results[kind]);next.progress[kind]=clone(review.progress[kind]);
+        next.highWater={...(next.highWater??{self:null,outline:null}),[kind]:Math.max(narrativeHighWater(latest.narrative,kind),review.progress[kind].lastProcessedFloor)};
+        next=recordNarrativeGeneration(next,baseline,kind,{range:review.range,pairId:review.pairId,source:next.preferences[kind].autoSource==='cumulative'?'cumulative':'event',regenerateLatest:active.regenerateLatest===true});
+      }
+      next.pendingRun=pendingCheckpoint({...active,index:active.index+1,review:null,pairId:null,failedKinds:[]});
+      const saved=await repository.updateNarrative(t,latest,next,{isCurrent:valid,requireConfirmation:true});
+      if(!valid())throw new Error('聊天或功能开关已变化，生成已停止');
+      active.review=null;reviewGuards=null;active.pairId=null;active.index++;active.failedKinds=[];active.usage=null;currentRequestPreview=null;previewGuard=null;
+      for(const kind of review.kinds){
+        const beforeEntries=kind==='self'?baseline.self.flatMap(row=>row.entries):baseline.outline,afterEntries=kind==='self'?review.results.self.flatMap(row=>row.entries):review.results.outline,beforeById=new Map(beforeEntries.map(row=>[row.id,row.text]));
+        categoryStatus(kind,{status:'ready',error:'',addedCount:afterEntries.filter(row=>!beforeById.has(row.id)).length,changedCount:afterEntries.filter(row=>beforeById.has(row.id)&&beforeById.get(row.id)!==row.text).length});
+      }
+      adopt(t,saved.selection);publishRun();
+    }catch(error){
+      active.error=error.message;
+      if(error.code==='COMMIT_UNCONFIRMED')blockWrites(error);
+      publishRun();throw error;
+    }finally{if(sequencePromise===reservation)sequencePromise=null;}
+    // Adoption already committed the next checkpoint (or null for the final
+    // range) with the formal results. Do not reread the entire root just to
+    // submit the same checkpoint again.
+    if(active.index>=active.ranges.length){active.status='complete';active.stage='complete';active.error='';publishRun();return snapshot();}
+    if(active.pauseRequested){active.status='paused';active.error='';publishRun();return snapshot();}
+    return drive(active,{checkpointPersisted:true});
+  }
+  function pause(){
+    if(!sequenceRun)return snapshot();
+    const active=sequenceRun;active.pauseRequested=true;
+    if(!sequencePromise&&!['failed','awaiting-review'].includes(active.status))active.status='paused';publishRun();
+    if(active.status==='awaiting-review'&&!sequencePromise){
+      const work=persistCheckpoint(active).then(()=>snapshot()).catch(error=>{if(error.code==='COMMIT_UNCONFIRMED')blockWrites(error);throw error;});
+      sequencePromise=work;return work.finally(()=>{if(sequencePromise===work)sequencePromise=null;});
+    }
+    return snapshot();
+  }
   function resume(){if(!sequenceRun||!['paused','failed'].includes(sequenceRun.status))return Promise.resolve(snapshot());sequenceRun.pauseRequested=false;return drive(sequenceRun);}
   function skip(){
     if(sequencePromise)throw new Error('请等待当前批次结束');
-    if(!sequenceRun||!['failed','paused'].includes(sequenceRun.status))return Promise.resolve(snapshot());
-    sequenceRun.index++;sequenceRun.skipped++;sequenceRun.failedKinds=[];sequenceRun.usage=null;sequenceRun.pauseRequested=false;return drive(sequenceRun);
+    if(!sequenceRun||!['failed','paused','awaiting-review'].includes(sequenceRun.status))return Promise.resolve(snapshot());
+    sequenceRun.review=null;reviewGuards=null;currentRequestPreview=null;previewGuard=null;sequenceRun.pairId=null;sequenceRun.index++;sequenceRun.skipped++;sequenceRun.failedKinds=[];sequenceRun.usage=null;sequenceRun.pauseRequested=false;return drive(sequenceRun);
   }
   async function intercept(messages,_size,_abort,type='normal'){
     if(disposed)return;
@@ -416,7 +517,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
   });
   for(const name of ['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,()=>{clear();markSources();});
   for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{clear();sequenceRun=null;readSerial++;target=null;selection=null;seenReceipts.clear();automaticPaused.clear();unconfirmed=false;foregroundActive=false;quietDepth=0;state={target:null,narrative:emptyNarrative(),self:emptyStatus(),outline:emptyStatus(),writeBlocked:false,error:''};notify();});
-  return {load,snapshot,savePreferences,saveRunPreferences,saveEntries,generate,preview,start,pause,resume,retry:resume,skip,afterSummaryCommit,hasPending:()=>!!sequenceRun&&['running','paused','failed'].includes(sequenceRun.status),intercept,clear,cancel(kind){for(const key of kind?[assertKind(kind)]:kinds)automaticPaused.add(key);return cancel(kind);},defaultPrompts:DEFAULT_NARRATIVE_PROMPTS,
+  return {load,snapshot,savePreferences,saveRunPreferences,saveEntries,generate,preview,previewRequest,start,pause,resume,confirmReview,retry:resume,skip,afterSummaryCommit,hasPending:()=>!!sequenceRun&&['running','paused','failed','awaiting-review'].includes(sequenceRun.status),intercept,clear,cancel(kind){for(const key of kind?[assertKind(kind)]:kinds)automaticPaused.add(key);return cancel(kind);},defaultPrompts:DEFAULT_NARRATIVE_PROMPTS,
     controlsChanged(){clearSlots();for(const job of jobs)if(!(job.proofs??[job.received]).every(matches)){job.controller.abort();runners.delete(job.kind);if(state[job.kind].status==='running')state[job.kind]={...state[job.kind],status:'idle',error:''};}notify();},
     rebindTarget(next){const previous=target??lastTarget;if(!previous||previous.chatId!==next.chatId||previous.rootId!==next.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){clear();target=clone(next);selection=null;state={...state,target:clone(next),writeBlocked:true,error:'聊天已重新读取，请重新打开本末'};notify();}},
     subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},

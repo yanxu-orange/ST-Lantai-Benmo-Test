@@ -437,7 +437,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(refresh?(!panel||settingsOpen||!benmoContent.contains(container)||benmoContent.hidden||!sameTarget(target,repository.captureTarget())):!valid())return null;
       return refresh?benmoController.load():benmoController.ensure();
     };
-    const view=await mountBenmoView({container,controller:benmoController,availability,isCurrent:valid,prepare,initialState:initialState??{},onClose:close,onNavigate:(area,snapshot)=>{
+    const view=await mountBenmoView({container,controller:benmoController,availability,isCurrent:valid,prepare,initialState:initialState??{},onClose:close,onOpenCleaning:openNarrativeCleaning,onNavigate:(area,snapshot)=>{
       benmoNavigation=snapshot;
       if(area==='settings'){openSettings();return;}
       if(area==='memory')void returnFromSummary();else if(area==='time')void openTime();else if(area==='workshop')void openWorkshop();
@@ -704,6 +704,25 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;
     cumulativeSettingsView=mountCumulativeSettingsView({container:summaryContent,controller:cumulativeSettingsController});
     afterPageFrame(()=>{if(panel&&serial===ticket&&request===pageRequest&&sameTarget(target,repository.captureTarget()))void cumulativeSettingsController.init();});return true;
+  }
+  async function openNarrativeCleaning(){
+    if(!allowed('benmo')||!panel||settingsOpen||!benmoView||!runtime?.settings)return false;
+    const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
+    const current=()=>!!panel&&serial===ticket&&sameTarget(target,repository.captureTarget());
+    // The Benmo view remains suspended in place, keeping both its settings
+    // draft and the generation form underneath it. Cleaning uses the same
+    // event-generation summaryCleaning authority as both summary pages.
+    const returnToNarrative=()=>{cleaningTarget=null;void openBenmo();};
+    cleaningController?.dispose();cleaningTarget=null;
+    cleaningController=createSummarySettingsController({settings:runtime.settings,isCurrent:current,onBack:returnToNarrative,onClose:close});
+    const controller=cleaningController;await controller.init();
+    if(!current()||request!==pageRequest)return false;
+    controller.navigate('cleaning');
+    suspendPages();
+    cleaningFacade={...controller,back(){if(controller.inspect().route==='rule')return controller.back();if(controller.inspect().status==='saving')return false;returnToNarrative();return true;}};
+    memoryContent.hidden=true;memoryContent.inert=true;benmoContent.hidden=true;benmoContent.inert=true;summaryContent.hidden=false;summaryContent.inert=false;
+    summarySettingsView=mountSummarySettingsView(summaryContent,cleaningFacade,{readonlyContent:summaryReadonlyContent});
+    syncAppearance();return true;
   }
   async function openCumulativeCleaning(){
     if(!allowed('cumulative'))return false;

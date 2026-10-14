@@ -33,28 +33,7 @@ function assertEntries(entries, ids) {
     ids.add(entry.id);
   }
 }
-export function assertNarrative(value) {
-  if (!exact(value, ['schema', 'revision', 'preferences', 'self', 'outline', 'progress', ...(Object.hasOwn(value??{}, 'pendingRun') ? ['pendingRun'] : []), ...(Object.hasOwn(value??{}, 'highWater') ? ['highWater'] : [])]) || value.schema !== 1 || !integer(value.revision)
-    || !exact(value.preferences, ['self', 'outline', ...(Object.hasOwn(value.preferences??{}, 'run') ? ['run'] : [])]) || !exact(value.progress, ['self', 'outline']) || !Array.isArray(value.self)) throw new Error('自述或大纲数据结构无效');
-  if (value.preferences.run !== undefined && (!exact(value.preferences.run, ['auto', 'batchSize', ...(Object.hasOwn(value.preferences.run, 'jointBudget') ? ['jointBudget'] : [])]) || typeof value.preferences.run.auto !== 'boolean' || !integer(value.preferences.run.batchSize, 1) || Object.hasOwn(value.preferences.run, 'jointBudget') && !integer(value.preferences.run.jointBudget, 1))) throw new Error('叙事分批设置无效');
-  if (value.highWater !== undefined && (!exact(value.highWater, ['self', 'outline']) || Object.values(value.highWater).some(floor => floor !== null && !integer(floor)))) throw new Error('叙事后续起点无效');
-  for (const kind of ['self', 'outline']) assertNarrativePreferences(value.preferences[kind], kind);
-  if (value.pendingRun !== undefined && value.pendingRun !== null) {
-    const pending = value.pendingRun;
-    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status', ...(Object.hasOwn(pending, 'jointBudget') ? ['jointBudget'] : []), ...(Object.hasOwn(pending, 'summarySource') ? ['summarySource'] : []), ...(Object.hasOwn(pending, 'sentFloors') ? ['sentFloors'] : []), ...(Object.hasOwn(pending, 'summarySnapshot') ? ['summarySnapshot'] : [])]) || !Array.isArray(pending.ranges) || !pending.ranges.length
-      || pending.ranges.some(item => !exact(item, ['startFloor', 'endFloor']) || !integer(item.startFloor) || !integer(item.endFloor, item.startFloor))
-      || !integer(pending.index) || pending.index >= pending.ranges.length || !Array.isArray(pending.kinds) || !pending.kinds.length || new Set(pending.kinds).size !== pending.kinds.length || pending.kinds.some(kind => !['self', 'outline'].includes(kind))
-      || !Array.isArray(pending.failedKinds) || new Set(pending.failedKinds).size !== pending.failedKinds.length || pending.failedKinds.some(kind => !pending.kinds.includes(kind))
-      || typeof pending.restart !== 'boolean' || typeof pending.summary !== 'boolean' || !['paused', 'failed'].includes(pending.status)) throw new Error('叙事批次断点无效');
-    if (Object.hasOwn(pending, 'jointBudget') && !integer(pending.jointBudget, 1)) throw new Error('叙事批次联合预算无效');
-    if (pending.summarySource !== undefined && !['event', 'cumulative'].includes(pending.summarySource)) throw new Error('叙事批次来源无效');
-    if (pending.summarySnapshot !== undefined) assertNarrativeSource(pending.summarySnapshot);
-    if (pending.sentFloors !== undefined) {
-      assertRawSummarySource({epoch:0,messages:pending.sentFloors});
-      assertNarrativeSource(pending.summarySnapshot);
-      if (pending.summarySource !== 'cumulative' || pending.sentFloors.some(row => { const original=pending.summarySnapshot.rawMessages.find(item=>item.floor===row.floor); return !original || ['identity','role','system','date','swipeId'].some(key=>(original[key]??null)!==(row[key]??null)); })) throw new Error('古法叙事来源不一致');
-    }
-  }
+function assertNarrativeContent(value) {
   const ids = new Set(), characters = new Set();
   for (const row of value.self) {
     if (!exact(row, ['id', 'name', 'entries']) || !text(row.id) || !text(row.name) || characters.has(row.id)) throw new Error('角色自述记录身份无效');
@@ -85,6 +64,35 @@ export function assertNarrative(value) {
     const entries = kind === 'self' ? value.self.flatMap(row => row.entries) : value.outline;
     if (entries.some(entry => entry.sources.some(source => source.end > progress.lastProcessedFloor))) throw new Error('自述或大纲进度落后于结果');
   }
+}
+export function assertNarrative(value) {
+  if (!exact(value, ['schema', 'revision', 'preferences', 'self', 'outline', 'progress', ...(Object.hasOwn(value??{}, 'pendingRun') ? ['pendingRun'] : []), ...(Object.hasOwn(value??{}, 'highWater') ? ['highWater'] : []), ...(Object.hasOwn(value??{}, 'generationRecords') ? ['generationRecords'] : []), ...(Object.hasOwn(value??{}, 'latestGeneration') ? ['latestGeneration'] : [])]) || value.schema !== 1 || !integer(value.revision)
+    || !exact(value.preferences, ['self', 'outline', ...(Object.hasOwn(value.preferences??{}, 'run') ? ['run'] : [])]) || !exact(value.progress, ['self', 'outline']) || !Array.isArray(value.self)) throw new Error('自述或大纲数据结构无效');
+  if (value.preferences.run !== undefined && (!exact(value.preferences.run, ['auto', 'batchSize', ...(Object.hasOwn(value.preferences.run, 'jointBudget') ? ['jointBudget'] : [])]) || typeof value.preferences.run.auto !== 'boolean' || !integer(value.preferences.run.batchSize, 1) || Object.hasOwn(value.preferences.run, 'jointBudget') && !integer(value.preferences.run.jointBudget, 1))) throw new Error('叙事分批设置无效');
+  if (value.highWater !== undefined && (!exact(value.highWater, ['self', 'outline']) || Object.values(value.highWater).some(floor => floor !== null && !integer(floor)))) throw new Error('叙事后续起点无效');
+  for (const kind of ['self', 'outline']) assertNarrativePreferences(value.preferences[kind], kind);
+  if (value.pendingRun !== undefined && value.pendingRun !== null) {
+    const pending = value.pendingRun;
+    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status', ...(Object.hasOwn(pending, 'jointBudget') ? ['jointBudget'] : []), ...(Object.hasOwn(pending, 'summarySource') ? ['summarySource'] : []), ...(Object.hasOwn(pending, 'sentFloors') ? ['sentFloors'] : []), ...(Object.hasOwn(pending, 'summarySnapshot') ? ['summarySnapshot'] : []), ...['reviewBeforeCommit', 'regenerateLatest', 'pauseRequested', 'review', 'pairId'].filter(key => Object.hasOwn(pending, key))]) || !Array.isArray(pending.ranges) || !pending.ranges.length
+      || pending.ranges.some(item => !exact(item, ['startFloor', 'endFloor']) || !integer(item.startFloor) || !integer(item.endFloor, item.startFloor))
+      || !integer(pending.index) || pending.index >= pending.ranges.length || !Array.isArray(pending.kinds) || !pending.kinds.length || new Set(pending.kinds).size !== pending.kinds.length || pending.kinds.some(kind => !['self', 'outline'].includes(kind))
+      || !Array.isArray(pending.failedKinds) || new Set(pending.failedKinds).size !== pending.failedKinds.length || pending.failedKinds.some(kind => !pending.kinds.includes(kind))
+      || typeof pending.restart !== 'boolean' || typeof pending.summary !== 'boolean' || !['paused', 'failed', 'awaiting-review'].includes(pending.status)) throw new Error('叙事批次断点无效');
+    for (const key of ['reviewBeforeCommit', 'regenerateLatest', 'pauseRequested']) if (Object.hasOwn(pending, key) && typeof pending[key] !== 'boolean') throw new Error('叙事批次检查选项无效');
+    if (Object.hasOwn(pending, 'pairId') && !text(pending.pairId)) throw new Error('叙事批次身份无效');
+    if (pending.reviewBeforeCommit && pending.summary) throw new Error('自动续接不能进入手动检查');
+    if (pending.status === 'awaiting-review' || Object.hasOwn(pending, 'review')) assertNarrativeReview(pending);
+    if (Object.hasOwn(pending, 'jointBudget') && !integer(pending.jointBudget, 1)) throw new Error('叙事批次联合预算无效');
+    if (pending.summarySource !== undefined && !['event', 'cumulative'].includes(pending.summarySource)) throw new Error('叙事批次来源无效');
+    if (pending.summarySnapshot !== undefined) assertNarrativeSource(pending.summarySnapshot);
+    if (pending.sentFloors !== undefined) {
+      assertRawSummarySource({epoch:0,messages:pending.sentFloors});
+      assertNarrativeSource(pending.summarySnapshot);
+      if (pending.summarySource !== 'cumulative' || pending.sentFloors.some(row => { const original=pending.summarySnapshot.rawMessages.find(item=>item.floor===row.floor); return !original || ['identity','role','system','date','swipeId'].some(key=>(original[key]??null)!==(row[key]??null)); })) throw new Error('古法叙事来源不一致');
+    }
+  }
+  assertNarrativeContent(value);
+  assertGenerationHistory(value);
   return clone(value);
 }
 export function narrativeOf(root) { return root.narrative === undefined ? emptyNarrative() : assertNarrative(root.narrative); }
@@ -107,6 +115,13 @@ export function inheritNarrative(value, floor) {
   for (const kind of ['self', 'outline']) retainSafeProof(domain, kind, floor);
   if (Object.hasOwn(domain, 'pendingRun')) domain.pendingRun = null;
   if (domain.highWater) for (const kind of ['self', 'outline']) domain.highWater[kind] = domain.highWater[kind] === null || floor === 0 ? null : Math.min(domain.highWater[kind], floor - 1);
+  for (const kind of ['self', 'outline']) {
+    if (domain.generationRecords) domain.generationRecords[kind] = domain.generationRecords[kind].filter(row => row.endFloor < floor);
+    const latest = domain.latestGeneration?.[kind];
+    if (latest && (latest.range.endFloor >= floor || latest.sourceSnapshot.requestedRange.end >= floor
+      || latest.baseline.progress?.lastProcessedFloor >= floor
+      || entriesForKind(latest.baseline.entries, kind).some(entry => !safe(entry)))) domain.latestGeneration[kind] = null;
+  }
   domain.revision = 0;
   return assertNarrative(domain);
 }
@@ -122,6 +137,7 @@ export function reconcileNarrativeSource(value, raw) {
     const safe = entry => entry.sources.every(source => source.end < changed);
     if (kind === 'self') domain.self = domain.self.map(row => ({...row, entries: row.entries.filter(safe)})); else domain.outline = domain.outline.filter(safe);
     retainSafeProof(domain, kind, changed); staleKinds.push(kind);
+    if (domain.latestGeneration?.[kind]) domain.latestGeneration[kind] = null;
     firstChangedFloor = firstChangedFloor === null ? changed : Math.min(firstChangedFloor, changed);
   }
   return {domain: assertNarrative(domain), staleKinds, firstChangedFloor};
@@ -185,3 +201,84 @@ export function narrativeHighWater(domain, kind) { return Math.max(domain.highWa
 // Missing shared budgets retain the previous larger-allowance default without
 // rewriting stored preferences or either category's independent budget.
 export function narrativeJointBudget(domain) { return domain.preferences.run?.jointBudget ?? Math.max(domain.preferences.self.budget, domain.preferences.outline.budget); }
+
+const kinds = ['self', 'outline'];
+const entriesForKind = (entries, kind) => kind === 'self' ? entries.flatMap(row => row.entries) : entries;
+const floorRange = value => exact(value, ['startFloor', 'endFloor']) && integer(value.startFloor) && integer(value.endFloor, value.startFloor);
+function assertKindContent(entries, progress, kind) {
+  const content = emptyNarrative(); content[kind] = entries; content.progress[kind] = progress;
+  assertNarrativeContent(content);
+}
+function assertGenerationHistory(domain) {
+  if (Object.hasOwn(domain, 'generationRecords')) {
+    if (!exact(domain.generationRecords, kinds)) throw new Error('叙事生成记录无效');
+    for (const kind of kinds) {
+      const records = domain.generationRecords[kind], ids = new Set();
+      if (!Array.isArray(records)) throw new Error('叙事生成记录无效');
+      for (const row of records) {
+        if (!exact(row, ['id', 'startFloor', 'endFloor', 'updatedAt', 'source']) || !text(row.id) || ids.has(row.id)
+          || !integer(row.startFloor) || !integer(row.endFloor, row.startFloor) || !text(row.updatedAt) || !['event', 'cumulative'].includes(row.source)) throw new Error('叙事生成记录无效');
+        ids.add(row.id);
+      }
+    }
+  }
+  if (Object.hasOwn(domain, 'latestGeneration')) {
+    if (!exact(domain.latestGeneration, kinds)) throw new Error('叙事最新生成基版无效');
+    for (const kind of kinds) {
+      const latest = domain.latestGeneration[kind]; if (latest === null) continue;
+      if (!exact(latest, ['recordId', 'pairId', 'baseline', 'range', 'sourceSnapshot']) || !text(latest.recordId) || !text(latest.pairId)
+        || !floorRange(latest.range) || !exact(latest.baseline, ['entries', 'progress'])) throw new Error('叙事最新生成基版无效');
+      assertKindContent(latest.baseline.entries, latest.baseline.progress, kind);
+      assertNarrativeSource(latest.sourceSnapshot);
+      const record = domain.generationRecords?.[kind]?.at(-1);
+      if (!record || record.id !== latest.recordId || record.startFloor !== latest.range.startFloor || record.endFloor !== latest.range.endFloor
+        || latest.sourceSnapshot.requestedRange.start !== latest.range.startFloor || latest.sourceSnapshot.requestedRange.end !== latest.range.endFloor) throw new Error('叙事最新生成记录与基版不一致');
+    }
+  }
+}
+// Only successful processing produces records. Legacy prose coverage is not a batch log.
+export function narrativeGenerationRecords(value, kind) {
+  assertKind(kind); return clone(assertNarrative(value).generationRecords?.[kind] ?? []);
+}
+export function recordNarrativeGeneration(value, before, kind, {range: selectedRange, pairId, source = 'event', regenerateLatest = false} = {}) {
+  const domain = assertNarrative(value), previous = assertNarrative(before); assertKind(kind);
+  const progress = domain.progress[kind];
+  if (!progress || !floorRange(selectedRange) || !text(pairId) || !['event', 'cumulative'].includes(source)
+    || !same(progress.sourceSnapshot.requestedRange, {start: selectedRange.startFloor, end: selectedRange.endFloor})) throw new Error('叙事生成记录缺少成功来源');
+  const old = previous.latestGeneration?.[kind];
+  if (regenerateLatest && (!old || !same(old.range, selectedRange))) throw new Error('缺少最新生成前基版，不能重新生成');
+  domain.generationRecords ??= {self: [], outline: []};
+  domain.latestGeneration ??= {self: null, outline: null};
+  const id = regenerateLatest ? old.recordId : progress.taskId;
+  const record = {id, ...clone(selectedRange), updatedAt: progress.updatedAt, source};
+  if (regenerateLatest) {
+    if (domain.generationRecords[kind].at(-1)?.id !== id) throw new Error('最新生成记录已变化');
+    domain.generationRecords[kind][domain.generationRecords[kind].length - 1] = record;
+  } else domain.generationRecords[kind].push(record);
+  domain.latestGeneration[kind] = {recordId: id, pairId, baseline: regenerateLatest ? clone(old.baseline) : {entries: clone(previous[kind]), progress: clone(previous.progress[kind])}, range: clone(selectedRange), sourceSnapshot: clone(progress.sourceSnapshot)};
+  // Replaying a historical range must never move the automatic continuation cursor backward.
+  domain.highWater = {...(domain.highWater ?? {self: null, outline: null}), [kind]: Math.max(narrativeHighWater(previous, kind), narrativeHighWater(domain, kind))};
+  return assertNarrative(domain);
+}
+
+function assertNarrativeReview(pending) {
+  const review = pending.review, digest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+  if (pending.status !== 'awaiting-review' || pending.reviewBeforeCommit !== true || pending.summary
+    || !exact(review, ['kinds', 'range', 'results', 'progress', 'bindings', 'pairId']) || !text(review.pairId) || pending.pairId !== undefined && pending.pairId !== review.pairId
+    || !Array.isArray(review.kinds) || !review.kinds.length || new Set(review.kinds).size !== review.kinds.length
+    || review.kinds.some(kind => !pending.kinds.includes(kind)) || !floorRange(review.range) || !same(review.range, pending.ranges[pending.index])
+    || !exact(review.results, review.kinds) || !exact(review.progress, review.kinds)
+    || !exact(review.bindings, ['generation', 'card', 'categories']) || !digest(review.bindings.generation)
+    || !(review.bindings.card === null || digest(review.bindings.card)) || !exact(review.bindings.categories, review.kinds)) throw new Error('叙事待采用内容无效');
+  const ids = new Set();
+  for (const kind of review.kinds) {
+    const binding = review.bindings.categories[kind], progress = review.progress[kind];
+    if (!exact(binding, ['preferences', 'entries', 'progress', 'memory', 'memoryIds', 'readMemory', 'latestGeneration'])
+      || ['preferences', 'entries', 'progress', 'memory', 'latestGeneration'].some(key => !digest(binding[key]))
+      || typeof binding.readMemory !== 'boolean' || !Array.isArray(binding.memoryIds) || binding.memoryIds.some(id => !text(id)) || new Set(binding.memoryIds).size !== binding.memoryIds.length) throw new Error('叙事待采用来源绑定无效');
+    assertKindContent(review.results[kind], progress, kind);
+    assertEntries(entriesForKind(review.results[kind], kind), ids);
+    if (!progress || !same(progress.sourceSnapshot.requestedRange, {start: review.range.startFloor, end: review.range.endFloor})
+      || !same(binding.memoryIds, progress.memorySnapshot.map(row => row.id))) throw new Error('叙事待采用进度与范围不一致');
+  }
+}
