@@ -91,7 +91,7 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     continueNarrative(){return write(null,()=>narrativeRuntime.resume());},
     retryNarrative(){return write(null,()=>narrativeRuntime.retry());},
     skipNarrative(){return write(null,()=>narrativeRuntime.skip());},
-    generateNarrative(kind,options){return write(kind,()=>narrativeRuntime.start(options));},
+    generateNarrative(kind,options={}){const scoped={...options};delete scoped.kind;delete scoped.kinds;Object.assign(scoped,kind==='both'?{kinds:['self','outline']}:{kind});return write(kind==='both'?null:kind,()=>narrativeRuntime.start(scoped));},
     cancelNarrative(kind){return write(kind,()=>narrativeRuntime.cancel(kind));},
     saveTrackingPrompt(kind,prompt,options){return write(kind,()=>trackingRuntime.savePrompt(kind,prompt,options));},
     saveExclusionNames(kind,names,options){return write(kind,()=>trackingRuntime.saveExclusionNames(kind,names,options));},

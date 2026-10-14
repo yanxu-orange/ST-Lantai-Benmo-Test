@@ -24,7 +24,7 @@ export async function mountBenmoView({container: app, controller, availability =
   let value = {}, loading = true, loadFailed = false, initializing = true;
   let disposed = false, suspended = false, acting = false, composing = false;
   let error = '', dialog = null, draft = null, baseline = null, original = null, narrativeRecovery = null, narrativeDraftTarget = null, invalidated = false, renderedPolicy = '';
-  let narrativePlan = null, narrativeRange = null, narrativePlanning = false;
+  let narrativeRange = null, narrativePlanning = false, narrativeKinds = null;
   let returnRoute = 'list', epoch = 0, toastTimer, redirectTimer;
   let backfillJob = null, summaryVisibilityDisposer = null, observingSummaryVisibility = false;
   const generating = new Map(), narrativeJobs = new Map();
@@ -66,7 +66,7 @@ export async function mountBenmoView({container: app, controller, availability =
   const selectedRecord = () => records().find(row => row.id === state.selected);
   const context = () => ['benmo', state.tab, state.kind, state.route, ['detail', 'edit', 'narrative-edit'].includes(state.route) ? state.selected ?? 'new' : ''].join(':');
   const blocked = () => loading || loadFailed || !!narrativeRecovery || summaryDraftHidden() || invalidated || externalPolicy().transient === true || value.writeBlocked === true || !policy()[activeKind()];
-  const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'toggle-excluded', 'restore-excluded', 'new', 'generate', 'generate-narrative', 'start-narrative', 'continue-narrative', 'retry-narrative', 'skip-narrative', 'pause-narrative', 'manual-summary', 'start-backfill'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
+  const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'toggle-excluded', 'restore-excluded', 'new', 'generate', 'generate-narrative', 'generate-narrative-together', 'save-narrative-budget', 'start-narrative', 'continue-narrative', 'retry-narrative', 'skip-narrative', 'pause-narrative', 'manual-summary', 'start-backfill'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
   const bookTheme = () => ['paper-letter','purple-glow'].includes(surfaceTheme(app));
   const textEntry = (label, action, attrs = '') => button(bookTheme() && ['settings-summary','settings-tracking','settings-narrative'].includes(action) ? '设置' : label, action, attrs).replace('ui-button ui-button--tertiary', 'benmo-text-entry');
   const icon = (label, action, file, attrs = '') => `<button type="button" class="ui-icon-button ui-button--tertiary" aria-label="${esc(label)}" data-action="${action}" ${attrs}><img class="lt-icon" data-icon="${file}" src="${new URL(`./icons/${file}.svg`, import.meta.url)}" alt=""></button>`;
@@ -77,7 +77,7 @@ export async function mountBenmoView({container: app, controller, availability =
   function readDraft() {
     const form = app.querySelector('form');
     if (form && state.route === 'narrative-generate' && narrativeRange) {
-      for (const [key, raw] of new FormData(form)) if (['startFloor', 'endFloor', 'batchSize'].includes(key)) narrativeRange[key] = String(raw);
+      for (const [key, raw] of new FormData(form)) if (['startFloor', 'endFloor', 'batchSize', 'jointBudget'].includes(key)) narrativeRange[key] = String(raw);
       return;
     }
     if (!form || !draft) return;
@@ -272,34 +272,48 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   function narrativeReport() {
     const info = narrativeStatus(), progress = narrativeData().progress?.[state.tab], report = info.materialReport ?? progress?.materialsReport;
-    if (!report) return '';
-    return `<details class="section benmo-material-report"><summary>本次读取范围</summary><p class="meta">原文：${esc(rangesText(report.originalRanges))}</p><p class="meta">记忆：${esc(rangesText(report.memoryRanges))}</p><p class="meta">材料用量：${report.estimated ? '估算约 ' : ''}${esc(report.tokens)} / ${esc(report.budget)} token</p>${report.trimmed ? `<p class="meta">已略过 ${esc(report.omittedMemoryCount ?? 0)} 条较早记忆。</p>` : ''}${report.unavailableMemoryCount > 0 ? `<p class="meta">已跳过 ${esc(report.unavailableMemoryCount)} 条来源范围无法确认的记忆。</p>` : ''}</details>`;
+    const run = narrativeRun(), active = ['running','paused','failed'].includes(run.status) && run.kinds?.includes(state.tab), joint = active ? run.usage : report?.joint;
+    const jointMarkup = joint ? `<p class="meta">联合用量：输入 ${esc(joint.inputTokens)} ＋ 输出预留 ${esc(joint.outputReserve)} ＝ 总计 ${esc(joint.totalTokens)} / 上限 ${esc(joint.budget)} token${joint.estimated ? '（估算）' : ''}</p>` : '';
+    if (!report) return jointMarkup;
+    return `<details class="section benmo-material-report"><summary>本次读取范围</summary>${jointMarkup}<p class="meta">原文：${esc(rangesText(report.originalRanges))}</p><p class="meta">记忆：${esc(rangesText(report.memoryRanges))}</p><p class="meta">材料用量：${report.estimated ? '估算约 ' : ''}${esc(report.tokens)} / ${esc(report.budget)} token</p>${report.trimmed ? `<p class="meta">已略过 ${esc(report.omittedMemoryCount ?? 0)} 条较早记忆。</p>` : ''}${report.unavailableMemoryCount > 0 ? `<p class="meta">已跳过 ${esc(report.unavailableMemoryCount)} 条来源范围无法确认的记忆。</p>` : ''}</details>`;
   }
   function narrativeView() {
     const kind = state.tab, preferences = narrativePreferences(), info = narrativeStatus(), result = narrativeResults();
     const floor = narrativeData().progress?.[kind]?.lastProcessedFloor;
     const hasEntries = kind === 'self' ? result.some(character => character.entries?.length) : result.length > 0;
     const entryMarkup = entry => `<article class="record benmo-narrative-entry"><div class="row"><span class="meta">${esc(rangesText(entry.sources))}</span>${button('编辑', 'edit-narrative', `data-id="${esc(entry.id)}"`)}</div><p class="reading">${esc(entry.text)}</p></article>`;
-    return `<div class="row"><span class="meta">${Number.isSafeInteger(floor) ? `已处理至第 ${floor} 楼` : hasEntries ? '当前聊天' : '尚未生成'}</span><div class="actions">${textEntry('设置', 'settings-narrative')}${button('生成', 'generate-narrative', '', 'secondary')}</div></div>${narrativeRunStatus() ? `<p class="meta" role="status">${esc(narrativeRunStatus())}</p><div class="actions">${narrativeRunActions()}</div>` : ''}${info.error && info.error !== (error || value.error) ? `<p class="lt-error" role="alert">${esc(info.error)}</p>` : ''}<div class="section">${kind === 'self' ? result.filter(character => character.entries?.length).map(character => { const selected = preferences.characters?.find(row => row.id === character.id); return `<section class="section benmo-narrative-group"><div class="row"><h2>${esc(character.name)}</h2><span class="meta">${selected ? selected.inject ? '每轮注入' : '未选择注入' : '保留的历史自述'}</span></div>${character.entries.map(entryMarkup).join('')}</section>`; }).join('') : result.map(entryMarkup).join('')}${hasEntries ? '' : `<p class="meta">暂无${TABS[kind]}</p>`}</div>${narrativeReport()}`;
+    return `<div class="row"><span class="meta">${Number.isSafeInteger(floor) ? `已处理至第 ${floor} 楼` : hasEntries ? '当前聊天' : '尚未生成'}</span><div class="actions">${textEntry('设置', 'settings-narrative')}${button('生成', 'generate-narrative', '', 'secondary')}${NARRATIVES.every(item => policy()[item]) ? button('一起生成', 'generate-narrative-together') : ''}</div></div>${narrativeRunStatus() ? `<p class="meta" role="status">${esc(narrativeRunStatus())}</p><div class="actions">${narrativeRunActions()}</div>` : ''}${info.error && info.error !== (error || value.error) ? `<p class="lt-error" role="alert">${esc(info.error)}</p>` : ''}<div class="section">${kind === 'self' ? result.filter(character => character.entries?.length).map(character => { const selected = preferences.characters?.find(row => row.id === character.id); return `<section class="section benmo-narrative-group"><div class="row"><h2>${esc(character.name)}</h2><span class="meta">${selected ? selected.inject ? '每轮注入' : '未选择注入' : '保留的历史自述'}</span></div>${character.entries.map(entryMarkup).join('')}</section>`; }).join('') : result.map(entryMarkup).join('')}${hasEntries ? '' : `<p class="meta">暂无${TABS[kind]}</p>`}</div>${narrativeReport()}`;
   }
   function narrativeGeneration() {
     if (narrativePlanning) return '<p class="meta" role="status">正在读取生成范围…</p>';
-    if (!narrativeRange) return button('重新读取范围', 'generate-narrative');
-    const run = narrativeRun(), kinds = narrativePlan?.kinds ?? NARRATIVES.filter(kind => policy()[kind]);
+    if (!narrativeRange) return button('重新读取范围', narrativeKinds?.length > 1 ? 'generate-narrative-together' : 'generate-narrative');
+    const run = narrativeRun(), kinds = ['running','paused','failed'].includes(run.status) ? run.kinds ?? narrativeKinds ?? [state.tab] : narrativeKinds ?? [state.tab];
     const source = kind => { const preferences = narrativePreferences(kind); return [preferences.autoSource === 'cumulative' ? '本批清洗原文' : [preferences.readMemory !== false && '记忆', preferences.readOriginal === true && '原文'].filter(Boolean).join('、'), kind === 'self' && preferences.readCard !== false && '角色卡', preferences.background && '补充背景'].filter(Boolean).join('、'); };
-    if (['running','paused','failed'].includes(run.status)) return `<section class="section"><div class="row"><h2>${kinds.map(kind => TABS[kind]).join('与')}</h2>${textEntry('设置', 'settings-narrative')}</div><p class="meta" role="status">${esc(narrativeRunStatus())}</p>${run.error ? `<p class="lt-error" role="alert">${esc(run.error)}</p>` : ''}<div class="actions">${narrativeRunActions()}</div></section>`;
-    return `<form class="section" id="benmo-narrative-generate-form"><div class="row"><h2>生成范围</h2>${textEntry('设置', 'settings-narrative')}</div><p class="meta">${kinds.map(kind => `${TABS[kind]}：${esc(source(kind))}`).join('；')}</p><div class="two-cols">${[['startFloor', '起始楼层'], ['endFloor', '结束楼层']].map(([key,label]) => `<label class="ui-field"><span>${label}</span><input class="ui-input" type="number" min="0" step="1" inputmode="numeric" name="${key}" value="${esc(narrativeRange[key])}" ${narrativeBusy() ? 'disabled' : ''}></label>`).join('')}</div><label class="ui-field"><span>每批楼数</span><input class="ui-input" type="number" min="1" step="1" inputmode="numeric" name="batchSize" value="${esc(narrativeRange.batchSize)}" ${narrativeBusy() ? 'disabled' : ''}></label>${narrativeRunStatus() ? `<p class="meta" role="status">${esc(narrativeRunStatus())}</p>` : ''}${run.error ? `<p class="lt-error" role="alert">${esc(run.error)}</p>` : ''}${!narrativeBusy() && Number(narrativeRange.startFloor) > Number(narrativeRange.endFloor) ? '<p class="meta" role="status">暂无新内容，可选择其他楼层范围。</p>' : ''}<div class="actions">${narrativeRunActions()}${button('开始生成', 'start-narrative', narrativeBusy() || ['failed', 'paused'].includes(run.status) ? 'disabled' : '', 'primary')}</div></form>`;
+    if (['running','paused','failed'].includes(run.status)) return `<section class="section"><div class="row"><h2>${kinds.map(kind => TABS[kind]).join('与')}</h2>${textEntry('设置', 'settings-narrative')}</div><p class="meta" role="status">${esc(narrativeRunStatus())}</p>${run.error ? `<p class="lt-error" role="alert">${esc(run.error)}</p>` : ''}<div class="actions">${narrativeRunActions()}</div>${narrativeReport()}</section>`;
+    return `<form class="section" id="benmo-narrative-generate-form"><div class="row"><h2>生成范围</h2>${textEntry('设置', 'settings-narrative')}</div><p class="meta">${kinds.map(kind => `${TABS[kind]}：${esc(source(kind))}`).join('；')}</p><div class="two-cols">${[['startFloor', '起始楼层'], ['endFloor', '结束楼层']].map(([key,label]) => `<label class="ui-field"><span>${label}</span><input class="ui-input" type="number" min="0" step="1" inputmode="numeric" name="${key}" value="${esc(narrativeRange[key])}" ${narrativeBusy() ? 'disabled' : ''}></label>`).join('')}</div><label class="ui-field"><span>每批楼数</span><input class="ui-input" type="number" min="1" step="1" inputmode="numeric" name="batchSize" value="${esc(narrativeRange.batchSize)}" ${narrativeBusy() ? 'disabled' : ''}></label>${kinds.length > 1 ? `<label class="ui-field"><span>联合预算（token）</span><input class="ui-input" type="number" min="1" step="1" inputmode="numeric" name="jointBudget" value="${esc(narrativeRange.jointBudget)}" required></label><div class="actions">${button('保存预算', 'save-narrative-budget', acting ? 'disabled' : '')}</div><p class="meta">两项共用此预算，包含请求输入与输出预留。</p>` : ''}${narrativeRunStatus() ? `<p class="meta" role="status">${esc(narrativeRunStatus())}</p>` : ''}${run.error ? `<p class="lt-error" role="alert">${esc(run.error)}</p>` : ''}${!narrativeBusy() && Number(narrativeRange.startFloor) > Number(narrativeRange.endFloor) ? '<p class="meta" role="status">暂无新内容，可选择其他楼层范围。</p>' : ''}<div class="actions">${narrativeRunActions()}${button('开始生成', 'start-narrative', narrativeBusy() || ['failed', 'paused'].includes(run.status) ? 'disabled' : '', 'primary')}</div></form>${narrativeReport()}`;
   }
-  async function openNarrativeGeneration() {
+  const narrativeScope = () => narrativeKinds?.length > 1 ? {kinds: [...narrativeKinds]} : {kind: narrativeKinds?.[0] ?? state.tab};
+  async function openNarrativeGeneration(together = false) {
+    if (blocked() || together && !NARRATIVES.every(kind => policy()[kind])) return;
+    const pending = narrativeRun();
+    narrativeKinds = ['running','paused','failed'].includes(pending.status) && pending.kinds?.length ? [...pending.kinds] : together ? [...NARRATIVES] : [state.tab];
     remember(); epoch++; const operationEpoch = epoch; clearDraft(); state.route = 'narrative-generate'; error = ''; narrativePlanning = true; narrativeRange = null; render();
-    try { const plan = await controller.previewNarrative(); if (disposed || suspended || epoch !== operationEpoch) return; narrativePlan = plan; const preferences = narrativeData().preferences?.run ?? {}; narrativeRange = {startFloor: String(plan.startFloor ?? ''), endFloor: String(plan.endFloor ?? plan.latestFloor ?? ''), batchSize: String(plan.batchSize ?? preferences.batchSize ?? 10)}; }
+    try { const plan = await controller.previewNarrative(narrativeScope()); if (disposed || suspended || epoch !== operationEpoch) return; const preferences = narrativeData().preferences?.run ?? {}; narrativeRange = {startFloor: String(plan.startFloor ?? ''), endFloor: String(plan.endFloor ?? plan.latestFloor ?? ''), batchSize: String(plan.batchSize ?? preferences.batchSize ?? 10), ...(narrativeKinds.length > 1 ? {jointBudget: String(plan.jointBudget ?? preferences.jointBudget ?? Math.max(...NARRATIVES.map(kind => narrativePreferences(kind).budget ?? 30000)))} : {})}; }
     catch (failure) { if (!disposed && !suspended && epoch === operationEpoch) error = failure.message || '读取生成范围失败，请重试'; }
     finally { if (!disposed && !suspended && epoch === operationEpoch) { narrativePlanning = false; render(); } }
   }
   function narrativeOptions() {
     readDraft(); const options = Object.fromEntries(['startFloor','endFloor','batchSize'].map(key => [key, Number(narrativeRange?.[key])]));
     if (Object.keys(options).some(key => !String(narrativeRange?.[key] ?? '').trim() || !Number.isSafeInteger(options[key])) || options.startFloor < 0 || options.endFloor < options.startFloor || options.batchSize < 1) throw new Error('请填写有效的楼层范围与每批楼数');
-    return options;
+    if (narrativeKinds?.length > 1) {
+      options.jointBudget = narrativeJointBudget();
+    }
+    return {...options, ...narrativeScope()};
+  }
+  function narrativeJointBudget() {
+    const budget = Number(narrativeRange?.jointBudget);
+    if (!Number.isSafeInteger(budget) || budget < 1) throw new Error('请填写有效的联合预算');
+    return budget;
   }
   function narrativeSwitch(key, label, checked, action = 'toggle-narrative-setting') {
     return `<div class="row"><span class="ui-field__label">${esc(label)}</span><button type="button" class="ui-switch" role="switch" aria-label="${esc(label)}" aria-checked="${checked === true}" data-action="${action}" data-id="${esc(key)}"><span class="ui-switch__track" aria-hidden="true"><span class="ui-switch__knob" aria-hidden="true"></span></span></button></div>`;
@@ -412,13 +426,18 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   async function refreshNarrativeRange(operationEpoch) {
     if (state.route !== 'narrative-generate' || !narrativeRange || narrativeRun().status !== 'complete' || disposed || suspended || epoch !== operationEpoch) return;
-    const plan = await controller.previewNarrative({batchSize:Number(narrativeRange.batchSize)});
-    if (!disposed && !suspended && epoch === operationEpoch) { narrativePlan = plan; narrativeRange = {...narrativeRange,startFloor:String(plan.startFloor),endFloor:String(plan.endFloor)}; render(); }
+    const plan = await controller.previewNarrative({...narrativeScope(), batchSize:Number(narrativeRange.batchSize)});
+    if (!disposed && !suspended && epoch === operationEpoch) { narrativeRange = {...narrativeRange,startFloor:String(plan.startFloor),endFloor:String(plan.endFloor)}; render(); }
   }
   async function generateNarrative(options) {
     if (blocked() || narrativeBusy()) return;
     const operationEpoch = epoch, token = {}; narrativeJobs.set('run', token); remember(); render();
-    try { const next = await controller.startNarrative(options); if (!disposed && narrativeJobs.get('run') === token) { apply(next); await refreshNarrativeRange(operationEpoch); } }
+    try {
+      if (options.kinds?.length > 1) {
+        apply(await controller.saveNarrativeRunPreferences({jointBudget: options.jointBudget}));
+        if (disposed || suspended || epoch !== operationEpoch || blocked()) return;
+      }
+      const next = await controller.startNarrative(options); if (!disposed && narrativeJobs.get('run') === token) { apply(next); await refreshNarrativeRange(operationEpoch); } }
     catch (failure) { if (!disposed && !suspended && epoch === operationEpoch) error = failure.message || '生成未完成，请重试'; }
     finally { if (narrativeJobs.get('run') === token) narrativeJobs.delete('run'); if (!disposed && !suspended && epoch === operationEpoch) { remember(); render(); } }
   }
@@ -607,7 +626,13 @@ export async function mountBenmoView({container: app, controller, availability =
       if (action === 'kind' && enabledKinds().includes(id)) { leave(() => { remember(); epoch++; state.kind = id; state.route = 'list'; state.selected = state.selections[id] ?? null; clearDraft(); render(); }); return; }
       if (action === 'settings-narrative' && NARRATIVES.includes(state.tab)) { startNarrativeSettings(); return; }
       if (action === 'edit-narrative' && NARRATIVES.includes(state.tab)) { startNarrativeEdit(id); return; }
-      if (action === 'generate-narrative') { await openNarrativeGeneration(); return; }
+      if (['generate-narrative','generate-narrative-together'].includes(action)) { await openNarrativeGeneration(action === 'generate-narrative-together'); return; }
+      if (action === 'save-narrative-budget' && state.route === 'narrative-generate' && narrativeKinds?.length > 1 && !blocked() && !narrativeBusy()) {
+        readDraft(); const jointBudget = narrativeJointBudget(); acting = ownsAction = true; error = ''; render();
+        const next = await controller.saveNarrativeRunPreferences({jointBudget});
+        if (!disposed) { remember(); apply(next); if (!suspended && epoch === actionEpoch) { render(); toast('联合预算已保存'); } }
+        return;
+      }
       if (action === 'start-narrative' && state.route === 'narrative-generate' && !blocked() && !narrativePlanning && !narrativeBusy() && !['paused','failed'].includes(narrativeRun().status)) {
         const options = narrativeOptions();
         narrativePlanning = true; error = ''; render();
@@ -615,9 +640,9 @@ export async function mountBenmoView({container: app, controller, availability =
         try { plan = await controller.previewNarrative(options); }
         finally { if (!disposed && !suspended && epoch === actionEpoch) { narrativePlanning = false; render(); } }
         if (disposed || suspended || epoch !== actionEpoch || blocked() || narrativeBusy()) return;
-        narrativePlan = plan;
-        const kinds = plan.kinds ?? NARRATIVES.filter(kind => policy()[kind]);
-        if (plan.restart) confirm(`第 ${options.startFloor}—${options.endFloor} 楼与已处理范围重叠。生成后将替换当前启用的${kinds.map(kind => TABS[kind]).join('与')}全部内容，包括手动编辑的内容。${kinds.includes('self') ? '所有已配置角色一起重新生成。' : ''}`, () => { if (!same(kinds, NARRATIVES.filter(kind => policy()[kind]))) throw new Error('启用功能已变化，请重新开始生成并确认替换范围'); dialog = null; void generateNarrative({...options, restart:true}); }, {confirmLabel:'替换并生成'});
+        const kinds = [...narrativeKinds];
+        if (!same(kinds, plan.kinds ?? kinds) || kinds.some(kind => !policy()[kind])) throw new Error('选定功能已变化，请重新选择生成范围');
+        if (plan.restart) confirm(`第 ${options.startFloor}—${options.endFloor} 楼与已处理范围重叠。生成后将替换本次选定的${kinds.map(kind => TABS[kind]).join('与')}全部内容，包括手动编辑的内容。${kinds.includes('self') ? '所有已配置角色一起重新生成。' : ''}`, () => { if (kinds.some(kind => !policy()[kind])) throw new Error('选定功能已变化，请重新开始生成并确认替换范围'); dialog = null; void generateNarrative({...options, restart:true}); }, {confirmLabel:'替换并生成'});
         else await generateNarrative(options);
         return;
       }

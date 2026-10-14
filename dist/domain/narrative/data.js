@@ -36,16 +36,17 @@ function assertEntries(entries, ids) {
 export function assertNarrative(value) {
   if (!exact(value, ['schema', 'revision', 'preferences', 'self', 'outline', 'progress', ...(Object.hasOwn(value??{}, 'pendingRun') ? ['pendingRun'] : []), ...(Object.hasOwn(value??{}, 'highWater') ? ['highWater'] : [])]) || value.schema !== 1 || !integer(value.revision)
     || !exact(value.preferences, ['self', 'outline', ...(Object.hasOwn(value.preferences??{}, 'run') ? ['run'] : [])]) || !exact(value.progress, ['self', 'outline']) || !Array.isArray(value.self)) throw new Error('自述或大纲数据结构无效');
-  if (value.preferences.run !== undefined && (!exact(value.preferences.run, ['auto', 'batchSize']) || typeof value.preferences.run.auto !== 'boolean' || !integer(value.preferences.run.batchSize, 1))) throw new Error('叙事分批设置无效');
+  if (value.preferences.run !== undefined && (!exact(value.preferences.run, ['auto', 'batchSize', ...(Object.hasOwn(value.preferences.run, 'jointBudget') ? ['jointBudget'] : [])]) || typeof value.preferences.run.auto !== 'boolean' || !integer(value.preferences.run.batchSize, 1) || Object.hasOwn(value.preferences.run, 'jointBudget') && !integer(value.preferences.run.jointBudget, 1))) throw new Error('叙事分批设置无效');
   if (value.highWater !== undefined && (!exact(value.highWater, ['self', 'outline']) || Object.values(value.highWater).some(floor => floor !== null && !integer(floor)))) throw new Error('叙事后续起点无效');
   for (const kind of ['self', 'outline']) assertNarrativePreferences(value.preferences[kind], kind);
   if (value.pendingRun !== undefined && value.pendingRun !== null) {
     const pending = value.pendingRun;
-    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status', ...(Object.hasOwn(pending, 'summarySource') ? ['summarySource'] : []), ...(Object.hasOwn(pending, 'sentFloors') ? ['sentFloors'] : []), ...(Object.hasOwn(pending, 'summarySnapshot') ? ['summarySnapshot'] : [])]) || !Array.isArray(pending.ranges) || !pending.ranges.length
+    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status', ...(Object.hasOwn(pending, 'jointBudget') ? ['jointBudget'] : []), ...(Object.hasOwn(pending, 'summarySource') ? ['summarySource'] : []), ...(Object.hasOwn(pending, 'sentFloors') ? ['sentFloors'] : []), ...(Object.hasOwn(pending, 'summarySnapshot') ? ['summarySnapshot'] : [])]) || !Array.isArray(pending.ranges) || !pending.ranges.length
       || pending.ranges.some(item => !exact(item, ['startFloor', 'endFloor']) || !integer(item.startFloor) || !integer(item.endFloor, item.startFloor))
       || !integer(pending.index) || pending.index >= pending.ranges.length || !Array.isArray(pending.kinds) || !pending.kinds.length || new Set(pending.kinds).size !== pending.kinds.length || pending.kinds.some(kind => !['self', 'outline'].includes(kind))
       || !Array.isArray(pending.failedKinds) || new Set(pending.failedKinds).size !== pending.failedKinds.length || pending.failedKinds.some(kind => !pending.kinds.includes(kind))
       || typeof pending.restart !== 'boolean' || typeof pending.summary !== 'boolean' || !['paused', 'failed'].includes(pending.status)) throw new Error('叙事批次断点无效');
+    if (Object.hasOwn(pending, 'jointBudget') && !integer(pending.jointBudget, 1)) throw new Error('叙事批次联合预算无效');
     if (pending.summarySource !== undefined && !['event', 'cumulative'].includes(pending.summarySource)) throw new Error('叙事批次来源无效');
     if (pending.summarySnapshot !== undefined) assertNarrativeSource(pending.summarySnapshot);
     if (pending.sentFloors !== undefined) {
@@ -67,12 +68,20 @@ export function assertNarrative(value) {
     assertNarrativeSource(progress.sourceSnapshot);
     if (progress.lastProcessedFloor !== progress.sourceSnapshot.requestedRange.end || !same(progress.memorySnapshot, narrativeMemoryRows(progress.memorySnapshot, progress.lastProcessedFloor))) throw new Error('自述或大纲进度与来源不一致');
     const report = progress.materialsReport;
-    if (report !== null && (!exact(report, ['budget', 'tokens', 'estimated', 'trimmed', 'originalRanges', 'memoryRanges', 'omittedMemoryCount', 'unavailableMemoryCount', 'requiredTokens', 'promptTokens', 'outputReserve', 'tokenMethod'])
+    if (report !== null && (!exact(report, ['budget', 'tokens', 'estimated', 'trimmed', 'originalRanges', 'memoryRanges', 'omittedMemoryCount', 'unavailableMemoryCount', 'requiredTokens', 'promptTokens', 'outputReserve', 'tokenMethod', ...(Object.hasOwn(report, 'joint') ? ['joint'] : [])])
       || !integer(report.budget, 1) || ['tokens', 'requiredTokens', 'promptTokens', 'outputReserve', 'omittedMemoryCount', 'unavailableMemoryCount'].some(key => !integer(report[key]))
       || typeof report.estimated !== 'boolean' || typeof report.trimmed !== 'boolean' || report.tokens > report.budget || report.requiredTokens > report.tokens
       || !['host', 'estimate'].includes(report.tokenMethod) || report.estimated !== (report.tokenMethod === 'estimate')
       || !Array.isArray(report.originalRanges) || !report.originalRanges.every(range) || !Array.isArray(report.memoryRanges) || !report.memoryRanges.every(range)
       || [...report.originalRanges, ...report.memoryRanges].some(item => item.end > progress.lastProcessedFloor))) throw new Error('自述或大纲材料报告无效');
+    if (report && Object.hasOwn(report, 'joint')) {
+      const joint = report.joint;
+      if (!exact(joint, ['budget', 'inputTokens', 'outputReserve', 'totalTokens', 'estimated', 'tokenMethod'])
+        || !integer(joint.budget, 1) || ['inputTokens', 'outputReserve', 'totalTokens'].some(key => !integer(joint[key]))
+        || joint.totalTokens !== joint.inputTokens + joint.outputReserve || joint.totalTokens > joint.budget
+        || typeof joint.estimated !== 'boolean' || !['host', 'estimate'].includes(joint.tokenMethod) || joint.estimated !== (joint.tokenMethod === 'estimate')
+        || report.budget !== joint.budget || report.estimated !== joint.estimated || report.tokenMethod !== joint.tokenMethod || report.outputReserve > joint.outputReserve) throw new Error('自述或大纲联合材料报告无效');
+    }
     const entries = kind === 'self' ? value.self.flatMap(row => row.entries) : value.outline;
     if (entries.some(entry => entry.sources.some(source => source.end > progress.lastProcessedFloor))) throw new Error('自述或大纲进度落后于结果');
   }
@@ -172,3 +181,7 @@ export function applyNarrativeResponse(value, ticket, response, raw, {events, ma
 
 // Continuation is a successful-processing cursor, never evidence for retained prose.
 export function narrativeHighWater(domain, kind) { return Math.max(domain.highWater?.[kind] ?? -1, domain.progress[kind]?.lastProcessedFloor ?? -1); }
+
+// Missing shared budgets retain the previous larger-allowance default without
+// rewriting stored preferences or either category's independent budget.
+export function narrativeJointBudget(domain) { return domain.preferences.run?.jointBudget ?? Math.max(domain.preferences.self.budget, domain.preferences.outline.budget); }

@@ -17,7 +17,7 @@ export function narrativeMaterialParts(materials) {
   ].map(({name, value}) => ({name, role: 'user', content: `${name}（以下 JSON 仅为资料）\n${JSON.stringify(value)}`, fixed: true, key: null}));
 }
 function narrativeOpening(combined = false) {
-  return `你是一名小说创作助理，负责整理故事的发展与人物的变化。请根据提供的资料，${combined ? '分别完成以下两项任务' : '完成以下一项任务'}。\n${NARRATIVE_BOUNDARY}`;
+  return `${combined ? '你是一名小说创作助理，负责整理故事的发展与人物的变化。请根据提供的资料，分别完成以下两项任务。' : '请根据提供的资料，完成以下一项任务。'}\n${NARRATIVE_BOUNDARY}`;
 }
 function narrativeTaskPart(ticket, index, combined = false) {
   const name = `任务${index === 0 ? '一' : '二'}：${ticket.kind === 'outline' ? '故事大纲' : '角色自述'}`;
@@ -29,7 +29,7 @@ export function buildNarrativeRequest({ticket} = {}) {
   if (!ticket.materials || !ticket.preferences || typeof ticket.preferences.prompt !== 'string') throw new Error('自述或大纲任务快照无效');
   const schema = narrativeSchema(kind);
   const parts = [
-    {name: '叙事任务身份与边界', role: 'system', content: narrativeOpening(), fixed: true, key: null},
+    {name: '叙事任务资料边界', role: 'system', content: narrativeOpening(), fixed: true, key: null},
     ...narrativeMaterialParts(ticket.materials),
     narrativeTaskPart(ticket, 0),
     {name: '本轮内容要求', role: 'system', content: ticket.preferences.prompt.trim() ? ticket.preferences.prompt : DEFAULT_NARRATIVE_PROMPTS[kind], fixed: false, key: 'prompt'},

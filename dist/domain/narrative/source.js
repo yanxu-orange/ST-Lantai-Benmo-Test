@@ -58,8 +58,10 @@ function memoryPayload(row, originalRanges) {
   }
   return {...clone(row), overlapsOriginal: mergeRanges(overlaps)};
 }
-export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endFloor, events = [], card = null, countTokens = null, rules, originalOnly = false, sentFloors: suppliedFloors, isCurrent = () => true} = {}) {
+export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endFloor, events = [], card = null, countTokens = null, rules, originalOnly = false, sentFloors: suppliedFloors, jointBudget, isCurrent = () => true} = {}) {
   assertKind(kind);
+  if (jointBudget !== undefined && !integer(jointBudget, 1)) throw new Error('联合材料预算无效');
+  const deferredBudget = jointBudget !== undefined;
   const guard = () => {
     let current = false;
     try { current = typeof isCurrent === 'function' && isCurrent() === true; } catch { /* Expired work is cancelled, never retried as a tokenizer fallback. */ }
@@ -124,7 +126,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     let units = fixedUnits + selected.reduce((sum, item) => sum + item.units, 0) + Math.max(0, selected.length - 1);
     let tokens = useHost ? await count(fullText(selected)) : Math.ceil(units / 4);
     const requiredTokens = tokens;
-    if (tokens > preferences.budget) {
+    if (!deferredBudget && tokens > preferences.budget) {
       const error = new Error(`必要材料需要${useHost ? '' : '约'} ${tokens} token，超过材料预算 ${preferences.budget}；请提高预算或减少本批范围、背景及已有内容`);
       error.code = 'NARRATIVE_BUDGET_EXCEEDED'; error.requiredTokens = tokens; error.budget = preferences.budget; error.estimated = !useHost;
       throw error;
@@ -133,7 +135,9 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     for (const memory of historicalMemory) {
       await cooperate();
       const item = encoded.get(memory.id), proposedUnits = units + item.units + (selected.length ? 1 : 0);
-      if (!useHost) {
+      if (deferredBudget) {
+        selected.push(item); units = proposedUnits; tokens = Math.ceil(proposedUnits / 4);
+      } else if (!useHost) {
         // Additive estimate units avoid O(n²) cloning/encoding/token scans. Sort
         // accepted rows just once for chronological delivery below.
         const proposedTokens = Math.ceil(proposedUnits / 4);
@@ -154,7 +158,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     // One full final check also guards the incremental accounting against a
     // future change in prompt framing or material serialization.
     const actualTokens = await count(materialsText(materials));
-    if (actualTokens > preferences.budget || !useHost && actualTokens !== tokens) {
+    if ((!deferredBudget && actualTokens > preferences.budget) || (!useHost && actualTokens !== tokens)) {
       const error = new Error('最终材料预算校验失败，请调整预算或重试'); error.code = 'NARRATIVE_BUDGET_EXCEEDED'; throw error;
     }
     tokens = actualTokens;
@@ -171,7 +175,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     const existingOutputTokens = await count(JSON.stringify(previousOutput));
     const incrementalOutputTokens = await count('新'.repeat((kind === 'self' ? 100 * preferences.characters.length : 150)));
     const outputReserve = Math.max(1024, existingOutputTokens + incrementalOutputTokens + 256);
-    return {...draft, memorySnapshot: selected.map(item => item.row), usage: {budget: preferences.budget, tokens, estimated: !useHost, trimmed: omittedMemoryCount > 0, originalRanges, memoryRanges: mergeRanges(selected.flatMap(item => item.row.sources)), omittedMemoryCount, unavailableMemoryCount, requiredTokens, promptTokens, outputReserve, tokenMethod: useHost ? 'host' : 'estimate'}};
+    return {...draft, memorySnapshot: selected.map(item => item.row), usage: {budget: jointBudget ?? preferences.budget, tokens, estimated: !useHost, trimmed: omittedMemoryCount > 0, originalRanges, memoryRanges: mergeRanges(selected.flatMap(item => item.row.sources)), omittedMemoryCount, unavailableMemoryCount, requiredTokens, promptTokens, outputReserve, tokenMethod: useHost ? 'host' : 'estimate'}};
   };
   if (typeof countTokens === 'function') {
     try { return freeze(await select(true)); } catch (error) { if (error.code?.startsWith('NARRATIVE_')) throw error; }
@@ -180,13 +184,20 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
 }
 
 // A combined call shares one context window. Validate the actual final message
-// envelope and reserve against the larger existing category allowance.
-export async function prepareCombinedNarrativeRequest(input, {countTokens = null, isCurrent = () => true} = {}) {
+// envelope and reserve against its explicitly chosen shared allowance.
+export async function prepareCombinedNarrativeRequest(input, {countTokens = null, jointBudget, isCurrent = () => true} = {}) {
+  if (jointBudget !== undefined && !integer(jointBudget, 1)) throw new Error('联合材料预算无效');
   const {buildCombinedNarrativeRequest} = await import('./requests.js');
-  const guard = () => { if (!isCurrent()) { const error = new Error('叙事任务已取消或来源已变化'); error.code = 'NARRATIVE_CANCELLED'; throw error; } };
+  const guard = () => { let current = false; try { current = typeof isCurrent === 'function' && isCurrent() === true; } catch {} if (!current) { const error = new Error('叙事任务已取消或来源已变化'); error.code = 'NARRATIVE_CANCELLED'; throw error; } };
   const prepare = async useHost => {
-    const tickets = clone(input), budget = Math.max(...tickets.map(ticket => ticket.preferences.budget));
+    const tickets = clone(input), budget = jointBudget ?? Math.max(...tickets.map(ticket => ticket.preferences.budget));
     const count = async text => { guard(); if (!useHost) return estimateNarrativeTokens(text); const value = await countTokens(text); guard(); if (!Number.isFinite(value) || value < 0) throw new TypeError('宿主 token 计数不可用'); return Math.ceil(value); };
+    // Count each reserve with the same tokenizer as the final envelope, including
+    // when a failed host count restarts the whole pass using estimates.
+    for (const ticket of tickets) {
+      const previous = ticket.kind === 'self' ? {characters: ticket.materials.previous.map(({id, entries}) => ({id, entries}))} : {entries: ticket.materials.previous};
+      ticket.usage.outputReserve = Math.max(1024, await count(JSON.stringify(previous)) + await count('新'.repeat(ticket.kind === 'self' ? 100 * ticket.preferences.characters.length : 150)) + 256);
+    }
     const outputReserve = tickets.reduce((sum, ticket) => sum + ticket.usage.outputReserve, 0);
     let request, inputTokens;
     while (true) {
@@ -194,7 +205,7 @@ export async function prepareCombinedNarrativeRequest(input, {countTokens = null
       inputTokens = await count(JSON.stringify(request.messages));
       if (inputTokens + outputReserve <= budget) break;
       const optional = tickets.flatMap((ticket, index) => ticket.materials.memory.filter(row => row.sources.every(source => source.end < ticket.source.requestedRange.start)).map(row => ({index, row, end: Math.max(...row.sources.map(source => source.end))}))).sort((a, b) => a.end - b.end);
-      if (!optional.length) { const error = new Error(`合并请求需要${useHost ? '' : '约'} ${inputTokens + outputReserve} token（含输出预留），超过预算 ${budget}；请减小批次范围或提高现有预算`); error.code = 'NARRATIVE_BUDGET_EXCEEDED'; throw error; }
+      if (!optional.length) { const error = new Error(`合并请求需要${useHost ? '' : '约'} ${inputTokens + outputReserve} token（含输出预留），超过预算 ${budget}；请减小批次范围或提高联合预算`); error.code = 'NARRATIVE_BUDGET_EXCEEDED'; error.requiredTokens = inputTokens + outputReserve; error.budget = budget; error.estimated = !useHost; throw error; }
       // Remove the same oldest optional memory from both sections, keeping the
       // shared material deduplicated and all required batch evidence intact.
       const id = optional[0].row.id;
@@ -206,13 +217,14 @@ export async function prepareCombinedNarrativeRequest(input, {countTokens = null
       }
       await new Promise(resolve => setTimeout(resolve, 0));guard();
     }
+    const joint = {budget, inputTokens, outputReserve, totalTokens: inputTokens + outputReserve, estimated: !useHost, tokenMethod: useHost ? 'host' : 'estimate'};
     for (const ticket of tickets) {
       const tokens = await count(materialsText(ticket.materials));
       const requiredMaterials = {...ticket.materials, memory: ticket.materials.memory.filter(row => row.sources.some(source => source.end >= ticket.source.requestedRange.start))};
-      ticket.usage = {...ticket.usage, tokens, requiredTokens: await count(materialsText(requiredMaterials)), memoryRanges: mergeRanges(ticket.memorySnapshot.flatMap(row => row.sources)), estimated: !useHost, tokenMethod: useHost ? 'host' : 'estimate'};
+      ticket.usage = {...ticket.usage, budget, joint: clone(joint), tokens, promptTokens: await count(buildNarrativeRequest({ticket}).previewParts.filter(part => part.role === 'system').map(part => part.content).join('\n\n')), requiredTokens: await count(materialsText(requiredMaterials)), memoryRanges: mergeRanges(ticket.memorySnapshot.flatMap(row => row.sources)), estimated: !useHost, tokenMethod: useHost ? 'host' : 'estimate'};
       if (!ticket.materials.original.length && !ticket.materials.memory.length) { const error = new Error('合并预算内没有可读取的记忆，请提高预算或减小批次'); error.code = 'NARRATIVE_NO_MATERIAL'; throw error; }
     }
-    return {tickets: freeze(tickets), request, usage: {budget, inputTokens, outputReserve, totalTokens: inputTokens + outputReserve, estimated: !useHost, tokenMethod: useHost ? 'host' : 'estimate'}};
+    return {tickets: freeze(tickets), request, usage: joint};
   };
   if (typeof countTokens === 'function') { try { return await prepare(true); } catch (error) { if (error.code?.startsWith('NARRATIVE_')) throw error; } }
   return prepare(false);
