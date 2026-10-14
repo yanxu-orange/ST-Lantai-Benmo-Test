@@ -143,12 +143,10 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
         try { current = repository.captureAi(); }
         catch (error) {
           if (error?.code !== 'SETTINGS_COMMIT_UNCONFIRMED') throw error;
-          // A local host update can invalidate authority before saveAi enters
-          // its queue. Reconcile only that case, keeping this draft's epoch.
-          await repository.read();
-          current = repository.captureAi();
+          // The queued save reconciles lost authority with its own fresh
+          // read, still checking this draft's original epoch before writing.
         }
-        if (current.epoch !== baseline.epoch) throw { code: 'SETTINGS_CONFLICT' };
+        if (current && current.epoch !== baseline.epoch) throw { code: 'SETTINGS_CONFLICT' };
         // Confirmed authority needs only the repository's queued fresh read
         // and its final server confirmation, with no outer network read.
         const result = await repository.saveAi(draft, { expectedEpoch: baseline.epoch, credentials });

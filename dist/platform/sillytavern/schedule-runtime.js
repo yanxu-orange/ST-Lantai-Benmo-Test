@@ -94,9 +94,10 @@ export function createScheduleRuntime({repository,settings,getControls,captureSo
     if(!captured)return [];
     const receipts=captured.receipts.filter(row=>captured.activeIds.has(row.id)&&row.sourceSnapshot.replyId===replyId&&matchesStoredLatestSource(row.sourceSnapshot,raw));
     const active=allowed();
-    if(!receipts.length&&(!active||!['running','failed'].includes(status.status)))return [];
     const counts=receipts.length?receipts.reduce((counts,row)=>Object.fromEntries(Object.keys(counts).map(key=>[key,counts[key]+row.counts[key]])),{added:0,updated:0,candidates:0}):null;
-    return [{id:TASK_ID,kind:'schedule',name:'日程与纪念日',body:counts?`本轮新增 ${counts.added} 条，更新 ${counts.updated} 条，候选 ${counts.candidates} 条。`:'',status:active?status.status??'ready':'ready',error:active?status.error??'':'',canRetry:active,openSchedule:true}];
+    const hasChanges=!!counts&&Object.values(counts).some(count=>count>0);
+    if(!hasChanges&&(!active||!['running','failed'].includes(status.status)))return [];
+    return [{id:TASK_ID,kind:'schedule',name:'日程与纪念日',body:hasChanges?`本轮新增 ${counts.added} 条，更新 ${counts.updated} 条，候选 ${counts.candidates} 条。`:'',status:active?status.status??'ready':'ready',error:active?status.error??'':'',canRetry:active,openSchedule:hasChanges}];
   }
   function cancel(){serial++;}
   return {allowed,captureAutomaticProof,prepareBackground,filterBackgroundPlan,filterCurrentBackgroundPlan,saveBackgroundResult,reconcile,backgroundState,displayState,floorTasks,cancel,reset:cancel,

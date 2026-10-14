@@ -79,12 +79,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     let localCurrent=false;try{localCurrent=!!local?.target&&sameTarget(local.target,repository.captureTarget());}catch{/* Preparing a new chat. */}
     return {...global?.policy,...Object.fromEntries(['summary','item','npc','self','outline','benmo'].map(key=>[key,master&&local?.policy?.[key]===true])),memory:!!controls?.allowed('memory'),settings:true,transient:global?.status!=='ready'||!localCurrent};
   };
-  let hostReloadSequence=0,timeRuntime,timePrompts,timeController,timeView,timeTarget;
+  let hostReloadSequence=0,timeRuntime,timePrompts,timeController,timeView,timeTarget,timeContainer,memoryReadProof=null;
   let sourceDeletionRuntime,sourceDeletionNotices,narrativeRuntime,latestRuntime,latestDisplay,workshopBackgroundDisplay;
   let benmoController,benmoView,benmoSubscription,benmoTarget,benmoNavigation=null,benmoPolicyKey='';
   let benmoWarmupRequested=false,benmoWarmupScheduled=false;
-  let workshopRegex,workshopRegexError=null,workshopRuntime,workshopController,workshopView,trackingRuntime,scheduleRuntime;
-  // Area-owned views stay here with their settings round trip. Runtime services
+  let workshopRegex,workshopRegexError=null,workshopRuntime,workshopController,workshopView,workshopTarget,workshopContainer,trackingRuntime,scheduleRuntime;
+  // Area-owned views survive ordinary section and settings round trips. Runtime services
   // are deliberately not page resources: closing a page must not stop a task.
   const areaPages = {
     benmo: {
@@ -100,11 +100,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         await benmoController.load().catch(()=>{});
         if(valid()&&!settingsOpen)benmoView?.resume();
       },
-      visible: () => !!benmoView && !benmoContent.hidden,
-      suspend() { benmoNavigation=benmoView.snapshotNavigation();benmoView.suspend();benmoContent.hidden=true;benmoContent.inert=true; },
+      visible: () => !!benmoContent && !benmoContent.hidden && !!benmoContent.children.length,
+      suspend() { if(benmoView)benmoNavigation=benmoView.snapshotNavigation();benmoView?.suspend();benmoContent.hidden=true;benmoContent.inert=true; },
       resume() { if(!benmoView)return false;benmoContent.hidden=false;benmoContent.inert=false;benmoView.resume();return true; },
       unmount({preserve=true}={}) {
         if(preserve&&benmoView)benmoNavigation=benmoView.snapshotNavigation();
+        if(!preserve)benmoNavigation=null;
         benmoView?.dispose();benmoView=null;
         if(benmoContent){benmoContent.hidden=true;benmoContent.inert=false;}
         this.settingsReturn=false;
@@ -119,10 +120,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(workshopView?.blocking()){workshopController.rebindTarget(target);workshopView.invalidate('聊天已重新读取，草稿已保留。请重新读取后确认保存');return;}
         return openWorkshop();
       },
-      visible: () => !!workshopView,
-      suspend() { summaryContent.hidden=true;summaryContent.inert=true;workshopView.suspend(); },
-      resume() { if(!workshopView)return false;summaryContent.hidden=false;summaryContent.inert=false;workshopView.resume();focusAreaSettings('[data-action=settings]');return true; },
-      unmount() { workshopView?.dispose();workshopView=null;workshopController?.dispose();workshopController=null;this.settingsReturn=false; },
+      visible: () => !!workshopContainer && !summaryContent.hidden && summaryContent.contains(workshopContainer),
+      suspend() { if(this.visible()){summaryContent.hidden=true;summaryContent.inert=true;}workshopView?.suspend(); },
+      resume() { if(!workshopView)return false;showAreaContainer(workshopContainer);workshopView.resume();return true; },
+      unmount() { workshopView?.dispose();workshopView=null;workshopController?.dispose();workshopController=null;workshopContainer=null;workshopTarget=null;this.settingsReturn=false; },
     },
     time: {
       open: openTime,
@@ -130,27 +131,39 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       view: () => timeView,
       mounted: () => !!timeView,
       reload: () => openTime(),
-      visible: () => !!timeView,
-      suspend() { summaryContent.hidden=true;summaryContent.inert=true;timeController.suspend(); },
-      resume() { if(!timeView)return false;summaryContent.hidden=false;summaryContent.inert=false;timeController.resume();timeView.refresh?.();focusAreaSettings('[data-time-action=settings]');return true; },
-      unmount() { timeView?.dispose();timeView=null;timeController?.suspend(); },
+      visible: () => !!timeContainer && !summaryContent.hidden && summaryContent.contains(timeContainer),
+      suspend() { if(this.visible()){summaryContent.hidden=true;summaryContent.inert=true;}timeController?.suspend(); },
+      resume() { if(!timeView)return false;showAreaContainer(timeContainer);timeController.resume();return true; },
+      unmount() { timeView?.dispose();timeView=null;timeContainer=null;timeController?.suspend();this.settingsReturn=false; },
     },
   };
   function focusAreaSettings(selector) { (summaryContent.querySelector(selector)??summaryContent.querySelector('.lt-main'))?.focus({preventScroll:true}); }
   function suspendAreasForSettings() {
     for(const page of Object.values(areaPages)){
-      page.settingsReturn=page.visible();
-      if(page.settingsReturn)page.suspend();
+      const visible=page.visible();
+      page.settingsReturn=visible&&!!page.view();
+      if(visible)page.suspend();
     }
   }
   function resumeAreaFromSettings(name,policy) {
     const page=areaPages[name];
     if(!page.settingsReturn||!policy[name]||!page.view()||!sameTarget(returnTarget,repository.captureTarget()))return false;
     page.settingsReturn=false;
-    page.resume();
+    void page.open().then(()=>{if(page.visible()&&!settingsOpen&&name!=='benmo')focusAreaSettings(name==='time'?'[data-time-action=settings]':'[data-action=settings]');});
     returnFocus=returnTarget=null;
     return true;
   }
+  function showAreaContainer(container) {
+    container.setAttribute('data-ui-theme',panel.getAttribute('data-ui-theme')??DEFAULT_THEME);
+    summaryContent.replaceChildren(container);summaryContent.hidden=false;summaryContent.inert=false;
+  }
+  function suspendPages() {
+    for(const page of Object.values(areaPages))if(page.view()||page.visible())page.suspend();
+    if(benmoContent){benmoContent.hidden=true;benmoContent.inert=true;}
+    if(summaryContent){summaryContent.hidden=true;summaryContent.inert=true;}
+    unmountCumulative();unmountSummary();unmountRecall();
+  }
+  const areaVisible=()=>Object.values(areaPages).some(page=>page.visible());
   function unmountAreas() {
     for(const page of Object.values(areaPages))page.unmount();
     unmountCumulative();
@@ -191,7 +204,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
           await controls?.ensure();if(!valid())return;
           if(cumulativeVisible&&previousTarget?.chatId===nextTarget.chatId&&previousTarget?.rootId===nextTarget.rootId&&previousTarget.epoch!==nextTarget.epoch){runtime.cumulativeController.invalidateReload({previousTarget,nextTarget,reloadSequence:sequence});}
           // Preserve the existing reload priority, including pending workshop mounts.
-          const page=Object.values(areaPages).find(page=>page.mounted());
+          const page=Object.values(areaPages).find(page=>page.visible()||page.settingsReturn);
           if(page)return page.reload(nextTarget,valid);
           return current?.rebind();
         }).catch(error=>{if(valid())errorView(error);});
@@ -217,7 +230,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       const currentRecallView=recallView;recallView=null;
       cleanup(()=>currentRecallView?.dispose());cleanup(()=>recallController?.suspend());
       for(const page of Object.values(areaPages)){cleanup(()=>page.unmount({preserve:false}));page.settingsReturn=false;}
-      benmoNavigation=null;cleanup(()=>timeController?.dispose());timeController=null;
+      benmoNavigation=null;memoryReadProof=null;cleanup(()=>timeController?.dispose());timeController=null;timeTarget=null;
       const currentApp=app;app=null;cleanup(()=>currentApp?.dispose());
       const currentObserver=sharedObserver;sharedObserver=null;sharedStyle=null;snowStyle=null;springStyle=null;
       for (const bundle of bookStylesByTheme.values()) bundle.style=null;
@@ -309,14 +322,14 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   async function openTask(taskId){
     if(!allowed('event'))return false;
-    if(disposed||settingsOpen||workshopController||benmoView||benmoContent&&!benmoContent.hidden||timeView||cumulativeEditing())return false;
+    if(disposed||settingsOpen||areaVisible()||cumulativeEditing())return false;
     if(panel)return app?.showManagementTask(taskId)??false;
     if(!runtime?.controller.resume(taskId))return false;
     await open();return !!app?.isManagementTask(taskId);
   }
   async function openSummaryTask(taskId) {
     if(!allowed('event'))return false;
-    if(disposed||settingsOpen||workshopController||benmoView||benmoContent&&!benmoContent.hidden||timeView||summarySettingsView||cumulativeSettingsView||cumulativeEditing())return false;
+    if(disposed||settingsOpen||areaVisible()||summarySettingsView||cumulativeSettingsView||cumulativeEditing())return false;
     if(panel&&summaryContent.hidden){const active=panel.shadowRoot.activeElement;if(app?.session.state.route==='editor'||active?.matches('input,textarea,select')||panel.shadowRoot.querySelector('[data-composing=true]'))return false;}
     unmountCumulative();if(app?.memoryType()==='cumulative')app.suspendCumulative();
     const task=runtime?.summaryService.inspect(taskId);if(!task||!sameTarget(task.target,repository.captureTarget()))return false;
@@ -326,13 +339,25 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(app?.memoryType()==='cumulative')app.suspendCumulative();
     areaPages.workshop.unmount();summaryView=mountSummaryView({container:summaryContent,controller:runtime.summaryController,onBack:()=>void returnFromSummary(),onClose:close,openSettings:()=>void openSummarySettings(false)});return true;
   }
+  function memoryStream() {
+    const context=getContext(),processor=context?.streamingProcessor;
+    return JSON.stringify([(context.chat??[]).map(row=>[row?.gen_started??null,row?.gen_finished??null]),processor?[processor.messageId,processor.isFinished,processor.isStopped,!!processor.abortController?.signal?.aborted,processor.toolCalls?.length??0]:null]);
+  }
+  function captureMemoryRead() {
+    try{const target=repository.captureTarget();if(!adapter.captureReadToken||!latestRuntime?.captureSource)return null;return {target,root:adapter.captureReadToken(target),source:latestRuntime.captureSource(target),stream:memoryStream()};}catch{return null;}
+  }
+  function matchesMemoryRead(proof) {
+    try{return !!proof&&sameTarget(proof.target,repository.captureTarget())&&adapter.matchesReadToken(proof.target,proof.root)&&latestRuntime.matchesSource(proof.target,proof.source)&&proof.stream===memoryStream();}catch{return false;}
+  }
   async function returnFromSummary() {
-    pageRequest++;unmountPages();
+    pageRequest++;suspendPages();
     if(!panel)return;
     if(!allowed('memory')){if(allowed('time'))return openTime();if(allowed('workshop'))return openWorkshop();if(allowed('benmo'))return openBenmo();openSettings();return;}
     summaryContent.replaceChildren();summaryContent.hidden=true;summaryContent.inert=false;memoryContent.hidden=false;memoryContent.inert=false;
     if(!app)return open();
-    await app.refreshAvailability();await app.rebind();if(!panel)return;if(app?.memoryType()==='cumulative')app.resumeCumulative();
+    await app.refreshAvailability();
+    if(app.memoryType()==='cumulative'||!matchesMemoryRead(memoryReadProof)){const proof=captureMemoryRead();await app.rebind();memoryReadProof=matchesMemoryRead(proof)?proof:null;}
+    if(!panel)return;if(app?.memoryType()==='cumulative')app.resumeCumulative();
     if(app?.session.state.route==='editor'&&app.session.state.draft?.id&&!app.session.state.root.events.some(event=>event.id===app.session.state.draft.id))await app.refresh();
     const previous=summaryReturnFocus;
     (previous?.isConnected&&memoryContent.contains(previous)&&!previous.closest('[hidden],[inert]')?previous:memoryContent.querySelector('[data-action=summary-manual]')??memoryContent.querySelector('.lt-main'))?.focus({preventScroll:true});
@@ -358,51 +383,41 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     // calling setEnabled or loading from this subscription would recurse.
     settingsRootView?.refreshAvailability?.();
     if(!panel)return;
-    if(!settingsOpen&&benmoView&&!next.benmo&&!next.transient&&benmoController?.availability().status==='ready'){openSettings();return;}
+    if(!settingsOpen&&areaPages.benmo.visible()&&!next.benmo&&!next.transient&&benmoController?.availability().status==='ready'){openSettings();return;}
     if(!next.transient)benmoView?.refreshAvailability?.();
     if(app&&!memoryContent.hidden)void app.refreshAvailability();
-    if(timeView&&!summaryContent.hidden)timeView.refresh?.();
-    if(workshopView&&!summaryContent.hidden)workshopView.refreshAvailability?.();
+    if(areaPages.time.visible())timeView?.refresh?.();
+    if(areaPages.workshop.visible())workshopView?.refreshAvailability?.();
   }
   async function openBenmo({kind}={}){
     if(!allowed('benmo')||!benmoController||!panel||settingsOpen)return false;
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
-    if(benmoView&&!benmoContent.hidden&&!kind)return true;
     const valid=()=>!!panel&&serial===ticket&&request===pageRequest&&!settingsOpen&&sameTarget(target,repository.captureTarget());
-    const navigation=benmoView?.snapshotNavigation()??benmoNavigation;
-    const previous=benmoTarget&&!sameTarget(benmoTarget,target)?null:navigation;
+    if(benmoTarget&&!sameTarget(benmoTarget,target))areaPages.benmo.unmount({preserve:false});
+    const previous=benmoView?.snapshotNavigation()??benmoNavigation;
     const initialState=kind?{...(previous??{}),tab:'records',kind,route:'list'}:previous;
-    const benmoContainer=doc.createElement('div');benmoContainer.className='benmo-mount';
-    // A detached warm mount still inherits the selected appearance synchronously.
-    benmoContainer.setAttribute('data-ui-theme',panel.getAttribute('data-ui-theme')??DEFAULT_THEME);
-    let activated=false,settled=false,loading=null;
-    const activate=()=>{
-      if(activated||!valid())return;
-      unmountPages();app?.suspendCumulative();
-      memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=true;summaryContent.inert=false;benmoContent.hidden=false;benmoContent.inert=false;
-      benmoTarget=target;benmoContent.replaceChildren(benmoContainer);activated=true;
-    };
-    const showLoading=()=>{
-      if(!valid())return null;activate();
-      return loading??=mountWorkshopLoading(benmoContainer,{titleText:'本末',messageText:'正在读取本末记录…',onBack:()=>void returnFromSummary(),onClose:close,onRetry:()=>void openBenmo({kind})});
-    };
-    try{
-    if(benmoController.availability().dataStatus!=='ready'){
-      showLoading();await new Promise(afterPageFrame);if(!valid())return false;
-    }else{
-      // A proof-checked warm ensure completes without replacing the current
-      // surface with loading. A genuinely pending reread still gets feedback.
-      afterPageFrame(()=>{if(!settled&&valid())showLoading();});
+    suspendPages();app?.suspendCumulative();
+    memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=true;summaryContent.inert=false;benmoContent.hidden=false;benmoContent.inert=false;
+    benmoTarget=target;
+    if(benmoView){
+      const view=benmoView;let settled=false;
+      afterPageFrame(()=>{if(!settled&&valid()&&view===benmoView)view.loading();});
+      try{const value=await benmoController.ensure();settled=true;if(!valid()||view!==benmoView)return false;view.resume(value,{kind});syncAppearance();return true;}
+      catch(error){settled=true;if(valid()&&view===benmoView){view.resume();view.fail(error);}return false;}
     }
-    const view=await mountBenmoView({container:benmoContainer,controller:benmoController,availability,isCurrent:valid,initialState:initialState??{},onClose:close,onNavigate:(area,snapshot)=>{
+    const container=doc.createElement('div');container.className='benmo-mount';container.setAttribute('data-ui-theme',panel.getAttribute('data-ui-theme')??DEFAULT_THEME);benmoContent.replaceChildren(container);
+    const prepare=async({refresh=false}={})=>{
+      if(refresh||benmoController.availability().dataStatus!=='ready')await new Promise(afterPageFrame);
+      if(refresh?(!panel||settingsOpen||!benmoContent.contains(container)||benmoContent.hidden||!sameTarget(target,repository.captureTarget())):!valid())return null;
+      return refresh?benmoController.load():benmoController.ensure();
+    };
+    const view=await mountBenmoView({container,controller:benmoController,availability,isCurrent:valid,prepare,initialState:initialState??{},onClose:close,onNavigate:(area,snapshot)=>{
       benmoNavigation=snapshot;
       if(area==='settings'){openSettings();return;}
       if(area==='memory')void returnFromSummary();else if(area==='time')void openTime();else if(area==='workshop')void openWorkshop();
     }});
-    settled=true;
     if(!view||!valid()){view?.dispose();return false;}
-    activate();benmoView=view;syncAppearance();return true;
-    }catch(error){settled=true;if(valid())showLoading()?.fail(error);return false;}
+    benmoView=view;syncAppearance();return !view.failed();
   }
   const openLatestSummary=()=>openBenmo({kind:'summary'});
   async function openSummarySettings(fromMemory=true) {
@@ -453,14 +468,17 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(!allowed('time')&&!(allowReadOnly&&allowed('enabled')))return false;
     if(!panel||settingsOpen||!runtime?.settings)return false;
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
-    unmountPages();app?.suspendCumulative();
+    suspendPages();app?.suspendCumulative();
     if(!timeController||!sameTarget(timeTarget,target)){
-      timeController?.dispose();timeTarget=target;
+      areaPages.time.unmount();timeController?.dispose();timeTarget=target;
       timeController=createTimeController({repository,settings:runtime.settings,dateRuntime:timeRuntime,captureSource:t=>adapter.captureTimeSource?.(t)??adapter.captureChatSource?.(t)??adapter.captureSummarySource(t),matchesSource:typeof (adapter.matchesTimeSource??adapter.matchesChatSource)==='function'?(t,s)=>(adapter.matchesTimeSource??adapter.matchesChatSource)(t,s):null,onMemory:()=>void returnFromSummary(),onWorkshop:()=>void openWorkshop(),onBenmo:()=>void openBenmo(),onSettings:openSettings,onClose:close});
     }
-    memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;summaryContent.inert=false;
-    timeController.resume();timeView=mountTimeView({container:summaryContent,controller:timeController,availability});
-    afterPageFrame(()=>{if(panel&&serial===ticket&&request===pageRequest&&sameTarget(target,repository.captureTarget())){const controller=timeController;void controller.init().then(ready=>{if(ready&&panel&&serial===ticket&&request===pageRequest&&controller===timeController&&sameTarget(target,repository.captureTarget())){if(candidates)controller.openCandidates();else if(route)controller.open(route);}});}});return true;
+    memoryContent.hidden=true;memoryContent.inert=true;
+    if(!timeContainer){timeContainer=doc.createElement('div');timeContainer.className='time-mount';}
+    showAreaContainer(timeContainer);timeController.resume();
+    if(!timeView)timeView=mountTimeView({container:timeContainer,controller:timeController,availability});
+    const controller=timeController,valid=()=>panel&&serial===ticket&&request===pageRequest&&controller===timeController&&sameTarget(target,repository.captureTarget());
+    afterPageFrame(()=>{if(valid())void controller.ensure().then(ready=>{if(ready&&valid()){if(candidates)controller.openCandidates();else if(route)controller.open(route);}});});return true;
   }
   async function openSchedule({candidates=false,fromSettings=false}={}){
     if(disposed||settingsOpen&&!fromSettings)return false;
@@ -469,22 +487,27 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(settingsOpen){settingsRootView?.dispose();settingsRootView=null;settingsOpen=false;settingsContent.replaceChildren();settingsContent.hidden=true;returnFocus=returnTarget=null;}
     return openTime({allowReadOnly:true,route:'schedules',candidates});
   }
-  async function openWorkshop({kind='prompt'}={}){
-    if(!allowed('workshop'))return false;
-    if(!panel||settingsOpen||!runtime?.settings)return false;
+  async function openWorkshop({kind}={}){
+    if(!allowed('workshop')||!panel||settingsOpen||!runtime?.settings)return false;
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
-    unmountPages();app?.suspendCumulative();
-    memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;summaryContent.inert=false;
-    const workshopContainer=doc.createElement('div');workshopContainer.className='wk-mount';summaryContent.replaceChildren(workshopContainer);
-    const loading=mountWorkshopLoading(workshopContainer,{onBack:()=>void returnFromSummary(),onClose:close,onRetry:()=>void openWorkshop()});
-    const controller=createWorkshopController({repository,settings:runtime.settings,target,runtime:workshopRuntime,onProgress:text=>loading.progress(text),getCharacterName:binding=>getContext().characters?.find(c=>c.avatar===binding?.owner)?.name??'当前角色',ensureRegex:()=>{if(workshopRegexError)throw workshopRegexError;},onMemory:()=>void returnFromSummary(),onTime:()=>void openTime(),onSettings:openSettings,onBenmo:()=>void openBenmo(),onClose:close});
+    const valid=()=>!!panel&&serial===ticket&&request===pageRequest&&!settingsOpen&&sameTarget(target,repository.captureTarget());
+    suspendPages();app?.suspendCumulative();memoryContent.hidden=true;memoryContent.inert=true;
+    if(workshopTarget&&!sameTarget(workshopTarget,target))areaPages.workshop.unmount();
+    if(workshopView){
+      const view=workshopView;showAreaContainer(workshopContainer);let settled=false;
+      afterPageFrame(()=>{if(!settled&&valid()&&view===workshopView)view.loading();});
+      try{const value=await workshopController.ensure();settled=true;if(!valid()||view!==workshopView)return false;view.resume(value,{kind});syncAppearance();return true;}
+      catch(error){settled=true;if(valid()&&view===workshopView){view.resume();view.fail(error);}return false;}
+    }
+    // Only an unfinished mount is replaced. A confirmed view owns its drafts.
+    workshopController?.dispose();workshopTarget=target;
+    const container=doc.createElement('div');container.className='wk-mount';workshopContainer=container;showAreaContainer(container);
+    const controller=createWorkshopController({repository,settings:runtime.settings,target,runtime:workshopRuntime,getCharacterName:binding=>getContext().characters?.find(c=>c.avatar===binding?.owner)?.name??'当前角色',ensureRegex:()=>{if(workshopRegexError)throw workshopRegexError;},onMemory:()=>void returnFromSummary(),onTime:()=>void openTime(),onSettings:openSettings,onBenmo:()=>void openBenmo(),onClose:close});
     workshopController=controller;
-    try{const view=await mountWorkshopView({container:workshopContainer,controller,availability,initialKind:kind});
-      if(!panel||serial!==ticket||request!==pageRequest||!sameTarget(target,repository.captureTarget())){view.dispose();controller.dispose();return false;}
-      workshopView=view;return true;
-    }catch(error){if(panel&&serial===ticket&&request===pageRequest){
-      loading.fail(error);
-    }return false;}
+    const prepare=async({refresh=false}={})=>{await new Promise(afterPageFrame);if(refresh?(!panel||settingsOpen||!summaryContent.contains(container)||summaryContent.hidden||controller!==workshopController||!sameTarget(target,repository.captureTarget())):!valid())return null;return refresh?controller.load({refresh:true}):controller.ensure();};
+    const view=await mountWorkshopView({container,controller,availability,initialKind:kind??'prompt',prepare,isCurrent:valid});
+    if(!view||!valid()){view?.dispose();controller.dispose();return false;}
+    workshopView=view;syncAppearance();return !view.failed();
   }
   const openTracking=kind=>['item','npc'].includes(kind)?openBenmo({kind}):Promise.resolve(false);
   async function returnFromSettings(reason) {
@@ -497,14 +520,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if (reason === 'close') { close(); return; }
     settingsContent.replaceChildren(); settingsContent.hidden = true;
     if(Object.hasOwn(areaPages,reason)){
-      // The explicit Benmo link preserves its live view. The other area links
-      // intentionally open a fresh page; Escape below resumes the saved view.
-      if(reason==='benmo'&&resumeAreaFromSettings(reason,policy))return;
-      if(reason!=='benmo')areaPages[reason].settingsReturn=false;
+      if(resumeAreaFromSettings(reason,policy))return;
+      areaPages[reason].settingsReturn=false;
       returnFocus=returnTarget=null;
       void areaPages[reason].open();return;
     }
-    if(reason==='memory'){areaPages.time.settingsReturn=false;returnFocus=returnTarget=null;void open();return;}
+    if(reason==='memory'){areaPages.time.settingsReturn=false;returnFocus=returnTarget=null;void returnFromSummary();return;}
     if(areaPages.benmo.settingsReturn){
       if(resumeAreaFromSettings('benmo',policy))return;
       areaPages.benmo.unmount();returnFocus=returnTarget=null;openSettings();return;
@@ -585,7 +606,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   async function openCumulativeTask(taskId){
     if(!allowed('cumulative'))return false;
-    if(disposed||settingsOpen||workshopController||benmoView||benmoContent&&!benmoContent.hidden||cumulativeSettingsView||summarySettingsView)return false;
+    if(disposed||settingsOpen||areaVisible()||cumulativeSettingsView||summarySettingsView)return false;
     const task=runtime?.cumulativeService.inspect(taskId);if(!task||!sameTarget(task.target,repository.captureTarget()))return false;
     if(panel){const active=panel.shadowRoot.activeElement,value=runtime.cumulativeController.inspect();if(app?.session.state.route==='editor'||value.editDraft||value.restore||active?.matches('input,textarea,select')||panel.shadowRoot.querySelector('[data-composing=true]'))return false;}
     if(!panel)await open();
@@ -748,7 +769,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   async function open() {
     if (disposed) return;
     const currentTicket = ++ticket,currentPageRequest=++pageRequest;openingTicket=currentTicket;
-    app?.dispose(); app = null;unmountPages();areaPages.time.settingsReturn=false;
+    app?.dispose(); app = null;memoryReadProof=null;unmountPages();areaPages.time.settingsReturn=false;
     if(panel){settingsRootView?.dispose();settingsRootView=null;settingsOpen=false;summaryContent.replaceChildren();summaryContent.hidden=true;summaryContent.inert=false;memoryContent.hidden=false;memoryContent.inert=false;apiView?.dispose();apiView=null;const previous=apiSession;apiSession=null;replacingPage=true;try{previous?.exit('back');}finally{replacingPage=false;}settingsContent.replaceChildren();settingsContent.hidden=true;}
     if (!panel) {
       panel = doc.createElement('lantai-benmo-host'); panel.id = 'lantai-benmo-panel';
@@ -760,7 +781,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       shadow.addEventListener('compositionend', () => { composing = false; });
       panel.addEventListener('keydown', event => {
         if (disposed || event.currentTarget!==panel || !settingsContent || !summaryContent || event.defaultPrevented || event.isComposing || composing || shadow.querySelector('[data-composing=true]')) return;
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!settingsContent.hidden) apiSession?apiSession.exit('back'):settingsRootView?.back()||returnFromSettings('back'); else if(benmoView&&!benmoContent.hidden){benmoView.back();}else if(!summaryContent.hidden){if(workshopView)workshopView.back();else if(workshopController)void returnFromSummary();else if(timeView)timeController.back();else if(cleaningFacade)cleaningFacade.back();else if(cumulativeSettingsView)cumulativeSettingsController.back();else if(cumulativeView)void runtime.cumulativeController.back().then(back=>{if(back)void returnFromCumulative();});else if(recallView)recallController.back();else if(summarySettingsView)summarySettingsController.back();else void runtime.summaryController.back().then(back=>{if(back)void returnFromSummary();});}else close(); return; }
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!settingsContent.hidden) apiSession?apiSession.exit('back'):settingsRootView?.back()||returnFromSettings('back'); else if(benmoView&&!benmoContent.hidden){benmoView.back();}else if(!summaryContent.hidden){if(areaPages.workshop.visible()){if(workshopView)workshopView.back();else void returnFromSummary();}else if(areaPages.time.visible())timeController.back();else if(cleaningFacade)cleaningFacade.back();else if(cumulativeSettingsView)cumulativeSettingsController.back();else if(cumulativeView)void runtime.cumulativeController.back().then(back=>{if(back)void returnFromCumulative();});else if(recallView)recallController.back();else if(summarySettingsView)summarySettingsController.back();else void runtime.summaryController.back().then(back=>{if(back)void returnFromSummary();});}else close(); return; }
         if (event.key !== 'Tab') return;
         const items = [...shadow.querySelectorAll('button,a,input,textarea,select,summary,[tabindex]')]
           .filter(node => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length);
@@ -807,6 +828,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(!valid())return;
       if(!allowed('memory')){if(allowed('time'))await openTime();else if(allowed('workshop'))await openWorkshop();else if(allowed('benmo'))await openBenmo();else openSettings();syncAppearance();return;}
       if(!allowed(memoryType))memoryType=allowed('event')?'event':'cumulative';
+      const memoryProof=captureMemoryRead();
       app = mountMemoryApp(memoryContent, repository, { history: null, window: null, onClose: close,
         managementService: runtime?.service, managementController: runtime?.controller,
         getSettingsEpoch: () => runtime.getGenerationSettings().epoch,
@@ -814,6 +836,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         openBenmo:()=>void openBenmo(),openWorkshop:()=>void openWorkshop(),openTime:()=>void openTime(),openSummary:origin=>void showSummary(origin),openSummarySettings:()=>void openSummarySettings(true),openRecall:()=>void openRecall(),regenerateBatch:id=>void showSummary('manual',id),cumulativeController:runtime.cumulativeController,initialMemoryType:memoryType,availability,onMemoryType:type=>{memoryType=type;cumulativePage='root';},openCumulative:origin=>void showCumulative(origin),openCumulativeSettings:()=>void openCumulativeSettings('root') });
       const mountedApp=app,reopenPage=cumulativePage,reopenTarget=cumulativePageTarget;await mountedApp.ready;
       if(!valid()||app!==mountedApp||currentPageRequest!==pageRequest)return;
+      memoryReadProof=matchesMemoryRead(memoryProof)?memoryProof:null;
       if(memoryType==='cumulative'&&sameTarget(reopenTarget,repository.captureTarget())){if(['manual','auto'].includes(reopenPage))await showCumulative(reopenPage);else if(reopenPage==='settings'||reopenPage==='cleaning'){await openCumulativeSettings(cumulativeReturnPage,true);if(reopenPage==='cleaning')await openCumulativeCleaning();}}
       if(valid())syncAppearance();
     } catch (error) { if (valid()&&currentPageRequest===pageRequest) errorView(error); }

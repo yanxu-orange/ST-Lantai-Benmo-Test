@@ -61,14 +61,20 @@ export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.docu
             try { Promise.resolve(runtime.generate(floor, { workshopOnly: true, taskId: task.id })).catch(() => {}); }
             catch { /* Runtime reports errors. */ }
           });
-          const manage = doc.createElement('button'); manage.type='button';manage.className='menu_button';manage.textContent='查看日程与候选';
-          manage.addEventListener('click',()=>{if(current()&&!manage.hidden)onOpenSchedule?.();});
-          actions.append(status, retry, manage); detail.append(heading, display.body, actions); box.append(detail);
+          let manage = null;
+          actions.append(status, retry);
+          if (task.kind === 'schedule') {
+            manage = doc.createElement('button'); manage.type='button';manage.className='menu_button';manage.textContent='查看日程与候选';
+            manage.addEventListener('click',()=>{if(current()&&!manage.hidden)onOpenSchedule?.();});
+            actions.append(manage);
+          }
+          detail.append(heading, display.body, actions); box.append(detail);
           entry = { ...display, detail, heading, status, retry, manage }; state.entries.set(key, entry);
         }
         text(entry.heading, task.name);
         text(entry.status, task.status === 'running' ? '正在生成…' : task.error || (!task.body ? '尚未生成' : ''));
-        text(entry.retry, task.body ? '重新生成' : task.status === 'failed' ? '重试' : '生成'); entry.retry.disabled = task.status === 'running'||task.canRetry===false;entry.retry.hidden=task.canRetry===false;entry.manage.hidden=task.openSchedule!==true||typeof onOpenSchedule!=='function';
+        text(entry.retry, task.body ? '重新生成' : task.status === 'failed' ? '重试' : '生成'); entry.retry.disabled = task.status === 'running'||task.canRetry===false;entry.retry.hidden=task.canRetry===false;
+        if(entry.manage)entry.manage.hidden=task.openSchedule!==true||typeof onOpenSchedule!=='function';
         // Tracking remains plain text and never enters the Helper formatter.
         if (task.kind !== 'workshop') { text(entry.body, task.body ?? ''); entry.body.hidden = !task.body; }
       }
@@ -91,6 +97,7 @@ export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.docu
 .lantai-workshop-result-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ui-space-control,.5em);min-inline-size:0}
 .lantai-workshop-result-status{min-inline-size:0;max-inline-size:100%;overflow-wrap:anywhere}
 .lantai-workshop-results button{display:inline-flex;width:max-content;white-space:nowrap;flex-shrink:0}
+.lantai-workshop-results [hidden]{display:none!important}
 .lantai-workshop-results summary{cursor:pointer}
 .lantai-workshop-results > details > summary{display:list-item;box-sizing:border-box;inline-size:100%;min-block-size:44px;padding:10px .25em;cursor:pointer}
 .lantai-workshop-results > details + details{margin-block-start:4px}

@@ -15,24 +15,36 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
   let disposed=false,serial=0,pending=null,identityUnconfirmed=true,backgroundSourceReader=null;
   const keys=new Set(),releases=[],listeners=new Set();
   const changed=()=>{for(const listener of listeners)try{listener();}catch{/* Display refresh cannot change a write. */}};
+  // Display reuse needs the live story source as well as the repository root.
+  // Reply ownership lives outside that root and can change without an event.
+  const replyOwnership=()=>JSON.stringify(getContext().chat.map(message=>[message?.extra?.[WORKSHOP_REPLY_KEY],message?.swipe_info?.map(info=>info?.extra?.[WORKSHOP_REPLY_KEY]),message?.swipes?.length]));
+  function captureDisplaySource(target,source){
+    if(!captureSource||!matchesSource)return null;
+    try{return {serial,source:source??captureSource(target),ownership:replyOwnership(),gates:Object.entries(gates).map(([key,gate])=>({key,allowed:gate.allowed(),proof:gate.capture()}))};}catch{return null;}
+  }
+  function matchesDisplaySource(target,proof){
+    try{return !!proof&&!disposed&&proof.serial===serial&&sameTarget(target,repository.captureTarget())&&matchesSource(target,proof.source)&&proof.ownership===replyOwnership()&&proof.gates.every(row=>gates[row.key].allowed()===row.allowed&&(!row.allowed||gates[row.key].matches(row.proof)));}catch{return false;}
+  }
   function clear(){
     serial++;const context=getContext();let okay=true;
     for(const key of keys){try{context.setExtensionPrompt(key,'',1,0,false,0);}catch{okay=false;}}
     if(okay)keys.clear();changed();return okay;
   }
-  async function collect(){
+  async function collect({target,readView:provided}={}){
     if(disposed)return;
     const collectSerial=serial;
-    const target=repository.captureTarget(),config=settings.captureWorkshop(),readView=await repository.capturePanelData?.(target),selection=await repository.captureWorkshop(target,readView);
+    if(!sameTarget(target,repository.captureTarget()))return;
+    const config=settings.captureWorkshop(),readView=provided&&repository.matchesPanelData?.(target,provided)?provided:await repository.capturePanelData?.(target),selection=await repository.captureWorkshop(target,readView);
     if(disposed||serial!==collectSerial||!sameTarget(target,repository.captureTarget())||!settings.matchesWorkshop(config))return;
     const root=readView?await repository.readPanelRoot(target,readView):await repository.read(target);
     const modules=applicableModules(config.workshop,selection.workshop,root.binding?.kind==='character'?root.binding.owner:null).filter(module=>gates[module.lifecycle].allowed());
     const collectors=modules.filter(module=>module.lifecycle!=='prompt'&&generationSourceOf(module)==='story');
-    if(!modules.some(module=>module.lifecycle!=='prompt')&&!selection.workshop.results.some(row=>row.generationSource==='background'))return {target,selection,config,modules,readView};
+    if(!modules.some(module=>module.lifecycle!=='prompt')&&!selection.workshop.results.some(row=>row.generationSource==='background'))return {target,selection,config,modules,readView,binding:root.binding,displaySource:captureDisplaySource(target)};
     if(disposed||serial!==collectSerial||!sameTarget(target,repository.captureTarget())||!settings.matchesWorkshop(config))return;
     const prepared=prepareWorkshopIdentities(getContext().chat.map(message=>pendingProjection(message)?null:message),{allowPendingLast:true});
     if(prepared.changed)identityUnconfirmed=true;
     const source=captureSource?.(target);
+    const displaySource=captureDisplaySource(target,source);
     const guard=()=>!disposed&&serial===collectSerial&&sameTarget(target,repository.captureTarget())&&settings.matchesWorkshop(config)&&(!matchesSource||matchesSource(target,source));
     if(!guard())return;
     const snapshots=collectors.flatMap(module=>prepared.selected.map(reply=>({moduleId:module.id,replyId:reply.replyId,floor:reply.floor,values:[module.captureTag,...(module.captureAliases??[]).filter(alias=>alias.rootId===target.rootId).map(alias=>alias.tag)].flatMap(tag=>extractResults(reply.text,tag))})));
@@ -58,12 +70,13 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     catch(error){identityUnconfirmed=true;throw error;}
     if(!guard())return;
     if(saved.status==='committed')identityUnconfirmed=false;
-    return {target,selection:saved.selection,config,modules,readView};
+    // A collection may commit. Its input view cannot certify the saved output.
+    return {target,selection:saved.selection,config,modules,binding:(saved.root??root).binding,displaySource,readView:readView&&repository.matchesPanelData(target,readView)?readView:undefined};
   }
-  function request(){
+  function request({target:requestedTarget,readView}={}){
     if(!gates.collect.allowed()&&!gates.sync.allowed()&&!gates.prompt.allowed())return Promise.resolve(null);
-    const requestedSerial=serial;
-    const work=(pending??Promise.resolve()).catch(()=>{}).then(()=>requestedSerial===serial?collect():null).then(result=>{changed();return result;});
+    const requestedSerial=serial,target=requestedTarget??repository.captureTarget();
+    const work=(pending??Promise.resolve()).catch(()=>{}).then(()=>requestedSerial===serial?collect({target,readView}):null).then(result=>{changed();return result;});
     pending=work;work.finally(()=>{if(pending===work)pending=null;}).catch(()=>{});return work;
   }
   async function intercept(messages,_size,_abort,type='normal'){
@@ -119,7 +132,19 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     const saved=await repository.updateWorkshop(target,state.selection,next,{isCurrent:()=>!disposed&&sameTarget(target,repository.captureTarget())&&(!options.isCurrent||options.isCurrent())});
     return {...state,selection:saved.selection};
   }
-  if(settings.subscribe)releases.push(settings.subscribe(changed));
+  if(settings.subscribe){
+    let displayed;
+    try{displayed=settings.captureWorkshop().workshop.modules;}catch{/* Wait for confirmed settings. */}
+    releases.push(settings.subscribe(notice=>{
+      // Unconfirmed API staging cannot supply display data. Generation and
+      // write guards still check live settings; only relevant confirmed
+      // workshop changes require another read of stored results.
+      if(notice?.confirmed===false)return;
+      let next;try{next=settings.captureWorkshop().workshop.modules;}catch{return;}
+      const unchanged=displayed&&equal(displayed,next);displayed=next;
+      if(!unchanged)changed();
+    }));
+  }
   const context=getContext();let timer;
   for(const name of ['MESSAGE_RECEIVED','MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED','GENERATION_ENDED']){
     const event=context?.eventTypes?.[name],events=context?.eventSource;if(!event||!events?.on)continue;
@@ -130,5 +155,5 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     const event=context?.eventTypes?.[name],events=context?.eventSource;if(!event||!events?.on)continue;
     const listener=()=>{clearTimeout(timer);clear();};events.on(event,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,event,listener));
   }
-  return {request,intercept,clear,changed,setBackgroundSourceReader(reader){backgroundSourceReader=reader;},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},moduleAllowed:module=>gates[module.lifecycle].allowed()&&(module.scope==='chat'||equal(settings.captureWorkshop().workshop.modules.find(item=>item.id===module.id),module)),backgroundState,prepareBackground,filterBackgroundPlan,filterCurrentBackgroundPlan,saveBackgroundResult,reconcileBackground,dispose(){if(disposed)return;clear();disposed=true;clearTimeout(timer);for(const release of releases)release();listeners.clear();}};
+  return {request,intercept,clear,changed,captureDisplaySource,matchesDisplaySource,setBackgroundSourceReader(reader){backgroundSourceReader=reader;},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},moduleAllowed:module=>gates[module.lifecycle].allowed()&&(module.scope==='chat'||equal(settings.captureWorkshop().workshop.modules.find(item=>item.id===module.id),module)),backgroundState,prepareBackground,filterBackgroundPlan,filterCurrentBackgroundPlan,saveBackgroundResult,reconcileBackground,dispose(){if(disposed)return;clear();disposed=true;clearTimeout(timer);for(const release of releases)release();listeners.clear();}};
 }

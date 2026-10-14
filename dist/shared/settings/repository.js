@@ -22,7 +22,16 @@ export function createSettingsRepository(adapter) {
     // when an unrelated save has temporarily staged the shared namespace.
     // The queued peek still rejects failed/unconfirmed writes without rereading.
     const queuedControls = field === 'controls' && requestedEpoch !== undefined;
-    const previous = queuedControls ? null : adapter.peek();
+    let previous = null;
+    if (!queuedControls) {
+      try { previous = adapter.peek(); }
+      catch (error) {
+        // An API draft already owns its original domain epoch. Its queued
+        // fresh read can reconcile lost authority and validate that same
+        // epoch together; an outer recovery read would immediately repeat it.
+        if (field !== 'ai' || requestedEpoch === undefined || error?.code !== 'SETTINGS_COMMIT_UNCONFIRMED') throw error;
+      }
+    }
     const expectedEpoch = requestedEpoch ?? adapter.epochs()[field];
     const work = queue.then(async () => {
       // Ordinary settings follow the current ST window. Cross-window edits

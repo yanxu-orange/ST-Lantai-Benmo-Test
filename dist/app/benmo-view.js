@@ -18,11 +18,10 @@ const aliases = value => [...new Set((Array.isArray(value) ? value : String(valu
 
 /** The Benmo surface owns only navigation/drafts. The controller owns source
  * eligibility, runtime jobs, feature policy and acknowledged persistence. */
-export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, isCurrent = () => true, initialState = {}} = {}) {
+export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, isCurrent = () => true, prepare, initialState = {}} = {}) {
   initialState ??= {};
   const lifetime = new AbortController();
-  let value = await (controller.ensure ? controller.ensure() : controller.load());
-  if (!isCurrent()) return null;
+  let value = {}, loading = true, loadFailed = false, initializing = true;
   let disposed = false, suspended = false, acting = false, composing = false;
   let error = '', dialog = null, draft = null, baseline = null, original = null, narrativeRecovery = null, narrativeDraftTarget = null, invalidated = false, renderedPolicy = '';
   let returnRoute = 'list', epoch = 0, toastTimer, redirectTimer;
@@ -65,7 +64,7 @@ export async function mountBenmoView({container: app, controller, availability =
   const summaryRecords = () => byFloor(value.summary?.records ?? []);
   const selectedRecord = () => records().find(row => row.id === state.selected);
   const context = () => ['benmo', state.tab, state.kind, state.route, ['detail', 'edit', 'narrative-edit'].includes(state.route) ? state.selected ?? 'new' : ''].join(':');
-  const blocked = () => !!narrativeRecovery || summaryDraftHidden() || invalidated || externalPolicy().transient === true || value.writeBlocked === true || !policy()[activeKind()];
+  const blocked = () => loading || loadFailed || !!narrativeRecovery || summaryDraftHidden() || invalidated || externalPolicy().transient === true || value.writeBlocked === true || !policy()[activeKind()];
   const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'toggle-excluded', 'restore-excluded', 'new', 'generate', 'generate-narrative', 'manual-summary', 'start-backfill'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
   const bookTheme = () => ['paper-letter','purple-glow'].includes(surfaceTheme(app));
   const textEntry = (label, action, attrs = '') => button(bookTheme() && ['settings-summary','settings-tracking','settings-narrative'].includes(action) ? '设置' : label, action, attrs).replace('ui-button ui-button--tertiary', 'benmo-text-entry');
@@ -102,7 +101,7 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   function remember() {
     const main = app.querySelector('.lt-main');
-    if (main) state.scrolls[context()] = main.scrollTop;
+    if (main && !loading && !loadFailed) state.scrolls[context()] = main.scrollTop;
     readDraft();
   }
   const dirty = () => { readDraft(); return !!draft && !same(draft, baseline); };
@@ -110,7 +109,7 @@ export async function mountBenmoView({container: app, controller, availability =
     remember();
     return {tab: state.tab, kind: state.kind, route: draft ? returnRoute : state.route, selected: state.selected, selections: {...state.selections}, scrolls: {...state.scrolls}, expanded: [...state.expanded], summaryHistoryExpanded: state.summaryHistoryExpanded};
   }
-  function normalize() {
+  function normalize(validateSelection = true) {
     const tabs = enabledTabs(), kinds = enabledKinds();
     if (!tabs.length) return false;
     if (!tabs.includes(state.tab) || (state.tab === 'records' && !kinds.includes(state.kind))) {
@@ -119,7 +118,7 @@ export async function mountBenmoView({container: app, controller, availability =
       state.route = 'list'; state.selected = state.selections[state.kind] ?? null;
       draft = baseline = original = null; narrativeRecovery = narrativeDraftTarget = null; dialog = null; epoch++;
     }
-    if (state.tab === 'records' && state.route === 'detail' && !selectedRecord()) { state.route = 'list'; state.selected = null; }
+    if (validateSelection && state.tab === 'records' && state.route === 'detail' && !selectedRecord()) { state.route = 'list'; state.selected = null; }
     return true;
   }
   function redirectToSettings() {
@@ -401,14 +400,15 @@ export async function mountBenmoView({container: app, controller, availability =
   let renderedMarkup = null;
   function render() {
     if (disposed || suspended) return;
-    if (externalPolicy().transient) { syncWriteControls(); return; }
+    if (externalPolicy().transient && !loading && !loadFailed) { syncWriteControls(); return; }
     renderedPolicy = JSON.stringify(policy());
-    if (!normalize()) { stopSummaryVisibility(); app.innerHTML = ''; renderedMarkup = null; redirectToSettings(); return; }
-    if (state.tab === 'records' && state.kind === 'summary') startSummaryVisibility(); else stopSummaryVisibility();
+    if (initializing && loading && enabledTabs().length) normalize(false);
+    if (!loading && !loadFailed && !normalize()) { stopSummaryVisibility(); app.innerHTML = ''; renderedMarkup = null; redirectToSettings(); return; }
+    if (!loading && !loadFailed && state.tab === 'records' && state.kind === 'summary') startSummaryVisibility(); else stopSummaryVisibility();
     const focused = app.getRootNode().activeElement;
     const focusName = focused?.name, focusValue = focused?.value, focusData = focused?.dataset ? JSON.stringify({...focused.dataset}) : null;
     const subpage = state.route !== 'list';
-    const markup = `<section class="lantai workshop benmo ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}" data-benmo-route="${state.route}" data-benmo-tab="${state.tab}" data-benmo-kind="${state.kind}">${subpage ? `<header class="lt-header ui-header subpage-header">${icon(draft && returnRoute === 'detail' ? '返回记录详情' : `返回${state.tab === 'records' ? KINDS[state.kind] : TABS[state.tab]}`, 'back', 'back')}<h1 class="ui-page-title">${pageTitle()}</h1>${icon('关闭兰台', 'close', 'close')}</header>` : `<header class="lt-header lt-header--root ui-header"><div class="lt-root-top">${rootTitle('benmo')}${icon('关闭兰台', 'close', 'close')}</div><nav class="ui-tablist" aria-label="本末分区">${enabledTabs().map(id => selectButton(id, TABS[id], state.tab, 'tab')).join('')}</nav></header>`}<main class="lt-main ui-main" tabindex="-1">${error || value.error ? `<p class="lt-error" role="alert">${esc(error || value.error)}</p>${button('重新读取', 'reload')}` : ''}${content()}</main><footer class="lt-footer">${mainNavigation({policy: policy(), current: 'benmo', actions: {memory: 'area', time: 'area', workshop: 'area', benmo: 'area', settings: 'area'}, attributes: Object.fromEntries(['memory', 'time', 'workshop', 'benmo', 'settings'].map(area => [area, `data-id="${area}"`]))})}</footer>${dialog ? `<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending ? '正在处理，请稍候…' : dialog.text)}</p>${(dialog.details ?? []).map(item => `<section class="section"><label class="ui-field"><span>后台新内容</span><textarea class="lt-textarea" rows="3" readonly aria-label="后台${esc(item.label)}">${esc(item.latest)}</textarea></label><label class="ui-field"><span>你的草稿</span><textarea class="lt-textarea" rows="3" readonly aria-label="草稿${esc(item.label)}">${esc(item.local)}</textarea></label></section>`).join('')}<div class="wk-dialog-actions">${button(dialog.cancelLabel ?? '取消', 'cancel-dialog', dialog.pending ? 'disabled' : '')}${button(dialog.pending ? '处理中…' : dialog.confirmLabel ?? '确认', 'confirm-dialog', dialog.pending ? 'disabled aria-busy="true"' : '', 'primary')}</div></div></div>` : ''}</section>`;
+    const markup = `<section class="lantai workshop benmo ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}" data-benmo-route="${state.route}" data-benmo-tab="${state.tab}" data-benmo-kind="${state.kind}">${subpage ? `<header class="lt-header ui-header subpage-header">${icon(draft && returnRoute === 'detail' ? '返回记录详情' : `返回${state.tab === 'records' ? KINDS[state.kind] : TABS[state.tab]}`, 'back', 'back')}<h1 class="ui-page-title">${pageTitle()}</h1>${icon('关闭兰台', 'close', 'close')}</header>` : `<header class="lt-header lt-header--root ui-header"><div class="lt-root-top">${rootTitle('benmo')}${icon('关闭兰台', 'close', 'close')}</div><nav class="ui-tablist" aria-label="本末分区">${enabledTabs().map(id => selectButton(id, TABS[id], state.tab, 'tab')).join('')}</nav></header>`}<main class="lt-main ui-main" tabindex="-1">${error || value.error ? `<p class="lt-error" role="alert">${esc(error || value.error)}</p>${button('重新读取', 'reload')}` : ''}${loading ? '<p class="wk-empty" role="status" aria-live="polite">正在读取本末记录…</p>' : loadFailed ? '' : content()}</main><footer class="lt-footer">${mainNavigation({policy: policy(), current: 'benmo', actions: {memory: 'area', time: 'area', workshop: 'area', benmo: 'area', settings: 'area'}, attributes: Object.fromEntries(['memory', 'time', 'workshop', 'benmo', 'settings'].map(area => [area, `data-id="${area}"`]))})}</footer>${dialog ? `<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending ? '正在处理，请稍候…' : dialog.text)}</p>${(dialog.details ?? []).map(item => `<section class="section"><label class="ui-field"><span>后台新内容</span><textarea class="lt-textarea" rows="3" readonly aria-label="后台${esc(item.label)}">${esc(item.latest)}</textarea></label><label class="ui-field"><span>你的草稿</span><textarea class="lt-textarea" rows="3" readonly aria-label="草稿${esc(item.label)}">${esc(item.local)}</textarea></label></section>`).join('')}<div class="wk-dialog-actions">${button(dialog.cancelLabel ?? '取消', 'cancel-dialog', dialog.pending ? 'disabled' : '')}${button(dialog.pending ? '处理中…' : dialog.confirmLabel ?? '确认', 'confirm-dialog', dialog.pending ? 'disabled aria-busy="true"' : '', 'primary')}</div></div></div>` : ''}</section>`;
   // Repeated runtime receipts must not replace an unchanged surface.
   if (markup !== renderedMarkup) { replaceSurfaceMarkup(app, markup, renderedMarkup); renderedMarkup = markup; }
     const main = app.querySelector('.lt-main');
@@ -538,8 +538,9 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   app.addEventListener('click', async event => {
     const control = event.target.closest('[data-action]');
-    if (!control || control.disabled || disposed || suspended) return;
+    if (!control || control.disabled || disposed || suspended || (initializing && !isCurrent())) return;
     const action = control.dataset.action, id = control.dataset.id;
+    if (loading && !['close', 'area', 'back'].includes(action)) return;
     if (dialog && !['cancel-dialog', 'confirm-dialog'].includes(action)) return;
     if (acting && !['back', 'cancel', 'close', 'area', 'cancel-dialog', 'confirm-dialog'].includes(action)) return;
     if (composing && ['save', 'restore-excluded', 'add-field', 'remove-field', 'default-prompt', 'default-tracking-prompt', 'default-narrative-prompt', 'add-narrative-character', 'remove-narrative-character', 'toggle-narrative-setting', 'toggle-narrative-injection'].includes(action)) return;
@@ -555,7 +556,7 @@ export async function mountBenmoView({container: app, controller, availability =
       if (action === 'back' || action === 'cancel') { if (action === 'cancel') leave(goBack); else back(); return; }
       if (action === 'close') { leave(() => { epoch++; clearDraft(); dialog = null; suspended = true; app.inert = true; stopSummaryVisibility(); onClose(); }); return; }
       if (action === 'area') { leave(() => navigate(id)); return; }
-      if (action === 'reload') { acting = ownsAction = true; remember(); const token = epoch; const next = await controller.load({refresh: true}); if (!disposed && token === epoch) { remember(); apply(next); invalidated = false; recoverNarrativeDraft(); render(); } return; }
+      if (action === 'reload') { acting = ownsAction = true; remember(); const token = epoch; loading = !draft; loadFailed = false; error = ''; render(); try { const next = await readValue(true); if (!disposed && token === epoch) { remember(); apply(next); invalidated = false; recoverNarrativeDraft(); } } catch (failure) { if (!disposed && token === epoch) { loadFailed = true; throw failure; } } finally { loading = false; if (!disposed && token === epoch) render(); } return; }
       if (action === 'tab' && enabledTabs().includes(id)) { leave(() => { remember(); epoch++; state.tab = id; state.route = 'list'; clearDraft(); render(); }); return; }
       if (action === 'kind' && enabledKinds().includes(id)) { leave(() => { remember(); epoch++; state.kind = id; state.route = 'list'; state.selected = state.selections[id] ?? null; clearDraft(); render(); }); return; }
       if (action === 'settings-narrative' && NARRATIVES.includes(state.tab)) { startNarrativeSettings(); return; }
@@ -639,7 +640,8 @@ export async function mountBenmoView({container: app, controller, availability =
       controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length].focus();
     }
   }, {signal: lifetime.signal});
-  const unsubscribe = controller.subscribe?.(next => {
+  let unsubscribe;
+  function subscribe() { unsubscribe = controller.subscribe?.(next => {
     if (disposed) return;
     value = next;
     const automaticStatus=app.querySelector('[data-latest-automatic-status]');
@@ -649,9 +651,9 @@ export async function mountBenmoView({container: app, controller, availability =
     // A background receipt must never rebuild an active input or its baseline.
     if (!draft && !acting && !dialog && !suspended) { remember(); render(); }
     else for (const node of app.querySelectorAll('[data-action="save"],[data-action="delete-record"],[data-action="toggle-excluded"],[data-action="restore-excluded"]')) node.disabled = blocked() || acting;
-  });
+  }); }
   function startSummaryVisibility() {
-    if (disposed || suspended || observingSummaryVisibility || !controller.observeSummaryVisibility) return;
+    if (disposed || suspended || loading || loadFailed || observingSummaryVisibility || !controller.observeSummaryVisibility) return;
     observingSummaryVisibility = true;
     summaryVisibilityDisposer = controller.observeSummaryVisibility({document: app.ownerDocument});
   }
@@ -660,7 +662,13 @@ export async function mountBenmoView({container: app, controller, availability =
     summaryVisibilityDisposer = null; observingSummaryVisibility = false;
     dispose?.();
   }
+  const readValue = refresh => prepare ? prepare({refresh}) : refresh ? controller.load({refresh: true}) : controller.ensure ? controller.ensure() : controller.load();
   render();
+  const loadingRoot = app.children?.[0], loadingMarkup = renderedMarkup;
+  try { apply(await readValue(false)); }
+  catch (failure) { loadFailed = true; error = failure.message || '读取未完成，请重试'; }
+  if (!isCurrent()) { disposed = true; lifetime.abort(); stopSummaryVisibility(); clearTimeout(redirectTimer); if (loadingRoot) { if (app.children?.[0] === loadingRoot) loadingRoot.remove(); } else if (app.innerHTML === loadingMarkup) app.innerHTML = ''; return null; }
+  initializing = false; loading = false; subscribe(); render();
   return {
     back() { if (!dialog && !acting) back(); },
     blocking() { return acting || dirty() || !!dialog; },
@@ -668,7 +676,10 @@ export async function mountBenmoView({container: app, controller, availability =
     refreshAvailability() { if (JSON.stringify(policy()) !== renderedPolicy || externalPolicy().transient) { remember(); render(); } },
     invalidate(message) { remember(); epoch++; invalidated = true; error = message; value = {...value, writeBlocked: true}; render(); },
     suspend() { if (disposed || suspended) return; remember(); suspended = true; epoch++; app.inert = true; stopSummaryVisibility(); },
-    resume() { if (disposed) return; suspended = false; app.inert = false; render(); },
+    loading() { if (disposed) return; remember(); loading = true; loadFailed = false; error = ''; suspended = false; app.inert = false; render(); },
+    fail(failure) { if (disposed) return; loading = false; loadFailed = true; error = failure?.message || '读取未完成，请重试'; suspended = false; app.inert = false; render(); },
+    failed() { return loadFailed; },
+    resume(next, {kind} = {}) { if (disposed) return; remember(); if (next) { apply(next); invalidated = false; } if (kind && Object.hasOwn(KINDS, kind) && policy()[kind] && !draft && (state.tab !== 'records' || state.kind !== kind)) { state.tab = 'records'; state.kind = kind; state.route = 'list'; state.selected = state.selections[kind] ?? null; } loading = false; loadFailed = false; suspended = false; app.inert = false; render(); },
     dispose() { if (disposed) return; disposed = true; epoch++; stopSummaryVisibility(); unsubscribe?.(); lifetime.abort(); clearTimeout(toastTimer); clearTimeout(redirectTimer); app.innerHTML = ''; },
   };
 }

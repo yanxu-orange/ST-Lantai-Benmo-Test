@@ -22,7 +22,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
   }
   const available=settings=>settings.eventWords.filter(item=>item.enabled!==false).map(item=>item.name);
   function notify(taskId) {const value=inspect(taskId);if(value)for(const listener of [...listeners])try{listener(value);}catch{/* observers cannot stop a task */}}
-  function inspect(taskId) {const task=manager.inspect(taskId),record=records.get(taskId);return task&&record?{...task,stage:record.stage,origin:record.origin,outcome:record.outcome,receipt:record.receipt,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,diagnostics:structuredClone(record.diagnostics)}:null;}
+  function inspect(taskId) {const task=manager.inspect(taskId),record=records.get(taskId);return task&&record?{...task,stage:record.stage,origin:record.origin,outcome:record.outcome,receipt:record.receipt,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,diagnostics:structuredClone(record.diagnostics),trackingRejected:structuredClone(record.trackingRejected??record.trackingParts?.rejected??null)}:null;}
   async function capture(origin,options={}) {
     const target=repository.captureTarget(),selection=origin==='regeneration'?await repository.captureBatch(target,options.batchId):await repository.captureSummary(target),settings=readSettings();
     const preferences=selection.summary.preferences[origin==='auto'?'auto':'manual'];
@@ -85,7 +85,9 @@ export function createEventSummaryService({repository,manager,provider,getGenera
           const selected=await repository.captureTracking(ctx.target),applied=applyBatchTracking(selected.tracking,snapshot.tracking.ticket,ctx.candidate.trackingParts,captureSource(ctx.target),{makeId:uuid,batchId:snapshot.batchId});
           options.trackingUpdate={expectedRevision:snapshot.tracking.ticket.revision,value:applied.tracking};
           record.trackingErrors=applied.errors;
-          for(const [category,message] of Object.entries(applied.errors))if(message&&!record.diagnostics.some(row=>row.kind==='tracking'&&row.category===category&&row.message===message))record.diagnostics.push({kind:'tracking',category,message});
+          record.trackingRejected=applied.rejected??null;
+          record.diagnostics=record.diagnostics.filter(row=>row.kind!=='tracking');
+          for(const [category,message] of Object.entries(applied.errors))if(message)record.diagnostics.push({kind:'tracking',category,message});
         }
         const receipt=snapshot.origin==='regeneration'?await repository.replaceBatch(ctx.target,selection,events,batch,options):await repository.appendBatch(ctx.target,selection,events,batch,options);
         record.receipt=receipt;return receipt;

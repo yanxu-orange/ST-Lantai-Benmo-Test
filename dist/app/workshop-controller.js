@@ -3,18 +3,20 @@ import {allocateCaptureTag,validateModule,workshopEditableModule} from '../domai
 import {visibleResults,resultText,editResult,deleteResult} from '../domain/workshop/results.js';
 import {sameTarget} from '../domain/memory/repository.js';
 export function createWorkshopController({repository,settings,target,runtime,ensureRegex,getCharacterName,onProgress,onMemory,onTime,onSettings,onBenmo,onClose}={}) {
-  let disposed=false,globalSnapshot,chatSnapshot,binding,busy=0,warning='',writeFailure=null,tail=Promise.resolve(),generation=0,operationGeneration=0;
+  let disposed=false,globalSnapshot,chatSnapshot,binding,readView,displaySource,busy=0,warning='',writeFailure=null,tail=Promise.resolve(),generation=0,operationGeneration=0;
   const enabledIntents=new Map(),toggleTasks=new Map(),deleting=new Set(),saving=new Set();
   const current=()=>!disposed&&operationGeneration===generation&&sameTarget(target,repository.captureTarget());
   async function loadNow({refresh=false}={}){
     if(!current())throw new Error('聊天已变化，请重新打开工坊');
+    readView=undefined;displaySource=null;
     warning='';onProgress?.('正在读取工坊设置…');
     if(refresh||!settings.ensure)await settings.read();else await settings.ensure();
     if(!current())throw new Error('工坊已关闭或聊天已变化');
     onProgress?.('正在准备工坊显示规则…');
     if(ensureRegex){try{await ensureRegex({settingsReady:true});}catch(error){warning='正则自动安装未完成：'+error.message;}}
     if(!current())throw new Error('工坊已关闭或聊天已变化');
-    globalSnapshot=settings.captureWorkshop();chatSnapshot=await repository.captureWorkshop(target);
+    globalSnapshot=settings.captureWorkshop();
+    readView=await repository.capturePanelData?.(target);chatSnapshot=await repository.captureWorkshop(target,readView);
     const dropGlobal=new Set(),dropChat=new Set();
     for(const globalModule of globalSnapshot.workshop.modules){
       const chatModule=chatSnapshot.workshop.modules.find(m=>m.id===globalModule.id);if(!chatModule)continue;
@@ -24,11 +26,6 @@ export function createWorkshopController({repository,settings,target,runtime,ens
     }
     if(dropChat.size)await commitChat({...chatSnapshot.workshop,modules:chatSnapshot.workshop.modules.filter(m=>!dropChat.has(m.id))});
     if(dropGlobal.size)await commitGlobal({...globalSnapshot.workshop,modules:globalSnapshot.workshop.modules.filter(m=>!dropGlobal.has(m.id))});
-    if(!current())throw new Error('工坊已关闭或聊天已变化');
-    onProgress?.('正在同步已收集的内容…');
-    await runtime?.request();
-    chatSnapshot=await repository.captureWorkshop(target);
-    binding=(await repository.read(target)).binding;
     if(!current())throw new Error('工坊已关闭或聊天已变化');
     onProgress?.('正在准备工坊页面…');
     if(!chatSnapshot.workshop.imports.includes('examples-v3')&&chatSnapshot.workshop.modules.some(row=>row.example)){
@@ -48,7 +45,36 @@ export function createWorkshopController({repository,settings,target,runtime,ens
       if(!initialized)seeded.imports.push('examples-v1');
       seeded.imports.push('examples-v3');await commitGlobal(seeded);
     }
+    onProgress?.('正在同步已收集的内容…');
+    displaySource=runtime?.captureDisplaySource?.(target);
+    const collected=await runtime?.request({target,readView});
+    if(collected&&sameTarget(target,collected.target)){
+      chatSnapshot=collected.selection;binding=collected.binding;readView=collected.readView;displaySource=collected.displaySource;
+    }else{
+      // Disabled collectors need no second pass over the same unchanged root.
+      if(runtime&&(!readView||!repository.matchesPanelData(target,readView))){readView=await repository.capturePanelData?.(target);chatSnapshot=await repository.captureWorkshop(target,readView);}
+      binding=(readView?repository.readPanelRoot(target,readView):await repository.read(target)).binding;
+    }
     if(!current())throw new Error('聊天已变化，请重新打开工坊');
+    // Collection and migration writes invalidate their input view. Capture a
+    // current projection together with its proof; never stamp an old snapshot
+    // with a newer token. Repositories without display proofs simply reread.
+    if(!readView||!repository.matchesPanelData(target,readView)){
+      readView=await repository.capturePanelData?.(target);
+      if(readView){chatSnapshot=await repository.captureWorkshop(target,readView);binding=repository.readPanelRoot(target,readView).binding;}
+    }
+    if(!current())throw new Error('聊天已变化，请重新打开工坊');
+    // A changed input while awaiting collection needs its own pass before the
+    // first ready page, not only when the user returns to it next time.
+    if(settings.matchesWorkshop&&!settings.matchesWorkshop(globalSnapshot)
+      ||readView&&!repository.matchesPanelData(target,readView)
+      ||displaySource&&!runtime.matchesDisplaySource(target,displaySource)){
+      // Settled promises only yield to microtasks. Let close/chat-change events
+      // run before retrying a source that keeps changing between passes.
+      await new Promise(resolve=>setTimeout(resolve,0));
+      if(!current())throw new Error('工坊已关闭或聊天已变化');
+      return loadNow();
+    }
     return snapshot();
   }
   function snapshot(){
@@ -61,11 +87,11 @@ export function createWorkshopController({repository,settings,target,runtime,ens
   async function commitGlobal(value,options={}){
     const result=await settings.saveWorkshop(value,{...options,expectedEpoch:globalSnapshot.epoch,isCurrent:current});
     if(result.status!=='committed')throw new Error('模块保存尚未确认');
-    globalSnapshot=settings.captureWorkshop();runtime?.changed?.();
+    globalSnapshot=settings.captureWorkshop();displaySource=null;runtime?.changed?.();
   }
   async function commitChat(value,options={}){
     const result=await repository.updateWorkshop(target,chatSnapshot,value,{...options,isCurrent:current});
-    chatSnapshot=result.selection;runtime?.changed?.();
+    chatSnapshot=result.selection;displaySource=null;runtime?.changed?.();
   }
   function exclusive(action,{reconcile=false}={}){
     busy++;const queuedGeneration=generation;
@@ -88,6 +114,10 @@ export function createWorkshopController({repository,settings,target,runtime,ens
     await loadNow(options);
     if(options.refresh)writeFailure=null;
   },{reconcile:options.refresh===true});}
+  function ensure(){return exclusive(async()=>{
+    if(readView&&repository.matchesPanelData(target,readView)&&settings.matchesWorkshop?.(globalSnapshot)&&runtime?.matchesDisplaySource?.(target,displaySource))return;
+    await loadNow();
+  });}
   function toggle(id,enabled){
     if(!current()||writeFailure||deleting.has(id)||saving.has(id))return Promise.reject(writeFailure??new Error('模块当前无法修改，请重新读取'));
     const module=snapshot().modules.find(row=>row.id===id);
@@ -150,7 +180,7 @@ export function createWorkshopController({repository,settings,target,runtime,ens
       }
     }).finally(()=>{saving.delete(draft.id);});
   }
-  return {load,snapshot,saveModule,rebindTarget(next){if(next.chatId!==target.chatId||next.rootId!==target.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){generation++;enabledIntents.clear();writeFailure=new Error('聊天已重新读取，请重新读取工坊');}target=structuredClone(next);},
+  return {load,ensure,snapshot,saveModule,rebindTarget(next){if(next.chatId!==target.chatId||next.rootId!==target.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){generation++;enabledIntents.clear();writeFailure=new Error('聊天已重新读取，请重新读取工坊');}target=structuredClone(next);},
     toggle,
     deleteModule(id){if(deleting.has(id))return Promise.reject(new Error('正在删除模块'));deleting.add(id);enabledIntents.delete(id);return exclusive(async()=>{const module=[...globalSnapshot.workshop.modules,...chatSnapshot.workshop.modules].find(row=>row.id===id);if(!module)throw new Error('模块已不存在');if(module){const store=structuredClone(module.scope==='chat'?chatSnapshot.workshop:globalSnapshot.workshop);store.modules=store.modules.filter(row=>row.id!==id);if(module.scope==='chat')await commitChat(store);else await commitGlobal(store);}deleting.delete(id);});},
     editResult(id,text){return exclusive(()=>commitChat({...chatSnapshot.workshop,results:editResult(chatSnapshot.workshop.results,id,text)}));},

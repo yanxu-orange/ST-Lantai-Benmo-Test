@@ -67,8 +67,12 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     if(loading)return loading;
     // Reuse subscribed runtime state only while the exact chat source is current.
     // Adapters without a source proof keep the conservative reload path.
-    if(current()&&status==='ready'&&sourceProof&&adapter.matchesChatSource?.(target,sourceProof)&&(latestRuntime.matchesSource?latestRuntime.matchesSource(target,projectionProof):adapter.matchesChatSource?.(target,sourceProof)&&(!latestRuntime.captureSource||equal(projectionProof,latestRuntime.captureSource(target))))){
-      const summary=dataView&&latestRuntime.projectPanel?latestRuntime.projectPanel(dataView):undefined;
+    if(current()&&status==='ready'&&sourceProof&&typeof adapter.matchesChatSource==='function'){
+      // The current runtime validates source + root and projects in one
+      // synchronous pass. Its enriched source also covers the adapter proof.
+      let summary=null;
+      if(dataView&&projectionProof&&latestRuntime.projectPanel)summary=latestRuntime.projectPanel(dataView,{target,source:projectionProof});
+      else if(latestRuntime.matchesSource?latestRuntime.matchesSource(target,projectionProof):adapter.matchesChatSource?.(target,sourceProof)&&(!latestRuntime.captureSource||equal(projectionProof,latestRuntime.captureSource(target))))summary=undefined;
       if(summary!==null){const value=snapshotWithSummary(summary);if(!value.writeBlocked)return Promise.resolve(value);}
     }
     return load();

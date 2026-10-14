@@ -19,7 +19,7 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
   const captureCategories=()=>Object.fromEntries(['items','npcs'].map(key=>[key,categoryGates[key].capture()]));
   const contentOf=domain=>{const {revision,preferences,...content}=domain;return content;};
   const current=t=>{try{return !disposed&&sameTarget(t,repository.captureTarget());}catch{return false;}};
-  const snapshot=()=>clone({...state,exclusions:state.exclusions??trackingExclusionsOf(null),prompts:settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS,writeBlocked:state.writeBlocked||!gate.allowed()}),notify=()=>{for(const fn of listeners)try{fn(snapshot());}catch{/* Observer cannot break data. */}};
+  const snapshot=()=>clone({...state,exclusions:state.exclusions??trackingExclusionsOf(null),prompts:settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS,writeBlocked:state.writeBlocked||!gate.allowed()}),notify=change=>{for(const fn of listeners)try{fn(snapshot(),change);}catch{/* Observer cannot break data. */}};
   function adopt(t,captured,raw=captureSource(t)){
     if(selection&&!equal(trackingExclusionsOf(selection.tracking),trackingExclusionsOf(captured.tracking))){exclusionEpoch++;clear();}
     const previous=state,projected=currentTracking(captured.tracking,raw),exclusions=effectiveTrackingExclusions(captured.tracking,projected.records);target=clone(t);lastTarget=clone(t);selection=captured;
@@ -183,7 +183,8 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
       const captured=settings.captureTrackingPrompts();
       if(original!==undefined&&captured.prompts[kind]!==original)throw new Error('追踪要求已变化，请重新读取后修改');
       await settings.saveTrackingPrompts({...captured.prompts,[kind]:prompt},{expectedEpoch:captured.epoch});
-      notify();return snapshot();
+      // The prompt editor needs its new state; existing floor records do not.
+      notify({displayChanged:false});return snapshot();
     },isCurrent:()=>current(target),
     rebindTarget(next){const previous=target??lastTarget;if(!previous||previous.chatId!==next.chatId||previous.rootId!==next.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){clear();target=clone(next);selection=null;state={...state,target:clone(next),writeBlocked:true,error:'聊天已重新读取，请重新读取追踪'};notify();}},
     deleteRecord(kind,id){return mutate((domain,raw)=>{const record=currentTracking(domain,raw).records.find(row=>row.id===id);if(record?.kind!==kind)throw new Error('追踪记录已变化');return deleteTrackingRecord(domain,raw,id);},{category:kind==='item'?'items':'npcs'});},

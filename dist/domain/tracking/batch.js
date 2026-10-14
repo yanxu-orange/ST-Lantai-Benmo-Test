@@ -1,7 +1,7 @@
 import { assertTracking, assertTrackingPreferences, currentTracking, countTrackingAiTurns, applyChanges, storedBatchTrackingSource, matchesBatchTrackingSource } from './data.js';
 import { assertRawSummarySource, matchesSummarySource } from '../summary/source.js';
 import { assertTrackingChanges, applyTrackingCustomFieldValues, trackingInteger, trackingText, TRACKING_FIELDS } from './model.js';
-import { effectiveTrackingExclusions, filterTrackingChanges, trackingExclusionsOf } from './exclusions.js';
+import { effectiveTrackingExclusions, filterTrackingChanges, trackingExclusionsOf, normalizeTrackingName, trackingRecordExcluded } from './exclusions.js';
 const clone = structuredClone;
 const lists = ['items', 'npcs'];
 const freeze = value => { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
@@ -91,45 +91,74 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
   if (overlapping.length) return conflict('所选范围已有追踪版本，无法安全合并；已保留原追踪资料');
   const allIds = new Set([...domain.snapshots.flatMap(row => [row.id, ...lists.flatMap(list => row.changes[list].map(change => change.id))]), ...domain.manual.map(row => row.id)]);
   const freshId = () => { const id = makeId(); if (!trackingText(id) || allIds.has(id)) throw new Error('追踪身份重复'); allIds.add(id); return id; };
-  const changes = { items: [], npcs: [] };
+  const changes = { items: [], npcs: [] }, rejected = clone(parts?.rejected ?? { items: [], npcs: [] });
+  const accepted = new Set();
+  const inputRows = lists.flatMap(list => enabled(list) && Array.isArray(parts?.changes?.[list]) ? parts.changes[list] : []);
+  const duplicateId = id => id !== null && inputRows.filter(row => row?.id === id).length > 1;
+  const labels = row => [row?.name, ...(Array.isArray(row?.aliases) ? row.aliases : [])].map(normalizeTrackingName).filter(Boolean);
+  // Identity evidence only: never copy later/manual facts into the historical patch.
+  const history = list => domain.snapshots.flatMap(snapshot => [snapshot.changes, ...(snapshot.batchRebases ?? []).flatMap(proof => [proof.changes, proof.protectedChanges])].flatMap(changes => changes?.[list] ?? []))
+    .concat(domain.manual.filter(row => row.kind === (list === 'items' ? 'item' : 'npc')).flatMap(row => [{ ...row.record, id: row.id }, { ...row.patch, id: row.id }]));
+  for (const list of lists) for (const row of history(list)) allIds.add(row.id);
+  for (const kind of ['item', 'npc']) for (const id of ticket.exclusions[kind].ids) allIds.add(id);
   for (const [list, kind] of [['items', 'item'], ['npcs', 'npc']]) {
-    if (!enabled(list) || errors[list]) { changes[list] = clone(previous?.changes[list] ?? []); continue; }
-    try {
-      if (!Array.isArray(parts?.changes?.[list])) throw new Error('批追踪输出列表无效');
-      const appearances = new Map();
-      const input = parts.changes[list].map((change, index) => {
-        const { lastAppearanceFloor, ...fields } = change;
-        if (Object.hasOwn(change, 'appeared') || kind === 'item' && Object.hasOwn(change, 'lastAppearanceFloor')) throw new Error('批追踪出场证据无效');
-        if (kind === 'npc' && lastAppearanceFloor !== undefined) {
-          if (lastAppearanceFloor !== null && (!trackingInteger(lastAppearanceFloor) || !ticket.source.sentFloors.some(row => row.floor === lastAppearanceFloor && row.role === 'assistant' && !row.system))) throw new Error('NPC 出场楼层须为本批实际发送的 AI 楼层');
-          appearances.set(index, lastAppearanceFloor);
-        }
-        return fields;
-      });
-      assertTrackingChanges({ items: [], npcs: [], [list]: input });
-      const oldCreates = previous?.changes[list].filter(row => row.create) ?? [];
-      const rows = input.map((change, index) => {
-        const record = ticket.current.find(row => row.id === change.id && row.kind === kind);
-        if (change.id !== null && !record) throw new Error('追踪更新须指向批开始前已确认的记录 ID');
-        const matches = change.id === null ? oldCreates.filter(old => old.name === change.name) : [];
-        if (matches.length > 1) throw new Error('已有批追踪名称对应多个身份，无法安全重跑');
-        const patch = { ...change, id: change.id ?? matches[0]?.id ?? freshId(), create: change.id === null };
-        if (Object.hasOwn(change, 'customFields')) patch.customFields = applyTrackingCustomFieldValues(record, change.customFields);
-        if (kind === 'npc' && appearances.has(index)) patch.lastAppearanceTurn = appearances.get(index) === null ? (record?.lastAppearanceTurn ?? null) : countTrackingAiTurns(raw, { beforeFloor: appearances.get(index) + 1 });
-        return patch;
-      });
-      changes[list] = filterTrackingChanges({ items: [], npcs: [], [list]: rows }, ticket.current, ticket.exclusions)[list];
-      // Omitted prior creations stay alive: successors/manual patches may refer
-      // to them. A rerun can update them but cannot silently delete identities.
-      for (const old of previous?.changes[list] ?? []) {
-        const at = changes[list].findIndex(row => row.id === old.id);
-        if (at < 0) changes[list].push(clone(old));
-        else changes[list][at] = { ...clone(old), ...changes[list][at] };
+    changes[list] = clone(previous?.changes[list] ?? []);
+    if (!enabled(list) || errors[list] && !rejected[list]?.length) continue;
+    const input = parts?.changes?.[list];
+    if (!Array.isArray(input) || input.length > 50) { errors[list] = '批追踪输出列表无效'; continue; }
+    const oldCreates = previous?.changes[list].filter(row => row.create) ?? [];
+    const identities = history(list), used = new Set();
+    const parseRejected = parts?.rejected?.[list] ?? [];
+    const rejectedIndexes = new Set(parseRejected.map(row => row.index));
+    const originalIndexes = Array.from({ length: input.length + parseRejected.length }, (_, index) => index).filter(index => !rejectedIndexes.has(index));
+    if (!input.length && !errors[list]) accepted.add(list);
+    for (const [index, change] of input.entries()) try {
+      if (!change || typeof change !== 'object' || Array.isArray(change)) throw new Error('追踪输出身份无效');
+      const { lastAppearanceFloor, ...fields } = change;
+      if (duplicateId(change.id)) throw new Error('追踪输出身份重复，请为每个身份只返回一条记录');
+      if (Object.hasOwn(change, 'appeared') || kind === 'item' && Object.hasOwn(change, 'lastAppearanceFloor')) throw new Error('批追踪出场证据无效');
+      if (kind === 'npc' && lastAppearanceFloor !== undefined && lastAppearanceFloor !== null
+        && (!trackingInteger(lastAppearanceFloor) || !ticket.source.sentFloors.some(row => row.floor === lastAppearanceFloor && row.role === 'assistant' && !row.system))) throw new Error('NPC 出场楼层须为本批实际发送的 AI 楼层');
+      assertTrackingChanges({ items: [], npcs: [], [list]: [fields] });
+      const record = ticket.current.find(row => row.id === change.id && row.kind === kind);
+      const inferred = change.id !== null && !record;
+      let matches = change.id === null ? oldCreates.filter(old => old.name === change.name) : [];
+      // Explicit null keeps its existing creation semantics. Only malformed IDs
+      // need this conservative, exact-name/alias identity check.
+      if (inferred) {
+        if (!trackingText(change.name) || Object.hasOwn(change, 'customFields')) throw new Error('未知 ID 无法确认新增：须有名称且不能包含自定义字段更新');
+        const names = labels(change);
+        matches = oldCreates.filter(old => normalizeTrackingName(old.name) === normalizeTrackingName(change.name));
+        const matchId = matches.length === 1 ? matches[0].id : null;
+        if (allIds.has(change.id) && change.id !== matchId) throw new Error('追踪更新须指向批开始前已确认的记录 ID');
+        if (identities.some(row => row.id !== matchId && labels(row).some(name => names.includes(name)))) throw new Error('未知 ID 的名称或别名关联已有身份，无法确认新增');
+        if (input.some((other, at) => at !== index && labels(other).some(name => names.includes(name)))
+          || parseRejected.some(other => labels(other.row).some(name => names.includes(name)))) throw new Error('未知 ID 的名称或别名与本批其他记录重复，无法确认新增');
+        if (trackingRecordExcluded({ ...change, kind }, ticket.exclusions)) throw new Error('该身份或名称已暂停追踪，未按新记录创建');
       }
-      applyChanges(ticket.current, { items: [], npcs: [], [list]: changes[list] }, ticket.aiTurn, { stored: true });
-    } catch (error) { errors[list] = error.message; changes[list] = clone(previous?.changes[list] ?? []); }
+      if (matches.length > 1) throw new Error('已有批追踪名称对应多个身份，无法安全重跑');
+      const create = change.id === null || inferred;
+      const patch = { ...fields, id: create ? matches[0]?.id ?? freshId() : change.id, create };
+      if (used.has(patch.id)) throw new Error('追踪输出对应同一身份，不能重复采用');
+      if (Object.hasOwn(change, 'customFields')) patch.customFields = applyTrackingCustomFieldValues(record, change.customFields);
+      if (kind === 'npc' && lastAppearanceFloor !== undefined) patch.lastAppearanceTurn = lastAppearanceFloor === null ? (record?.lastAppearanceTurn ?? null) : countTrackingAiTurns(raw, { beforeFloor: lastAppearanceFloor + 1 });
+      const rows = filterTrackingChanges({ items: [], npcs: [], [list]: [patch] }, ticket.current, ticket.exclusions)[list];
+      const next = clone(changes[list]);
+      for (const row of rows) {
+        const at = next.findIndex(old => old.id === row.id);
+        if (at < 0) next.push(row); else next[at] = { ...next[at], ...row };
+      }
+      applyChanges(ticket.current, { items: [], npcs: [], [list]: next }, ticket.aiTurn, { stored: true });
+      changes[list] = next; used.add(patch.id); accepted.add(list);
+    } catch (error) {
+      rejected[list] ??= [];
+      const originalIndex = originalIndexes[index];
+      rejected[list].push({ index: originalIndex, row: clone(change), message: error.message });
+      errors[list] = [errors[list], `第 ${originalIndex + 1} 条：${error.message}`].filter(Boolean).join('；');
+    }
   }
-  if (lists.every(list => !enabled(list) || errors[list])) return { tracking: domain, errors };
+  const result = tracking => ({ tracking, errors, ...(rejected.items?.length || rejected.npcs?.length ? { rejected } : {}) });
+  if (!accepted.size) return result(domain);
   const id = previous?.id ?? freshId();
   const snapshot = { id, batchId, sourceSnapshot: source, aiTurn: ticket.aiTurn, baseKey: ticket.baseKey, changes, ...(previous?.batchRebases ? { batchRebases: clone(previous.batchRebases) } : {}) };
   const successorBase = previous?.id ?? ticket.baseKey;
@@ -148,7 +177,7 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
   }
   domain.snapshots.push(snapshot);
   domain.revision++;
-  try { return { tracking: assertTracking(domain), errors }; } catch (error) {
+  try { return result(assertTracking(domain)); } catch (error) {
     return { tracking: assertTracking(value), errors: Object.fromEntries(lists.map(list => [list, enabled(list) ? `批追踪无法安全合并：${error.message}` : errors[list]])) };
   }
 }

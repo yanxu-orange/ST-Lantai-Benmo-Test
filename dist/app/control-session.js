@@ -18,7 +18,14 @@ export function createControlSession({settings,repository,prepareTarget}={}){
  function inspect(){return structuredClone({...state,policy:current()?policy:effectiveControls({...defaultControls(),enabled:false})});}
  function syncGlobal(){
   if(disposed||writing||state.busy||state.status!=='ready')return;
-  try{globalSnapshot=settings.captureControls();state.controls=structuredClone(globalSnapshot.controls);publish();}
+  try{
+   const next=settings.captureControls(),unchanged=globalSnapshot&&JSON.stringify(next.controls)===JSON.stringify(globalSnapshot.controls);
+   globalSnapshot=next;
+   // Other settings saves do not change feature gates. Keep their current
+   // authority without republishing every runtime's identical enabled state.
+   if(unchanged)return;
+   state.controls=structuredClone(globalSnapshot.controls);publish();
+  }
   catch{state.status='unconfirmed';state.error='设置尚未确认，请重新读取';publish();}
  }
  const unsubscribe=settings.subscribe(notice=>{if(notice?.confirmed===false)return;syncGlobal();});

@@ -67,7 +67,7 @@ export function createSummaryController({repository,service,captureSource,contro
     state.task=task;
     if(task.status==='awaiting-user'&&task.candidate&&!state.drafts){state.drafts=structuredClone(task.candidate.events);state.entries={};if(task.snapshot.params.reviewBeforeCommit||task.candidate.incomplete||task.snapshot.selection.summary.pending)state.route='review';}
     if(task.status==='awaiting-user'&&task.candidate?.incomplete)state.error=task.errorMessage||'后续阶段尚未完成，正文草稿已保留。';
-    const trackingWarnings=(task.diagnostics??[]).filter(row=>row.kind==='tracking').map(row=>`${row.category==='items'?'物品':'角色'}追踪未保存：${row.message}`);
+    const trackingWarnings=(task.diagnostics??[]).filter(row=>row.kind==='tracking').map(row=>`${row.category==='items'?'物品':'角色'}追踪有未采用项：${row.message}`);
     if(task.status==='awaiting-user'&&task.snapshot.tracking){const enabled=task.snapshot.tracking.ticket.preferences;state.message=`${enabled.itemsEnabled?'物品':''}${enabled.itemsEnabled&&enabled.npcsEnabled?'与':''}${enabled.npcsEnabled?'角色':''}追踪结果将在采用本批时一起保存。`;if(trackingWarnings.length)state.error=[task.candidate?.incomplete?(task.errorMessage||'后续阶段尚未完成，正文草稿已保留。'):'',...new Set(trackingWarnings)].filter(Boolean).join('；');}
     if(task.status==='succeeded'){state.message=trackingWarnings.length?'已保存本批记忆；'+[...new Set(trackingWarnings)].join('；'):'已保存本批记忆';state.route=state.origin;state.drafts=null;const serial=ticket;void refresh().then(current=>{if(current&&visible&&serial===ticket)onCommitted();});}
     if(['failed','stale','cancelled'].includes(task.status)){state.error=task.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':task.errorMessage||'本批未完成，请重新发起';}

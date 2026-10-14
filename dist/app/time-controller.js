@@ -19,29 +19,50 @@ function validatedItemDraft(draft){
  return item;
 }
 export function createTimeController({repository,settings,dateRuntime,captureSource,matchesSource,onMemory=()=>{},onSettings=()=>{},onWorkshop=()=>{},onBenmo=()=>{},onClose=()=>{},id=()=>globalThis.crypto.randomUUID()}={}){
- let disposed=false,ticket=0,target=null,baseline=null,config=null,writer=null,visible=true,navigation=0,refreshTicket=0,previewSerial=0,quickJob=null;
+ let disposed=false,ticket=0,target=null,baseline=null,config=null,writer=null,visible=true,navigation=0,refreshTicket=0,previewSerial=0,quickJob=null,loading=null,dataView=null,sourceProof=null,reminderProof=null;
  const listeners=new Set(),stack=[];let pendingNavigation=null;
  let state={route:'home',status:'loading',time:null,reminders:null,draft:null,cursor:null,filter:'all',query:'',error:'',recognitionResult:false,saved:0,saving:false,scroll:{},opened:{},pendingCalendar:null,editorOriginal:null,candidateOriginal:null,editorTime:null,draftBaseline:null,confirm:null};
  const current=(t=target,n=ticket)=>{try{return !disposed&&n===ticket&&sameTarget(t,repository.captureTarget());}catch{return false;}};
  const notify=()=>{if(!disposed&&visible)for(const fn of listeners)try{fn(copy(state));}catch{}};
  const calendar=()=>{const definition=state.time?.calendars.find(item=>item.id===state.time.activeCalendarId);return definition?createCalendar(definition):null;};
  const resetWriter=()=>{writer?.dispose();writer=null;quickJob=null;};
- async function init(){
+ async function ensure(){
   if(disposed)return false;
-  const nextTarget=repository.captureTarget();if(target&&sameTarget(target,nextTarget)&&baseline)return refresh();
-  target=nextTarget;const request=++ticket;resetWriter();stack.length=0;state={...state,status:'loading',draft:null,pendingCalendar:null,error:'',recognitionResult:false,route:'home',cursor:null,saving:false};notify();
-  try{const selection=await repository.captureTime(target);if(!current(nextTarget,request))return false;baseline=selection;config=settings.captureTimeReminders();state.time=copy(selection.time);state.reminders=copy(config.reminders);state.status='ready';setCursor();notify();void importCandidates(nextTarget,request);return true;}
-  catch(error){if(current(nextTarget,request)){state.status='failed';state.error=error.message;notify();}return false;}
+  const nextTarget=repository.captureTarget();
+  if(target&&sameTarget(target,nextTarget)){
+   if(loading)return loading;
+   // Navigation reuses only an exact confirmed read, never just a revision.
+   if(state.status==='ready'&&!state.error&&dataView&&sourceProof&&repository.matchesPanelData(target,dataView)&&matchesSource(target,sourceProof)&&settings.matchesTimeReminders(reminderProof))return true;
+  }else{
+   target=nextTarget;ticket++;refreshTicket++;loading=null;baseline=config=dataView=sourceProof=reminderProof=null;resetWriter();stack.length=0;pendingNavigation=null;state={...state,status:'loading',time:null,reminders:null,draft:null,draftBaseline:null,editorOriginal:null,candidateOriginal:null,editorTime:null,pendingCalendar:null,confirm:null,error:'',recognitionResult:false,route:'home',cursor:null,saving:false};notify();
+  }
+  return refresh();
  }
- async function importCandidates(t,n){
+ async function importCandidates(t,n,refreshId){
   if(!repository.importSummaryTimeCandidates)return;
-  try{const receipt=await repository.importSummaryTimeCandidates(t,{isCurrent:()=>current(t,n)});if(receipt.status==='committed'&&current(t,n)&&!state.draft&&!state.saving)await refresh(false);}
-  catch(error){if(current(t,n)&&!state.draft)fail(error);}
+  try{const receipt=await repository.importSummaryTimeCandidates(t,{isCurrent:()=>current(t,n)});if(receipt.status==='committed'&&current(t,n)&&refreshId===refreshTicket&&!state.draft&&!state.saving)await refresh(false);}
+  catch(error){if(current(t,n)&&refreshId===refreshTicket&&!state.draft)fail(error);}
  }
- async function refresh(importSummary=true){
-  if(!current()||state.saving||writer?.inspect().saving)return false;
+ function refresh(importSummary=true){
+  if(!current()||state.saving||writer?.inspect().saving)return Promise.resolve(false);
   const t=copy(target),n=ticket,refreshId=++refreshTicket;
-  try{const selection=await repository.captureTime(t);if(!current(t,n)||refreshId!==refreshTicket||state.saving||writer?.inspect().saving)return false;resetWriter();baseline=selection;state.time=copy(selection.time);state.status='ready';state.error='';setCursor();notify();if(importSummary)void importCandidates(t,n);return true;}catch(error){if(current(t,n))fail(error);return false;}
+  dataView=sourceProof=reminderProof=null;
+  const active=()=>current(t,n)&&refreshId===refreshTicket&&!state.saving&&!writer?.inspect().saving;
+  const job=(async()=>{
+   try{
+    let selection,view,source;
+    do{
+     view=await repository.capturePanelData?.(t);if(!active())return false;
+     source=view&&captureSource&&matchesSource?await captureSource(t):null;if(!active())return false;
+     selection=await repository.captureTime(t,view);if(!active())return false;
+    }while(view&&(!repository.matchesPanelData(t,view)||source&&!matchesSource(t,source)));
+    const reminders=settings.captureTimeReminders();resetWriter();baseline=selection;dataView=view;sourceProof=source;reminderProof=reminders;
+    // Keep an editor's original settings proof, even while its displayed facts refresh.
+    if(!state.draft)config=reminders;
+    state.time=copy(selection.time);state.reminders=copy(reminders.reminders);state.status='ready';state.error='';setCursor();notify();if(importSummary)void importCandidates(t,n,refreshId);return true;
+   }catch(error){if(current(t,n)&&refreshId===refreshTicket){if(!baseline)state.status='failed';fail(error);}return false;}
+  })();
+  loading=job;void job.finally(()=>{if(loading===job)loading=null;});return job;
  }
  const unsubscribeDate=dateRuntime.subscribe?.(()=>{if(visible&&!state.draft&&!state.saving&&!writer?.inspect().saving&&baseline)void refresh();});
  function setCursor(){const cal=calendar(),date=state.time?.currentDate;if(!cal){state.cursor=null;return;}const candidate=state.cursor?.calendarId===cal.definition.id?state.cursor:date?{...date,month:date.month??1,day:date.day??1}:{calendarId:cal.definition.id,year:1,month:1,day:1};try{state.cursor=cal.validate(candidate);}catch{state.cursor={calendarId:cal.definition.id,year:date?.year??1,month:1,day:1};}}
@@ -94,7 +115,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   const editing=state.route.startsWith('candidate/');
   const operation=async()=>persist(time=>{if(!equal(time.candidates?.find(row=>row.id===candidateId),original))throw new Error('候选已变化，请重新打开');return ignoreScheduleCandidate(time,candidateId);});
   if(editing)return explicit(operation);
-  if(state.saving||!current())return false;state.saving=true;notify();try{await operation();state.saved++;return true;}catch(error){return fail(error);}finally{state.saving=false;notify();}
+  if(state.saving||!current())return false;const t=copy(target),n=ticket;state.saving=true;notify();try{await operation();if(!current(t,n))return false;state.saved++;return true;}catch(error){return current(t,n)?fail(error):false;}finally{if(current(t,n)){state.saving=false;notify();}}
  }
  async function save({confirmCalendar=false}={}){
   const route=state.route,editor=state.draft,draft=copy(state.draft);if(!draft)return false;
@@ -165,7 +186,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   }
   const key=`${calendarFlag?'calendar':'item'}:${itemId}`;quickJob=writer.change(flags=>{if(!flags[key])return;flags[key][field]=!flags[key][field];});return quickJob;
  }
- return {init,refresh,async recover(){const t=copy(target),n=ticket;if(!current(t,n)||state.saving)return false;try{await settings.read();if(!current(t,n))return false;config=settings.captureTimeReminders();state.reminders=copy(config.reminders);return refresh();}catch(error){return current(t,n)?fail(error):false;}},open,openItem,openCandidate,ignoreCandidate,openCandidates(kind=null){kind??=(state.time?.candidates?.some(row=>row.status==='pending'&&row.kind==='schedule')?'schedule':state.time?.candidates?.some(row=>row.status==='pending'&&row.kind==='anniversary')?'anniversary':'schedule');open(kind==='anniversary'?'anniversaries':'schedules');state.filter='candidate';notify();},save,back,edit,toggleItem,confirm(){const kind=state.confirm;state.confirm=null;if(kind==='discard'){const next=pendingNavigation;pendingNavigation=null;next?.();}else if(kind==='calendar')return save({confirmCalendar:true});notify();},cancelConfirm(){state.confirm=null;pendingNavigation=null;notify();},toggleCalendar:field=>toggleItem(state.time.activeCalendarId,field,true),inspect:()=>copy(state),subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},calendar,
+ return {init:ensure,ensure,refresh,async recover(){const t=copy(target),n=ticket;if(!current(t,n)||state.saving)return false;try{await settings.read();if(!current(t,n))return false;return refresh();}catch(error){return current(t,n)?fail(error):false;}},open,openItem,openCandidate,ignoreCandidate,openCandidates(kind=null){kind??=(state.time?.candidates?.some(row=>row.status==='pending'&&row.kind==='schedule')?'schedule':state.time?.candidates?.some(row=>row.status==='pending'&&row.kind==='anniversary')?'anniversary':'schedule');open(kind==='anniversary'?'anniversaries':'schedules');state.filter='candidate';notify();},save,back,edit,toggleItem,confirm(){const kind=state.confirm;state.confirm=null;if(kind==='discard'){const next=pendingNavigation;pendingNavigation=null;next?.();}else if(kind==='calendar')return save({confirmCalendar:true});notify();},cancelConfirm(){state.confirm=null;pendingNavigation=null;notify();},toggleCalendar:field=>toggleItem(state.time.activeCalendarId,field,true),inspect:()=>copy(state),subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},calendar,
   selectCandidateCalendar(calendarId){if(!state.route.startsWith('candidate/')||!state.draft||state.saving||!state.time.calendars.some(row=>row.id===calendarId))return false;state.draft.calendarId=calendarId;state.draft.startDate={calendarId,year:null,month:null,day:null};state.editorTime=copy(state.time);notify();return true;},
   refreshDraft(){notify();},mutateDraft(change){if(state.draft&&!state.saving){change(state.draft);state.recognitionResult=false;notify();}},
   selectCalendar(calendarId){const found=state.time.calendars.find(item=>item.id===calendarId);if(found){state.draft={...copy(found),importStart:found.importedYears?.[0]?.sourceYear??2025,importEnd:found.importedYears?.at(-1)?.sourceYear??2026};notify();}},

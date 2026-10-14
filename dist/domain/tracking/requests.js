@@ -142,27 +142,29 @@ export function parseBatchTrackingResponseParts(value,{ticket,preferences=ticket
     object=decoded(value);assistantFloors=batchAssistantFloors(source);
     if(!trackingObject(object)||Object.keys(object).some(key=>!['items','npcs'].includes(key)))throw new Error('批量追踪输出结构无效');
   }catch(error){for(const list of ['items','npcs'])if(preferences[`${list}Enabled`])errors[list]=error.message;return {changes,errors};}
+  const rejected={items:[],npcs:[]};
+  const inputRows=['items','npcs'].flatMap(list=>preferences[`${list}Enabled`]&&Array.isArray(object[list])?object[list]:[]);
+  const duplicateId=id=>id!==null&&inputRows.filter(row=>row?.id===id).length>1;
   for(const [list,kind] of [['items','item'],['npcs','npc']]){
     if(!preferences[`${list}Enabled`])continue;
-    try{
-      if(!Array.isArray(object[list]))throw new Error('批量追踪输出列表无效');
-      const rows=object[list].map(row=>{
-        if(!trackingObject(row)||!Object.hasOwn(row,'id')||Object.hasOwn(row,'appeared'))throw new Error('批量追踪输出身份或出场证据无效');
-        const allowed=['id','name','aliases',...TRACKING_FIELDS[kind],'customFields',...(kind==='npc'?['lastAppearanceFloor']:[])];
-        if(Object.keys(row).some(key=>!allowed.includes(key)))throw new Error('批量追踪修改包含未知字段');
-        if(kind==='npc'&&(!Object.hasOwn(row,'lastAppearanceFloor')||row.lastAppearanceFloor!==null&&!assistantFloors.has(row.lastAppearanceFloor)))throw new Error('NPC 出场楼层必须属于本批实际发送的 AI 正文');
-        const sparse=Object.fromEntries(Object.entries(row).filter(([key,value])=>key==='id'||key==='lastAppearanceFloor'||value!==null));
-        if(Object.hasOwn(sparse,'customFields')&&ticket){
-          const record=ticket.current.find(record=>record.id===sparse.id&&record.kind===kind);
-          if(!record)throw new Error('自定义字段更新须指向这条记录已有的字段 ID');
-          applyTrackingCustomFieldValues(record,sparse.customFields);
-        }
-        return sparse;
-      });
-      const checked=rows.map(({lastAppearanceFloor,...row})=>row);
-      assertTrackingChanges({items:[],npcs:[],[list]:checked});
-      changes[list]=rows;
-    }catch(error){errors[list]=error.message;}
+    if(!Array.isArray(object[list])||object[list].length>50){errors[list]='批量追踪输出列表无效';continue;}
+    for(const [index,row] of object[list].entries())try{
+      if(!trackingObject(row)||!Object.hasOwn(row,'id')||Object.hasOwn(row,'appeared'))throw new Error('批量追踪输出身份或出场证据无效');
+      if(duplicateId(row.id))throw new Error('追踪输出身份重复，请为每个身份只返回一条记录');
+      const allowed=['id','name','aliases',...TRACKING_FIELDS[kind],'customFields',...(kind==='npc'?['lastAppearanceFloor']:[])];
+      if(Object.keys(row).some(key=>!allowed.includes(key)))throw new Error('批量追踪修改包含未知字段');
+      if(kind==='npc'&&(!Object.hasOwn(row,'lastAppearanceFloor')||row.lastAppearanceFloor!==null&&!assistantFloors.has(row.lastAppearanceFloor)))throw new Error('NPC 出场楼层必须属于本批实际发送的 AI 正文');
+      const sparse=Object.fromEntries(Object.entries(row).filter(([key,value])=>key==='id'||key==='lastAppearanceFloor'||value!==null));
+      if(Object.hasOwn(sparse,'customFields')&&ticket){
+        const record=ticket.current.find(record=>record.id===sparse.id&&record.kind===kind);
+        if(!record)throw new Error('自定义字段更新须指向这条记录已有的字段 ID');
+        applyTrackingCustomFieldValues(record,sparse.customFields);
+      }
+      const {lastAppearanceFloor,...checked}=sparse;
+      assertTrackingChanges({items:[],npcs:[],[list]:[checked]});
+      changes[list].push(sparse);
+    }catch(error){rejected[list].push({index,row:structuredClone(row),message:error.message});}
+    if(rejected[list].length)errors[list]=rejected[list].map(row=>`第 ${row.index+1} 条：${row.message}`).join('；');
   }
-  return {changes,errors};
+  return {changes,errors,...(rejected.items.length||rejected.npcs.length?{rejected}:{})};
 }
