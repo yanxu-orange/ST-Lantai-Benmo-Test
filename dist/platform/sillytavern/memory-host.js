@@ -474,7 +474,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       timeController=createTimeController({repository,settings:runtime.settings,dateRuntime:timeRuntime,captureSource:t=>adapter.captureTimeSource?.(t)??adapter.captureChatSource?.(t)??adapter.captureSummarySource(t),matchesSource:typeof (adapter.matchesTimeSource??adapter.matchesChatSource)==='function'?(t,s)=>(adapter.matchesTimeSource??adapter.matchesChatSource)(t,s):null,onMemory:()=>void returnFromSummary(),onWorkshop:()=>void openWorkshop(),onBenmo:()=>void openBenmo(),onSettings:openSettings,onClose:close});
     }
     memoryContent.hidden=true;memoryContent.inert=true;
-    if(!timeContainer){timeContainer=doc.createElement('div');timeContainer.className='time-mount';}
+    if(!timeContainer){timeContainer=doc.createElement('div');timeContainer.className='time-mount lt-host-page';}
     showAreaContainer(timeContainer);timeController.resume();
     if(!timeView)timeView=mountTimeView({container:timeContainer,controller:timeController,availability});
     const controller=timeController,valid=()=>panel&&serial===ticket&&request===pageRequest&&controller===timeController&&sameTarget(target,repository.captureTarget());
