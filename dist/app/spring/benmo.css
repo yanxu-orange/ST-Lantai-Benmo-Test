@@ -191,7 +191,6 @@
   color: var(--lt-format-benmo-origin-ink);
   line-height: 1.7;
 }
-.lantai.benmo[data-ui-theme="spring"] .form-actions { bottom: -24px; gap: 10px; margin-top: 0; padding-block: 12px; }
 .lantai.benmo[data-ui-theme="spring"] .lt-modes { padding: 12px 14px; border: 1px solid var(--lt-benmo-line); border-radius: 9px; background: var(--lt-format-page-paper); }
 .lantai.benmo[data-ui-theme="spring"] .lt-modes > legend { padding-inline: 0 7px; color: var(--lt-format-benmo-heading-ink); font-size: 17px; font-weight: 700; }
 .lantai.benmo[data-ui-theme="spring"] .lt-mode:not(:has(:disabled)) { gap: 7px; border-radius: 8px; border: 1px solid var(--lt-format-benmo-choice-border); background: var(--lt-format-page-paper); color: var(--lt-format-benmo-choice-ink); }

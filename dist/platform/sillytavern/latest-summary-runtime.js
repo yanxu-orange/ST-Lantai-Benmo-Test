@@ -39,7 +39,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   let latestEpoch=0,disposed=false,serial=0,readSerial=0,target=null,selection=null,pending=null,receipt=null,enabled=true,generationQueue=Promise.resolve(),foregroundStopped=false,foregroundType=null,foregroundEnded=false;
   let workshopState=null,workshopFloorStates={},trackingState=null,trackingFloorStates={},scheduleState=null,scheduleFloorStates={};
   let libraryCache=null,displayEpoch=0,lastReadView=null,displayReadDirty=false,initialized=autoInitialize;
-  let settingsRecoveryEpoch=0,displayRecoveryEpoch=null;
+  let settingsRecoveryEpoch=0,displayRecoveryEpoch=null,maintenanceProof=null;
   const automaticReceipts=new Map(),displayBatches=new Map(),failureReports=[];
   let state={...emptyLatest(),status:'idle',error:'',floorStates:{}};
   let backfillState={status:'idle',id:null,total:0,completed:0,skipped:0,failed:0,error:''},backfillController=null;
@@ -87,6 +87,33 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const swipes=Array.isArray(message.swipes)&&message.swipes.length?message.swipes:[message.mes];
     return swipes.map((text,swipeId)=>({replyId:message.swipe_info?.[swipeId]?.extra?.[WORKSHOP_REPLY_KEY]??((message.swipe_id??0)===swipeId?message.extra?.[WORKSHOP_REPLY_KEY]:null),floor,swipeId,text})).filter(item=>item.replyId);
   });}
+  // A display read may adopt saved facts, but only a completed maintenance pass
+  // can certify that source ownership and collector inputs have been reconciled.
+  function maintenanceConfiguration(){
+    const controls=getControls?.();
+    return copy({modules:settings?.captureWorkshop?.().workshop.modules??[],rules:cleaningRules(),gates:['enabled','summary','item','npc','schedule','collect','sync','prompt'].map(key=>({key,allowed:controls?.allowed(key)===true,proof:controls?.capture?.(key)??null}))});
+  }
+  function maintenanceMatches(proof,readView){
+    try{
+      if(!proof||disposed||proof.serial!==serial||invalidatedFloors.size||!current(proof.target)||!matchesRaw(proof.target,proof.source)||!sameVersions(proof.versions,versions())||!equal(proof.config,maintenanceConfiguration()))return false;
+      if(proof.workshopSource&&!workshopRuntime.matchesDisplaySource(proof.target,proof.workshopSource))return false;
+      if(readView){
+        if(!repository.matchesPanelData(proof.target,readView))return false;
+        const root=repository.readPanelRoot(proof.target,readView);
+        if(!equal(proof.binding,[root.binding?.kind,root.binding?.owner])||!equal(proof.modules,root.workshop?.modules??[]))return false;
+      }
+      return true;
+    }catch{return false;}
+  }
+  async function projectMaintainedPanel(){
+    const proof=maintenanceProof;
+    if(!maintenanceMatches(proof))return false;
+    const readView=await repository.capturePanelData?.(proof.target);
+    if(!readView||!maintenanceMatches(proof,readView))return false;
+    await read({target:proof.target,readView});
+    // A source/config change during projection still owes real maintenance.
+    return maintenanceProof===proof&&!!lastReadView&&maintenanceMatches(proof,lastReadView);
+  }
   workshopRuntime?.setBackgroundSourceReader?.(t=>({...raw(t),invalidatedFloors:[...invalidatedFloors]}));
   function failedDisplayRead(error,startedEpoch){
     if(error?.code!=='SETTINGS_COMMIT_UNCONFIRMED')return;
@@ -111,6 +138,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     }catch(error){if(!disposed&&token===readSerial&&(!t||current(t)))failedDisplayRead(error,startedEpoch);throw error;}
   }
   async function reconcile(){
+    maintenanceProof=null;
+    let config;try{config=maintenanceConfiguration();}catch{/* Unconfirmed settings cannot grant reuse. */}
     const ticket=serial,t=await adapter.prepare(),workshopPass=await workshopRuntime?.request();
     const readView=workshopPass?.readView??await repository.capturePanelData?.(t);let captured=await repository.captureLatest(t,readView);
     const sharedSource=raw(t),workshop=await workshopRuntime?.backgroundState(t,{readView}),tracking=await trackingRuntime?.backgroundState(t,{readView,raw:sharedSource}),schedule=await scheduleRuntime?.backgroundState(t,{readView,raw:sharedSource});
@@ -121,6 +150,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     // rewriting its extra now would attach the survivor's UUID to stale text.
     const identityChat=getContext().chat.map(message=>pendingProjection(message)?null:message);
     const prepared=summaryAllowed()||captured.latest.records.length||workshop?.modules.length||workshop?.selection.workshop.results.some(row=>row.generationSource==='background')||getControls?.()?.allowed('item')||getControls?.()?.allowed('npc')||tracking?.tracking.snapshots.length||getControls?.()?.allowed('schedule')||schedule?.receipts.length?prepareWorkshopIdentities(identityChat,{allowPendingLast:true}):{changed:false,selected:[]},source=raw(t);
+    let maintainedProof=null;
+    if(config&&readView&&(!workshopRuntime||workshopPass?.displaySource||!config.gates.some(row=>['prompt','collect','sync'].includes(row.key)&&row.allowed))){const root=repository.readPanelRoot(t,readView);maintainedProof={target:copy(t),serial:ticket,source,versions:versions(),config,binding:[root.binding?.kind,root.binding?.owner],modules:copy(root.workshop?.modules??[]),workshopSource:workshopPass?.displaySource??null};}
     const next=pruneLatestRecords(captured.latest,raw(t,true),{replyVersions:versions(),retainStale:true});
     let rules=null,rebound=false;try{rules=cleaningRules();}catch{/* Missing configuration cannot prove equal generated input. */}
     next.records=next.records.map(record=>{
@@ -146,22 +177,30 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const trackingSelection=valid()?await trackingRuntime?.reconcile(t,options):null;
     const scheduleSelection=valid()?await scheduleRuntime?.reconcile(t,options):null;
     const tracked=valid()?await trackingRuntime?.backgroundState(t,{readView,raw:source,captured:trackingSelection??undefined}):null,scheduled=valid()?await scheduleRuntime?.backgroundState(t,{readView,raw:source,captured:scheduleSelection??undefined}):null;
-    if(valid()&&readView&&!repository.matchesPanelData(t,readView)){invalidatedFloors.clear();await read({target:t});return;}
-    if(valid()){displayRecoveryEpoch=null;invalidatedFloors.clear();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};publish();}
+    if(valid()&&readView&&!repository.matchesPanelData(t,readView)){invalidatedFloors.clear();await read({target:t});if(lastReadView&&maintenanceMatches(maintainedProof,lastReadView))maintenanceProof=maintainedProof;return;}
+    if(valid()){displayRecoveryEpoch=null;invalidatedFloors.clear();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};if(maintenanceMatches(maintainedProof,readView))maintenanceProof=maintainedProof;publish();}
   }
-  function refresh(){
+  function queueRefresh(allowProjection=false){
     initialized=true;
     // Explicit refreshes retain their own queued pass and failure. Only the
     // panel's ensureData joins existing initialization, so an old chat's failed
     // pass cannot consume a later chat's initialization or hide its own error.
     const work=(pending??Promise.resolve()).catch(()=>{}).then(async()=>{
       const ticket=serial,startedEpoch=settingsRecoveryEpoch;displayReadDirty=false;
-      try{await reconcile();
+      try{if(!allowProjection||!await projectMaintainedPanel())await reconcile();
       // Notifications received during a pass coalesce into a current read.
       while(!disposed&&ticket===serial&&displayReadDirty){displayReadDirty=false;await read({target,readView:lastReadView});}
       }catch(error){if(!disposed&&ticket===serial)failedDisplayRead(error,startedEpoch);throw error;}
     });pending=work;
     work.finally(()=>{if(pending===work){pending=null;if(displayRecoveryEpoch!==null&&settingsRecoveryEpoch>displayRecoveryEpoch)updateWorkshopDisplay();}}).catch(()=>{});return work;
+  }
+  const refresh=()=>queueRefresh();
+  const ensureData=()=>pending??queueRefresh(true);
+  function adoptLatestReceipt(saved,{resetFloors=false}={}){
+    // The repository has already confirmed this write. Adopt its exact result;
+    // a separate display read must never turn that receipt into a save failure.
+    readSerial++;lastReadView=null;selection=saved.selection;
+    state={...selection.latest,status:'ready',error:'',floorStates:resetFloors?{}:state.floorStates};publish();
   }
   async function savePreferences(preferences){
     if(!target||!current(target))throw new Error('聊天已变化，请重新读取');
@@ -169,7 +208,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const t=copy(target),ticket=serial,snapshot=await repository.captureLatest(t);
     const result=await repository.updateLatestPreferences(t,preferences,{expectedLatestRevision:snapshot.latest.revision,isCurrent:()=>current(t)&&ticket===serial});
     if(!current(t)||ticket!==serial)throw new Error('聊天已变化，请重新读取');
-    selection=result.selection??await repository.captureLatest(t);state={...selection.latest,status:'ready',error:'',floorStates:{}};publish();await refresh();return inspect();
+    adoptLatestReceipt(result,{resetFloors:true});return inspect();
   }
   async function clear(){
     if(!target||!current(target))throw new Error('聊天已变化，请重新读取');
@@ -464,9 +503,9 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const captured=await repository.captureLatest(t);
     if(!valid()||captured.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId))throw new Error('该回复已有摘要或来源已变化，请重新读取');
     const now=new Date().toISOString();
-    await repository.upsertLatestRecord(t,captured,{id:crypto.randomUUID(),body:body.trim(),edited:true,sourceSnapshot:source,createdAt:now,updatedAt:now},{isCurrent:valid});
+    const saved=await repository.upsertLatestRecord(t,captured,{id:crypto.randomUUID(),body:body.trim(),edited:true,sourceSnapshot:source,createdAt:now,updatedAt:now},{isCurrent:valid});
     if(!valid())throw new Error('摘要已保存，但聊天来源已变化，请重新读取');
-    await read();return library();
+    adoptLatestReceipt(saved);return library();
   }
   function backfillPlan(range){
     const {start=0,end=Number.MAX_SAFE_INTEGER}=range??{};
@@ -567,8 +606,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     if(!record||!library().records.some(row=>row.id===id&&!row.nativeHidden)||(original&&(original.body!==record.body||original.replyId!==undefined&&original.replyId!==record.sourceSnapshot.replyId)))throw new Error('摘要或回复版本已变化，请重新读取');
     const source=raw(t),valid=()=>current(t)&&ticket===serial&&summaryMatches(proof)&&adapter.matchesChatSource(t,source)&&pruneLatestRecords(captured.latest,raw(t,true),{replyVersions:versions(),retainStale:true}).records.some(row=>row.id===id);
     if(!valid())throw new Error('摘要来源已变化');
-    await repository.editLatestRecord(t,captured,id,body,{isCurrent:valid});
-    if(!valid())throw new Error('摘要来源已变化');await read();return library();
+    const saved=await repository.editLatestRecord(t,captured,id,body,{isCurrent:valid});
+    if(!valid())throw new Error('摘要已保存，但聊天来源已变化，请重新读取');adoptLatestReceipt(saved);return library();
   }
 
 
@@ -629,7 +668,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     library:()=>library(),projectPanel(readView,{target:owner=target,source}={}){
       if(!readView||!sameTarget(owner,target)||!current(target)||!repository.matchesPanelData(target,readView)||source&&!matchesRaw(target,source))return null;
       return library(readView,source);
-    },editRecord,manualRecord,estimateBackfill,startBackfill,stopBackfill,generate:(floor,options={})=>enqueueGeneration(floor,{workshopOnly:options.workshopOnly===true,...(typeof options.taskId==='string'?{taskId:options.taskId}:{})}),intercept,floorInfo,floorInfos,workshopFloorInfo,workshopFloorInfos,refresh,ensureData:()=>pending??refresh(),panelReadView:()=>lastReadView,matchesSource:(t,proof)=>matchesRaw(t,proof),captureSource:(t=target)=>raw(t),
+    },editRecord,manualRecord,estimateBackfill,startBackfill,stopBackfill,generate:(floor,options={})=>enqueueGeneration(floor,{workshopOnly:options.workshopOnly===true,...(typeof options.taskId==='string'?{taskId:options.taskId}:{})}),intercept,floorInfo,floorInfos,workshopFloorInfo,workshopFloorInfos,refresh,ensureData,panelReadView:()=>lastReadView,matchesSource:(t,proof)=>matchesRaw(t,proof),captureSource:(t=target)=>raw(t),
     setEnabled(value){enabled=!!value;if(!enabled)cancel();publish();},
     dispose(){if(disposed)return;for(const stop of [...visibilityReleases])stop();cancel();disposed=true;readSerial++;for(const release of releases)release();listeners.clear();}};
 }

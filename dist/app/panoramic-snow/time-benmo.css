@@ -117,12 +117,9 @@
   font-weight: 500;
 }
 
-/* Sticky actions and confirmations need steady plates, not extra blur. Inputs,
+/* Confirmations need steady plates, not extra blur. Inputs,
    invalid borders, warning/error surfaces and disabled controls stay opaque on
    their production roles, including read-only fields in conflict dialogs. */
-.lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .form-actions {
-  background: var(--ui-color-workspace);
-}
 .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).lt-time .time-confirm,
 .lantai[data-ui-theme="snow-ermine"]:is(.ui-workspace,.ui-dialog).benmo .wk-dialog-box {
   background: #f9fcfe;

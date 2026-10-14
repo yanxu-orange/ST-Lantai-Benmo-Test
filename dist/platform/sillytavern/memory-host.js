@@ -131,7 +131,13 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       settingsReturn: false,
       view: () => timeView,
       mounted: () => !!timeView,
-      reload: () => openTime(),
+      reload(target) {
+        timeController.rebindTarget(target);timeTarget=target;
+        if(this.settingsReturn)returnTarget=target;
+        if(timeController.inspect().invalidated)return;
+        if(this.settingsReturn)return timeController.ensure();
+        return openTime();
+      },
       visible: () => !!timeContainer && !summaryContent.hidden && summaryContent.contains(timeContainer),
       suspend() { if(this.visible()){summaryContent.hidden=true;summaryContent.inert=true;}timeController?.suspend(); },
       resume() { if(!timeView)return false;showAreaContainer(timeContainer);timeController.resume();return true; },
@@ -195,12 +201,21 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       const sequence=++hostReloadSequence;
       if(controls){controls.invalidate();void controls.ensure().then(()=>{if(disposed||sequence!==hostReloadSequence)return;if(panel)syncControls();requestBenmoWarmup();});}
       if (!panel) return;
-      if (kind === 'reload' && (app||workshopController||workshopView||benmoView)) {
+      // Only a retained editor needs identity resolution before the changed-chat
+      // path. Cold/read-only entries must still begin replacement immediately.
+      const timeReload=kind!=='reload'&&timeController?.inspect().draft&&(areaPages.time.visible()||areaPages.time.settingsReturn);
+      if ((kind === 'reload'||timeReload) && (app||workshopController||workshopView||benmoView||timeView)) {
         const current=app,visiblePanel=panel,previousTarget=runtime?.cumulativeController?.inspect().target;
         let eventTarget;try{eventTarget=repository.captureTarget();}catch{/* prepare establishes authority */}
         const cumulativeVisible=memoryType==='cumulative'&&settingsContent.hidden&&!!(cumulativeView||!memoryContent.hidden);
         const valid=()=>{try{return !disposed&&panel===visiblePanel&&app===current&&sequence===hostReloadSequence&&!!eventTarget&&sameTarget(eventTarget,repository.captureTarget());}catch{return false;}};
         void adapter.prepare().then(async nextTarget=>{
+          if(timeReload){
+            if(disposed||panel!==visiblePanel||app!==current||sequence!==hostReloadSequence)return;
+            eventTarget=nextTarget;
+            if(!valid())return;
+            if(timeTarget?.chatId!==nextTarget.chatId||timeTarget?.rootId!==nextTarget.rootId){runtime?.controller.refresh();void open();return;}
+          }
           if(!valid()||!sameTarget(nextTarget,eventTarget))return;
           await controls?.ensure();if(!valid())return;
           if(cumulativeVisible&&previousTarget?.chatId===nextTarget.chatId&&previousTarget?.rootId===nextTarget.rootId&&previousTarget.epoch!==nextTarget.epoch){runtime.cumulativeController.invalidateReload({previousTarget,nextTarget,reloadSequence:sequence});}
@@ -470,6 +485,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(!panel||settingsOpen||!runtime?.settings)return false;
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
     suspendPages();app?.suspendCumulative();
+    if(timeController&&timeTarget?.chatId===target.chatId&&timeTarget?.rootId===target.rootId&&!sameTarget(timeTarget,target)){timeController.rebindTarget(target);timeTarget=target;}
     if(!timeController||!sameTarget(timeTarget,target)){
       areaPages.time.unmount();timeController?.dispose();timeTarget=target;
       timeController=createTimeController({repository,settings:runtime.settings,dateRuntime:timeRuntime,captureSource:t=>adapter.captureTimeSource?.(t)??adapter.captureChatSource?.(t)??adapter.captureSummarySource(t),matchesSource:typeof (adapter.matchesTimeSource??adapter.matchesChatSource)==='function'?(t,s)=>(adapter.matchesTimeSource??adapter.matchesChatSource)(t,s):null,onMemory:()=>void returnFromSummary(),onWorkshop:()=>void openWorkshop(),onBenmo:()=>void openBenmo(),onSettings:openSettings,onClose:close});

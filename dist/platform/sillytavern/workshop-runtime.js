@@ -12,7 +12,7 @@ const pendingProjection=message=>{const slot=message?.swipe_info?.[message.swipe
 const roleIds = {system:0,user:1,assistant:2};
 export function createWorkshopRuntime({repository,settings,getContext,captureSource,matchesSource,getControls}={}) {
   const gates=Object.fromEntries(['prompt','collect','sync'].map(key=>[key,featureGate(getControls,key)]));
-  let disposed=false,serial=0,pending=null,identityUnconfirmed=true,backgroundSourceReader=null;
+  let disposed=false,serial=0,pending=null,identityUnconfirmed=true,backgroundSourceReader=null,lastCollection=null;
   const keys=new Set(),releases=[],listeners=new Set();
   const changed=()=>{for(const listener of listeners)try{listener();}catch{/* Display refresh cannot change a write. */}};
   // Display reuse needs the live story source as well as the repository root.
@@ -26,7 +26,7 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     try{return !!proof&&!disposed&&proof.serial===serial&&sameTarget(target,repository.captureTarget())&&matchesSource(target,proof.source)&&proof.ownership===replyOwnership()&&proof.gates.every(row=>gates[row.key].allowed()===row.allowed&&(!row.allowed||gates[row.key].matches(row.proof)));}catch{return false;}
   }
   function clear(){
-    serial++;const context=getContext();let okay=true;
+    serial++;lastCollection=null;const context=getContext();let okay=true;
     for(const key of keys){try{context.setExtensionPrompt(key,'',1,0,false,0);}catch{okay=false;}}
     if(okay)keys.clear();changed();return okay;
   }
@@ -76,7 +76,15 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
   function request({target:requestedTarget,readView}={}){
     if(!gates.collect.allowed()&&!gates.sync.allowed()&&!gates.prompt.allowed())return Promise.resolve(null);
     const requestedSerial=serial,target=requestedTarget??repository.captureTarget();
-    const work=(pending??Promise.resolve()).catch(()=>{}).then(()=>requestedSerial===serial?collect({target,readView}):null).then(result=>{changed();return result;});
+    const work=(pending??Promise.resolve()).catch(()=>{}).then(()=>requestedSerial===serial?collect({target,readView}):null) .then(result=>{
+      if(result){
+        const value={target:result.target,selection:result.selection,config:result.config,binding:result.binding,displaySource:result.displaySource};
+        // A fixed readView is newly allocated even when all displayed facts and
+        // source authority are identical. It is not a change notification.
+        if(!result.displaySource||!equal(lastCollection,value)){lastCollection=structuredClone(value);changed();}
+      }
+      return result;
+    }).catch(error=>{lastCollection=null;throw error;});
     pending=work;work.finally(()=>{if(pending===work)pending=null;}).catch(()=>{});return work;
   }
   async function intercept(messages,_size,_abort,type='normal'){

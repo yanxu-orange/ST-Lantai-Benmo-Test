@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "A60A06458B75F384C7EE1ECD72EC2EBEB2C5953BA32AF357452C72F9B6F5412F"
+    "sha256": "B84F701512417F08E8A9F7E367A4E3E9685F6F7744E67B84FCA14A702214782C"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -37,11 +37,11 @@
   },
   {
     "path": "dist/app/benmo-view.css",
-    "sha256": "3E4423B67FCC9F8F3DC6AD9E664DE9D6C6C27486F2F287F5D223A9D08EAFFFE9"
+    "sha256": "42904CB2917008E1F989830EEE97390938107D002C9776609ED99BB18D65D54A"
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "CA14DAEF947C0E7255B9E1DA4A393815E7EBF80A7CB2469D27F3516C270A0C47"
+    "sha256": "D1513846DB47EA9F43245F0492DA716FDF167F01A1650516E6F2A5B062438F5D"
   },
   {
     "path": "dist/app/book-themes/assets/PinyonScript-OFL.txt",
@@ -53,7 +53,7 @@
   },
   {
     "path": "dist/app/book-themes/components.css",
-    "sha256": "A457D56D9EC63AA0816E808A88ADDE43F5E81EDC9FBFFFDC43097B5522F51067"
+    "sha256": "C7CD84F81811FA6C2784F4AFD69DDBA599CB352453B0C608873AFABADC10AA94"
   },
   {
     "path": "dist/app/book-themes/memory.css",
@@ -197,7 +197,7 @@
   },
   {
     "path": "dist/app/panoramic-snow/time-benmo.css",
-    "sha256": "E6530DFA06BB7F9233850739B17F58CC155FF59C4F0A3774FA0DA3A6B2213652"
+    "sha256": "9C855EF4EE0E9FAC4860F73B30D83E59F75F78FB9E5C99F32283F0FA58B85720"
   },
   {
     "path": "dist/app/panoramic-snow/workshop-settings.css",
@@ -269,7 +269,7 @@
   },
   {
     "path": "dist/app/snow-ermine/benmo.css",
-    "sha256": "240C0A14C3202E5BE709B4D98B82F371B36208AC31373959E3585C4A1D2088FF"
+    "sha256": "D8705D11EB059C538F51F018D1184F290E778A12F040661D0AB0A40DCB238342"
   },
   {
     "path": "dist/app/snow-ermine/manifest.json",
@@ -373,7 +373,7 @@
   },
   {
     "path": "dist/app/spring/benmo.css",
-    "sha256": "19BE36B4E938AF5BDC8FAA7D7FA7692B35FFB7D3539F95371AED9E0AEF9E0DE6"
+    "sha256": "499AB7701105DDA6D1917F7AA404AB6D09E1BA438AEFB63867334A3DEE23BD91"
   },
   {
     "path": "dist/app/spring/manifest.json",
@@ -469,7 +469,7 @@
   },
   {
     "path": "dist/app/time-controller.js",
-    "sha256": "9FAA28852E2E5FCDA8D2D7E89FC42044B3751F14C79817087524FFF85ABE4DC1"
+    "sha256": "F3139667DA80D666CE74905409809968F65342F740691D455EDCDEF11DFA065C"
   },
   {
     "path": "dist/app/time-view.css",
@@ -477,7 +477,7 @@
   },
   {
     "path": "dist/app/time-view.js",
-    "sha256": "C24E4DB2A26A588C1776D32A039ADDB6E329C953B83A6A5BA7B923BAA01B661F"
+    "sha256": "B97B8B841AE5CC4C20749BC9656E9B61AF6E079457FAF59028FEF80BCEA0F678"
   },
   {
     "path": "dist/app/tracking-controller.js",
@@ -489,7 +489,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "664A2C309F2166F63CDA252169931A2FC614EAD6A8F74831186749CCDD949030"
+    "sha256": "5D74F3A5FD1DF9A3D5AF60C307D8B1281F64BFF49BCF1A67239A7C727B43AE8E"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -913,7 +913,7 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "sha256": "6E5D25D67B4B1EDD7C869367C37A8AC61C47A3B24EEB5C68876255C98C128707"
+    "sha256": "A0EAD491DFC35E8E5F3AA05C11E45148D7792F73FF6193E2CA3E339B79B9B384"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -937,7 +937,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "829453B791F0AFEE4D367175DBCBC70B1278F2C9B7A5AD24F3F1D83D2F0E8513"
+    "sha256": "A2C16B7B2D8F0F37E59F800620B23758CA256DEC98D5ADEE5F50FFBDF88ACD58"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1029,7 +1029,7 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-runtime.js",
-    "sha256": "671B843BEF2BEF992DE4F23A63A66B46616B829A487649168223A2100F5986D7"
+    "sha256": "3DA526A71F6567643E6B8E382039241D1C6F0F1BC41EF60836CA300E1D464565"
   },
   {
     "path": "dist/probe/runtime-probe.js",
@@ -1089,10 +1089,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "2B892DA2CF9BE2FCFDA83E3C2ACBF063D0D0FCF72B4BFA891F5D5955B10684F2"
+    "sha256": "C463630E62990D9177CB12BAF68B1DFF5F68F404E84308FECA207B574885BA7D"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "6B5E7775CFEDEE8B5FA2591DC5618E6B4198D9E255F07B996EE3929C673A8AA1"
+    "sha256": "070B5B136FA6D920723D75D2447380EAFE7C3B8B4313C823A432B5CF06C169B7"
   }
 ]

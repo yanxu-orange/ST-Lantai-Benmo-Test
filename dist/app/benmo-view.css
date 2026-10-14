@@ -47,8 +47,6 @@
 .benmo .detail-field--long{grid-template-columns:minmax(0,1fr);gap:var(--ui-space-inline)}
 .benmo .detail-field--group-start{margin-top:var(--ui-space-control);padding-top:var(--ui-space-control);border-top:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle)}
 .benmo .detail-field .detail-field-empty{color:var(--ui-color-text-meta)}
-.benmo .form-actions{display:flex;gap:8px;position:sticky;bottom:-16px;padding:12px 0;background:var(--ui-color-workspace);z-index:2}
-.benmo .form-actions button{flex:1}
 .benmo .future{margin-top:8px;border-top:1px solid var(--ui-color-border-default);padding-top:20px}
 .benmo .future h2{font-size:16px}
 .benmo .two-cols{display:grid;gap:14px}
@@ -84,5 +82,5 @@
 .benmo .summary-toolbar .pending-strip{margin:0;padding:0}
 .benmo .lt-mode input[type=radio]{width:auto;min-width:0}
 .benmo .lt-modes{padding-block:4px}
-@media(min-width:650px){.benmo .lt-main{padding:24px}.benmo .subtabs{top:-24px}.benmo .two-cols{grid-template-columns:1fr 1fr}.benmo .form-actions{bottom:-24px}}
-@media(max-width:360px){.benmo .lt-main{padding:12px}.benmo .subtabs{top:-12px}.benmo .form-actions{bottom:-12px}}
+@media(min-width:650px){.benmo .lt-main{padding:24px}.benmo .subtabs{top:-24px}.benmo .two-cols{grid-template-columns:1fr 1fr}}
+@media(max-width:360px){.benmo .lt-main{padding:12px}.benmo .subtabs{top:-12px}}
