@@ -20,7 +20,7 @@ const MAIN_EVENTS = ['MAIN_API_CHANGED', 'CHATCOMPLETION_MODEL_CHANGED', 'CHATCO
 
 // One owner survives mounted pages. All network and host exports are injectable.
 export async function createManagementRuntime({ repository, getContext, document: doc,
-  fetchImpl = globalThis.fetch, settingsOptions = {}, mainIdentityOptions = {}, jquery = globalThis.jQuery, signal, captureSummarySource,getControls } = {}) {
+  fetchImpl = globalThis.fetch, settingsOptions = {}, mainIdentityOptions = {}, jquery = globalThis.jQuery, signal, captureSummarySource,getControls,afterSummaryCommit,retrySummaryCommit,skipSummaryCommit,getPendingNarrative } = {}) {
   const allowed=key=>!getControls||!!getControls()?.allowed(key);
   const manager = createBackgroundTaskManager(), releases = [];
   let settings = null, controller = null, summaryService=null, summaryController=null, disposed = false, effective = null, epoch = 0, mainEpoch = 0, lastMain = null, jqueryCapable = false;
@@ -177,7 +177,7 @@ export async function createManagementRuntime({ repository, getContext, document
   controller = createManagementController({ service, repository, originalAvailable, getOriginalSnapshot,
     getSettingsEpoch: () => getGenerationSettings().epoch });
   if(typeof captureSummarySource==='function') {
-    summaryService=createEventSummaryService({repository,manager,provider,getGenerationSettings:eventGeneration,getTrackingContext:()=>{const context=getContext(),character=context.characters?.[context.characterId];return {identities:promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name}),allowed:{itemsEnabled:allowed('item'),npcsEnabled:allowed('npc')},proofs:{items:getControls?.()?.capture('item')??null,npcs:getControls?.()?.capture('npc')??null}};},control:featureGate(getControls,'event'),captureSource:captureSummarySource});
+    summaryService=createEventSummaryService({repository,manager,provider,afterSummaryCommit,retrySummaryCommit,skipSummaryCommit,getPendingNarrative,getGenerationSettings:eventGeneration,getTrackingContext:()=>{const context=getContext(),character=context.characters?.[context.characterId];return {identities:promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name}),allowed:{itemsEnabled:allowed('item'),npcsEnabled:allowed('npc')},proofs:{items:getControls?.()?.capture('item')??null,npcs:getControls?.()?.capture('npc')??null}};},control:featureGate(getControls,'event'),captureSource:captureSummarySource});
     summaryController=createSummaryController({repository,service:summaryService,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
     cumulativeService=createCumulativeSummaryService({repository,manager,provider,getGenerationSettings:cumulativeGeneration,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     cumulativeRunner=createAutomaticCumulativeRunner({repository,service:cumulativeService,captureSource:captureSummarySource});

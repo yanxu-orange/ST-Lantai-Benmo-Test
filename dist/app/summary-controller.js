@@ -69,7 +69,8 @@ export function createSummaryController({repository,service,captureSource,contro
     if(task.status==='awaiting-user'&&task.candidate?.incomplete)state.error=task.errorMessage||'后续阶段尚未完成，正文草稿已保留。';
     const trackingWarnings=(task.diagnostics??[]).filter(row=>row.kind==='tracking').map(row=>`${row.category==='items'?'物品':'角色'}追踪有未采用项：${row.message}`);
     if(task.status==='awaiting-user'&&task.snapshot.tracking){const enabled=task.snapshot.tracking.ticket.preferences;state.message=`${enabled.itemsEnabled?'物品':''}${enabled.itemsEnabled&&enabled.npcsEnabled?'与':''}${enabled.npcsEnabled?'角色':''}追踪结果将在采用本批时一起保存。`;if(trackingWarnings.length)state.error=[task.candidate?.incomplete?(task.errorMessage||'后续阶段尚未完成，正文草稿已保留。'):'',...new Set(trackingWarnings)].filter(Boolean).join('；');}
-    if(task.status==='succeeded'){state.message=trackingWarnings.length?'已保存本批记忆；'+[...new Set(trackingWarnings)].join('；'):'已保存本批记忆';state.route=state.origin;state.drafts=null;const serial=ticket;void refresh().then(current=>{if(current&&visible&&serial===ticket)onCommitted();});}
+    if(['narrative-running','narrative-failed'].includes(task.status)){state.busy=false;state.route=state.origin;state.drafts=null;state.message='本批记忆已保存，正在生成自述与大纲';if(task.status==='narrative-failed'){state.message='本批记忆已保存';state.error=task.errorMessage||'自述与大纲未完成，请重试或跳过';}void refresh();}
+    if(task.status==='succeeded'){state.error='';state.message=task.narrative?.status==='skipped'?'本批记忆已保存，已跳过本批自述与大纲':trackingWarnings.length?'已保存本批记忆；'+[...new Set(trackingWarnings)].join('；'):'已保存本批记忆';state.route=state.origin;state.drafts=null;const serial=ticket;void refresh().then(current=>{if(current&&visible&&serial===ticket)onCommitted();});}
     if(['failed','stale','cancelled'].includes(task.status)){state.error=task.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':task.errorMessage||'本批未完成，请重新发起';}
     notify();
   }
@@ -83,13 +84,13 @@ export function createSummaryController({repository,service,captureSource,contro
       if(disposed||!['manual','auto'].includes(origin))return false;
       const request=++openRequest,next=repository.captureTarget();
       const preserve=!!state.target&&sameTarget(state.target,next);if(preserve)await queueParameters();else cancelParameterTimer();if(disposed||request!==openRequest||!sameTarget(next,repository.captureTarget()))return false;
-      if(state.target&&sameTarget(state.target,next)&&state.taskId&&['starting','running','awaiting-user','committing'].includes(service.inspect(state.taskId)?.status)){notify();return true;}
+      if(state.target&&sameTarget(state.target,next)&&state.taskId&&['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(service.inspect(state.taskId)?.status)){notify();return true;}
       const serial=++ticket;state.busy=true;state.error='';notify();
-      try{const selected=await captureView(next);if(disposed||serial!==ticket||!sameTarget(next,repository.captureTarget()))return false;state.target=next;state.summary=selected.summary;if(!preserve)state.parametersUnconfirmed=false;parameterFailure=null;state.formalIds=selected.formalIds;state.origin=origin;state.route=origin;selectParameters(selected.summary,origin,preserve);state.taskId=null;state.task=null;state.drafts=null;state.preview=null;state.previewOpen=false;state.message='';if(selected.summary.pending){try{const id=await service.restorePending(origin);if(!viewCurrent(serial,next))return false;state.taskId=id;taskChanged(service.inspect(id));}catch(error){if(!viewCurrent(serial,next))return false;state.error=error.message;}}return true;}
+      try{const selected=await captureView(next);if(disposed||serial!==ticket||!sameTarget(next,repository.captureTarget()))return false;state.target=next;state.summary=selected.summary;if(!preserve)state.parametersUnconfirmed=false;parameterFailure=null;state.formalIds=selected.formalIds;state.origin=origin;state.route=origin;selectParameters(selected.summary,origin,preserve);state.taskId=null;state.task=null;state.drafts=null;state.preview=null;state.previewOpen=false;state.message='';const narrativeId=await service.restorePendingNarrative?.(origin);if(!viewCurrent(serial,next))return false;if(narrativeId){state.taskId=narrativeId;taskChanged(service.inspect(narrativeId));return true;}if(selected.summary.pending){try{const id=await service.restorePending(origin);if(!viewCurrent(serial,next))return false;state.taskId=id;taskChanged(service.inspect(id));}catch(error){if(!viewCurrent(serial,next))return false;state.error=error.message;}}return true;}
       catch(error){if(!disposed&&serial===ticket)state.error=error.message;return false;}finally{if(!disposed&&serial===ticket){state.busy=false;notify();}}
     },
     changeParams(mutator,{defer=false}={}){
-      if(state.busy||state.parametersUnconfirmed||!state.params||['starting','running','awaiting-user','committing'].includes(state.task?.status))return parameterQueue;
+      if(state.busy||state.parametersUnconfirmed||!state.params||['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(state.task?.status))return parameterQueue;
       const before=structuredClone(state.params);mutator(state.params);const draft=parameterDrafts[state.origin];
       if(!sameParams(before,state.params)){draft.revision++;state.preview=null;if(!draft.readRequired){draft.error=null;parameterFailure=null;state.error='';}}
       if(defer){cancelParameterTimer();parameterTimer=setTimeout(()=>{parameterTimer=null;void queueParameters();},PARAMETER_SAVE_DELAY);return parameterQueue;}
@@ -101,11 +102,13 @@ export function createSummaryController({repository,service,captureSource,contro
       await queueParameters();if(state.parametersUnconfirmed)throw new Error('保存结果尚未确认，请重新读取');if(parameterFailure?.serial===ticket)throw parameterFailure.error;
     },
     async start() {
-      if(state.busy)return;const origin=state.origin,params=structuredClone(state.params);state.message='';state.drafts=null;
+      if(state.busy||service.isBusy?.())return;const origin=state.origin,params=structuredClone(state.params);state.message='';state.drafts=null;
       await action(async current=>{await this.saveParams();if(!current())return;if(origin==='auto'){runner.start();}else {const id=await service.start('manual',params);if(current()){state.taskId=id;taskChanged(service.inspect(id));}}});
     },
+    async retryNarrative(){if(state.busy||!state.taskId)return;const id=state.taskId;await action(async current=>{const result=await service.retryNarrative(id);if(!current())return;if(!result)throw new Error('当前批次不能重试');taskChanged(service.inspect(id));if(result.status==='succeeded')runner.afterNarrative();});},
+    async skipNarrative(){if(state.busy||!state.taskId)return;const id=state.taskId;await action(async current=>{const result=await service.skipNarrative(id);if(!current())return;if(!result)throw new Error('当前批次不能跳过');taskChanged(service.inspect(id));if(result.status==='succeeded')runner.afterNarrative();});},
     async retry(){if(state.busy||!state.taskId)return;const taskId=state.taskId,drafts=structuredClone(state.drafts);await action(async current=>{const id=await service.retry(taskId,drafts);if(!current())return;if(!id)throw new Error('草稿来源或配置已变化，不能重试');state.taskId=id;state.drafts=null;state.error='';if(service.inspect(id)?.origin==='auto')runner.transferTask(id);taskChanged(service.inspect(id));});},
-    async regenerate(batchId){if(state.busy)return;state.drafts=null;await action(async current=>{const id=await service.start('regeneration',{batchId});if(current()){state.taskId=id;taskChanged(service.inspect(id));}});},
+    async regenerate(batchId){if(state.busy||service.isBusy?.())return;state.drafts=null;await action(async current=>{const id=await service.start('regeneration',{batchId});if(current()){state.taskId=id;taskChanged(service.inspect(id));}});},
     async preview(){if(state.busy)return;const origin=state.origin,params=structuredClone(state.params),summary=state.summary,target=state.target;await action(async current=>{await queueParameters();if(!current())return;if(state.parametersUnconfirmed)throw new Error('保存结果尚未确认，请重新读取');if(parameterFailure?.serial===ticket)throw parameterFailure.error;let options=params;if(origin==='auto'){const {automaticSummaryPlan}=await import('../domain/summary/auto-runner.js');if(!current())return;const plan=automaticSummaryPlan({...summary,preferences:{...summary.preferences,auto:params}},captureSource(target));if(plan.status!=='ready')throw new Error('尚无可总结的完整批次');options={...options,...plan};}if(!current())return;const preview=await service.preview(origin,options);if(current()){state.preview=preview;state.previewOpen=true;}});},
     togglePreview(){state.previewOpen=!state.previewOpen;notify();},
     previewView(view){state.previewView=view;notify();},
@@ -113,7 +116,7 @@ export function createSummaryController({repository,service,captureSource,contro
     removeDraft(index){if(state.busy||!state.drafts?.[index])return false;const [removed]=state.drafts.splice(index,1);state.openTerms=Object.fromEntries(Object.entries(state.openTerms).filter(([key])=>Number(key)!==index).map(([key,value])=>[Number(key)>index?Number(key)-1:Number(key),value]));for(const key of Object.keys(state.entries))if(key.startsWith(`${removed.id}:`))delete state.entries[key];state.error='';return true;},
     setEntry(index,key,value){const id=state.drafts?.[index]?.id;if(id)state.entries[`${id}:${key}`]=value;},
     openTerm(index,id,{notify:shouldNotify=true}={}){state.openTerms[index]=state.openTerms[index]===id?null:id;if(shouldNotify)notify();},
-    async confirm(){if(state.busy||!state.taskId)return;const taskId=state.taskId,drafts=structuredClone(state.drafts);await action(async current=>{const result=await service.confirm(taskId,drafts);if(!current())return;if(result.status==='invalid')state.error=result.error;else if(result.status==='succeeded')runner.afterReview();else state.error=result.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':'未能采用本批结果';});},
+    async confirm(){if(state.busy||!state.taskId)return;const taskId=state.taskId,drafts=structuredClone(state.drafts);await action(async current=>{const result=await service.confirm(taskId,drafts);if(!current())return;if(result.status==='invalid')state.error=result.error;else if(result.status==='succeeded')runner.afterReview();else if(result.status==='narrative-failed')state.error=service.inspect(taskId).errorMessage;else state.error=result.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':'未能采用本批结果';});},
     async read(){if(state.busy)return;cancelParameterTimer();const target=state.target;await action(async current=>{await parameterQueue;await repository.read(target);if(!current())return;await refresh();if(!current())return;if(state.parametersUnconfirmed||parameterDrafts[state.origin]?.readRequired){state.parametersUnconfirmed=false;parameterFailure=null;selectParameters(state.summary,state.origin,false);}if(state.task?.outcome==='unconfirmed'){state.task=null;state.taskId=null;state.drafts=null;state.route=state.origin;runner.discard();if(state.summary.pending){const id=await service.restorePending(state.origin);if(!current())return;state.taskId=id;taskChanged(service.inspect(id));}}state.message='已重新读取';});},
     async discardPending(){if(state.busy)return;await action(async current=>{await service.discardPending();if(current())await refresh();});},
     async back(){if(state.route==='review'){const taskId=state.taskId;await action(async current=>{if(taskId)await service.discard(taskId);if(!current())return;if(state.task?.origin==='auto')runner.discard();state.route=state.origin;state.drafts=null;state.taskId=null;state.task=null;await refresh();});return false;}void queueParameters();return true;},
@@ -122,4 +125,19 @@ export function createSummaryController({repository,service,captureSource,contro
     subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},
     dispose(){cancelParameterTimer();disposed=true;ticket++;releaseService();releaseRunner();runner.dispose();listeners.clear();}
   });
+}
+
+// Both result pages and the summary page resolve a summary-owned narrative
+// batch through the same service, including a checkpoint restored after reload.
+export function createSummaryNarrativeActions({runtime,service,runner}={}) {
+  async function resolve(action){
+    if(!runtime.snapshot().run?.summary)return runtime[action]();
+    const taskId=await service.restorePendingNarrative();
+    if(!taskId)return runtime.snapshot();
+    const result=await service[action==='skip'?'skipNarrative':'retryNarrative'](taskId);
+    if(!result)throw new Error('当前自述与大纲批次正在处理中');
+    if(result.status==='narrative-failed')throw new Error(result.errorMessage);
+    runner.afterNarrative();return runtime.snapshot();
+  }
+  return {retry:()=>resolve('retry'),resume:()=>resolve('resume'),skip:()=>resolve('skip'),pause(){if(runtime.snapshot().run?.summary){runner.stop();return runtime.snapshot();}return runtime.pause();}};
 }

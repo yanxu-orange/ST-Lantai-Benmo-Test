@@ -1,3 +1,4 @@
+import {createSummaryNarrativeActions} from '../../app/summary-controller.js';
 import { ensureBookThemeFont } from '../../app/styles/book-font.js';
 import { MEMORY_SHELL_CSS } from './memory-shell-style.js';
 import {createNarrativeRuntime} from './narrative-runtime.js';
@@ -243,7 +244,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(cleanupError)throw cleanupError;
   }
   async function ensureRuntime() {
-    if (!runtimePromise) runtimePromise = new Promise(afterPageFrame).then(()=>disposed||lifetime.signal.aborted?null:createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, signal: lifetime.signal,getControls:()=>controls,captureSummarySource:target=>adapter.captureSummarySource(target) }))
+    if (!runtimePromise) runtimePromise = new Promise(afterPageFrame).then(()=>disposed||lifetime.signal.aborted?null:createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, signal: lifetime.signal,getControls:()=>controls,afterSummaryCommit:args=>narrativeRuntime.afterSummaryCommit(args),retrySummaryCommit:()=>narrativeRuntime.retry(),skipSummaryCommit:()=>narrativeRuntime.skip(),getPendingNarrative:async()=>{if(!narrativeRuntime)return null;await narrativeRuntime.load();return narrativeRuntime.hasPending()?narrativeRuntime.snapshot().run:null;},captureSummarySource:target=>adapter.captureSummarySource(target) }))
       .then(async value => { if(!value)return null;if (disposed) { value.dispose(); return null; } runtime = value;
         controls=createControlSession({settings:runtime.settings,repository,prepareTarget:()=>adapter.prepare()});
         await controls.ensure();
@@ -261,8 +262,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         trackingRuntime=createTrackingRuntime({repository,adapter,settings:runtime.settings,getContext,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t),onChange:()=>{void latestRuntime.refresh().catch(()=>{});}});
         scheduleRuntime=createScheduleRuntime({repository,settings:runtime.settings,dateRuntime:timeRuntime,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t)});
         latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,autoInitialize:false});
-        narrativeRuntime=createNarrativeRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
-        benmoController=createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime,repository,adapter,getContext,getControls:()=>controls});
+        narrativeRuntime=createNarrativeRuntime({repository,adapter,getSummaryActive:()=>runtime.summaryService.isBusy(),settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
+        benmoController=createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime:{...narrativeRuntime,...createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.summaryService,runner:runtime.summaryController.runner})},repository,adapter,getContext,getControls:()=>controls});
         benmoSubscription=benmoController.subscribeAvailability(syncBenmoAvailability);
         const displayCoordinator=createFloorDisplayCoordinator({document:doc,runtime:latestRuntime,MutationObserver:Observer,formatter:createWorkshopDisplayFormatter({getContext})});
         latestDisplay=mountLatestSummaryDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator});

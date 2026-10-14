@@ -5,6 +5,7 @@ export function emptyNarrative() {
   return {schema: 1, revision: 0, preferences: {
     self: {readMemory: true, readOriginal: true, readCard: true, background: '', budget: 30000, depth: 9999, prompt: '', characters: []},
     outline: {readMemory: true, readOriginal: true, background: '', budget: 30000, depth: 9999, prompt: ''},
+    run: {auto: true, batchSize: 10},
   }, self: [], outline: [], progress: {self: null, outline: null}};
 }
 export function assertNarrativePreferences(value, kind) {
@@ -32,9 +33,18 @@ function assertEntries(entries, ids) {
   }
 }
 export function assertNarrative(value) {
-  if (!exact(value, ['schema', 'revision', 'preferences', 'self', 'outline', 'progress']) || value.schema !== 1 || !integer(value.revision)
-    || !exact(value.preferences, ['self', 'outline']) || !exact(value.progress, ['self', 'outline']) || !Array.isArray(value.self)) throw new Error('自述或大纲数据结构无效');
+  if (!exact(value, ['schema', 'revision', 'preferences', 'self', 'outline', 'progress', ...(Object.hasOwn(value??{}, 'pendingRun') ? ['pendingRun'] : [])]) || value.schema !== 1 || !integer(value.revision)
+    || !exact(value.preferences, ['self', 'outline', ...(Object.hasOwn(value.preferences??{}, 'run') ? ['run'] : [])]) || !exact(value.progress, ['self', 'outline']) || !Array.isArray(value.self)) throw new Error('自述或大纲数据结构无效');
+  if (value.preferences.run !== undefined && (!exact(value.preferences.run, ['auto', 'batchSize']) || typeof value.preferences.run.auto !== 'boolean' || !integer(value.preferences.run.batchSize, 1))) throw new Error('叙事分批设置无效');
   for (const kind of ['self', 'outline']) assertNarrativePreferences(value.preferences[kind], kind);
+  if (value.pendingRun !== undefined && value.pendingRun !== null) {
+    const pending = value.pendingRun;
+    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status']) || !Array.isArray(pending.ranges) || !pending.ranges.length
+      || pending.ranges.some(item => !exact(item, ['startFloor', 'endFloor']) || !integer(item.startFloor) || !integer(item.endFloor, item.startFloor))
+      || !integer(pending.index) || pending.index >= pending.ranges.length || !Array.isArray(pending.kinds) || !pending.kinds.length || new Set(pending.kinds).size !== pending.kinds.length || pending.kinds.some(kind => !['self', 'outline'].includes(kind))
+      || !Array.isArray(pending.failedKinds) || new Set(pending.failedKinds).size !== pending.failedKinds.length || pending.failedKinds.some(kind => !pending.kinds.includes(kind))
+      || typeof pending.restart !== 'boolean' || typeof pending.summary !== 'boolean' || !['paused', 'failed'].includes(pending.status)) throw new Error('叙事批次断点无效');
+  }
   const ids = new Set(), characters = new Set();
   for (const row of value.self) {
     if (!exact(row, ['id', 'name', 'entries']) || !text(row.id) || !text(row.name) || characters.has(row.id)) throw new Error('角色自述记录身份无效');
@@ -77,6 +87,7 @@ export function inheritNarrative(value, floor) {
   domain.self = domain.self.map(row => ({...row, entries: row.entries.filter(safe)}));
   domain.outline = domain.outline.filter(safe);
   for (const kind of ['self', 'outline']) retainSafeProof(domain, kind, floor);
+  if (Object.hasOwn(domain, 'pendingRun')) domain.pendingRun = null;
   domain.revision = 0;
   return assertNarrative(domain);
 }

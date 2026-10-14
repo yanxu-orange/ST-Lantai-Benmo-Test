@@ -8,8 +8,8 @@ import { prepareBatchTracking, applyBatchTracking } from '../tracking/batch.js';
 import { parseBatchTrackingResponseParts } from '../tracking/requests.js';
 
 // Uses the shared manager/provider. Chat transactions remain repository-owned.
-export function createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,uuid=()=>crypto.randomUUID()}={}) {
-  const records=new Map(),listeners=new Set(),reservations=new Set();
+export function createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID()}={}) {
+  const records=new Map(),listeners=new Set(),reservations=new Set(),restorations=new Map();
   const readSettings=()=>structuredClone(getGenerationSettings());
   const durableTrackingContext=context=>({identities:context.identities??{},allowed:context.allowed??{itemsEnabled:true,npcsEnabled:true}});
   const readTrackingContext=()=>{const context=getTrackingContext();return structuredClone({...durableTrackingContext(context),...(context.proofs?{proofs:{items:context.proofs.items??null,npcs:context.proofs.npcs??null}}:{})});};
@@ -22,7 +22,20 @@ export function createEventSummaryService({repository,manager,provider,getGenera
   }
   const available=settings=>settings.eventWords.filter(item=>item.enabled!==false).map(item=>item.name);
   function notify(taskId) {const value=inspect(taskId);if(value)for(const listener of [...listeners])try{listener(value);}catch{/* observers cannot stop a task */}}
-  function inspect(taskId) {const task=manager.inspect(taskId),record=records.get(taskId);return task&&record?{...task,stage:record.stage,origin:record.origin,outcome:record.outcome,receipt:record.receipt,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,diagnostics:structuredClone(record.diagnostics),trackingRejected:structuredClone(record.trackingRejected??record.trackingParts?.rejected??null)}:null;}
+  function inspect(taskId) {const record=records.get(taskId),task=manager.inspect(taskId)??record?.restoredTask;return task&&record?{...task,...(task.status==='succeeded'&&record.narrative?.status==='running'?{status:'narrative-running'}:task.status==='succeeded'&&record.narrative?.status==='failed'?{status:'narrative-failed'}:{}),narrative:record.narrative?{...record.narrative}:null,stage:record.stage,origin:record.origin,outcome:record.outcome,receipt:record.receipt,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,diagnostics:structuredClone(record.diagnostics),trackingRejected:structuredClone(record.trackingRejected??record.trackingParts?.rejected??null)}:null;}
+  // The memory transaction has already completed. Narrative failures never enter
+  // the guarded commit and cannot undo or retry the saved memory batch.
+  async function runNarrative(taskId,work) {
+    const record=records.get(taskId);
+    if(record.narrativePromise)return record.narrativePromise;
+    record.narrative={status:'running',error:''};record.stage='narrative';notify(taskId);
+    record.narrativePromise=Promise.resolve().then(work).then(result=>{
+      record.narrative={status:result?.run?.status==='skipped'?'skipped':'succeeded',error:''};record.errorMessage='';
+    }).catch(error=>{record.narrative={status:'failed',error:error.message};record.errorMessage=`本批记忆已保存；自述与大纲未完成：${error.message}`;}).finally(()=>{record.narrativePromise=null;notify(taskId);});
+    await record.narrativePromise;return inspect(taskId);
+  }
+  const busyStatuses=['starting','running','awaiting-user','committing','narrative-running','narrative-failed'];
+  const isBusy=(target=repository.captureTarget())=>reservations.has(target.chatId)||[...records.keys()].some(id=>{const state=inspect(id);return state&&sameTarget(state.target,target)&&busyStatuses.includes(state.status);});
   async function capture(origin,options={}) {
     const target=repository.captureTarget(),selection=origin==='regeneration'?await repository.captureBatch(target,options.batchId):await repository.captureSummary(target),settings=readSettings();
     const preferences=selection.summary.preferences[origin==='auto'?'auto':'manual'];
@@ -90,10 +103,11 @@ export function createEventSummaryService({repository,manager,provider,getGenera
           for(const [category,message] of Object.entries(applied.errors))if(message)record.diagnostics.push({kind:'tracking',category,message});
         }
         const receipt=snapshot.origin==='regeneration'?await repository.replaceBatch(ctx.target,selection,events,batch,options):await repository.appendBatch(ctx.target,selection,events,batch,options);
-        record.receipt=receipt;return receipt;
+        record.receipt=receipt;if(receipt?.status==='committed'&&afterSummaryCommit)record.narrative={status:'running',error:''};return receipt;
       }catch(error){if(error.code==='COMMIT_UNCONFIRMED')record.outcome='unconfirmed';record.errorMessage=error.message;throw error;}
     });
-    notify(taskId);return {...result,outcome:record.outcome};
+    if(result.status==='succeeded'&&record.narrative?.status==='running'){const {start,end}=state.snapshot.source.actualRange;await runNarrative(taskId,()=>afterSummaryCommit({target:state.target,startFloor:start,endFloor:end}));}
+    notify(taskId);return {...result,...(result.status==='succeeded'?{status:inspect(taskId).status}:{}),outcome:record.outcome};
   }
   const release=manager.subscribe(state=>{
     const record=records.get(state.taskId);if(!record)return;
@@ -107,7 +121,8 @@ export function createEventSummaryService({repository,manager,provider,getGenera
       if(!['manual','auto','regeneration'].includes(origin))throw new Error('总结来源无效');
       const key=repository.captureTarget().chatId;if(reservations.has(key))throw new Error('当前聊天已有总结任务');reservations.add(key);
       try{
-      for(const id of records.keys()){const state=inspect(id);if(state&&sameTarget(state.target,repository.captureTarget())&&['starting','running','awaiting-user','committing'].includes(state.status))throw new Error('当前聊天已有总结任务');}
+      if([...records.keys()].some(id=>{const state=inspect(id);return state&&sameTarget(state.target,repository.captureTarget())&&busyStatuses.includes(state.status);}))throw new Error('当前聊天已有总结任务，请先完成本批');
+      if(await getPendingNarrative?.())throw new Error('请先继续、重试或跳过当前自述与大纲批次');
       const snapshot=await capture(origin,options),resume=options.resumePending;
       if(control&&!control.matches(operationProof))throw new Error('功能开关已变化，请重新开始');
       if(snapshot.selection.summary.pending&&!resume)throw new Error('请先处理已保留的总结草稿');
@@ -149,10 +164,30 @@ export function createEventSummaryService({repository,manager,provider,getGenera
       }finally{reservations.delete(key);}
     },
     resumeAutoConfirm(){for(const [id,record]of records)if(record.autoConfirmPaused&&control?.allowed()){record.autoConfirmPaused=false;queueMicrotask(()=>void confirm(id));}},
-    confirm,inspect,settled:taskId=>manager.settled(taskId),
+    confirm,inspect,isBusy,
+    async restorePendingNarrative(origin='manual'){
+      const target=repository.captureTarget(),key=JSON.stringify([target.chatId,target.rootId,target.epoch]);
+      if(restorations.has(key))return restorations.get(key);
+      const existing=()=>[...records.keys()].find(id=>{const task=inspect(id);return task&&sameTarget(task.target,target)&&['narrative-running','narrative-failed'].includes(task.status);});
+      const id=existing();if(id)return id;
+      const work=(async()=>{
+        const pending=await getPendingNarrative?.();
+        if(!pending?.summary||!sameTarget(target,repository.captureTarget())||!sameTarget(target,pending.target))return null;
+        const selection=await repository.captureSummary(target);
+        if(!sameTarget(target,repository.captureTarget()))return null;
+        const previous=existing();if(previous)return previous;
+        const taskId=`narrative-restored:${uuid()}`;
+        records.set(taskId,{origin,stage:'narrative',outcome:null,receipt:null,errorMessage:'本批记忆已保存，请继续自述与大纲或跳过本批',diagnostics:[],narrative:{status:'failed',error:pending.error??''},restoredTask:{taskId,status:'succeeded',attempt:1,target,snapshot:{target,selection,params:selection.summary.preferences[origin],source:{actualRange:{start:pending.range.startFloor,end:pending.range.endFloor}}}}});
+        notify(taskId);return taskId;
+      })();
+      restorations.set(key,work);try{return await work;}finally{if(restorations.get(key)===work)restorations.delete(key);}
+    },
+    async retryNarrative(taskId){const record=records.get(taskId),state=inspect(taskId);if(!retrySummaryCommit||state?.status!=='narrative-failed'||!sameTarget(state.target,repository.captureTarget()))return false;return runNarrative(taskId,()=>retrySummaryCommit());},
+    async skipNarrative(taskId){const record=records.get(taskId),state=inspect(taskId);if(!skipSummaryCommit||state?.status!=='narrative-failed'||!sameTarget(state.target,repository.captureTarget()))return false;return runNarrative(taskId,async()=>{await skipSummaryCommit();return {run:{status:'skipped'}};});},
+    settled:taskId=>manager.settled(taskId),
     completed(taskId) {
       return new Promise(resolve=>{
-        const check=()=>{const state=inspect(taskId),record=records.get(taskId);if(!state||['succeeded','failed','stale','cancelled'].includes(state.status)||state.status==='awaiting-user'&&record.reviewRequired){stop?.();resolve(state);}};
+        const check=()=>{const state=inspect(taskId),record=records.get(taskId);if(!state||['succeeded','failed','stale','cancelled','narrative-failed'].includes(state.status)||state.status==='awaiting-user'&&record.reviewRequired){stop?.();resolve(state);}};
         let stop=null;stop=this.subscribe(state=>{if(state.taskId===taskId)check();});check();
       });
     },

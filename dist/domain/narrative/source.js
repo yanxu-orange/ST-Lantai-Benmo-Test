@@ -178,3 +178,42 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
   }
   return freeze(await select(false));
 }
+
+// A combined call shares one context window. Validate the actual final message
+// envelope and reserve against the larger existing category allowance.
+export async function prepareCombinedNarrativeRequest(input, {countTokens = null, isCurrent = () => true} = {}) {
+  const {buildCombinedNarrativeRequest} = await import('./requests.js');
+  const guard = () => { if (!isCurrent()) { const error = new Error('叙事任务已取消或来源已变化'); error.code = 'NARRATIVE_CANCELLED'; throw error; } };
+  const prepare = async useHost => {
+    const tickets = clone(input), budget = Math.max(...tickets.map(ticket => ticket.preferences.budget));
+    const count = async text => { guard(); if (!useHost) return estimateNarrativeTokens(text); const value = await countTokens(text); guard(); if (!Number.isFinite(value) || value < 0) throw new TypeError('宿主 token 计数不可用'); return Math.ceil(value); };
+    const outputReserve = tickets.reduce((sum, ticket) => sum + ticket.usage.outputReserve, 0);
+    let request, inputTokens;
+    while (true) {
+      request = buildCombinedNarrativeRequest(tickets);
+      inputTokens = await count(JSON.stringify(request.messages));
+      if (inputTokens + outputReserve <= budget) break;
+      const optional = tickets.flatMap((ticket, index) => ticket.materials.memory.filter(row => row.sources.every(source => source.end < ticket.source.requestedRange.start)).map(row => ({index, row, end: Math.max(...row.sources.map(source => source.end))}))).sort((a, b) => a.end - b.end);
+      if (!optional.length) { const error = new Error(`合并请求需要${useHost ? '' : '约'} ${inputTokens + outputReserve} token（含输出预留），超过预算 ${budget}；请减小批次范围或提高现有预算`); error.code = 'NARRATIVE_BUDGET_EXCEEDED'; throw error; }
+      // Remove the same oldest optional memory from both sections, keeping the
+      // shared material deduplicated and all required batch evidence intact.
+      const id = optional[0].row.id;
+      for (const ticket of tickets) {
+        if (!ticket.materials.memory.some(row => row.id === id && row.sources.every(source => source.end < ticket.source.requestedRange.start))) continue;
+        ticket.materials.memory = ticket.materials.memory.filter(row => row.id !== id);
+        ticket.memorySnapshot = ticket.memorySnapshot.filter(row => row.id !== id);
+        ticket.usage.omittedMemoryCount++;ticket.usage.trimmed = true;
+      }
+      await new Promise(resolve => setTimeout(resolve, 0));guard();
+    }
+    for (const ticket of tickets) {
+      const tokens = await count(materialsText(ticket.materials));
+      const requiredMaterials = {...ticket.materials, memory: ticket.materials.memory.filter(row => row.sources.some(source => source.end >= ticket.source.requestedRange.start))};
+      ticket.usage = {...ticket.usage, tokens, requiredTokens: await count(materialsText(requiredMaterials)), memoryRanges: mergeRanges(ticket.memorySnapshot.flatMap(row => row.sources)), estimated: !useHost, tokenMethod: useHost ? 'host' : 'estimate'};
+      if (!ticket.materials.original.length && !ticket.materials.memory.length) { const error = new Error('合并预算内没有可读取的记忆，请提高预算或减小批次'); error.code = 'NARRATIVE_NO_MATERIAL'; throw error; }
+    }
+    return {tickets: freeze(tickets), request, usage: {budget, inputTokens, outputReserve, totalTokens: inputTokens + outputReserve, estimated: !useHost, tokenMethod: useHost ? 'host' : 'estimate'}};
+  };
+  if (typeof countTokens === 'function') { try { return await prepare(true); } catch (error) { if (error.code?.startsWith('NARRATIVE_')) throw error; } }
+  return prepare(false);
+}

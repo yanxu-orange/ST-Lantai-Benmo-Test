@@ -31,9 +31,10 @@ export function createAutomaticSummaryRunner({service,repository,captureSource}=
   }
   return Object.freeze({
     inspect,
-    start(){const target=repository.captureTarget();if(disposed)return false;if(run&&!sameTarget(run.target,target)){if(run.taskId)service.cancel(run.taskId);run=null;}if(run&&['running','awaiting-user'].includes(run.status))return false;run={target,status:'running',taskId:null,stopRequested:false,error:'',pumping:false};notify();void pump(run);return true;},
+    start(){const target=repository.captureTarget();if(disposed)return false;if(run&&!sameTarget(run.target,target)){if(run.taskId)service.cancel(run.taskId);run=null;}if(run&&['running','awaiting-user'].includes(run.status)||service.isBusy?.(target))return false;run={target,status:'running',taskId:null,stopRequested:false,error:'',pumping:false};notify();void pump(run);return true;},
     stop(){if(!run||!['running','waiting','awaiting-user'].includes(run.status))return false;run.stopRequested=true;if(!run.pumping&&run.status!=='awaiting-user')run.status='stopped';notify();return true;},
-    afterReview(){if(!run||run.status!=='awaiting-user')return;run.status=run.stopRequested?'stopped':'running';notify();void pump(run);},
+    afterReview(){if(!run||run.status!=='awaiting-user'||service.inspect(run.taskId)?.status!=='succeeded')return;run.status=run.stopRequested?'stopped':'running';notify();void pump(run);},
+    afterNarrative(){if(!run||!['failed','awaiting-user'].includes(run.status)||service.inspect(run.taskId)?.status!=='succeeded')return;run.status=run.stopRequested?'stopped':'running';run.error='';notify();void pump(run);},
     transferTask(taskId){
       const task=service.inspect(taskId),active=run;if(!active||!task||!sameTarget(active.target,task.target)||!sameTarget(task.target,repository.captureTarget()))return false;
       active.taskId=taskId;active.status='running';active.error='';active.pumping=true;notify();
