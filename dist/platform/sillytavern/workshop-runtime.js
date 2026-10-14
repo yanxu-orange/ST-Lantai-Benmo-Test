@@ -74,6 +74,9 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     return {target,selection:saved.selection,config,modules,binding:(saved.root??root).binding,displaySource,readView:readView&&repository.matchesPanelData(target,readView)?readView:undefined};
   }
   function request({target:requestedTarget,readView}={}){
+    // A maintenance pass requested before the host-event timer fires owns
+    // that collection; do not run the same queued event again afterward.
+    clearTimeout(timer);
     if(!gates.collect.allowed()&&!gates.sync.allowed()&&!gates.prompt.allowed())return Promise.resolve(null);
     const requestedSerial=serial,target=requestedTarget??repository.captureTarget();
     const work=(pending??Promise.resolve()).catch(()=>{}).then(()=>requestedSerial===serial?collect({target,readView}):null) .then(result=>{

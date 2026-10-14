@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "246311CDB57E63ED5A63DAF280D438FB3214908E8270E0649161F4D942AD57EC"
+    "sha256": "2604DC4F4997F3CCC4B676045750BD544C7E7018A70A13E3B32D046F87481359"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -33,7 +33,7 @@
   },
   {
     "path": "dist/app/benmo-controller.js",
-    "sha256": "06A9570CD791FF78ADEDD4C5EC3B961347C08A0B4F0CF1F4C57FEC422BE5C9FF"
+    "sha256": "4E7F06336B1B0C870864B39A3D864870E45660008FAB2BAB5FFAA8A8BAFBFE44"
   },
   {
     "path": "dist/app/benmo-view.css",
@@ -41,7 +41,7 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "sha256": "D2BFD01ACABCC01C18E7E6BEEF91F949ADEFE3682FD23D17C9E52D3D7BF1918F"
+    "sha256": "EF68B377D4B92830E27354D74B7A55244FA60EE17064BDED7786B88890071F98"
   },
   {
     "path": "dist/app/book-themes/assets/PinyonScript-OFL.txt",
@@ -161,7 +161,7 @@
   },
   {
     "path": "dist/app/memory-app.js",
-    "sha256": "2901FF1B6CBCF81E343020F83B8462275DDB7E98A212C47CEACE0B9CA0A77D08"
+    "sha256": "F84BA59352C44B985B5CE44A9824526587F14C7C1E10F929F66A02BCA23BFD60"
   },
   {
     "path": "dist/app/memory-card-time.js",
@@ -465,7 +465,7 @@
   },
   {
     "path": "dist/app/summary-view.css",
-    "sha256": "B40D408116DF4A7ECEBD60DA22E19E72A53F2FE4881E7293E0059BF08DD78C52"
+    "sha256": "EB46DAB1D36E962BBADF4E30A0EC1CD1E9E267E78B61E6D8D0062A5392FE26B7"
   },
   {
     "path": "dist/app/summary-view.js",
@@ -497,11 +497,11 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "2CD9E0028E98F430D15AB48B0248A4C2BA3190A344C958AD9D4E1B136313D21B"
+    "sha256": "365E037B7B503123A330C13A68999B21438FCE274E5E4CFC3F6B97BD601B0A54"
   },
   {
     "path": "dist/app/workshop-controller.js",
-    "sha256": "4119B2CCFF49B6FAAEE8AE104E24D4588900F75234FACF08484450CF66F4948E"
+    "sha256": "683BB0A28DF240414B218D4AAF0345C6A3B5990BC13BFCACE61490AE584CC709"
   },
   {
     "path": "dist/app/workshop-loading-view.js",
@@ -621,11 +621,11 @@
   },
   {
     "path": "dist/domain/narrative/requests.js",
-    "sha256": "D36E4FE018751F42E94DA32ABB0C39A065E3646065FC103F70A6E294093D4C14"
+    "sha256": "131900B1165F7C1C9EE390E68C200D7C715226D50DF0A0E630E68A60E47E9F29"
   },
   {
     "path": "dist/domain/narrative/source.js",
-    "sha256": "0CCBC218A5EC84DE1E3E58E440CC01501EC404962CE4236B970CBFE1CA0838CE"
+    "sha256": "4DE5917AF7D6269F12DAECEFAD064AB19D7168192CCCA76989EC1846C4104680"
   },
   {
     "path": "dist/domain/recall/alias-parent.js",
@@ -945,7 +945,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "95522521CB40AB973C767D816D980D54BC5A3B614EAD2C1E389BCBBB8D63D9B2"
+    "sha256": "066170F7CD5110E7B76C720C17E283A624240483980A1970910D8C10ACAE14EA"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -957,7 +957,7 @@
   },
   {
     "path": "dist/platform/sillytavern/narrative-runtime.js",
-    "sha256": "F8DA984044FCFB61474635C3ED9D10CED4D244E63481C48D61BBB20D0BD43197"
+    "sha256": "6CD97ADD27D7EEF20DAE5681E7CD953D2CD328E947B105D866DF212757B1BCA2"
   },
   {
     "path": "dist/platform/sillytavern/pending-settings-saves.js",
@@ -1021,7 +1021,7 @@
   },
   {
     "path": "dist/platform/sillytavern/tracking-runtime.js",
-    "sha256": "1BCDD5D453010A0EB89AB45B237BC2E3F9F4F4ADB2AFC669CC68864DBE16BDF6"
+    "sha256": "DDAD778203E511A94D0425FCA0DF46597399949D3777202AE54A1176F5C948DA"
   },
   {
     "path": "dist/platform/sillytavern/workshop-background-display.js",
@@ -1041,7 +1041,7 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-runtime.js",
-    "sha256": "3DA526A71F6567643E6B8E382039241D1C6F0F1BC41EF60836CA300E1D464565"
+    "sha256": "41F047BBA7BB938E12902BBB416848300299B9F296D6D1DF31661952D64F0255"
   },
   {
     "path": "dist/probe/runtime-probe.js",
@@ -1101,10 +1101,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "22F743C6E2E31301F237F4B56A2537DEB0C117AAE46C09DDB915788516EF4987"
+    "sha256": "9B947C774904AE7BE8E7F0DEDBB32E1F862C7AFDEEF9C04DB8A885CF9CC2BF92"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "AE3D36426E5440955AC469A35D41725419D5B41763BC3B6B335EB2E4EB6D1918"
+    "sha256": "5F0ADCC73436BD5882DBBC4CCECE0FF53E6D6C92B72837F171CC2377EEEB1F8C"
   }
 ]

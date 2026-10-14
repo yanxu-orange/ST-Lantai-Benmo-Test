@@ -59,15 +59,16 @@ export function createWorkshopController({repository,settings,target,runtime,ens
     // Collection and migration writes invalidate their input view. Capture a
     // current projection together with its proof; never stamp an old snapshot
     // with a newer token. Repositories without display proofs simply reread.
-    if(!readView||!repository.matchesPanelData(target,readView)){
+    let rootCurrent=!!readView&&repository.matchesPanelData(target,readView);
+    if(!rootCurrent){
       readView=await repository.capturePanelData?.(target);
-      if(readView){chatSnapshot=await repository.captureWorkshop(target,readView);binding=repository.readPanelRoot(target,readView).binding;}
+      if(readView){chatSnapshot=await repository.captureWorkshop(target,readView);binding=repository.readPanelRoot(target,readView).binding;rootCurrent=repository.matchesPanelData(target,readView);}
     }
     if(!current())throw new Error('聊天已变化，请重新打开工坊');
     // A changed input while awaiting collection needs its own pass before the
     // first ready page, not only when the user returns to it next time.
     if(settings.matchesWorkshop&&!settings.matchesWorkshop(globalSnapshot)
-      ||readView&&!repository.matchesPanelData(target,readView)
+      ||readView&&!rootCurrent
       ||displaySource&&!runtime.matchesDisplaySource(target,displaySource)){
       // Settled promises only yield to microtasks. Let close/chat-change events
       // run before retrying a source that keeps changing between passes.

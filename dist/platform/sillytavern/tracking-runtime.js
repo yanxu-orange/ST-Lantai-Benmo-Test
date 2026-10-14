@@ -174,7 +174,7 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     const listener=()=>{clear();if(name.startsWith('CHAT_')){target=null;selection=null;state={...state,records:[],exclusions:trackingExclusionsOf(null),target:null};notify();}};
     events.on(event,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,event,listener));
   }
-  return {load,snapshot,saveRecord,
+  return {load,snapshot,writeState:()=>({writeBlocked:state.writeBlocked||!gate.allowed(),error:state.error}),saveRecord,
     saveExclusionNames(kind,names,{original}={}){const value=clone(names),before=clone(original);return changeExclusions(domain=>{if(before!==undefined&&!equal(trackingExclusionsOf(domain)[kind]?.names,before))throw new Error('追踪排除名单已变化，请重新读取后修改');return setTrackingExclusionNames(domain,kind,value);});},
     setRecordExcluded(kind,id,excluded){return changeExclusions((domain,raw)=>setTrackingRecordExcluded(domain,raw,kind,id,excluded));},
     defaultPrompts:DEFAULT_TRACKING_PROMPTS,

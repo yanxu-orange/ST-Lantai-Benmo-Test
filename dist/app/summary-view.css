@@ -11,6 +11,7 @@
 .lt-summary-workspace .lt-summary-access>div{display:grid;grid-template-rows:auto auto;justify-items:center;align-content:start;gap:var(--ui-space-inline);min-width:0;text-align:center;padding:var(--ui-space-control)}
 .lt-summary-workspace .lt-summary-access>div+div{border-left:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle)}
 .lt-summary-workspace .lt-summary-access>div>span:last-child{min-block-size:max(var(--ui-density-control-height),var(--ui-interaction-target-min));display:flex;align-items:center;font-family:var(--ui-type-ui-family);font-size:var(--ui-type-ui-control-size);font-weight:var(--ui-type-ui-control-weight);line-height:var(--ui-type-ui-control-line)}
+.lt-summary-workspace .lt-summary-access>div>span.ui-progress-text{flex-direction:column;align-items:flex-start;justify-content:center;text-align:left}
 .lt-summary-workspace .lt-summary-access .ui-button{padding-inline:0;background:transparent;border:0;border-radius:0}
 .lt-summary-workspace .lt-summary-connection[data-preview-open=true]>.lt-summary-access{border-bottom:0}
 .lt-summary-workspace .lt-summary-access>div[data-selected=true]{background:var(--ui-color-surface-subtle);border-start-start-radius:var(--ui-shape-surface-radius)}

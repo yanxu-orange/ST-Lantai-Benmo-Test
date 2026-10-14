@@ -394,7 +394,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summaryContent.replaceChildren();summaryContent.hidden=true;summaryContent.inert=false;memoryContent.hidden=false;memoryContent.inert=false;
     if(!app)return open();
     await app.refreshAvailability();
-    if(app.memoryType()==='cumulative'||!matchesMemoryRead(memoryReadProof)){const proof=captureMemoryRead();await app.rebind();memoryReadProof=matchesMemoryRead(proof)?proof:null;}
+    if(!matchesMemoryRead(memoryReadProof)){const proof=captureMemoryRead();await app.rebind();memoryReadProof=matchesMemoryRead(proof)?proof:null;}
     if(!panel)return;if(app?.memoryType()==='cumulative')app.resumeCumulative();
     if(app?.session.state.route==='editor'&&app.session.state.draft?.id&&!app.session.state.root.events.some(event=>event.id===app.session.state.draft.id))await app.refresh();
     const previous=summaryReturnFocus;
@@ -629,7 +629,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       back.addEventListener('click', () => returnFromSettings('back')); settingsContent.append(back); back.focus(); return;
     }
     mountSettingsRoot();
-    void controls.ensure();void benmoController?.ensure().catch(()=>{});
+    void controls.ensure();
   }
   function mountSettingsRoot(focusAction=null){
     if(!panel||closing||replacingPage)return;

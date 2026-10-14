@@ -3,7 +3,7 @@ import {sameTarget} from '../../domain/memory/repository.js';
 import {sourceFingerprint,durableSourceMessages} from '../../domain/summary/source.js';
 import {matchesStoredNarrativeSource,narrativeMemoryRows} from '../../domain/narrative/core.js';
 import {prepareNarrativeBatch,projectNarrativeBatchBase} from './narrative-preparation.js';
-import {emptyNarrative,assertNarrative,applyNarrativeResponse,reconcileNarrativeSource,narrativeHighWater,narrativeJointBudget,recordNarrativeGeneration} from '../../domain/narrative/data.js';
+import {emptyNarrative,narrativeOf,assertNarrative,applyNarrativeResponse,reconcileNarrativeSource,narrativeHighWater,narrativeJointBudget,recordNarrativeGeneration} from '../../domain/narrative/data.js';
 import {matchesNarrativeSource,matchesNarrativeMemory,projectNarrativeMemory} from '../../domain/narrative/source.js';
 import {parseCombinedNarrativeResponse} from '../../domain/narrative/requests.js';
 import {DEFAULT_NARRATIVE_PROMPTS,NARRATIVE_OUTLINE_INJECTION,narrativeSelfInjection} from '../../domain/narrative/prompts.js';
@@ -51,11 +51,11 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
   const snapshot=()=>clone({...state,requestPreview:currentRequestPreview&&previewGuard?.()?currentRequestPreview:null,preferencesWriteBlocked:unconfirmed||!target||!current(target),writeBlocked:state.writeBlocked||unconfirmed||controls()?.allowed('enabled')!==true});
   const notify=()=>{for(const listener of listeners)try{listener(snapshot());}catch{/* Display observers cannot change task ownership. */}};
   const categoryStatus=(kind,patch)=>{state={...state,[kind]:{...state[kind],...patch}};notify();};
-  function adopt(t,captured){
+  function adopt(t,captured,{publish=true}={}){
     target=clone(t);lastTarget=clone(t);selection=captured;
     state={...state,target:clone(t),narrative:clone(captured.narrative),writeBlocked:unconfirmed,error:unconfirmed?state.error:''};
     for(const kind of kinds)state[kind]={...state[kind],sourceStale:false,materialReport:captured.narrative.progress[kind]?.materialsReport??null};
-    markSources(false);notify();return snapshot();
+    markSources(false);if(publish){notify();return snapshot();}
   }
   function markSources(publish=true){
     if(!target||!current(target))return;
@@ -70,7 +70,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     if(disposed||ticket!==serial||readTicket!==readSerial||!current(t))throw new Error('聊天已变化，请重新读取本末');
     unconfirmed=false;
     if(!sequencePromise){const pending=captured.narrative.pendingRun;sequenceRun=pending?{...clone(pending),...(pending.kinds.length>1?{jointBudget:pending.jointBudget??narrativeJointBudget(captured.narrative)}:{}),target:clone(t),stage:pending.status,error:pending.status==='failed'?'上次叙事批次未完成，请重试或跳过':'已保留完成的批次，请继续',pauseRequested:pending.pauseRequested===true,skipped:0}:null;reviewGuards=null;}
-    const result=adopt(t,captured);publishRun();return snapshot();
+    adopt(t,captured,{publish:false});publishRun();return snapshot();
   }
   function clearSlots(){
     currentRequestPreview=null;previewGuard=null;injectionSerial++;let cleared=true;
@@ -224,8 +224,12 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     let prepared;
     const valid=()=>{
       try{
-        if(unconfirmed||ticket!==serial||!proofs.every(matches)||!equal(config,generation())||usesCard&&!equal(card,cardSnapshot())||repository.matchesNarrative&&!repository.matchesNarrative(t,captured))return false;
-        const currentRaw=source(t),events=typeof adapter.peekConfirmed==='function'?projectNarrativeMemory(adapter.peekConfirmed(t),currentRaw):null;
+        if(unconfirmed||ticket!==serial||!proofs.every(matches)||!equal(config,generation())||usesCard&&!equal(card,cardSnapshot()))return false;
+        // peekConfirmed validates this root; use that same synchronous capture
+        // for both narrative equality and memory projection.
+        const currentRoot=typeof adapter.peekConfirmed==='function'?adapter.peekConfirmed(t):null;
+        if(currentRoot?!sameTarget(t,captured.target)||!equal(narrativeOf(currentRoot),captured.narrative):repository.matchesNarrative&&!repository.matchesNarrative(t,captured))return false;
+        const currentRaw=source(t),events=currentRoot?projectNarrativeMemory(currentRoot,currentRaw):null;
         return (previewMemory===null||events===null||equal(previewMemory,narrativeMemoryRows(events,range.endFloor)))&&(!prepared||prepared.tasks.every(task=>matchesNarrativeSource(task.source,currentRaw)&&(events===null||matchesNarrativeMemory(task,events))));
       }catch{return false;}
     };
@@ -511,7 +515,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
   });
   for(const name of ['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,()=>{clear();markSources();});
   for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{clear();sequenceRun=null;readSerial++;target=null;selection=null;unconfirmed=false;foregroundActive=false;quietDepth=0;state={target:null,narrative:emptyNarrative(),self:emptyStatus(),outline:emptyStatus(),writeBlocked:false,error:''};notify();});
-  return {load,snapshot,savePreferences,saveRunPreferences,saveEntries,preview,previewRequest,start,pause,resume,confirmReview,retry:resume,skip,afterSummaryCommit,hasPending:()=>!!sequenceRun&&['running','paused','failed','awaiting-review'].includes(sequenceRun.status),intercept,clear,cancel,defaultPrompts:DEFAULT_NARRATIVE_PROMPTS,
+  return {load,snapshot,writeState:()=>({writeBlocked:state.writeBlocked||unconfirmed||controls()?.allowed('enabled')!==true,error:state.error}),savePreferences,saveRunPreferences,saveEntries,preview,previewRequest,start,pause,resume,confirmReview,retry:resume,skip,afterSummaryCommit,hasPending:()=>!!sequenceRun&&['running','paused','failed','awaiting-review'].includes(sequenceRun.status),intercept,clear,cancel,defaultPrompts:DEFAULT_NARRATIVE_PROMPTS,
     controlsChanged(){clearSlots();if(taskOwner&&!taskOwner.proofs.every(matches))manager.cancel(taskOwner.id);notify();},
     rebindTarget(next){const previous=target??lastTarget;if(!previous||previous.chatId!==next.chatId||previous.rootId!==next.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){clear();target=clone(next);selection=null;state={...state,target:clone(next),writeBlocked:true,error:'聊天已重新读取，请重新打开本末'};notify();}},
     subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},

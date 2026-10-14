@@ -3,7 +3,7 @@ import {cleanSummaryFloors} from '../summary/cleaning.js';
 import {effectiveBatchPositions} from '../summary/source-positions.js';
 import {assertNarrative} from './data.js';
 import {clone, same, integer, text, range, freeze, assertKind, mergeRanges, narrativeMemoryRows, matchesStoredNarrativeSource} from './core.js';
-import {buildNarrativeRequest, narrativeMaterialParts} from './requests.js';
+import {buildNarrativeRequest, narrativeMaterialParts, narrativeMemoryText, NARRATIVE_MATERIAL_SEPARATOR} from './requests.js';
 export {matchesNarrativeSource, matchesStoredNarrativeSource, storedNarrativeSource, matchesNarrativeMemory} from './core.js';
 export function narrativeCardFields(card) {
   if (!card || typeof card !== 'object') return null;
@@ -46,10 +46,10 @@ function estimatedUnits(value) {
 }
 export function estimateNarrativeTokens(value) {
   // Keep unrounded quarter-token units until all fragments are combined. This
-  // exactly matches the full-text estimate, including JSON punctuation.
+  // exactly matches the full-text estimate, including material separators.
   return Math.ceil(estimatedUnits(value) / 4);
 }
-function materialsText(materials) { return narrativeMaterialParts(materials).map(row => row.content).join('\n\n'); }
+function materialsText(materials, kind) { return narrativeMaterialParts(materials, kind).map(row => row.content).join('\n\n'); }
 function memoryPayload(row, originalRanges) {
   const overlaps = [];
   for (const source of row.sources) for (const original of originalRanges) {
@@ -101,21 +101,24 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     // background and previous prose, but use the same actual story evidence.
     const materials = {...base, memory: sharedMaterials.materials.memory, original: sharedMaterials.materials.original};
     return freeze({...ticket, materials, memorySnapshot: sharedMaterials.memorySnapshot,
-      usage: {...sharedMaterials.usage, tokens: estimateNarrativeTokens(materialsText(materials))}});
+      usage: {...sharedMaterials.usage, tokens: estimateNarrativeTokens(materialsText(materials, kind))}});
   }
   // Serialize fixed data and each memory exactly once. Older candidates change
   // neither the background nor existing prose nor original-message payloads.
-  const parts = narrativeMaterialParts(base).map(row => row.content);
-  const prefix = `${parts[0]}\n\n${parts[1]}\n\n${parts[2].slice(0, -2)}`;
-  const suffix = `\n\n${parts[3]}`;
-  const fixedUnits = estimatedUnits(prefix) + estimatedUnits(suffix) + 2;
+  const materialParts = narrativeMaterialParts(base, kind);
+  const parts = materialParts.map(row => row.content);
+  const memoryIndex = materialParts.findIndex(part => part.field === 'memory');
+  const prefix = parts.slice(0, memoryIndex + 1).join(NARRATIVE_MATERIAL_SEPARATOR);
+  const suffix = NARRATIVE_MATERIAL_SEPARATOR + parts.slice(memoryIndex + 1).join(NARRATIVE_MATERIAL_SEPARATOR);
+  const fixedUnits = estimatedUnits(prefix) + estimatedUnits(suffix);
+  const separatorUnits = estimatedUnits(NARRATIVE_MATERIAL_SEPARATOR);
   const encoded = new Map();
   for (let index = 0; index < eventsSnapshot.length; index++) {
-    const row = eventsSnapshot[index], payload = memoryPayload(row, originalRanges), json = JSON.stringify(payload);
-    encoded.set(row.id, {row, payload, json, index, units: estimatedUnits(json)});
+    const row = eventsSnapshot[index], payload = memoryPayload(row, originalRanges), content = narrativeMemoryText(payload);
+    encoded.set(row.id, {row, payload, content, index, units: estimatedUnits(content)});
     await cooperate();
   }
-  const fullText = items => `${prefix}[${items.map(item => item.json).join(',')}]${suffix}`;
+  const fullText = items => `${prefix}${items.map(item => item.content).join(NARRATIVE_MATERIAL_SEPARATOR)}${suffix}`;
   const insertionIndex = (items, index) => {
     let low = 0, high = items.length;
     while (low < high) { const middle = (low + high) >>> 1; if (items[middle].index < index) low = middle + 1; else high = middle; }
@@ -132,7 +135,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
       return Math.ceil(result);
     };
     const selected = requiredMemory.map(row => encoded.get(row.id)).sort((a, b) => a.index - b.index);
-    let units = fixedUnits + selected.reduce((sum, item) => sum + item.units, 0) + Math.max(0, selected.length - 1);
+    let units = fixedUnits + selected.reduce((sum, item) => sum + item.units, 0) + Math.max(0, selected.length - 1) * separatorUnits;
     let tokens = useHost ? await count(fullText(selected)) : Math.ceil(units / 4);
     const requiredTokens = tokens;
     if (!deferredBudget && tokens > preferences.budget) {
@@ -143,7 +146,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     let omittedMemoryCount = 0;
     for (const memory of historicalMemory) {
       await cooperate();
-      const item = encoded.get(memory.id), proposedUnits = units + item.units + (selected.length ? 1 : 0);
+      const item = encoded.get(memory.id), proposedUnits = units + item.units + (selected.length ? separatorUnits : 0);
       if (deferredBudget) {
         selected.push(item); units = proposedUnits; tokens = Math.ceil(proposedUnits / 4);
       } else if (!useHost) {
@@ -152,7 +155,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
         const proposedTokens = Math.ceil(proposedUnits / 4);
         if (proposedTokens <= preferences.budget) { selected.push(item); units = proposedUnits; tokens = proposedTokens; } else omittedMemoryCount++;
       } else {
-        // A host tokenizer is not necessarily additive across JSON boundaries.
+        // A host tokenizer is not necessarily additive across material boundaries.
         // Reuse cached encodings but keep exact candidate counts and unchanged
         // nearest-first skip/accept semantics rather than inventing a bound.
         const at = insertionIndex(selected, item.index);
@@ -166,7 +169,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     const materials = {...base, memory: selected.map(item => item.payload)};
     // One full final check also guards the incremental accounting against a
     // future change in prompt framing or material serialization.
-    const actualTokens = await count(materialsText(materials));
+    const actualTokens = await count(materialsText(materials, kind));
     if ((!deferredBudget && actualTokens > preferences.budget) || (!useHost && actualTokens !== tokens)) {
       const error = new Error('最终材料预算校验失败，请调整预算或重试'); error.code = 'NARRATIVE_BUDGET_EXCEEDED'; throw error;
     }
@@ -231,9 +234,9 @@ export async function prepareCombinedNarrativeRequest(input, {countTokens = null
     }
     const joint = {budget, inputTokens, outputReserve, totalTokens: inputTokens + outputReserve, estimated: !useHost, tokenMethod: useHost ? 'host' : 'estimate'};
     for (const ticket of tickets) {
-      const tokens = await count(materialsText(ticket.materials));
+      const tokens = await count(materialsText(ticket.materials, ticket.kind));
       const requiredMaterials = {...ticket.materials, memory: ticket.materials.memory.filter(row => row.sources.some(source => source.end >= ticket.source.requestedRange.start))};
-      ticket.usage = {...ticket.usage, budget, joint: clone(joint), tokens, promptTokens: await count(buildNarrativeRequest({ticket}).previewParts.filter(part => part.role === 'system').map(part => part.content).join('\n\n')), requiredTokens: await count(materialsText(requiredMaterials)), memoryRanges: mergeRanges(ticket.memorySnapshot.flatMap(row => row.sources)), estimated: !useHost, tokenMethod: useHost ? 'host' : 'estimate'};
+      ticket.usage = {...ticket.usage, budget, joint: clone(joint), tokens, promptTokens: await count(buildNarrativeRequest({ticket}).previewParts.filter(part => part.role === 'system').map(part => part.content).join('\n\n')), requiredTokens: await count(materialsText(requiredMaterials, ticket.kind)), memoryRanges: mergeRanges(ticket.memorySnapshot.flatMap(row => row.sources)), estimated: !useHost, tokenMethod: useHost ? 'host' : 'estimate'};
       if (!ticket.materials.original.length && !ticket.materials.memory.length) { const error = new Error('合并预算内没有可读取的记忆，请提高预算或减小批次'); error.code = 'NARRATIVE_NO_MATERIAL'; throw error; }
     }
     return {tickets: freeze(tickets), request, usage: joint};

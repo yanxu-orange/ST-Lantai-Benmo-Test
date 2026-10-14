@@ -17,8 +17,8 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     policy.benmo=BENMO_FEATURES.some(key=>policy[key]);
     return {enabled,policy,status,dataStatus:status,busy,error,target:navigationTarget&&copy(navigationTarget)};
   }
-  function snapshotWithSummary(projection,{tracking:trackingProjection,narrative:narrativeProjection}={}){
-    const latest=projection??latestRuntime.library(),tracked=trackingProjection??trackingRuntime.snapshot(),narrated=narrativeProjection??narrativeRuntime?.snapshot();
+  function snapshotWithSummary(projection,{tracking:trackingProjection,narrative:narrativeProjection,cached=false,summaryChanged=false}={}){
+    const latest=projection??(cached&&!summaryChanged?summaryCache:null)??latestRuntime.library(),tracked=trackingProjection??(cached?trackingCache:null)??trackingRuntime.snapshot(),narrated=narrativeProjection??(cached&&!narrativeCache?.requestPreview?narrativeCache:null)??narrativeRuntime?.snapshot();
     let binding=target;try{binding??=repository.captureTarget();}catch{/* Unavailable bindings own no source data. */}
     if(binding&&sameTarget(latest.target,binding))summaryCache=latest;
     if(binding&&sameTarget(tracked.target,binding))trackingCache=trackingProjection?copy(tracked):tracked;
@@ -28,17 +28,17 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     return copy({summary,tracking,narrative,...availability(),error:error||tracking.error||narrative.error||'',writeBlocked:!current()||!master()||status!=='ready'||tracking.writeBlocked===true||narrative.writeBlocked===true});
   }
   const snapshot=()=>snapshotWithSummary();
-  const publish=(projections)=>{
+  const publish=(projections,value)=>{
     if(disposed)return;
     if(availabilityListeners.size)try{const value=availability();for(const fn of availabilityListeners)try{fn(copy(value));}catch{/* Navigation cannot break saved facts. */}}catch{/* Unavailable state cannot break a runtime publication. */}
-    if(listeners.size)try{const value=snapshotWithSummary(undefined,projections);for(const fn of listeners)try{fn(copy(value));}catch{/* Rendering cannot break saved facts. */}}catch{/* Unavailable state cannot break a runtime publication. */}
+    if(listeners.size)try{const output=value??snapshotWithSummary(undefined,projections);for(const fn of listeners)try{fn(copy(output));}catch{/* Rendering cannot break saved facts. */}}catch{/* Unavailable state cannot break a runtime publication. */}
   };
   // Domain notifications already carry a snapshot for this synchronous publication.
   // Latest notifications carry inspect state instead, so its library stays a fresh read.
-  const offLatest=latestRuntime.subscribe(()=>publish()),offTracking=trackingRuntime.subscribe(tracking=>publish({tracking})),offNarrative=narrativeRuntime?.subscribe(narrative=>publish({narrative}));
+  const offLatest=latestRuntime.subscribe(()=>{if(!loading)publish({cached:true,summaryChanged:true});}),offTracking=trackingRuntime.subscribe(tracking=>{if(!loading)publish({tracking,cached:true});}),offNarrative=narrativeRuntime?.subscribe(narrative=>{if(!loading)publish({narrative,cached:true});});
   async function load(){
     if(disposed)throw new Error('本末已关闭');if(loading)return loading;
-    const ticket=sequence;status='loading';error='';publish();
+    const ticket=sequence;status='loading';error='';publish({cached:true});
     const job=(async()=>{
       const next=await adapter.prepare(),proof=adapter.captureChatSource?.(next);
       // Modern runtimes coalesce their automatic initialization with this pass.
@@ -54,11 +54,11 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
         // every domain together when a concurrent write changed the fixed view.
         readView=await repository.capturePanelData(next);await latestRuntime.read({target:next,readView});
       }while(true);
-      target=copy(next);sourceProof=proof;projectionProof=projection;dataView=readView;const sourceCurrent=(!proof||adapter.matchesChatSource?.(next,proof)!==false)&&(!latestRuntime.matchesSource||latestRuntime.matchesSource(next,projection));status=sourceCurrent?'ready':'unconfirmed';error=sourceCurrent?'':'来源在读取期间已变化，请重新读取本末';publish();return snapshot();
+      target=copy(next);sourceProof=proof;projectionProof=projection;dataView=readView;const sourceCurrent=(!proof||adapter.matchesChatSource?.(next,proof)!==false)&&(!latestRuntime.matchesSource||latestRuntime.matchesSource(next,projection));status=sourceCurrent?'ready':'unconfirmed';error=sourceCurrent?'':'来源在读取期间已变化，请重新读取本末';const value=snapshot();publish(undefined,value);return value;
     })().catch(failure=>{if(!disposed&&ticket===sequence){status='unconfirmed';error=failure.message;publish();}throw failure;}).finally(()=>{if(loading===job)loading=null;});
     loading=job;return job;
   }
-  function writable(kind){if(!current()||!master()||status!=='ready'||trackingRuntime.snapshot().writeBlocked===true)throw new Error(error||trackingRuntime.snapshot().error||'聊天已变化，请重新读取本末');if(kind&&!availability().policy[kind])throw new Error('该功能已关闭');if(['self','outline'].includes(kind)&&narrativeRuntime?.snapshot().writeBlocked)throw new Error(narrativeRuntime.snapshot().error||'请重新读取本末');}
+  function writable(kind){if(!current()||!master()||status!=='ready')throw new Error(error||'聊天已变化，请重新读取本末');const tracking=trackingRuntime.writeState?.()??trackingRuntime.snapshot();if(tracking.writeBlocked)throw new Error(error||tracking.error||'聊天已变化，请重新读取本末');if(kind&&!availability().policy[kind])throw new Error('该功能已关闭');if(['self','outline'].includes(kind)){const narrative=narrativeRuntime?.writeState?.()??narrativeRuntime?.snapshot();if(narrative?.writeBlocked)throw new Error(narrative.error||'请重新读取本末');}}
   async function write(kind,operation){
     writable(kind);const ticket=sequence,t=copy(target);busy=kind;publish();
     try{await operation();if(disposed||ticket!==sequence||!sameTarget(t,repository.captureTarget()))throw new Error('聊天已变化，请重新读取本末');error='';return snapshot();}
