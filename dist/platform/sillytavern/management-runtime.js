@@ -176,10 +176,18 @@ export async function createManagementRuntime({ repository, getContext, document
   const service = createMemoryManagementService({ repository, manager, provider, getGenerationSettings:eventGeneration,control:featureGate(getControls,'event'), getOriginalSnapshot });
   controller = createManagementController({ service, repository, originalAvailable, getOriginalSnapshot,
     getSettingsEpoch: () => getGenerationSettings().epoch });
+  const narrativeHooks=summarySource=>({
+    afterSummaryCommit:afterSummaryCommit?args=>afterSummaryCommit({...args,summarySource}):null,
+    retrySummaryCommit:retrySummaryCommit?()=>retrySummaryCommit({summarySource}):null,
+    skipSummaryCommit:skipSummaryCommit?()=>skipSummaryCommit({summarySource}):null,
+    // Any pending narrative blocks another summary before it can save a new batch.
+    // Each service independently filters the owner only when restoring controls.
+    getPendingNarrative:getPendingNarrative??null,
+  });
   if(typeof captureSummarySource==='function') {
-    summaryService=createEventSummaryService({repository,manager,provider,afterSummaryCommit,retrySummaryCommit,skipSummaryCommit,getPendingNarrative,getGenerationSettings:eventGeneration,getTrackingContext:()=>{const context=getContext(),character=context.characters?.[context.characterId];return {identities:promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name}),allowed:{itemsEnabled:allowed('item'),npcsEnabled:allowed('npc')},proofs:{items:getControls?.()?.capture('item')??null,npcs:getControls?.()?.capture('npc')??null}};},control:featureGate(getControls,'event'),captureSource:captureSummarySource});
+    summaryService=createEventSummaryService({repository,manager,provider,...narrativeHooks('event'),getGenerationSettings:eventGeneration,getTrackingContext:()=>{const context=getContext(),character=context.characters?.[context.characterId];return {identities:promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name}),allowed:{itemsEnabled:allowed('item'),npcsEnabled:allowed('npc')},proofs:{items:getControls?.()?.capture('item')??null,npcs:getControls?.()?.capture('npc')??null}};},control:featureGate(getControls,'event'),captureSource:captureSummarySource});
     summaryController=createSummaryController({repository,service:summaryService,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
-    cumulativeService=createCumulativeSummaryService({repository,manager,provider,getGenerationSettings:cumulativeGeneration,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
+    cumulativeService=createCumulativeSummaryService({repository,manager,provider,...narrativeHooks('cumulative'),getGenerationSettings:cumulativeGeneration,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     cumulativeRunner=createAutomaticCumulativeRunner({repository,service:cumulativeService,captureSource:captureSummarySource});
     cumulativeController=createCumulativeController({repository,service:cumulativeService,runner:cumulativeRunner,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     let replyRun=null,quietDepth=0,lastReplyFloor=(ctx?.chat?.length??0)-1;

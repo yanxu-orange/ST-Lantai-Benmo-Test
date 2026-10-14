@@ -27,6 +27,8 @@ import {createTimePromptRuntime} from './time-prompts.js';
 import {createTimeRuntime} from './time-runtime.js';
 import { createSillyTavernMemoryAdapter } from './memory-adapter.js';
 import { createRepository, sameTarget } from '../../domain/memory/repository.js';
+import { summaryOf } from '../../domain/summary/data.js';
+import { cumulativeOf } from '../../domain/cumulative/data.js';
 import { mountMemoryApp } from '../../app/memory-app.js';
 import { getSillyTavernContext } from './context.js';
 import { createManagementRuntime } from './management-runtime.js';
@@ -258,8 +260,14 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     }
     if(cleanupError)throw cleanupError;
   }
+  function resumeSummaryNarrative(action,{summarySource='event'}={}){
+    const snapshot=narrativeRuntime.snapshot();
+    if(!narrativeRuntime.hasPending())return snapshot;
+    if(!snapshot.run?.summary||(snapshot.run.summarySource??'event')!==summarySource)throw new Error('请返回当前批次所属的总结继续');
+    return narrativeRuntime[action]();
+  }
   async function ensureRuntime() {
-    if (!runtimePromise) runtimePromise = new Promise(afterPageFrame).then(()=>disposed||lifetime.signal.aborted?null:createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, signal: lifetime.signal,getControls:()=>controls,afterSummaryCommit:args=>narrativeRuntime.afterSummaryCommit(args),retrySummaryCommit:()=>narrativeRuntime.retry(),skipSummaryCommit:()=>narrativeRuntime.skip(),getPendingNarrative:async()=>{if(!narrativeRuntime)return null;await narrativeRuntime.load();return narrativeRuntime.hasPending()?narrativeRuntime.snapshot().run:null;},captureSummarySource:target=>adapter.captureSummarySource(target) }))
+    if (!runtimePromise) runtimePromise = new Promise(afterPageFrame).then(()=>disposed||lifetime.signal.aborted?null:createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, signal: lifetime.signal,getControls:()=>controls,afterSummaryCommit:args=>narrativeRuntime.afterSummaryCommit(args),retrySummaryCommit:args=>resumeSummaryNarrative('retry',args),skipSummaryCommit:args=>resumeSummaryNarrative('skip',args),getPendingNarrative:async()=>{if(!narrativeRuntime)return null;await narrativeRuntime.load();return narrativeRuntime.hasPending()?narrativeRuntime.snapshot().run:null;},captureSummarySource:target=>adapter.captureSummarySource(target) }))
       .then(async value => { if(!value)return null;if (disposed) { value.dispose(); return null; } runtime = value;
         controls=createControlSession({settings:runtime.settings,repository,prepareTarget:()=>adapter.prepare()});
         await controls.ensure();
@@ -277,8 +285,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         trackingRuntime=createTrackingRuntime({repository,adapter,settings:runtime.settings,getContext,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t),onChange:()=>{void latestRuntime.refresh().catch(()=>{});}});
         scheduleRuntime=createScheduleRuntime({repository,settings:runtime.settings,dateRuntime:timeRuntime,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t)});
         latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,autoInitialize:false});
-        narrativeRuntime=createNarrativeRuntime({repository,adapter,getSummaryActive:()=>runtime.summaryService.isBusy(),settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
-        benmoController=createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime:{...narrativeRuntime,...createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.summaryService,runner:runtime.summaryController.runner})},repository,adapter,getContext,getControls:()=>controls});
+        narrativeRuntime=createNarrativeRuntime({repository,adapter,getSummaryActive:()=>runtime.summaryService.isBusy()||runtime.cumulativeService?.isBusy(),settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
+        const summaryNarrativeActions={event:createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.summaryService,runner:runtime.summaryController.runner}),cumulative:createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.cumulativeService,runner:runtime.cumulativeRunner})};
+        const narrativeActions=Object.fromEntries(['retry','resume','skip','pause'].map(action=>[action,()=>summaryNarrativeActions[narrativeRuntime.snapshot().run?.summarySource==='cumulative'?'cumulative':'event'][action]()]));
+        benmoController=createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime:{...narrativeRuntime,...narrativeActions},repository,adapter,getContext,getControls:()=>controls});
         benmoSubscription=benmoController.subscribeAvailability(syncBenmoAvailability);
         const displayCoordinator=createFloorDisplayCoordinator({document:doc,runtime:latestRuntime,MutationObserver:Observer,formatter:createWorkshopDisplayFormatter({getContext})});
         latestDisplay=mountLatestSummaryDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator});
@@ -436,6 +446,28 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     benmoView=view;syncAppearance();return !view.failed();
   }
   const openLatestSummary=()=>openBenmo({kind:'summary'});
+  function narrativeSettingsAccess(target){
+    let readView;
+    return {
+      snapshot:()=>narrativeRuntime.snapshot(),
+      subscribe:listener=>narrativeRuntime.subscribe(listener),
+      savePreferences:(kind,patch)=>narrativeRuntime.savePreferences(kind,patch),
+      async readRoot(){
+        readView=await repository.capturePanelData(target);
+        return readView?repository.readPanelRoot(target,readView):repository.read(target);
+      },
+      async load({refresh=false}={}){
+        const snapshot=narrativeRuntime.snapshot();
+        if(!refresh&&sameTarget(snapshot.target,target)){
+          if(snapshot.preferencesWriteBlocked)throw Object.assign(new Error('保存结果尚未确认，请重新读取。'),{code:'COMMIT_UNCONFIRMED'});
+          return snapshot;
+        }
+        let view=readView??latestRuntime.panelReadView?.();
+        if(!repository.matchesPanelData(target,view))view=await repository.capturePanelData(target);
+        return narrativeRuntime.load({target,readView:view});
+      },
+    };
+  }
   async function openSummarySettings(fromMemory=true) {
     if(!allowed('event'))return false;
     if(!runtime?.settings||!panel||settingsOpen)return;unmountAreas();if(app?.memoryType()==='cumulative')app.suspendCumulative();
@@ -444,9 +476,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(!summarySettingsController||!sameTarget(target,summarySettingsTarget)) {
       summarySettingsController?.dispose();summarySettingsTarget=target;
       const current=()=>sameTarget(target,repository.captureTarget());
-      const read=async()=>{const capture=await repository.captureSummary(target);return capture.summary.excludedFloors;};
+      const narrativeSettings=narrativeSettingsAccess(target);
+      const read=async()=>summaryOf(await narrativeSettings.readRoot()).excludedFloors;
       const change=async(floor,remove)=>{const capture=await repository.captureSummary(target),records=structuredClone(capture.summary.excludedFloors);if(remove){const index=records.findIndex(item=>item.floor===Number(floor));if(index>=0)records.splice(index,1);}else{const message=adapter.captureSummarySource(target).messages.find(item=>item.floor===Number(floor));if(!message)throw new Error('楼层不存在');if(!records.some(item=>item.floor===message.floor))records.push({floor:message.floor,identity:message.identity});}await repository.setSummaryExcludedFloors(target,records,{expectedSummaryRevision:capture.summary.revision,isCurrent:current});};
-      summarySettingsController=createSummarySettingsController({settings:runtime.settings,getControls:()=>controls,exclusions:{read,add:floor=>change(floor,false),remove:floor=>change(floor,true)},isCurrent:current,onBack:()=>{if(summarySettingsFromMemory)void returnFromSummary();else void showSummary(runtime.summaryController.inspect().origin);},onClose:close});
+      summarySettingsController=createSummarySettingsController({settings:runtime.settings,getControls:()=>controls,narrativeRuntime:narrativeSettings,exclusions:{read,add:floor=>change(floor,false),remove:floor=>change(floor,true)},isCurrent:current,onBack:()=>{if(summarySettingsFromMemory)void returnFromSummary();else void showSummary(runtime.summaryController.inspect().origin);},onClose:close});
     }
     if(!panel||serial!==ticket||!sameTarget(target,repository.captureTarget()))return;
     summarySettingsFromMemory=fromMemory;summaryView?.dispose();summaryView=null;summarySettingsView?.dispose();
@@ -650,9 +683,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     cumulativeView=mountCumulativeView({container:summaryContent,controller:runtime.cumulativeController,onBack:()=>void returnFromCumulative(),onClose:close,openSettings:()=>void openCumulativeSettings(origin)});
     summaryContent.querySelector('.lt-main')?.focus({preventScroll:true});return true;
   }
-  function cumulativeExclusions(target){
+  function cumulativeExclusions(target,narrativeSettings=null){
     const current=()=>sameTarget(target,repository.captureTarget());
-    const read=async()=>{const capture=await repository.captureCumulative(target);return capture.cumulative.excludedFloors;};
+    const read=async()=>{if(narrativeSettings)return cumulativeOf(await narrativeSettings.readRoot()).excludedFloors;const capture=await repository.captureCumulative(target);return capture.cumulative.excludedFloors;};
     const change=async(floor,remove)=>{const capture=await repository.captureCumulative(target),records=structuredClone(capture.cumulative.excludedFloors);if(remove){const index=records.findIndex(item=>item.floor===floor);if(index>=0)records.splice(index,1);}else{const message=adapter.captureSummarySource(target).messages.find(item=>item.floor===floor);if(!message)throw new Error('楼层不存在');if(!records.some(item=>item.floor===floor))records.push({floor,identity:message.identity});}await repository.setCumulativeExcludedFloors(target,capture,records,{isCurrent:current});};
     return {read,add:floor=>change(floor,false),remove:floor=>change(floor,true)};
   }
@@ -662,7 +695,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
     if(!cumulativeSettingsController||!sameTarget(target,cumulativeSettingsTarget)){
       cumulativeSettingsController?.dispose();cumulativeSettingsTarget=target;
-      cumulativeSettingsController=createCumulativeSettingsController({settings:runtime.settings,exclusions:cumulativeExclusions(target),isCurrent:()=>sameTarget(target,repository.captureTarget()),onBack:()=>{if(cumulativeReturnPage==='root')void returnFromCumulative();else void showCumulative(cumulativeReturnPage);},onClose:close,onOpenCleaning:()=>void openCumulativeCleaning()});
+      const narrativeSettings=narrativeSettingsAccess(target);
+      cumulativeSettingsController=createCumulativeSettingsController({settings:runtime.settings,narrativeRuntime:narrativeSettings,exclusions:cumulativeExclusions(target,narrativeSettings),isCurrent:()=>sameTarget(target,repository.captureTarget()),onBack:()=>{if(cumulativeReturnPage==='root')void returnFromCumulative();else void showCumulative(cumulativeReturnPage);},onClose:close,onOpenCleaning:()=>void openCumulativeCleaning()});
     }
     if(!preserve)cumulativeReturnPage=from;
     unmountCumulative();unmountSummary();unmountRecall();app?.suspendCumulative();

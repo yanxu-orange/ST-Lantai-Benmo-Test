@@ -3,16 +3,17 @@ import {clone, same, integer, text, range, exact, assertKind, mergeRanges, asser
 import {parseNarrativeResponse, validateNarrativeEntries} from './requests.js';
 export function emptyNarrative() {
   return {schema: 1, revision: 0, preferences: {
-    self: {readMemory: true, readOriginal: true, readCard: true, background: '', budget: 30000, depth: 9999, prompt: '', characters: []},
-    outline: {readMemory: true, readOriginal: true, background: '', budget: 30000, depth: 9999, prompt: ''},
+    self: {readMemory: true, readOriginal: false, autoSource: 'event', readCard: true, background: '', budget: 30000, depth: 9999, prompt: '', characters: []},
+    outline: {readMemory: true, readOriginal: false, autoSource: 'event', background: '', budget: 30000, depth: 9999, prompt: ''},
     run: {auto: true, batchSize: 10},
   }, self: [], outline: [], progress: {self: null, outline: null}};
 }
 export function assertNarrativePreferences(value, kind) {
   assertKind(kind);
-  const keys = ['readMemory', 'readOriginal', 'background', 'budget', 'depth', 'prompt', ...(kind === 'self' ? ['readCard', 'characters'] : [])];
-  if (!exact(value, keys) || typeof value.readMemory !== 'boolean' || typeof value.readOriginal !== 'boolean' || !value.readMemory && !value.readOriginal
+  const keys = ['readMemory', 'readOriginal', 'background', 'budget', 'depth', 'prompt', ...(kind === 'self' ? ['readCard', 'characters'] : []), ...(Object.hasOwn(value??{}, 'autoSource') ? ['autoSource'] : [])];
+  if (!exact(value, keys) || typeof value.readMemory !== 'boolean' || typeof value.readOriginal !== 'boolean' || !value.readMemory && !value.readOriginal && value.autoSource !== 'cumulative'
     || typeof value.background !== 'string' || typeof value.prompt !== 'string' || !integer(value.budget, 1)) throw new Error('自述或大纲设置无效，至少开启记忆或原文');
+  if (value.autoSource !== undefined && !['event', 'cumulative', 'none'].includes(value.autoSource)) throw new Error('叙事自动来源无效');
   if (!integer(value.depth) || value.depth > 10000) throw new Error('请填写 0—10000 的整数注入深度');
   if (kind === 'self') {
     if (typeof value.readCard !== 'boolean' || !Array.isArray(value.characters)) throw new Error('角色自述设置无效');
@@ -33,17 +34,25 @@ function assertEntries(entries, ids) {
   }
 }
 export function assertNarrative(value) {
-  if (!exact(value, ['schema', 'revision', 'preferences', 'self', 'outline', 'progress', ...(Object.hasOwn(value??{}, 'pendingRun') ? ['pendingRun'] : [])]) || value.schema !== 1 || !integer(value.revision)
+  if (!exact(value, ['schema', 'revision', 'preferences', 'self', 'outline', 'progress', ...(Object.hasOwn(value??{}, 'pendingRun') ? ['pendingRun'] : []), ...(Object.hasOwn(value??{}, 'highWater') ? ['highWater'] : [])]) || value.schema !== 1 || !integer(value.revision)
     || !exact(value.preferences, ['self', 'outline', ...(Object.hasOwn(value.preferences??{}, 'run') ? ['run'] : [])]) || !exact(value.progress, ['self', 'outline']) || !Array.isArray(value.self)) throw new Error('自述或大纲数据结构无效');
   if (value.preferences.run !== undefined && (!exact(value.preferences.run, ['auto', 'batchSize']) || typeof value.preferences.run.auto !== 'boolean' || !integer(value.preferences.run.batchSize, 1))) throw new Error('叙事分批设置无效');
+  if (value.highWater !== undefined && (!exact(value.highWater, ['self', 'outline']) || Object.values(value.highWater).some(floor => floor !== null && !integer(floor)))) throw new Error('叙事后续起点无效');
   for (const kind of ['self', 'outline']) assertNarrativePreferences(value.preferences[kind], kind);
   if (value.pendingRun !== undefined && value.pendingRun !== null) {
     const pending = value.pendingRun;
-    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status']) || !Array.isArray(pending.ranges) || !pending.ranges.length
+    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status', ...(Object.hasOwn(pending, 'summarySource') ? ['summarySource'] : []), ...(Object.hasOwn(pending, 'sentFloors') ? ['sentFloors'] : []), ...(Object.hasOwn(pending, 'summarySnapshot') ? ['summarySnapshot'] : [])]) || !Array.isArray(pending.ranges) || !pending.ranges.length
       || pending.ranges.some(item => !exact(item, ['startFloor', 'endFloor']) || !integer(item.startFloor) || !integer(item.endFloor, item.startFloor))
       || !integer(pending.index) || pending.index >= pending.ranges.length || !Array.isArray(pending.kinds) || !pending.kinds.length || new Set(pending.kinds).size !== pending.kinds.length || pending.kinds.some(kind => !['self', 'outline'].includes(kind))
       || !Array.isArray(pending.failedKinds) || new Set(pending.failedKinds).size !== pending.failedKinds.length || pending.failedKinds.some(kind => !pending.kinds.includes(kind))
       || typeof pending.restart !== 'boolean' || typeof pending.summary !== 'boolean' || !['paused', 'failed'].includes(pending.status)) throw new Error('叙事批次断点无效');
+    if (pending.summarySource !== undefined && !['event', 'cumulative'].includes(pending.summarySource)) throw new Error('叙事批次来源无效');
+    if (pending.summarySnapshot !== undefined) assertNarrativeSource(pending.summarySnapshot);
+    if (pending.sentFloors !== undefined) {
+      assertRawSummarySource({epoch:0,messages:pending.sentFloors});
+      assertNarrativeSource(pending.summarySnapshot);
+      if (pending.summarySource !== 'cumulative' || pending.sentFloors.some(row => { const original=pending.summarySnapshot.rawMessages.find(item=>item.floor===row.floor); return !original || ['identity','role','system','date','swipeId'].some(key=>(original[key]??null)!==(row[key]??null)); })) throw new Error('古法叙事来源不一致');
+    }
   }
   const ids = new Set(), characters = new Set();
   for (const row of value.self) {
@@ -88,6 +97,7 @@ export function inheritNarrative(value, floor) {
   domain.outline = domain.outline.filter(safe);
   for (const kind of ['self', 'outline']) retainSafeProof(domain, kind, floor);
   if (Object.hasOwn(domain, 'pendingRun')) domain.pendingRun = null;
+  if (domain.highWater) for (const kind of ['self', 'outline']) domain.highWater[kind] = domain.highWater[kind] === null || floor === 0 ? null : Math.min(domain.highWater[kind], floor - 1);
   domain.revision = 0;
   return assertNarrative(domain);
 }
@@ -155,6 +165,10 @@ export function applyNarrativeResponse(value, ticket, response, raw, {events, ma
     }
   }
   domain.progress[kind] = {lastProcessedFloor: ticket.source.requestedRange.end, sourceSnapshot: storedNarrativeSource(ticket.source), taskId: freshId(), updatedAt: now, materialsReport: clone(ticket.usage), memorySnapshot: clone(ticket.memorySnapshot)};
+  domain.highWater = {...(domain.highWater ?? {self: domain.progress.self?.lastProcessedFloor ?? null, outline: domain.progress.outline?.lastProcessedFloor ?? null}), [kind]: Math.max(narrativeHighWater(value, kind), ticket.source.requestedRange.end)};
   domain.revision++;
   return assertNarrative(domain);
 }
+
+// Continuation is a successful-processing cursor, never evidence for retained prose.
+export function narrativeHighWater(domain, kind) { return Math.max(domain.highWater?.[kind] ?? -1, domain.progress[kind]?.lastProcessedFloor ?? -1); }

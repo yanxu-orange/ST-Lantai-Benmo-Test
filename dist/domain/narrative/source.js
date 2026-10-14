@@ -58,7 +58,7 @@ function memoryPayload(row, originalRanges) {
   }
   return {...clone(row), overlapsOriginal: mergeRanges(overlaps)};
 }
-export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endFloor, events = [], card = null, countTokens = null, rules, isCurrent = () => true} = {}) {
+export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endFloor, events = [], card = null, countTokens = null, rules, originalOnly = false, sentFloors: suppliedFloors, isCurrent = () => true} = {}) {
   assertKind(kind);
   const guard = () => {
     let current = false;
@@ -82,9 +82,9 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
   if (domain.progress[kind] && !matchesStoredNarrativeSource(domain.progress[kind].sourceSnapshot, raw)) throw new Error('已有自述或大纲来源已变化，请先更新来源投影');
   const rawMessages = source.messages.filter(row => row.floor <= endFloor).sort((a, b) => a.floor - b.floor);
   if (rawMessages.length !== endFloor + 1 || rawMessages.some((row, index) => row.floor !== index)) throw new Error('截至本批的原文前缀不可用，无法验证来源');
-  const sentFloors = preferences.readOriginal ? cleanSummaryFloors(rawMessages.filter(row => row.floor >= startFloor && row.role !== 'system' && !row.system), {includeUser: true, rules: clone(rules)}) : [];
+  const sentFloors = suppliedFloors !== undefined ? assertRawSummarySource({epoch:source.epoch,messages:suppliedFloors}).messages.filter(row => row.floor >= startFloor && row.floor <= endFloor) : originalOnly || preferences.readOriginal ? cleanSummaryFloors(rawMessages.filter(row => row.floor >= startFloor && row.role !== 'system' && !row.system), {includeUser: true, rules: clone(rules)}) : [];
   const originalRanges = mergeRanges(sentFloors.map(row => ({start: row.floor, end: row.floor})));
-  const allEvents = clone(events), eventsSnapshot = preferences.readMemory ? narrativeMemoryRows(allEvents, endFloor) : [];
+  const allEvents = clone(events), eventsSnapshot = !originalOnly && preferences.readMemory ? narrativeMemoryRows(allEvents, endFloor) : [];
   const requiredMemory = eventsSnapshot.filter(row => row.sources.some(item => item.end >= startFloor));
   const historicalMemory = eventsSnapshot.filter(row => row.sources.every(item => item.end < startFloor)).sort((a, b) => b.sources.at(-1).end - a.sources.at(-1).end || b.sources[0].start - a.sources[0].start || a.id.localeCompare(b.id));
   if (!sentFloors.length && !eventsSnapshot.length) throw new Error('所选范围没有可读取的原文或记忆');
@@ -110,7 +110,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     while (low < high) { const middle = (low + high) >>> 1; if (items[middle].index < index) low = middle + 1; else high = middle; }
     return low;
   };
-  const unavailableMemoryCount = preferences.readMemory ? allEvents.filter(row => !row.supersededBy && (!Array.isArray(row.sources) || !row.sources.length || !row.sources.every(range))).length : 0;
+  const unavailableMemoryCount = !originalOnly && preferences.readMemory ? allEvents.filter(row => !row.supersededBy && (!Array.isArray(row.sources) || !row.sources.length || !row.sources.every(range))).length : 0;
   const select = async useHost => {
     const count = async value => {
       guard();

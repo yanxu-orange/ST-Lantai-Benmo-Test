@@ -172,7 +172,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
       const id=existing();if(id)return id;
       const work=(async()=>{
         const pending=await getPendingNarrative?.();
-        if(!pending?.summary||!sameTarget(target,repository.captureTarget())||!sameTarget(target,pending.target))return null;
+        if(!pending?.summary||(pending.summarySource??'event')!=='event'||!sameTarget(target,repository.captureTarget())||!sameTarget(target,pending.target))return null;
         const selection=await repository.captureSummary(target);
         if(!sameTarget(target,repository.captureTarget()))return null;
         const previous=existing();if(previous)return previous;

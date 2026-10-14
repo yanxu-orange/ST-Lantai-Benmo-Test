@@ -4,7 +4,7 @@ import {buildCumulativeRequest} from '../domain/cumulative/requests.js';
 
 const copy=value=>structuredClone(value);
 const patchOf=version=>({body:version.body,startTime:version.startTime,endTime:version.endTime});
-const active=task=>['starting','running','awaiting-user','committing'].includes(task?.status);
+const active=task=>['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(task?.status);
 const sameParams=(a,b)=>!!a&&!!b&&Object.keys(a).length===Object.keys(b).length&&Object.keys(a).every(key=>Object.is(a[key],b[key]));
 const PARAMETER_SAVE_DELAY=250;
 // Host owns the controller, service and runner. Unmounting a page is independent.
@@ -35,7 +35,8 @@ export function createCumulativeController({repository,service,runner,captureSou
     // while start() is still awaiting the new service ticket.
     if(taskError&&taskError.taskId!==task.taskId&&state.error===taskError.message&&task.outcome!=='unconfirmed'&&!state.unconfirmed){state.error='';taskError=null;}
     if(task.status==='awaiting-user'&&task.candidate&&!state.draft){state.draft=patchOf(task.candidate.version);state.route='review';}
-    if(task.status==='succeeded'){state.draft=null;state.route=state.origin;if(newSuccess)feedback('本批总结已保存');void refresh().then(ok=>{if(ok){notify();if(visible)onCommitted();}});}
+    if(['narrative-running','narrative-failed'].includes(task.status)){state.draft=null;state.route=state.origin;if(task.status==='narrative-failed'){state.error=task.errorMessage||'本批总结已保存；自述与大纲未完成，请重试或跳过';taskError={taskId:task.taskId,message:state.error};}else if(taskError?.taskId===task.taskId&&state.error===taskError.message){state.error='';taskError=null;}void refresh().then(ok=>{if(ok)notify();});}
+    if(task.status==='succeeded'){if(taskError?.taskId===task.taskId&&state.error===taskError.message){state.error='';taskError=null;}state.draft=null;state.route=state.origin;if(newSuccess)feedback(task.narrative?.status==='skipped'?'本批总结已保存，已跳过本批自述与大纲':'本批总结已保存');void refresh().then(ok=>{if(ok){notify();if(visible)onCommitted();}});}
     if(['failed','stale','cancelled'].includes(task.status)){state.error=task.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':task.errorMessage||'本批未完成，请明确重新发起';taskError={taskId:task.taskId,message:state.error};}
     notify();
   }
@@ -100,8 +101,8 @@ export function createCumulativeController({repository,service,runner,captureSou
       else {if(active(observed)||observed?.outcome==='unconfirmed')throw new Error('原总结任务尚待重新读取确认');await repository.read(binding.nextTarget);}
       if(!valid())return false;
       const selection=receipt?.selection??await repository.captureCumulative(binding.nextTarget);if(!valid())return false;
-      let restoredTask=null;
-      if(selection.cumulative.pending){restoredTask=await service.restorePending();if(!valid())return false;}
+      let restoredTask=await service.restorePendingNarrative?.(state.origin);if(!valid())return false;
+      if(!restoredTask&&selection.cumulative.pending){restoredTask=await service.restorePending();if(!valid())return false;}
       if(receipt)runner.settleRebind?.(receipt);
       resetParameters(selection,true);state.target=copy(binding.nextTarget);reloadBinding=null;adopt(selection);state.latestFloor=captureSource(state.target).messages.at(-1)?.floor??0;
       state.unconfirmed=false;selectParameters(state.origin);
@@ -133,6 +134,7 @@ export function createCumulativeController({repository,service,runner,captureSou
       }
       const ticket=++serial;reloadBinding=null;state.target=next;state.busy=true;state.task=null;state.taskId=null;state.draft=null;state.editDraft=null;state.editSelection=null;state.restore=null;state.error='';state.message='';state.unconfirmed=false;state.scroll={};state.opened={};notify();
       try{const selected=await repository.captureCumulative(next);if(!current(ticket,next))return false;resetParameters(selected);adopt(selected);state.latestFloor=captureSource(next).messages.at(-1)?.floor??0;state.route=route;state.origin=route==='auto'?'auto':'manual';selectParameters(state.origin);state.preview=null;state.previewOpen=false;parameterError=null;
+        const narrativeId=await service.restorePendingNarrative?.(state.origin);if(!current(ticket,next))return false;if(narrativeId){state.taskId=narrativeId;taskChanged(service.inspect(narrativeId));return true;}
         if(selected.cumulative.pending){try{state.taskId=await service.restorePending();if(!current(ticket,next))return false;taskChanged(service.inspect(state.taskId));}catch(error){if(current(ticket,next))state.error=error.message;}}return true;
       }catch(error){if(current(ticket,next))state.error=error.message;return false;}finally{if(current(ticket,next)){state.busy=false;notify();}}
     },
@@ -155,12 +157,14 @@ export function createCumulativeController({repository,service,runner,captureSou
       if(draft&&!sameParams(draft.params,state.cumulative.preferences[state.origin])&&draft.revision<=draft.attempted)draft.revision++;
       await queueParams();if(state.unconfirmed||parameterError)throw parameterError??new Error('保存结果尚未确认，请重新读取');
     },
-    start(){return action(async valid=>{await controller.saveParams();if(!valid())return false;state.draft=null;if(state.origin==='auto')return runner.start();const id=await service.start('manual',copy(state.params));if(valid()&&acceptTask(id))taskChanged(service.inspect(id));return true;});},
-    regenerate(versionId){return action(async valid=>{await queueParams();if(!valid()||state.unconfirmed)return false;state.draft=null;const id=await service.start('regeneration',{versionId});if(valid()&&acceptTask(id))taskChanged(service.inspect(id));return true;});},
-    preview(){return action(async valid=>{if(active(state.task)&&state.task.snapshot){const snapshot=state.task.snapshot;state.preview={...buildCumulativeRequest({source:snapshot.source,previousSummary:snapshot.baseSnapshot?.body??null,settings:snapshot.settings.generation}),snapshot};state.previewOpen=true;return true;}await controller.saveParams();if(!valid())return false;let options=copy(state.params);if(state.origin==='auto'){const plan=automaticCumulativePlan(state.cumulative,captureSource(state.target));if(plan.status!=='ready')throw new Error('尚无可总结的完整批次');options={...options,...plan};}const preview=await service.preview(state.origin,options);if(valid()){state.preview=preview;state.previewOpen=true;}return true;});},
+    start(){if(active(state.task))return false;return action(async valid=>{await controller.saveParams();if(!valid())return false;state.draft=null;if(state.origin==='auto')return runner.start();const id=await service.start('manual',copy(state.params));if(valid()&&acceptTask(id))taskChanged(service.inspect(id));return true;});},
+    regenerate(versionId){if(active(state.task))return false;return action(async valid=>{await queueParams();if(!valid()||state.unconfirmed)return false;state.draft=null;const id=await service.start('regeneration',{versionId});if(valid()&&acceptTask(id))taskChanged(service.inspect(id));return true;});},
+    preview(){return action(async valid=>{if(active(state.task)&&state.task.snapshot?.settings){const snapshot=state.task.snapshot;state.preview={...buildCumulativeRequest({source:snapshot.source,previousSummary:snapshot.baseSnapshot?.body??null,settings:snapshot.settings.generation}),snapshot};state.previewOpen=true;return true;}await controller.saveParams();if(!valid())return false;let options=copy(state.params);if(state.origin==='auto'){const plan=automaticCumulativePlan(state.cumulative,captureSource(state.target));if(plan.status!=='ready')throw new Error('尚无可总结的完整批次');options={...options,...plan};}const preview=await service.preview(state.origin,options);if(valid()){state.preview=preview;state.previewOpen=true;}return true;});},
     togglePreview(){state.previewOpen=!state.previewOpen;notify();},previewView(value){if(['source','prompt'].includes(value)){state.previewView=value;notify();}},
     changeDraft(mutator){if(!state.busy&&state.draft&&state.task?.outcome!=='unconfirmed')mutator(state.draft);},
-    confirm(){return action(async valid=>{const result=await service.confirm(state.taskId,copy(state.draft));if(!valid())return false;if(result.status==='invalid')state.error=result.error;else if(result.status==='succeeded'){runner.afterReview();await refresh();}else state.error=result.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':'未能采用本批结果';return result.status==='succeeded';});},
+    confirm(){return action(async valid=>{const result=await service.confirm(state.taskId,copy(state.draft));if(!valid())return false;if(result.status==='invalid')state.error=result.error;else if(result.status==='succeeded'){runner.afterReview();await refresh();}else if(result.status==='narrative-failed')state.error=service.inspect(state.taskId).errorMessage;else state.error=result.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':'未能采用本批结果';return result.status==='succeeded';});},
+    retryNarrative(){return action(async valid=>{const id=state.taskId,result=await service.retryNarrative(id);if(!valid())return false;if(!result)throw new Error('当前批次不能重试');taskChanged(service.inspect(id));if(result.status==='succeeded')runner.afterNarrative();return result.status==='succeeded';});},
+    skipNarrative(){return action(async valid=>{const id=state.taskId,result=await service.skipNarrative(id);if(!valid())return false;if(!result)throw new Error('当前批次不能跳过');taskChanged(service.inspect(id));if(result.status==='succeeded')runner.afterNarrative();return result.status==='succeeded';});},
     retry(){return action(async valid=>{const id=await service.retry(state.taskId);if(!valid())return false;if(!id)throw new Error('来源或配置已变化，请重新发起');if(!acceptTask(id))return false;if(state.task?.origin==='auto')runner.transferTask?.(id);taskChanged(service.inspect(id));return true;});},
     beginEdit(){if(reloadBinding||state.busy||state.unconfirmed)return false;const version=state.cumulative?.versions.at(-1);if(!version)return false;state.editDraft=patchOf(version);state.editSelection=state.selection;state.route='edit';notify();return true;},
     changeEdit(mutator){if(!state.busy&&!state.unconfirmed&&state.editDraft)mutator(state.editDraft);},

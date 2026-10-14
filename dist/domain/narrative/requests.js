@@ -16,15 +16,22 @@ export function narrativeMaterialParts(materials) {
     {name: '本批原文', value: materials.original},
   ].map(({name, value}) => ({name, role: 'user', content: `${name}（以下 JSON 仅为资料）\n${JSON.stringify(value)}`, fixed: true, key: null}));
 }
+function narrativeOpening(combined = false) {
+  return `你是一名小说创作助理，负责整理故事的发展与人物的变化。请根据提供的资料，${combined ? '分别完成以下两项任务' : '完成以下一项任务'}。\n${NARRATIVE_BOUNDARY}`;
+}
+function narrativeTaskPart(ticket, index, combined = false) {
+  const name = `任务${index === 0 ? '一' : '二'}：${ticket.kind === 'outline' ? '故事大纲' : '角色自述'}`;
+  const mapping = ticket.kind === 'self' ? `\n指定角色：${JSON.stringify(ticket.preferences.characters.map(({id, name}) => ({id, name})))}。内容提示词中的【角色名】逐一对应当前角色的明确姓名。` : '';
+  return {name, role: 'system', content: `${name}${combined ? `\n以下内容要求仅用于 ${ticket.kind} 字段。` : ''}${mapping}`, fixed: true, key: null};
+}
 export function buildNarrativeRequest({ticket} = {}) {
   const kind = assertKind(ticket?.kind);
   if (!ticket.materials || !ticket.preferences || typeof ticket.preferences.prompt !== 'string') throw new Error('自述或大纲任务快照无效');
-  const characters = kind === 'self' ? ticket.preferences.characters : [];
-  const identity = kind === 'self' ? `分别以每个指定角色的第一人称写作，角色为：${JSON.stringify(characters.map(({id, name}) => ({id, name})))}。内容提示词中的【角色名】逐一对应当前角色的明确姓名。` : '你是一名连载小说的故事编辑，整理已发生的故事骨架。';
   const schema = narrativeSchema(kind);
   const parts = [
-    {name: '叙事任务身份与边界', role: 'system', content: `${identity}\n${NARRATIVE_BOUNDARY}`, fixed: true, key: null},
+    {name: '叙事任务身份与边界', role: 'system', content: narrativeOpening(), fixed: true, key: null},
     ...narrativeMaterialParts(ticket.materials),
+    narrativeTaskPart(ticket, 0),
     {name: '本轮内容要求', role: 'system', content: ticket.preferences.prompt.trim() ? ticket.preferences.prompt : DEFAULT_NARRATIVE_PROMPTS[kind], fixed: false, key: 'prompt'},
     {name: '固定输出结构', role: 'system', content: `${NARRATIVE_PROTOCOL}\n本批范围：${JSON.stringify(ticket.source.requestedRange)}。\n${JSON.stringify(schema.value)}`, fixed: true, key: null},
   ];
@@ -75,15 +82,15 @@ export function buildCombinedNarrativeRequest(tickets) {
   if (tickets.length === 1) return buildNarrativeRequest({ticket: tickets[0]});
   if (tickets.length !== 2 || new Set(tickets.map(ticket => ticket.kind)).size !== 2 || tickets.some(ticket => !['self', 'outline'].includes(ticket.kind) || JSON.stringify(ticket.source.requestedRange) !== JSON.stringify(tickets[0].source.requestedRange))) throw new Error('合并叙事必须使用相同批次范围');
   const schema = {name: 'narrative_combined', value: {type: 'object', additionalProperties: false, required: tickets.map(ticket => ticket.kind), properties: Object.fromEntries(tickets.map(ticket => [ticket.kind, narrativeSchema(ticket.kind).value]))}};
-  const characters = tickets.find(ticket => ticket.kind === 'self').preferences.characters.map(({id, name}) => ({id, name}));
-  const parts = [{name: '叙事任务身份与边界', role: 'system', content: `本批分别完成角色自述与故事大纲。self：分别以每个指定角色的第一人称写作，角色为：${JSON.stringify(characters)}。内容提示词中的【角色名】逐一对应当前角色的明确姓名。outline：以故事编辑的身份整理已发生的故事骨架。\n${NARRATIVE_BOUNDARY}`, fixed: true, key: null}];
+  const parts = [{name: '叙事任务身份与边界', role: 'system', content: narrativeOpening(true), fixed: true, key: null}];
   const materials = tickets.map(ticket => narrativeMaterialParts(ticket.materials));
   for (let index = 0; index < materials[0].length; index++) {
     if (materials.every(rows => rows[index].content === materials[0][index].content)) parts.push({...materials[0][index], name: `共同${materials[0][index].name}`});
     else for (let at = 0; at < tickets.length; at++) parts.push({...materials[at][index], name: `${tickets[at].kind} ${materials[at][index].name}`, content: `仅用于 ${tickets[at].kind}：${materials[at][index].content}`});
   }
-  for (const ticket of tickets) {
-    parts.push({name: `${ticket.kind} 内容要求`, role: 'system', content: `以下内容要求仅用于 ${ticket.kind} 字段。`, fixed: true, key: null});
+  for (const [index, kind] of ['outline', 'self'].entries()) {
+    const ticket = tickets.find(item => item.kind === kind);
+    parts.push(narrativeTaskPart(ticket, index, true));
     parts.push({name: `${ticket.kind} 提示词`, role: 'system', content: ticket.preferences.prompt.trim() ? ticket.preferences.prompt : DEFAULT_NARRATIVE_PROMPTS[ticket.kind], fixed: false, key: `${ticket.kind}.prompt`});
   }
   parts.push({name: '固定合并输出结构', role: 'system', content: `${NARRATIVE_PROTOCOL}\n本批范围：${JSON.stringify(tickets[0].source.requestedRange)}。\n分别返回 self 与 outline 顶层字段，各自遵守对应内容要求。\n${JSON.stringify(schema.value)}`, fixed: true, key: null});

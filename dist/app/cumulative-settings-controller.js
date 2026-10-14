@@ -3,7 +3,7 @@ import { CUMULATIVE_PROMPT_KEYS, cumulativePromptDefault } from '../shared/setti
 const copy = value => structuredClone(value);
 
 export function createCumulativeSettingsController({
-  settings, exclusions, isCurrent = () => true,
+  settings, exclusions, narrativeRuntime, isCurrent = () => true,
   onBack = () => {}, onClose = () => {}, onOpenCleaning = () => {}
 } = {}) {
   const listeners = new Set();
@@ -13,7 +13,12 @@ export function createCumulativeSettingsController({
     excludedFloors: [], opened: {}, scroll: {}, message: '', error: null,
     savedSequence: 0, injectionDraft: null, floorDraft: ''
   };
-  const inspect = () => copy(state), notify = () => {
+  const narrativeSettings = () => {
+    if (!narrativeRuntime) return {};
+    const snapshot = narrativeRuntime.snapshot();
+    return { narrativeAutoSources: Object.fromEntries(['self', 'outline'].map(kind => [kind, snapshot.narrative.preferences[kind].autoSource ?? 'event'])), narrativeWriteBlocked: !snapshot.target || snapshot.preferencesWriteBlocked === true };
+  };
+  const inspect = () => copy({ ...state, ...narrativeSettings() }), notify = () => {
     if (!disposed) for (const listener of [...listeners]) try {
       listener(inspect());
     } catch { /* view only */ }
@@ -68,6 +73,8 @@ export function createCumulativeSettingsController({
       state.message = '';
       notify();
       const floors = await exclusions.read();
+      if (!current()) throw new Error('聊天已变化，请重新读取。');
+      await narrativeRuntime?.load({ refresh: !useConfirmed });
       if (!current() || !settings.matchesCumulativeGeneration(captured)) throw new Error('聊天或设置已变化，请重新读取。');
       state.excludedFloors = copy(floors);
       return true;
@@ -171,6 +178,7 @@ export function createCumulativeSettingsController({
       notify();
     }
   });
+  const offNarrative = narrativeRuntime?.subscribe?.(() => { if (!disposed) notify(); });
 
   const controller = {
     inspect,
@@ -179,6 +187,17 @@ export function createCumulativeSettingsController({
       return load(false, true);
     },
     read: () => load(true),
+    async toggleNarrative(kind) {
+      if (!['self', 'outline'].includes(kind) || !narrativeRuntime || !editable() || narrativeSettings().narrativeWriteBlocked) return false;
+      const autoSource = narrativeSettings().narrativeAutoSources[kind] === 'cumulative' ? 'none' : 'cumulative';
+      busy = true; state.status = 'saving'; state.error = null; state.message = ''; notify();
+      try {
+        await narrativeRuntime.savePreferences(kind, { autoSource });
+        if (!current()) throw new Error('聊天已变化，请重新读取。');
+        state.status = 'ready'; state.message = '已保存'; state.savedSequence++; return true;
+      } catch (error) { if (!disposed) fail(error); return false; }
+      finally { busy = false; if (!disposed) notify(); }
+    },
     editPrompt(key, value) {
       if (!CUMULATIVE_PROMPT_KEYS.includes(key) || typeof value !== 'string' || !editable()) return false;
       state.promptDrafts[key] = value;
@@ -237,6 +256,7 @@ export function createCumulativeSettingsController({
     dispose() {
       disposed = true;
       off?.();
+      offNarrative?.();
       listeners.clear();
     }
   };

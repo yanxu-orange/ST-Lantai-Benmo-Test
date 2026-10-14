@@ -5,12 +5,12 @@ import { SUMMARY_PROMPT_KEYS, summaryPromptDefault } from '../shared/settings/su
 import { normalizeCleaningRule, BUILTIN_SUMMARY_CLEANING_SHORTCUTS } from '../domain/summary/cleaning.js';
 
 const copy = value => structuredClone(value);
-const message = error => error?.code === 'SETTINGS_COMMIT_UNCONFIRMED'
+const message = error => ['SETTINGS_COMMIT_UNCONFIRMED', 'COMMIT_UNCONFIRMED'].includes(error?.code)
   ? '保存结果尚未确认，请重新读取，不要重复提交。'
   : error?.code === 'SETTINGS_CONFLICT' ? '设置已变化，请重新读取后编辑。' : '设置无法保存，请检查内容或重新读取。';
 
 // One host-owned instance. A view may unmount without discarding this session.
-export function createSummarySettingsController({ settings, exclusions, getControls, isCurrent = () => true,
+export function createSummarySettingsController({ settings, exclusions, getControls, narrativeRuntime, isCurrent = () => true,
   onBack = () => {}, onClose = () => {}, uuid = () => globalThis.crypto.randomUUID() } = {}) {
   if (!settings?.captureEventGeneration || !settings?.saveEventGeneration) throw new TypeError('总结设置接口不可用');
   const listeners = new Set();
@@ -19,12 +19,18 @@ export function createSummarySettingsController({ settings, exclusions, getContr
     libraryDraft: null, libraryOpen: null, librarySelection: [], libraryMulti: false, ruleDraft: null, ruleId: null,
     quickOpen: false, autoSaving: false, opened: {}, scroll: {}, message: '', error: null };
   const trackingAllowed = key => { try { return !getControls || getControls()?.allowed(key) === true; } catch { return false; } };
-  const inspect = () => frozenSettingsCopy({ ...state, trackingAvailability: { trackingItemsEnabled: trackingAllowed('item'), trackingNpcsEnabled: trackingAllowed('npc') } });
+  const narrativeSettings = () => {
+    if (!narrativeRuntime) return {};
+    const snapshot = narrativeRuntime.snapshot();
+    return { narrativeAutoSources: Object.fromEntries(['self', 'outline'].map(kind => [kind, snapshot.narrative.preferences[kind].autoSource ?? 'event'])), narrativeWriteBlocked: !snapshot.target || snapshot.preferencesWriteBlocked === true };
+  };
+  const inspect = () => frozenSettingsCopy({ ...state, ...narrativeSettings(), trackingAvailability: { trackingItemsEnabled: trackingAllowed('item'), trackingNpcsEnabled: trackingAllowed('npc') } });
   const notify = () => { if(!listeners.size)return;const snapshot=inspect();for (const listener of [...listeners]) { try { listener(snapshot); } catch { /* Isolated views. */ } } };
   const unsubscribeControls = getControls?.()?.subscribe?.(() => { if (!disposed) notify(); });
+  const unsubscribeNarrative = narrativeRuntime?.subscribe?.(() => { if (!disposed) notify(); });
   const current = () => { if (disposed) return false; try { return isCurrent() === true && !disposed; } catch { return false; } };
   const editable = () => !disposed && !busy && !!baseline && state.status === 'ready' && current() && (state.autoSaving || validateBaseline());
-  const fail = error => { state.status = error?.code === 'SETTINGS_COMMIT_UNCONFIRMED' ? 'unconfirmed' : 'error'; state.error = error?.code ?? 'INVALID_SETTINGS'; state.message = message(error); };
+  const fail = error => { state.status = ['SETTINGS_COMMIT_UNCONFIRMED', 'COMMIT_UNCONFIRMED'].includes(error?.code) ? 'unconfirmed' : 'error'; state.error = error?.code ?? 'INVALID_SETTINGS'; state.message = message(error); };
   function validateBaseline() {
     if(checking)return false;
     checking=true;
@@ -109,6 +115,8 @@ export function createSummarySettingsController({ settings, exclusions, getContr
       if (!afterAwait()) return false;
       const floors = exclusions?.read ? await exclusions.read() : [];
       if (!afterAwait()) return false;
+      await narrativeRuntime?.load({ refresh: !useConfirmed });
+      if (!afterAwait()) return false;
       if (!Array.isArray(floors)) throw new SettingsError();
       if(captured&&settings.matchesEventGeneration&&!settings.matchesEventGeneration(captured))throw new SettingsError('SETTINGS_CONFLICT');
       captured??=settings.captureEventGeneration();
@@ -162,6 +170,17 @@ export function createSummarySettingsController({ settings, exclusions, getContr
       if (!['trackingItemsEnabled', 'trackingNpcsEnabled'].includes(key)) return Promise.resolve(false);
       if (state.draft?.[key] !== true && !trackingAllowed(key === 'trackingItemsEnabled' ? 'item' : 'npc')) return Promise.resolve(false);
       return lightChange(draft => { draft[key] = !draft[key]; });
+    },
+    async toggleNarrative(kind) {
+      if (!['self', 'outline'].includes(kind) || !narrativeRuntime || !editable() || state.autoSaving || narrativeSettings().narrativeWriteBlocked) return false;
+      const autoSource = narrativeSettings().narrativeAutoSources[kind] === 'event' ? 'none' : 'event';
+      busy = true; state.status = 'saving'; state.error = null; state.message = ''; notify();
+      try {
+        await narrativeRuntime.savePreferences(kind, { autoSource });
+        if (!afterAwait()) return false;
+        state.status = 'ready'; state.message = '已保存。'; return true;
+      } catch (error) { if (!disposed) fail(error); return false; }
+      finally { busy = false; if (!disposed) notify(); }
     },
     editPrompt(key, text) { if (!SUMMARY_PROMPT_KEYS.includes(key) || typeof text !== 'string') return false; return edit(() => { state.promptDrafts[key] = text; }); },
     restorePrompt(key) { return this.editPrompt(key, summaryPromptDefault(key)); },
@@ -247,6 +266,6 @@ export function createSummarySettingsController({ settings, exclusions, getContr
       state.promptDrafts = {}; state.customDrafts = {}; onBack(); return true;
     },
     close() { if (!disposed) { onClose(); return true; } return false; },
-    dispose() { if (disposed) return; disposed = true; discardLightWriter(); unsubscribeSettings?.(); unsubscribeControls?.(); state.status = 'disposed'; state.error = null; state.message = ''; listeners.clear(); },
+    dispose() { if (disposed) return; disposed = true; discardLightWriter(); unsubscribeSettings?.(); unsubscribeControls?.(); unsubscribeNarrative?.(); state.status = 'disposed'; state.error = null; state.message = ''; listeners.clear(); },
   });
 }

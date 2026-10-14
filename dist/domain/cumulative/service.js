@@ -24,8 +24,8 @@ const AI_FAILURE_MESSAGES=Object.freeze({
 // The host supplies PUBLIC tickets only:
 // {generation,cumulativeEpoch,summaryCleaning,cleaningEpoch,aiIdentity,aiEpoch}.
 // aiIdentity is an opaque public selection identity, never a credential or API object.
-export function createCumulativeSummaryService({repository,manager,provider,captureSource,getGenerationSettings,control=null,uuid=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}) {
-  const records=new Map(),listeners=new Set(),reservations=new Set(),reboundReceipts=new WeakSet();let disposed=false;
+export function createCumulativeSummaryService({repository,manager,provider,captureSource,getGenerationSettings,control=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}) {
+  const records=new Map(),listeners=new Set(),reservations=new Set(),restorations=new Map(),reboundReceipts=new WeakSet();let disposed=false;
   const frozen=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(frozen);Object.freeze(value);}return value;};
   function reboundGuard(previous,next,isCurrent){
     if(disposed||typeof isCurrent!=='function'||isCurrent()!==true||!sameTarget(previous,previous)||!sameTarget(next,next)||previous.chatId!==next.chatId||previous.rootId!==next.rootId||previous.epoch===next.epoch||!sameTarget(next,repository.captureTarget()))throw new Error('重载目标或读取来路已变化');
@@ -42,10 +42,23 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
   }
   const current=(snapshot,target)=>targetCurrent(snapshot,target)&&sourceCurrent(snapshot,target);
   function inspect(taskId) {
-    const state=manager.inspect(taskId),record=records.get(taskId);if(!state||!record)return null;
-    return {...state,origin:record.origin,stage:record.stage,outcome:record.outcome,reviewResolution:record.reviewResolution,rebindRequired:record.rebindRequired,receipt:record.receipt?structuredClone(record.receipt):null,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly};
+    const record=records.get(taskId),state=manager.inspect(taskId)??record?.restoredTask;if(!state||!record)return null;
+    const narrative=record.narrativeRetired?null:record.narrative;
+    return {...state,...(state.status==='succeeded'&&narrative?.status==='running'?{status:'narrative-running'}:state.status==='succeeded'&&narrative?.status==='failed'?{status:'narrative-failed'}:{}),narrative:narrative?{...narrative}:null,origin:record.origin,stage:record.stage,outcome:record.outcome,reviewResolution:record.reviewResolution,rebindRequired:record.rebindRequired,receipt:record.receipt?structuredClone(record.receipt):null,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly};
   }
   function notify(taskId){const state=inspect(taskId);if(state)for(const listener of [...listeners])try{listener(state);}catch{/* observation only */}}
+  const busyStatuses=['starting','running','awaiting-user','committing','narrative-running','narrative-failed'];
+  const isBusy=(target=repository.captureTarget())=>reservations.has(target.chatId)||[...records.keys()].some(id=>{const state=inspect(id);return state&&sameTarget(state.target,target)&&(busyStatuses.includes(state.status)||state.outcome==='unconfirmed'||state.rebindRequired);});
+  // The confirmed cumulative version stays saved even if its narrative step fails.
+  // Mark this step inside the commit so manager success cannot release the runner early.
+  async function runNarrative(taskId,work){
+    const record=records.get(taskId);if(record.narrativePromise)return record.narrativePromise;
+    record.narrative={status:'running',error:''};record.stage='narrative';notify(taskId);
+    record.narrativePromise=Promise.resolve().then(work).then(result=>{
+      record.narrative={status:result?.run?.status==='skipped'?'skipped':'succeeded',error:''};record.errorMessage='';record.stage='completed';
+    }).catch(error=>{record.narrative={status:'failed',error:error?.message??'生成未完成'};record.errorMessage=`本批古法总结已保存；自述与大纲未完成：${record.narrative.error}`;}).finally(()=>{record.narrativePromise=null;notify(taskId);});
+    await record.narrativePromise;return inspect(taskId);
+  }
   function evidence(config,params){return publicCumulativeEvidence({...config.generation,injectionPosition:config.generation.injectionPosition??9999,summaryCleaning:config.summaryCleaning,includeUser:params.includeUser,checkBeforeSave:params.checkBeforeSave,hideSource:params.hideSource});}
   async function capture(origin,options={},pending=null) {
     if(!['manual','auto','regeneration'].includes(origin))throw new Error('古法生成来源无效');
@@ -91,9 +104,11 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
         await repository.read(ctx.target);
         const options={isCurrent:ctx.isCurrent,...(record.pendingId?{pendingId:record.pendingId}:{})};
         const receipt=ctx.snapshot.origin==='regeneration'?await repository.replaceCumulative(ctx.target,record.selection,version,options):await repository.appendCumulative(ctx.target,record.selection,version,options);
-        record.receipt=receipt;record.selection=receipt.selection;record.stage='completed';record.reviewResolution='committed';return receipt;
+        record.receipt=receipt;record.selection=receipt.selection;record.stage='completed';record.reviewResolution='committed';if(receipt?.status==='committed'&&afterSummaryCommit)record.narrative={status:'running',error:''};return receipt;
       }catch(error){writeError(record,error);throw error;}finally{record.writeInFlight=false;}
-    });notify(taskId);return {...result,outcome:record.outcome};
+    });
+    if(result.status==='succeeded'&&record.narrative?.status==='running'){const source=state.snapshot.source,{start,end}=source.requestedRange;await runNarrative(taskId,()=>afterSummaryCommit({target:state.target,startFloor:start,endFloor:end,sentFloors:structuredClone(source.sentFloors)}));}
+    notify(taskId);return {...result,...(result.status==='succeeded'?{status:inspect(taskId).status}:{}),outcome:record.outcome};
   }
   const release=manager.subscribe(state=>{
     const record=records.get(state.taskId);if(!record)return;notify(state.taskId);
@@ -104,7 +119,8 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     if(disposed)throw new Error('古法服务已关闭');
     const initialTarget=repository.captureTarget(),key=initialTarget?.chatId;if(!key||reservations.has(key))throw new Error('当前聊天已有古法任务');reservations.add(key);
     try{
-      for(const id of records.keys()){const state=inspect(id);if(state?.target.chatId===key&&(['starting','running','awaiting-user','committing'].includes(state.status)||state.outcome==='unconfirmed'||state.rebindRequired))throw new Error('当前聊天已有古法任务或未确认保存');}
+      for(const id of records.keys()){const state=inspect(id);if(state?.target.chatId===key&&(busyStatuses.includes(state.status)||state.outcome==='unconfirmed'||state.rebindRequired))throw new Error('当前聊天已有古法任务或未确认保存');}
+      if(await getPendingNarrative?.())throw new Error('请先继续、重试或跳过当前自述与大纲批次');
       const snapshot=await capture(origin,options,pending);
       if(control&&!control.matches(operationProof))throw new Error('功能开关已变化，请重新开始');
       if(!sameTarget(initialTarget,snapshot.target))throw new Error('古法聊天目标已变化');
@@ -131,8 +147,26 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
   const service={
     async preview(origin='manual',options={}){const snapshot=await capture(origin,options);return {...buildCumulativeRequest({source:snapshot.source,previousSummary:snapshot.baseSnapshot?.body??null,settings:snapshot.settings.generation}),snapshot};},
     resumeAutoConfirm(){for(const [id,record]of records)if(record.autoConfirmPaused&&control?.allowed()){record.autoConfirmPaused=false;queueMicrotask(()=>void confirm(id));}},
-    start:(origin='manual',options={})=>launch(origin,options),confirm,inspect,settled:taskId=>manager.settled(taskId),
-    completed(taskId){return new Promise(resolve=>{let off;const check=()=>{const state=inspect(taskId),record=records.get(taskId);if(!state||['succeeded','failed','stale','cancelled'].includes(state.status)||state.status==='awaiting-user'&&record.reviewRequired){off?.();resolve(state);}};off=service.subscribe(state=>{if(state.taskId===taskId)check();});check();});},
+    start:(origin='manual',options={})=>launch(origin,options),confirm,inspect,isBusy,settled:taskId=>manager.settled(taskId),
+    completed(taskId){return new Promise(resolve=>{let off;const check=()=>{const state=inspect(taskId),record=records.get(taskId);if(!state||['succeeded','failed','stale','cancelled','narrative-failed'].includes(state.status)||state.status==='awaiting-user'&&record.reviewRequired){off?.();resolve(state);}};off=service.subscribe(state=>{if(state.taskId===taskId)check();});check();});},
+    async restorePendingNarrative(origin='manual'){
+      const target=repository.captureTarget(),key=JSON.stringify([target.chatId,target.rootId,target.epoch]);
+      if(restorations.has(key))return restorations.get(key);
+      const existing=()=>[...records.keys()].find(id=>{const task=inspect(id);return task&&sameTarget(task.target,target)&&['narrative-running','narrative-failed'].includes(task.status);});
+      const id=existing();if(id)return id;
+      const work=(async()=>{
+        const pending=await getPendingNarrative?.();
+        if(!pending?.summary||pending.summarySource!=='cumulative'||!sameTarget(target,repository.captureTarget())||!sameTarget(target,pending.target))return null;
+        const selection=await repository.captureCumulative(target);if(!sameTarget(target,repository.captureTarget()))return null;
+        const previous=existing();if(previous)return previous;
+        const taskId=`cumulative-narrative-restored:${uuid()}`,mode=origin==='auto'?'auto':'manual';
+        records.set(taskId,{origin:mode,stage:'narrative',outcome:null,receipt:null,reviewResolution:'committed',selection,errorMessage:'本批古法总结已保存，请继续自述与大纲或跳过本批',narrative:{status:'failed',error:pending.error??''},restoredTask:{taskId,status:'succeeded',attempt:1,target,snapshot:{target,selection,params:selection.cumulative.preferences[mode],source:{requestedRange:{start:pending.range.startFloor,end:pending.range.endFloor},sentFloors:structuredClone(pending.sentFloors??[])}}}});
+        notify(taskId);return taskId;
+      })();
+      restorations.set(key,work);try{return await work;}finally{if(restorations.get(key)===work)restorations.delete(key);}
+    },
+    async retryNarrative(taskId){const state=inspect(taskId);if(!retrySummaryCommit||state?.status!=='narrative-failed'||!sameTarget(state.target,repository.captureTarget()))return false;return runNarrative(taskId,()=>retrySummaryCommit());},
+    async skipNarrative(taskId){const state=inspect(taskId);if(!skipSummaryCommit||state?.status!=='narrative-failed'||!sameTarget(state.target,repository.captureTarget()))return false;return runNarrative(taskId,async()=>{await skipSummaryCommit();return {run:{status:'skipped'}};});},
     cancel:taskId=>records.has(taskId)&&manager.cancel(taskId),
     async discard(taskId){const record=records.get(taskId),state=inspect(taskId);if(!record||!state||record.outcome==='unconfirmed'||state.status==='committing')return false;const guard=()=>sameTarget(state.target,repository.captureTarget());if(!guard())return false;
       if(record.pendingId){record.discardAttempted=true;record.writeInFlight=true;try{const receipt=await repository.clearCumulativePending(state.target,record.selection,{isCurrent:guard});record.selection=receipt.selection;record.receipt=receipt;}catch(error){writeError(record,error);notify(taskId);throw error;}finally{record.writeInFlight=false;}}
@@ -165,7 +199,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
       const receipt=frozen(structuredClone({status:'readback',previousTarget:previous,nextTarget:next,root,selection,tasks,outcome:primary?.outcome??null,reviewResolution:primary?.reviewResolution??null}));
       // Only confirmed authority ends old tickets. Original target, snapshot and
       // selection remain attached to the old task and can never adopt in next.
-      for(const task of tasks){const record=records.get(task.taskId);record.outcome=task.outcome;record.reviewResolution=task.reviewResolution;record.rebindRequired=false;record.receipt=receipt;manager.cancel(task.taskId);notify(task.taskId);}
+      for(const task of tasks){const record=records.get(task.taskId);record.outcome=task.outcome;record.reviewResolution=task.reviewResolution;record.rebindRequired=false;record.narrativeRetired=true;record.receipt=receipt;manager.cancel(task.taskId);notify(task.taskId);}
       reboundReceipts.add(receipt);return receipt;
     },
     matchesReboundReadback(receipt){try{return !disposed&&reboundReceipts.has(receipt)&&sameTarget(receipt.nextTarget,repository.captureTarget())&&repository.matchesCumulative(receipt.nextTarget,receipt.selection);}catch{return false;}},
