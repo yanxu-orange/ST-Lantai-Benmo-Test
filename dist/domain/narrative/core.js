@@ -53,7 +53,7 @@ export function narrativeMemoryRows(events, endFloor) {
 
 export function matchesNarrativeMemory(ticket, events) {
   try {
-    if (!ticket.preferences.readMemory) return true;
+    if (!ticket.preferences.readMemory && !ticket.memorySnapshot?.length) return true;
     const selected = ticket.memorySnapshot, ids = new Set(selected.map(row => row.id));
     return same(selected, narrativeMemoryRows(events, ticket.source.requestedRange.end).filter(row => ids.has(row.id)));
   } catch { return false; }

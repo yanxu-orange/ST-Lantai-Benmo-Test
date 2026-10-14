@@ -16,6 +16,27 @@ export function narrativeMaterialParts(materials) {
     {name: '剧情原文', value: materials.original},
   ].map(({name, value}) => ({name, role: 'user', content: `${name}（以下 JSON 仅为资料）\n${JSON.stringify(value)}`, fixed: true, key: null}));
 }
+// Shared story evidence is read once; supplements and prior outputs retain
+// their task ownership even when their text happens to be identical.
+export function narrativeMaterialGroups(tickets) {
+  const groups = [];
+  if (!tickets.length) return groups;
+  const add = (field, name, value, kind = null) => groups.push({field, name, value, kind});
+  const cards = new Map();
+  for (const ticket of tickets) {
+    const card = ticket.materials?.background?.initialCharacter;
+    if (card) cards.set(JSON.stringify(card), card);
+  }
+  for (const card of cards.values()) add('card', '角色设定', card);
+  for (const ticket of tickets) add('supplement', '补充背景', ticket.materials?.background?.supplement ?? '', ticket.kind);
+  for (const ticket of tickets) add('previous', ticket.kind === 'self' ? '已有自述' : '已有大纲', ticket.materials?.previous ?? [], ticket.kind);
+  for (const [field, name] of [['memory', '记忆资料'], ['original', '剧情原文']]) {
+    const values = tickets.map(ticket => ticket.materials?.[field] ?? []);
+    if (values.every(value => JSON.stringify(value) === JSON.stringify(values[0]))) add(field, name, values[0]);
+    else tickets.forEach((ticket, index) => add(field, name, values[index], ticket.kind));
+  }
+  return groups;
+}
 function narrativeOpening(combined = false) {
   return `${combined ? '你是一名小说创作助理，负责整理故事的发展与人物的变化。请根据提供的资料，分别完成以下两项任务。' : '请根据提供的资料，完成以下一项任务。'}\n${NARRATIVE_BOUNDARY}`;
 }
@@ -76,17 +97,16 @@ export function validateNarrativeEntries(previous, next) {
   return clone(next);
 }
 
-// Each enabled section keeps its own approved content prompt and materials.
+// Each task keeps its approved prompt and prior output; common evidence is sent once.
 export function buildCombinedNarrativeRequest(tickets) {
   if (!Array.isArray(tickets) || !tickets.length) throw new Error('没有启用的叙事功能');
   if (tickets.length === 1) return buildNarrativeRequest({ticket: tickets[0]});
   if (tickets.length !== 2 || new Set(tickets.map(ticket => ticket.kind)).size !== 2 || tickets.some(ticket => !['self', 'outline'].includes(ticket.kind) || JSON.stringify(ticket.source.requestedRange) !== JSON.stringify(tickets[0].source.requestedRange))) throw new Error('合并叙事必须使用相同批次范围');
   const schema = {name: 'narrative_combined', value: {type: 'object', additionalProperties: false, required: tickets.map(ticket => ticket.kind), properties: Object.fromEntries(tickets.map(ticket => [ticket.kind, narrativeSchema(ticket.kind).value]))}};
   const parts = [{name: '叙事任务身份与边界', role: 'system', content: narrativeOpening(true), fixed: true, key: null}];
-  const materials = tickets.map(ticket => narrativeMaterialParts(ticket.materials));
-  for (let index = 0; index < materials[0].length; index++) {
-    if (materials.every(rows => rows[index].content === materials[0][index].content)) parts.push({...materials[0][index], name: `共同${materials[0][index].name}`});
-    else for (let at = 0; at < tickets.length; at++) parts.push({...materials[at][index], name: `${tickets[at].kind} ${materials[at][index].name}`, content: `仅用于 ${tickets[at].kind}：${materials[at][index].content}`});
+  for (const group of narrativeMaterialGroups(tickets)) {
+    const prefix = group.kind ? `仅用于 ${group.kind}：` : '';
+    parts.push({name: `${group.kind ?? '共同'}${group.kind ? ' ' : ''}${group.name}`, role: 'user', content: `${prefix}${group.name}（以下 JSON 仅为资料）\n${JSON.stringify(group.value)}`, fixed: true, key: null});
   }
   for (const [index, kind] of ['outline', 'self'].entries()) {
     const ticket = tickets.find(item => item.kind === kind);

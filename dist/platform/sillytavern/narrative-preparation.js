@@ -1,5 +1,5 @@
 import {reconcileNarrativeSource,narrativeHighWater} from '../../domain/narrative/data.js';
-import {prepareNarrativeUpdate,prepareCombinedNarrativeRequest,projectNarrativeMemory,estimateNarrativeTokens} from '../../domain/narrative/source.js';
+import {prepareNarrativeUpdate,prepareCombinedNarrativeRequest,projectNarrativeMemory,estimateNarrativeTokens,narrativeCardFields} from '../../domain/narrative/source.js';
 import {buildCombinedNarrativeRequest} from '../../domain/narrative/requests.js';
 
 // Effective pre-request state, also used when adopting a reviewed result.
@@ -19,7 +19,7 @@ export function projectNarrativeBatchBase(domain,raw,{kinds,restart=false,index=
 
 // Read-only preparation shared by the actual sender and the transient preview.
 // Never retain a provider, repository, or mutable host object in the result.
-export async function prepareNarrativeBatch({domain,root,raw,range,kinds,restart=false,index=0,summary=false,summarySource,jointBudget,sentFloors,regenerateLatest=false,card=null,rules=[],countTokens=null,isCurrent=()=>true}={}) {
+export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materialKinds=kinds,restart=false,index=0,summary=false,summarySource,jointBudget,sentFloors,regenerateLatest=false,card=null,rules=[],countTokens=null,isCurrent=()=>true}={}) {
   const guard=()=>{
     let current=false;try{current=typeof isCurrent==='function'&&isCurrent()===true;}catch{}
     if(!current)throw Object.assign(new Error('自述或大纲任务已取消或来源已变化'),{code:'NARRATIVE_CANCELLED'});
@@ -27,8 +27,8 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,restart
   guard();
   if(!Array.isArray(kinds)||!kinds.length||new Set(kinds).size!==kinds.length||kinds.some(kind=>!['self','outline'].includes(kind)))throw new Error('请选择有效的叙事类别');
   // Capture all data before the first tokenizer await, including retry inputs.
-  const captured=structuredClone({domain,root,raw,range,kinds,restart,index,summary,summarySource,jointBudget,sentFloors,regenerateLatest,card,rules});
-  ({domain,root,raw,range,kinds,card,rules,sentFloors}=captured);
+  const captured=structuredClone({domain,root,raw,range,kinds,materialKinds,restart,index,summary,summarySource,jointBudget,sentFloors,regenerateLatest,card,rules});
+  ({domain,root,raw,range,kinds,materialKinds,card,rules,sentFloors}=captured);
   // Exact-text memoization is local to this preparation only. A host tokenizer
   // need not be additive; every distinct budget decision is still counted.
   const counts=new Map(),hostCount=countTokens;
@@ -40,10 +40,17 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,restart
   }:null;
   const projected=projectNarrativeBatchBase(domain,raw,{kinds,restart,index,regenerateLatest});
   const events=projectNarrativeMemory(root,raw),tasks=[];
+  const joint=materialKinds.length>1;
+  const materialSelection=joint?{
+    card:projected.preferences.self.readCard?narrativeCardFields(card):null,
+    readOriginal:materialKinds.some(kind=>(summarySource??projected.preferences[kind].autoSource)==='cumulative'||projected.preferences[kind].readOriginal),
+    readMemory:materialKinds.some(kind=>(summarySource??projected.preferences[kind].autoSource)!=='cumulative'&&projected.preferences[kind].readMemory),
+  }:null;
+  const sharedRange=summary&&joint?{...range,startFloor:Math.max(range.startFloor,Math.min(...kinds.map(kind=>narrativeHighWater(domain,kind)+1)))}:null;
   for(const kind of kinds){
     const originalOnly=(summarySource??projected.preferences[kind].autoSource)==='cumulative';
-    const taskRange=summary?{...range,startFloor:Math.max(range.startFloor,narrativeHighWater(domain,kind)+1)}:range;
-    tasks.push(await prepareNarrativeUpdate(projected,raw,{kind,...taskRange,events,card,originalOnly,...(jointBudget!==undefined?{jointBudget}:{}),...(originalOnly&&sentFloors?{sentFloors}:{}),rules,countTokens:count,deferAccounting:jointBudget!==undefined,isCurrent:()=>{guard();return true;}}));
+    const taskRange=sharedRange??(summary?{...range,startFloor:Math.max(range.startFloor,narrativeHighWater(domain,kind)+1)}:range);
+    tasks.push(await prepareNarrativeUpdate(projected,raw,{kind,...taskRange,events,card,originalOnly,materialSelection,sharedMaterials:joint?tasks[0]:null,...(jointBudget!==undefined?{jointBudget}:{}),...(originalOnly&&sentFloors?{sentFloors}:{}),rules,countTokens:count,deferAccounting:jointBudget!==undefined,isCurrent:()=>{guard();return true;}}));
   }
   guard();
   if(jointBudget!==undefined){

@@ -16,6 +16,7 @@ const assertKind=kind=>{if(!kinds.includes(kind))throw new Error('本末类别�
 const content=(domain,kind)=>kind==='self'?domain.self:domain.outline;
 const stable=value=>value&&typeof value==='object'?Array.isArray(value)?value.map(stable):Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):value;
 async function digest(value){const bytes=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(stable(value))));return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');}
+const materialPreferences=(domain,selected)=>selected.map(kind=>{const p=domain.preferences[kind];return {kind,readMemory:p.readMemory,readOriginal:p.readOriginal,autoSource:p.autoSource??'event',...(kind==='self'?{readCard:p.readCard}:{})};});
 const durableGeneration=value=>Object.fromEntries(Object.entries(value).filter(([key])=>!['epoch','generationEpoch'].includes(key)));
 
 // A host generateRaw/tokenizer promise can ignore AbortSignal indefinitely.
@@ -217,13 +218,21 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     if(!range)throw new Error('尚无可预览的完整楼层范围');
     const selected=plan.failedKinds?.length?[...plan.failedKinds]:[...plan.kinds],proofs=selected.map(kind=>proof(kind,t));
     const config=clone(generation());
-    const usesCard=selected.includes('self')&&captured.narrative.preferences.self.readCard,card=usesCard?cardSnapshot():null;
-    const previewMemory=selected.some(kind=>captured.narrative.preferences[kind].readMemory&&(plan.summarySource??captured.narrative.preferences[kind].autoSource)!=='cumulative')?narrativeMemoryRows(projectNarrativeMemory(root,raw),range.endFloor):null;
+    const materialKinds=plan.kinds;
+    const usesCard=materialKinds.includes('self')&&captured.narrative.preferences.self.readCard,card=usesCard?cardSnapshot():null;
+    const previewMemory=materialKinds.some(kind=>captured.narrative.preferences[kind].readMemory&&(plan.summarySource??captured.narrative.preferences[kind].autoSource)!=='cumulative')?narrativeMemoryRows(projectNarrativeMemory(root,raw),range.endFloor):null;
     let prepared;
     const valid=()=>{
-      try{return !unconfirmed&&ticket===serial&&current(t)&&proofs.every(matches)&&equal(config,generation())&&(!usesCard||equal(card,cardSnapshot()))&&(!repository.matchesNarrative||repository.matchesNarrative(t,captured))&&(previewMemory===null||typeof adapter.peekConfirmed!=='function'||equal(previewMemory,narrativeMemoryRows(projectNarrativeMemory(adapter.peekConfirmed(t),source(t)),range.endFloor)))&&(!prepared||prepared.tasks.every(task=>matchesNarrativeSource(task.source,source(t))&&(typeof adapter.peekConfirmed!=='function'||matchesNarrativeMemory(task,projectNarrativeMemory(adapter.peekConfirmed(t),source(t))))));}catch{return false;}
+      try{
+        if(unconfirmed||ticket!==serial||!proofs.every(matches)||!equal(config,generation())||usesCard&&!equal(card,cardSnapshot())||repository.matchesNarrative&&!repository.matchesNarrative(t,captured))return false;
+        const currentRaw=source(t),events=typeof adapter.peekConfirmed==='function'?projectNarrativeMemory(adapter.peekConfirmed(t),currentRaw):null;
+        return (previewMemory===null||events===null||equal(previewMemory,narrativeMemoryRows(events,range.endFloor)))&&(!prepared||prepared.tasks.every(task=>matchesNarrativeSource(task.source,currentRaw)&&(events===null||matchesNarrativeMemory(task,events))));
+      }catch{return false;}
     };
-    prepared=await prepareNarrativeBatch({domain:captured.narrative,root,raw,range,kinds:selected,restart:plan.restart,index:plan.index??0,summary:plan.summary,summarySource:plan.summarySource,jointBudget:options.jointBudget??plan.jointBudget,sentFloors:plan.sentFloors,regenerateLatest:plan.regenerateLatest,card,rules:config.summaryCleaning?.rules??[],countTokens:typeof getContext().getTokenCountAsync==='function'?text=>getContext().getTokenCountAsync(text):null,isCurrent:valid});
+    // Preparation only reads its frozen capture. Inner loops check lifecycle
+    // authority; exact data/config/card checks run before publishing and reuse,
+    // not once per memory or tokenizer candidate (which would rescan the root).
+    prepared=await prepareNarrativeBatch({domain:captured.narrative,root,raw,range,kinds:selected,materialKinds,restart:plan.restart,index:plan.index??0,summary:plan.summary,summarySource:plan.summarySource,jointBudget:options.jointBudget??plan.jointBudget,sentFloors:plan.sentFloors,regenerateLatest:plan.regenerateLatest,card,rules:config.summaryCleaning?.rules??[],countTokens:typeof getContext().getTokenCountAsync==='function'?text=>getContext().getTokenCountAsync(text):null,isCurrent:()=>!unconfirmed&&ticket===serial&&proofs.every(matches)});
     if(!valid())throw new Error('材料、设置或聊天已变化，请重新预览');
     currentRequestPreview={range:clone(range),kinds:selected,request:clone(prepared.request),tasks:clone(prepared.tasks),usage:clone(prepared.usage)};previewGuard=valid;
     notify();return clone(currentRequestPreview);
@@ -249,14 +258,22 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     if(!proofs.length){active.index++;await persistCheckpoint(active);return;}
     if(active.summarySnapshot&&!matchesStoredNarrativeSource(active.summarySnapshot,raw))throw new Error('已保存总结的原文来源已变化，请跳过本批');
     const durable=active.reviewBeforeCommit&&!active.summary,bind=durable?digest:async()=>null;
-    const config=clone(generation()),usesCard=proofs.some(row=>row.kind==='self')&&captured.narrative.preferences.self.readCard,card=usesCard?cardSnapshot():null,tasks=[];
+    const config=clone(generation()),usesCard=active.kinds.includes('self')&&captured.narrative.preferences.self.readCard,card=usesCard?cardSnapshot():null,tasks=[];
     let signal;
-    const valid=()=>{try{return !unconfirmed&&!signal?.aborted&&proofs.every(matches)&&equal(generation(),config)&&(!usesCard||equal(cardSnapshot(),card))&&tasks.every(task=>matchesNarrativeSource(task.source,source(t))&&(typeof adapter.peekConfirmed!=='function'||matchesNarrativeMemory(task,projectNarrativeMemory(adapter.peekConfirmed(t),source(t)))));}catch{return false;}};
+    const materialSettings=materialPreferences(captured.narrative,active.kinds),materialEpochs=active.kinds.map(kind=>[kind,epochs[kind]]);
+    const preparationCurrent=()=>!unconfirmed&&!signal?.aborted&&proofs.every(matches)&&materialEpochs.every(([kind,epoch])=>epochs[kind]===epoch);
+    const valid=()=>{try{
+      if(!preparationCurrent()||!equal(generation(),config)||usesCard&&!equal(cardSnapshot(),card))return false;
+      const currentRaw=source(t),currentRoot=typeof adapter.peekConfirmed==='function'?adapter.peekConfirmed(t):null;
+      if(currentRoot?.narrative&&!equal(materialSettings,materialPreferences(currentRoot.narrative,active.kinds)))return false;
+      const events=currentRoot?projectNarrativeMemory(currentRoot,currentRaw):null;
+      return tasks.every(task=>matchesNarrativeSource(task.source,currentRaw)&&(events===null||matchesNarrativeMemory(task,events)));
+    }catch{return false;}};
     active.failedKinds=proofs.map(row=>row.kind);active.stage='preparing';publishRun();
     for(const {kind} of proofs)categoryStatus(kind,{status:'running',error:'',addedCount:null,changedCount:null});
     const owner=launchTask(active,proofs,async ctx=>{
       signal=ctx.signal;
-      const prepared=await abortable(()=>prepareNarrativeBatch({domain:captured.narrative,root,raw,range,kinds:proofs.map(row=>row.kind),restart:active.restart,index:active.index,summary:active.summary,summarySource:active.summarySource,jointBudget:active.jointBudget,sentFloors:active.sentFloors,regenerateLatest:active.regenerateLatest,card,rules:config.summaryCleaning?.rules??[],countTokens:typeof getContext().getTokenCountAsync==='function'?text=>getContext().getTokenCountAsync(text):null,isCurrent:()=>!unconfirmed&&!signal.aborted&&proofs.every(matches)}),signal);
+      const prepared=await abortable(()=>prepareNarrativeBatch({domain:captured.narrative,root,raw,range,kinds:proofs.map(row=>row.kind),materialKinds:active.kinds,restart:active.restart,index:active.index,summary:active.summary,summarySource:active.summarySource,jointBudget:active.jointBudget,sentFloors:active.sentFloors,regenerateLatest:active.regenerateLatest,card,rules:config.summaryCleaning?.rules??[],countTokens:typeof getContext().getTokenCountAsync==='function'?text=>getContext().getTokenCountAsync(text):null,isCurrent:preparationCurrent}),signal);
       tasks.push(...prepared.tasks);
       if(!valid())throw new Error('材料、设置或聊天已变化，生成已停止');
       active.usage=clone(prepared.usage);const request=prepared.request;
@@ -275,7 +292,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
           if(!equal(latest.narrative.preferences[kind],captured.narrative.preferences[kind])||!equal(latest.narrative[kind],captured.narrative[kind])||!equal(latest.narrative.progress[kind],captured.narrative.progress[kind]))throw new Error('本末内容已变化，请重试');
           const applied=applyNarrativeResponse(prepared.projected,task,responses[kind],source(t),{events:projectNarrativeMemory(latestRoot,source(t))});
           results[kind]=applied[kind];progress[kind]=applied.progress[kind];
-          categories[kind]={preferences:await bind(latest.narrative.preferences[kind]),entries:await bind(latest.narrative[kind]),progress:await bind(latest.narrative.progress[kind]),latestGeneration:await bind(latest.narrative.latestGeneration?.[kind]??null),memory:await bind(task.memorySnapshot),memoryIds:task.memorySnapshot.map(row=>row.id),readMemory:task.preferences.readMemory};
+          categories[kind]={preferences:await bind(latest.narrative.preferences[kind]),entries:await bind(latest.narrative[kind]),progress:await bind(latest.narrative.progress[kind]),latestGeneration:await bind(latest.narrative.latestGeneration?.[kind]??null),memory:await bind(task.memorySnapshot),memoryIds:task.memorySnapshot.map(row=>row.id),readMemory:task.memorySnapshot.length>0};
         }catch(error){errors.push(error.message);categoryStatus(kind,{status:'failed',error:error.message});}
       }
       if(durable&&errors.length)throw new Error(errors[0]);

@@ -58,7 +58,7 @@ function memoryPayload(row, originalRanges) {
   }
   return {...clone(row), overlapsOriginal: mergeRanges(overlaps)};
 }
-export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endFloor, events = [], card = null, countTokens = null, rules, originalOnly = false, sentFloors: suppliedFloors, jointBudget, deferAccounting = false, isCurrent = () => true} = {}) {
+export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endFloor, events = [], card = null, countTokens = null, rules, originalOnly = false, sentFloors: suppliedFloors, jointBudget, deferAccounting = false, materialSelection = null, sharedMaterials = null, isCurrent = () => true} = {}) {
   assertKind(kind);
   if (jointBudget !== undefined && !integer(jointBudget, 1)) throw new Error('联合材料预算无效');
   const deferredBudget = jointBudget !== undefined;
@@ -84,16 +84,25 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
   if (domain.progress[kind] && !matchesStoredNarrativeSource(domain.progress[kind].sourceSnapshot, raw)) throw new Error('已有自述或大纲来源已变化，请先更新来源投影');
   const rawMessages = source.messages.filter(row => row.floor <= endFloor).sort((a, b) => a.floor - b.floor);
   if (rawMessages.length !== endFloor + 1 || rawMessages.some((row, index) => row.floor !== index)) throw new Error('截至本批的原文前缀不可用，无法验证来源');
-  const sentFloors = suppliedFloors !== undefined ? assertRawSummarySource({epoch:source.epoch,messages:suppliedFloors}).messages.filter(row => row.floor >= startFloor && row.floor <= endFloor) : originalOnly || preferences.readOriginal ? cleanSummaryFloors(rawMessages.filter(row => row.floor >= startFloor && row.role !== 'system' && !row.system), {includeUser: true, rules: clone(rules)}) : [];
-  const originalRanges = mergeRanges(sentFloors.map(row => ({start: row.floor, end: row.floor})));
-  const allEvents = clone(events), eventsSnapshot = !originalOnly && preferences.readMemory ? narrativeMemoryRows(allEvents, endFloor) : [];
+  const readOriginal = materialSelection?.readOriginal ?? (originalOnly || preferences.readOriginal);
+  const readMemory = materialSelection?.readMemory ?? (!originalOnly && preferences.readMemory);
+  const sentFloors = sharedMaterials ? [] : suppliedFloors !== undefined ? assertRawSummarySource({epoch:source.epoch,messages:suppliedFloors}).messages.filter(row => row.floor >= startFloor && row.floor <= endFloor) : readOriginal ? cleanSummaryFloors(rawMessages.filter(row => row.floor >= startFloor && row.role !== 'system' && !row.system), {includeUser: true, rules: clone(rules)}) : [];
+  const originalRanges = sharedMaterials?.usage.originalRanges ?? mergeRanges(sentFloors.map(row => ({start: row.floor, end: row.floor})));
+  const allEvents = sharedMaterials ? [] : clone(events), eventsSnapshot = sharedMaterials?.eventsSnapshot ?? (readMemory ? narrativeMemoryRows(allEvents, endFloor) : []);
   const requiredMemory = eventsSnapshot.filter(row => row.sources.some(item => item.end >= startFloor));
   const historicalMemory = eventsSnapshot.filter(row => row.sources.every(item => item.end < startFloor)).sort((a, b) => b.sources.at(-1).end - a.sources.at(-1).end || b.sources[0].start - a.sources[0].start || a.id.localeCompare(b.id));
-  if (!sentFloors.length && !eventsSnapshot.length) throw new Error('所选范围没有可读取的原文或记忆');
-  const background = {initialCharacter: kind === 'self' && preferences.readCard ? narrativeCardFields(clone(card)) : null, supplement: preferences.background};
+  if (!sharedMaterials && !sentFloors.length && !eventsSnapshot.length) throw new Error('所选范围没有可读取的原文或记忆');
+  const background = {initialCharacter: materialSelection ? materialSelection.card : kind === 'self' && preferences.readCard ? narrativeCardFields(clone(card)) : null, supplement: preferences.background};
   const previousPayload = kind === 'outline' ? previous.map(row => row.text) : preferences.characters.map(character => ({id: character.id, name: character.name, entries: previous.find(row => row.id === character.id)?.entries.map(row => row.text) ?? []}));
   const base = {background, previous: previousPayload, memory: [], original: sentFloors.map(row => ({floor: row.floor, speaker: row.role === 'user' ? '用户' : 'AI', time: row.date, text: row.text}))};
   const ticket = {kind, revision: domain.revision, preferences, previous, progress: clone(domain.progress[kind]), source: {epoch: source.epoch, requestedRange, rawMessages, fingerprint: sourceFingerprint(rawMessages)}, eventsSnapshot};
+  if (sharedMaterials) {
+    // The joint batch selected these sources once. Keep each task's settings,
+    // background and previous prose, but use the same actual story evidence.
+    const materials = {...base, memory: sharedMaterials.materials.memory, original: sharedMaterials.materials.original};
+    return freeze({...ticket, materials, memorySnapshot: sharedMaterials.memorySnapshot,
+      usage: {...sharedMaterials.usage, tokens: estimateNarrativeTokens(materialsText(materials))}});
+  }
   // Serialize fixed data and each memory exactly once. Older candidates change
   // neither the background nor existing prose nor original-message payloads.
   const parts = narrativeMaterialParts(base).map(row => row.content);
@@ -112,7 +121,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     while (low < high) { const middle = (low + high) >>> 1; if (items[middle].index < index) low = middle + 1; else high = middle; }
     return low;
   };
-  const unavailableMemoryCount = !originalOnly && preferences.readMemory ? allEvents.filter(row => !row.supersededBy && (!Array.isArray(row.sources) || !row.sources.length || !row.sources.every(range))).length : 0;
+  const unavailableMemoryCount = readMemory ? allEvents.filter(row => !row.supersededBy && (!Array.isArray(row.sources) || !row.sources.length || !row.sources.every(range))).length : 0;
   const select = async useHost => {
     const count = async value => {
       guard();

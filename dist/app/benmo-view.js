@@ -1,3 +1,4 @@
+import {narrativeMaterialGroups} from '../domain/narrative/requests.js';
 import {summaryPreviewSource,summaryPreviewPrompt,summaryPreviewStage,summaryPreviewTabs,summaryPreviewPanel} from './shared-ui/summary-preview.js';
 import {changeGenerationDraft,createGenerationPreview} from './generation-preview.js';
 import {replaceSurfaceMarkup} from './stable-surface.js';
@@ -310,20 +311,33 @@ export async function mountBenmoView({container: app, controller, availability =
     const requestPreview=previewState.preview;if (!requestPreview) return '';
     const tasks=requestPreview.tasks??[], kinds=requestPreview.kinds??activeNarrativeKinds();
     const jointBudget=kinds.length>1||tasks.some(task=>task.usage?.joint);
-    const tabs=summaryPreviewTabs([['memory','记忆总结'],['original','历史正文'],['materials',kinds.includes('self')?'角色信息':'现有大纲'],['prompt','提示词']],previewState.previewView,id=>`data-action="narrative-preview-tab" data-id="${id}"`);
-    const materialRows=task=>{
-      const materials=task.materials??{};
-      if(previewState.previewView==='memory')return (materials.memory??[]).map((row,index)=>summaryPreviewSource(row.title??`记忆 ${index+1}`,row.body??row.text??'')).join('')||'<p class="lt-meta">本项未发送记忆总结</p>';
-      if(previewState.previewView==='original')return (materials.original??[]).map(row=>summaryPreviewSource(`第 ${row.floor} 楼 · ${row.speaker??''}`,row.text)).join('')||'<p class="lt-meta">本项未发送历史正文</p>';
-      const background=materials.background??{},card=background.initialCharacter;
-      const fields=card?[['description','角色描述'],['personality','性格'],['scenario','初始情境']].filter(([key])=>card[key]).map(([key,label])=>summaryPreviewSource(`${card.name?`${card.name} · `:''}${label}`,card[key])).join(''):'';
-      const supplement=background.supplement?summaryPreviewSource('补充背景',background.supplement):'';
-      const previous=task.kind==='self'?(materials.previous??[]).map(row=>summaryPreviewSource(`${row.name} · 历史自述`,(row.entries??[]).join('\n\n'))).join(''):summaryPreviewSource('现有大纲',(materials.previous??[]).join('\n\n'));
-      return fields+supplement+previous;
+    const tabs=summaryPreviewTabs([['memory','记忆'],['original','上下文'],['materials','角色'],['prompt','提示词']],previewState.previewView,id=>`data-action="narrative-preview-tab" data-id="${id}"`);
+    const groups=narrativeMaterialGroups(tasks);
+    const cardRows=card=>card?[['description','角色描述'],['personality','性格'],['scenario','初始情境']].filter(([key])=>card[key]).map(([key,label])=>[`${card.name?`${card.name} · `:''}${label}`,card[key],true]):[];
+    const promptReading=part=>{
+      if(part.name==='共同角色设定')return groups.filter(group=>group.field==='card').flatMap(group=>cardRows(group.value));
+      if(part.name==='角色设定与补充背景'){
+        const background=tasks[0]?.materials?.background;
+        const rows=[...cardRows(background?.initialCharacter),...(background?.supplement?[['补充背景',background.supplement]]:[])];
+        return rows.length?rows:null;
+      }
+      return null;
     };
-    // Prompt disclosure is exact outgoing text. Reading tabs use the prepared,
-    // pruned material fields rather than rendering their JSON serialization.
-    const body=previewState.previewView==='prompt'?(requestPreview.request?.previewParts??requestPreview.request?.messages??[]).map((part,index)=>summaryPreviewPrompt({...part,name:part.name??`消息 ${index+1}`})).join(''):tasks.map(task=>kinds.length>1?summaryPreviewStage(TABS[task.kind],materialRows(task)):materialRows(task)).join('');
+    const materialRows=group=>{
+      const data=group.value;
+      if(group.field==='memory')return data.map((row,index)=>summaryPreviewSource(row.title??`记忆 ${index+1}`,row.body??row.text??'')).join('')||'<p class="lt-meta">本项未发送记忆总结</p>';
+      if(group.field==='original')return data.map(row=>summaryPreviewSource(`第 ${row.floor} 楼 · ${row.speaker??''}`,row.text)).join('')||'<p class="lt-meta">本项未发送历史正文</p>';
+      if(group.field==='card')return cardRows(data).map(([label,text])=>summaryPreviewSource(label,text,'',{lineBreaks:true})).join('');
+      if(group.field==='supplement')return data?summaryPreviewSource('补充背景',data):'';
+      return group.kind==='self'?data.map(row=>summaryPreviewSource(`${row.name} · 历史自述`,(row.entries??[]).join('\n\n'))).join(''):summaryPreviewSource('现有大纲',data.join('\n\n'));
+    };
+    // Role data uses readable fields in both tabs; other prompt parts remain
+    // exact outgoing text. Display formatting never changes request messages.
+    const visible=groups.filter(group=>previewState.previewView==='materials'?['card','supplement','previous'].includes(group.field):group.field===previewState.previewView);
+    const body=previewState.previewView==='prompt'?(requestPreview.request?.previewParts??requestPreview.request?.messages??[]).map((part,index)=>summaryPreviewPrompt({...part,name:part.name??`消息 ${index+1}`},'',promptReading(part))).join(''):visible.map(group=>{
+      const rows=materialRows(group);
+      return rows&&kinds.length>1?summaryPreviewStage(group.kind?TABS[group.kind]:`共同${group.name}`,rows):rows;
+    }).join('');
     const usage=requestPreview.usage;
     return summaryPreviewPanel(tabs,body+(usage?`<p class="lt-meta">${usage.estimated?'预计输入约':'输入 '}${esc(usage.inputTokens)} token · 输出预留 ${esc(usage.outputReserve)} token${jointBudget?` · 总计 ${esc(usage.totalTokens)} / 联合预算 ${esc(usage.budget)} token`:` · 材料预算 ${esc(usage.budget)} token`}</p>`:''));
   }
@@ -342,7 +356,7 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   function narrativeConnection(locked = false) {
     const kinds = activeNarrativeKinds(), live = ['running','paused','failed'].includes(narrativeRun().status) ? value.narrative?.requestPreview : null;
-    const progress = kinds.map(kind => { const floor = narrativeData().progress?.[kind]?.lastProcessedFloor; return `${kinds.length > 1 ? `${TABS[kind]}：` : ''}${Number.isSafeInteger(floor) ? `第${floor}楼` : '尚未总结'}`; }).join('；');
+    const progress = kinds.map(kind => { const floor = narrativeData().progress?.[kind]?.lastProcessedFloor; return `${kind==='self'?'自述':'大纲'}：${Number.isSafeInteger(floor) ? `第 ${floor} 楼` : '未生成'}`; }).join('；');
     return `<div class="lt-summary-connection" data-preview-open="${previewState.previewOpen}"><div class="lt-summary-access ui-status-grid"><div class="ui-status-cell" data-selected="${previewState.previewOpen}"><span>发送内容</span>${button(previewState.previewOpen ? '收起' : '预览','preview-narrative',`${locked && !live || previewState.previewBusy ? 'disabled' : ''} ${previewState.previewBusy ? 'aria-busy="true"' : ''}`)}</div><div class="ui-status-cell"><span>总结进度</span><span class="ui-progress-text">${esc(progress)}</span></div><div class="ui-status-cell"><span>设置</span>${button('打开','settings-narrative',locked ? 'disabled' : '')}</div></div>${narrativePreviewPanel()}</div>`;
   }
   function narrativeGeneration() {
