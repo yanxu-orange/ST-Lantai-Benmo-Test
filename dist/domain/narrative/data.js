@@ -8,11 +8,21 @@ export function emptyNarrative() {
     run: {auto: true, batchSize: 10},
   }, self: [], outline: [], progress: {self: null, outline: null}};
 }
+// Legacy booleans remain stored unchanged; ambiguous values resolve to memory.
+export function narrativeSourceChoice(preferences, originalOnly = false) {
+  return originalOnly || preferences.autoSource === 'cumulative' || preferences.readOriginal === true && preferences.readMemory === false ? 'original' : 'memory';
+}
+// Existing kinds order records the manual entry page, including after reload.
+export function narrativeBatchSourceChoice(preferences, kinds, {summary = false, summarySource} = {}) {
+  if (kinds.some(kind => (summarySource ?? preferences[kind].autoSource) === 'cumulative')) return 'original';
+  const choices = kinds.map(kind => narrativeSourceChoice(preferences[kind]));
+  return summary ? (choices.every(choice => choice === 'original') ? 'original' : 'memory') : choices[0];
+}
 export function assertNarrativePreferences(value, kind) {
   assertKind(kind);
   const keys = ['readMemory', 'readOriginal', 'background', 'budget', 'depth', 'prompt', ...(kind === 'self' ? ['readCard', 'characters'] : []), ...(Object.hasOwn(value??{}, 'autoSource') ? ['autoSource'] : [])];
-  if (!exact(value, keys) || typeof value.readMemory !== 'boolean' || typeof value.readOriginal !== 'boolean' || !value.readMemory && !value.readOriginal && value.autoSource !== 'cumulative'
-    || typeof value.background !== 'string' || typeof value.prompt !== 'string' || !integer(value.budget, 1)) throw new Error('自述或大纲设置无效，至少开启记忆或原文');
+  if (!exact(value, keys) || typeof value.readMemory !== 'boolean' || typeof value.readOriginal !== 'boolean'
+    || typeof value.background !== 'string' || typeof value.prompt !== 'string' || !integer(value.budget, 1)) throw new Error('自述或大纲设置无效');
   if (value.autoSource !== undefined && !['event', 'cumulative', 'none'].includes(value.autoSource)) throw new Error('叙事自动来源无效');
   if (!integer(value.depth) || value.depth > 10000) throw new Error('请填写 0—10000 的整数注入深度');
   if (kind === 'self') {

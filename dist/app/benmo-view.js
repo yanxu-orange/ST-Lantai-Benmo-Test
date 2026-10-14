@@ -1,3 +1,4 @@
+import {narrativeSourceChoice} from '../domain/narrative/data.js';
 import {narrativeMaterialGroups, narrativeMemoryTime} from '../domain/narrative/requests.js';
 import {summaryPreviewSource,summaryPreviewPrompt,summaryPreviewStage,summaryPreviewTabs,summaryPreviewPanel} from './shared-ui/summary-preview.js';
 import {changeGenerationDraft,createGenerationPreview} from './generation-preview.js';
@@ -359,7 +360,11 @@ export async function mountBenmoView({container: app, controller, availability =
     const choice = (name,attribute,label,checked,disabled=false) => `<label class="ui-choice ui-choice--control-only ui-hit-owner"><input class="ui-input" type="checkbox" name="${name}" ${attribute} ${checked ? 'checked' : ''} ${blocked() || acting || locked || disabled ? 'disabled' : ''}><span>${label}</span><span class="ui-hit-area" aria-hidden="true"></span></label>`;
     const number = (key,label,min=0) => `<label class="ui-field"><span>${label}</span><input class="ui-input" type="number" min="${min}" step="1" inputmode="numeric" name="${key}" value="${esc(narrativeRange[key])}" ${locked || blocked() ? 'disabled' : ''}></label>`;
 
-    return `<form id="benmo-narrative-generate-form" class="lt-summary-main"><section class="lt-summary-section ui-section"><h2>楼层范围</h2><div class="lt-summary-range ui-field-grid">${number('startFloor','开始楼')}${number('endFloor','结束楼')}</div></section><section class="lt-summary-section ui-section"><h2>生成选项</h2><div class="lt-summary-choices ui-choice-group" data-ui-interaction-profile="compact-group-candidate">${choice('narrativeTogether','data-narrative-together',`同时生成${TABS[other]}`,kinds.length > 1,!policy()[other])}${choice('narrativeReview','data-narrative-review','入库前检查',narrativeRange.reviewBeforeCommit)}${choice('narrativeBatching','data-narrative-batching','批量生成',narrativeRange.batching)}</div>${!policy()[other] ? `<p class="meta">${TABS[other]}已关闭，暂不可同时生成。</p>` : ''}${narrativeRange.batching ? number('batchSize','每隔多少楼总结',1) : ''}${kinds.length > 1 ? `${number('jointBudget','联合预算（token）',1)}<div class="actions">${button('保存预算','save-narrative-budget',locked || acting ? 'disabled' : '')}</div>` : ''}</section>${narrativeHistory()}${narrativeConnection(locked)}<div data-narrative-draft-status ${narrativeDraftStatus() ? '' : 'hidden'}>${narrativeDraftStatus()}</div></form>`;
+    return `<form id="benmo-narrative-generate-form" class="lt-summary-main"><section class="lt-summary-section ui-section"><h2>楼层范围</h2><div class="lt-summary-range ui-field-grid">${number('startFloor','开始楼')}${number('endFloor','结束楼')}</div></section><section class="lt-summary-section ui-section"><h2>生成选项</h2><div class="lt-summary-choices ui-choice-group" data-ui-interaction-profile="compact-group-candidate">${choice('narrativeTogether','data-narrative-together',`同时生成${TABS[other]}`,kinds.length > 1,!policy()[other])}${choice('narrativeReview','data-narrative-review','入库前检查',narrativeRange.reviewBeforeCommit)}${choice('narrativeBatching','data-narrative-batching','批量生成',narrativeRange.batching)}</div>${!policy()[other] ? `<p class="meta">${TABS[other]}已关闭，暂不可同时生成。</p>` : ''}${narrativeRange.batching ? number('batchSize','每隔多少楼总结',1) : ''}${kinds.length > 1 ? `${narrativeSharedSource()}${number('jointBudget','联合预算（token）',1)}<div class="actions">${button('保存预算','save-narrative-budget',locked || acting ? 'disabled' : '')}</div>` : ''}</section>${narrativeHistory()}${narrativeConnection(locked)}<div data-narrative-draft-status ${narrativeDraftStatus() ? '' : 'hidden'}>${narrativeDraftStatus()}</div></form>`;
+  }
+  function narrativeSharedSource() {
+    const kinds = activeNarrativeKinds();
+    return `<p class="meta" data-narrative-shared-source>共同剧情资料：${kinds.some(kind => narrativePreferences(kind).autoSource === 'cumulative') ? '本批原文（古法固定）' : `${narrativeSourceChoice(narrativePreferences(kinds[0])) === 'memory' ? '记忆' : '本批原文'}（跟随${TABS[kinds[0]]}设置）`}</p>`;
   }
   function narrativeDraftStatus() {
     return `${narrativeRunStatus() ? `<p class="meta" role="status">${esc(narrativeRunStatus())}</p>` : ''}${narrativeRun().error ? `<p class="lt-error" role="alert">${esc(narrativeRun().error)}</p>` : ''}${Number(narrativeRange?.startFloor) > Number(narrativeRange?.endFloor) ? '<p class="meta" role="status">暂无新内容，可选择其他楼层范围。</p>' : ''}`;
@@ -377,6 +382,7 @@ export async function mountBenmoView({container: app, controller, availability =
       if (!node.isEqualNode(next)) node.parentNode.replaceChild(next, node);
     };
     replaceRegion('.lt-summary-connection', narrativeConnection());
+    if (activeNarrativeKinds().length > 1) replaceRegion('[data-narrative-shared-source]', narrativeSharedSource());
     const status = app.querySelector('[data-narrative-draft-status]');
     if (status) { const markup = narrativeDraftStatus(); status.innerHTML = markup; status.hidden = !markup; }
     if (receipt) {
@@ -427,14 +433,15 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   function narrativeSettings() {
     const self = state.tab === 'self';
-    const sources = draft.autoSource === 'cumulative' ? '<p class="meta">古法固定读取本批清洗原文。</p>' : `${narrativeSwitch('readMemory', '读取记忆', draft.readMemory)}${narrativeSwitch('readOriginal', '读取本批原文', draft.readOriginal)}<p class="meta">记忆与原文至少选择一项。</p>`;
+    const sources = draft.autoSource === 'cumulative' ? '<p class="meta">古法固定读取本批清洗原文。</p>' : `<fieldset class="lt-modes" aria-label="剧情资料来源"><legend class="ui-field__label">剧情资料来源</legend>${[['memory','读取记忆'],['original','读取本批原文']].map(([source,label])=>`<label class="lt-mode"><input type="radio" name="narrativeSource" data-narrative-source value="${source}" ${narrativeSourceChoice(draft)===source?'checked':''}>${label}</label>`).join('')}</fieldset>`;
     return `<form id="benmo-edit-form" class="section"><section class="card"><h2>读取材料</h2>${onOpenCleaning ? button('总结文本清洗','narrative-cleaning') : ''}${sources}${self ? `${narrativeSwitch('readCard', '读取角色卡基础设定', draft.readCard)}` : ''}<label class="ui-field"><span>补充背景</span><textarea class="lt-textarea" name="background" rows="5" placeholder="可粘贴本条路线或世界设定">${esc(draft.background)}</textarea></label></section>${self ? `<section class="card"><h2>指定角色与注入</h2><p class="meta">所有角色一起生成；可分别选择是否注入。</p>${draft.characters.map(character => `<section class="section"><div class="custom-field-heading"><label class="ui-field"><span>角色姓名</span><input class="ui-input" name="${esc(`narrative-character-${character.id}`)}" value="${esc(character.name)}" maxlength="160" required></label>${button('移除', 'remove-narrative-character', `data-id="${esc(character.id)}" aria-label="移除此指定角色"`)}</div>${narrativeSwitch(character.id, `${character.name || '此角色'}的自述每轮注入`, character.inject, 'toggle-narrative-injection')}</section>`).join('')}${button('＋ 添加角色', 'add-narrative-character', '', 'secondary')}</section>` : ''}<details class="card"><summary>高级设置</summary><div class="two-cols"><label class="ui-field"><span>材料预算（token）</span><input class="ui-input" name="budget" type="number" min="1" step="1" inputmode="numeric" required value="${esc(draft.budget)}"></label><label class="ui-field"><span>注入深度</span><input class="ui-input" name="depth" type="number" min="0" max="10000" step="1" inputmode="numeric" required value="${esc(draft.depth)}"></label></div></details><section class="card"><label class="ui-field"><span>${TABS[state.tab]}内容提示词</span><textarea class="lt-textarea lt-prompt-editor" name="prompt" rows="12" maxlength="20000" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-narrative-prompt')}</div></section></form>`;
   }
   function narrativeEditor() {
     return `<form id="benmo-edit-form" class="section"><p class="summary-origin">来源：${esc(rangesText(draft.sources))}</p><label class="ui-field"><span>${TABS[state.tab]}正文</span><textarea class="lt-textarea" name="text" rows="10" required>${esc(draft.text)}</textarea></label></form>`;
   }
   function narrativeSettingsDraft(preferences, kind = state.tab) {
-    const next = {...preferences, readMemory: preferences.readMemory !== false, readOriginal: preferences.readOriginal === true, background: preferences.background ?? '', budget: String(preferences.budget ?? 30000), depth: String(preferences.depth ?? 9999), prompt: preferences.prompt || controller.defaultNarrativePrompts?.[kind] || ''};
+    const next = {...preferences, readMemory: narrativeSourceChoice(preferences) === 'memory', readOriginal: narrativeSourceChoice(preferences) === 'original', background: preferences.background ?? '', budget: String(preferences.budget ?? 30000), depth: String(preferences.depth ?? 9999), prompt: preferences.prompt || controller.defaultNarrativePrompts?.[kind] || ''};
+    if (preferences.autoSource === 'cumulative') { next.readMemory = preferences.readMemory; next.readOriginal = preferences.readOriginal; }
     if (kind === 'self') { next.readCard = preferences.readCard !== false; next.characters = clone(preferences.characters ?? []); }
     return next;
   }
@@ -504,7 +511,6 @@ export async function mountBenmoView({container: app, controller, availability =
     readDraft(); const submitted = clone(draft), previous = clone(original), operationEpoch = epoch, route = state.route, kind = state.tab;
     let next;
     if (route === 'narrative-settings') {
-      if (submitted.autoSource !== 'cumulative' && !submitted.readMemory && !submitted.readOriginal) throw new Error('读取记忆与读取原文至少选择一项');
       const budget = Number(submitted.budget), depth = Number(submitted.depth);
       if (!String(submitted.budget).trim() || !Number.isSafeInteger(budget) || budget < 1) throw new Error('请填写大于 0 的整数材料预算');
       if (!String(submitted.depth).trim() || !Number.isSafeInteger(depth) || depth < 0 || depth > 10000) throw new Error('请填写 0—10000 的整数注入深度');
@@ -702,6 +708,10 @@ export async function mountBenmoView({container: app, controller, availability =
     if (!disposed) { apply(next);if (!suspended && epoch === operationEpoch) { remember();render(); } }
   }
   app.addEventListener('change', event => {
+    if (event.target?.dataset?.narrativeSource !== undefined) {
+      if (state.route !== 'narrative-settings' || blocked() || acting || composing || disposed || suspended || draft.autoSource === 'cumulative' || !['memory','original'].includes(event.target.value)) return;
+      remember(); draft.readMemory = event.target.value === 'memory'; draft.readOriginal = !draft.readMemory; render(); return;
+    }
     const control = event.target.closest('[data-narrative-together], [data-narrative-batching], [data-narrative-review]');
     if (!control || control.disabled || disposed || suspended || composing || acting || dialog || blocked() || narrativePlanning || narrativeBusy() || ['running','paused','failed','awaiting-review'].includes(narrativeRun().status) || state.route !== 'narrative-generate' || !narrativeRange) return;
     clearNarrativePreview();
@@ -711,7 +721,7 @@ export async function mountBenmoView({container: app, controller, availability =
     }
     const together = control.checked === true;
     if (together && !NARRATIVES.every(kind => policy()[kind])) return;
-    remember(); epoch++; narrativeKinds = together ? [...NARRATIVES] : [state.tab]; error = ''; render();
+    remember(); epoch++; narrativeKinds = together ? [state.tab, ...NARRATIVES.filter(kind => kind !== state.tab)] : [state.tab]; error = ''; render();
   }, {signal: lifetime.signal});
   app.addEventListener('input', event => {
     if (state.route !== 'narrative-generate' || !event.target?.name || !['startFloor','endFloor','batchSize','jointBudget'].includes(event.target.name)) return;
@@ -812,7 +822,7 @@ export async function mountBenmoView({container: app, controller, availability =
         if (!disposed) { apply(next); if (!suspended && epoch === token) { remember(); render(); } } return;
       }
       if (action === 'default-narrative-prompt' && state.route === 'narrative-settings') { remember(); draft.prompt = controller.defaultNarrativePrompts?.[state.tab] ?? ''; render(); return; }
-      if (action === 'toggle-narrative-setting' && state.route === 'narrative-settings' && ['readMemory', 'readOriginal', 'readCard'].includes(id) && (draft.autoSource !== 'cumulative' || id === 'readCard')) { remember(); draft[id] = !draft[id]; render(); return; }
+      if (action === 'toggle-narrative-setting' && state.route === 'narrative-settings' && id === 'readCard') { remember(); draft[id] = !draft[id]; render(); return; }
       if (action === 'toggle-narrative-injection' && state.route === 'narrative-settings') { remember(); const character = draft.characters?.find(row => row.id === id); if (character) { character.inject = !character.inject; render(); } return; }
       if (action === 'add-narrative-character' && state.route === 'narrative-settings' && state.tab === 'self') { remember(); draft.characters.push({id: crypto.randomUUID(), name: '', inject: true}); render(); return; }
       if (action === 'remove-narrative-character' && state.route === 'narrative-settings' && state.tab === 'self') { remember(); draft.characters = draft.characters.filter(row => row.id !== id); render(); return; }

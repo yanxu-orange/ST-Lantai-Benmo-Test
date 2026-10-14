@@ -3,7 +3,7 @@ import {sameTarget} from '../../domain/memory/repository.js';
 import {sourceFingerprint,durableSourceMessages} from '../../domain/summary/source.js';
 import {matchesStoredNarrativeSource,narrativeMemoryRows} from '../../domain/narrative/core.js';
 import {prepareNarrativeBatch,projectNarrativeBatchBase} from './narrative-preparation.js';
-import {emptyNarrative,narrativeOf,assertNarrative,applyNarrativeResponse,reconcileNarrativeSource,narrativeHighWater,narrativeJointBudget,recordNarrativeGeneration} from '../../domain/narrative/data.js';
+import {emptyNarrative,narrativeOf,assertNarrative,applyNarrativeResponse,reconcileNarrativeSource,narrativeHighWater,narrativeJointBudget,narrativeBatchSourceChoice,recordNarrativeGeneration} from '../../domain/narrative/data.js';
 import {matchesNarrativeSource,matchesNarrativeMemory,projectNarrativeMemory} from '../../domain/narrative/source.js';
 import {parseCombinedNarrativeResponse} from '../../domain/narrative/requests.js';
 import {DEFAULT_NARRATIVE_PROMPTS,NARRATIVE_OUTLINE_INJECTION,narrativeSelfInjection} from '../../domain/narrative/prompts.js';
@@ -220,7 +220,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const config=clone(generation());
     const materialKinds=plan.kinds;
     const usesCard=materialKinds.includes('self')&&captured.narrative.preferences.self.readCard,card=usesCard?cardSnapshot():null;
-    const previewMemory=materialKinds.some(kind=>captured.narrative.preferences[kind].readMemory&&(plan.summarySource??captured.narrative.preferences[kind].autoSource)!=='cumulative')?narrativeMemoryRows(projectNarrativeMemory(root,raw),range.endFloor):null;
+    const previewMemory=narrativeBatchSourceChoice(captured.narrative.preferences,materialKinds,plan)==='memory'?narrativeMemoryRows(projectNarrativeMemory(root,raw),range.endFloor):null;
     let prepared;
     const valid=()=>{
       try{

@@ -1,7 +1,7 @@
 import {assertRawSummarySource, sourceFingerprint, durableSourceMessages} from '../summary/source.js';
 import {cleanSummaryFloors} from '../summary/cleaning.js';
 import {effectiveBatchPositions} from '../summary/source-positions.js';
-import {assertNarrative} from './data.js';
+import {assertNarrative, narrativeSourceChoice} from './data.js';
 import {clone, same, integer, text, range, freeze, assertKind, mergeRanges, narrativeMemoryRows, matchesStoredNarrativeSource} from './core.js';
 import {buildNarrativeRequest, narrativeMaterialParts, narrativeMemoryText, NARRATIVE_MATERIAL_SEPARATOR} from './requests.js';
 export {matchesNarrativeSource, matchesStoredNarrativeSource, storedNarrativeSource, matchesNarrativeMemory} from './core.js';
@@ -84,9 +84,9 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
   if (domain.progress[kind] && !matchesStoredNarrativeSource(domain.progress[kind].sourceSnapshot, raw)) throw new Error('已有自述或大纲来源已变化，请先更新来源投影');
   const rawMessages = source.messages.filter(row => row.floor <= endFloor).sort((a, b) => a.floor - b.floor);
   if (rawMessages.length !== endFloor + 1 || rawMessages.some((row, index) => row.floor !== index)) throw new Error('截至本批的原文前缀不可用，无法验证来源');
-  const readOriginal = materialSelection?.readOriginal ?? (originalOnly || preferences.readOriginal);
-  const readMemory = materialSelection?.readMemory ?? (!originalOnly && preferences.readMemory);
-  const sentFloors = sharedMaterials ? [] : suppliedFloors !== undefined ? assertRawSummarySource({epoch:source.epoch,messages:suppliedFloors}).messages.filter(row => row.floor >= startFloor && row.floor <= endFloor) : readOriginal ? cleanSummaryFloors(rawMessages.filter(row => row.floor >= startFloor && row.role !== 'system' && !row.system), {includeUser: true, rules: clone(rules)}) : [];
+  const choice = narrativeSourceChoice(materialSelection ?? preferences, originalOnly);
+  const readOriginal = choice === 'original', readMemory = !readOriginal;
+  const sentFloors = sharedMaterials || !readOriginal ? [] : suppliedFloors !== undefined ? assertRawSummarySource({epoch:source.epoch,messages:suppliedFloors}).messages.filter(row => row.floor >= startFloor && row.floor <= endFloor) : readOriginal ? cleanSummaryFloors(rawMessages.filter(row => row.floor >= startFloor && row.role !== 'system' && !row.system), {includeUser: true, rules: clone(rules)}) : [];
   const originalRanges = sharedMaterials?.usage.originalRanges ?? mergeRanges(sentFloors.map(row => ({start: row.floor, end: row.floor})));
   const allEvents = sharedMaterials ? [] : clone(events), eventsSnapshot = sharedMaterials?.eventsSnapshot ?? (readMemory ? narrativeMemoryRows(allEvents, endFloor) : []);
   const requiredMemory = eventsSnapshot.filter(row => row.sources.some(item => item.end >= startFloor));
@@ -105,11 +105,17 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
   }
   // Serialize fixed data and each memory exactly once. Older candidates change
   // neither the background nor existing prose nor original-message payloads.
-  const materialParts = narrativeMaterialParts(base, kind);
-  const parts = materialParts.map(row => row.content);
+  // Keep a memory insertion slot without emitting an empty memory heading.
+  const marker = {title: '', body: '__narrative_memory_slot__'};
+  const materialParts = narrativeMaterialParts({...base, memory: [marker]}, kind);
   const memoryIndex = materialParts.findIndex(part => part.field === 'memory');
-  const prefix = parts.slice(0, memoryIndex + 1).join(NARRATIVE_MATERIAL_SEPARATOR);
-  const suffix = NARRATIVE_MATERIAL_SEPARATOR + parts.slice(memoryIndex + 1).join(NARRATIVE_MATERIAL_SEPARATOR);
+  const before = materialParts.slice(0, memoryIndex).map(row => row.content);
+  const after = materialParts.slice(memoryIndex + 1).map(row => row.content);
+  const emptyText = [...before, ...after].join(NARRATIVE_MATERIAL_SEPARATOR);
+  const memoryHeading = materialParts[memoryIndex].content.slice(0, -narrativeMemoryText(marker).length);
+  const prefix = [...before, memoryHeading].join(NARRATIVE_MATERIAL_SEPARATOR);
+  const suffix = after.length ? NARRATIVE_MATERIAL_SEPARATOR + after.join(NARRATIVE_MATERIAL_SEPARATOR) : '';
+  const emptyUnits = estimatedUnits(emptyText);
   const fixedUnits = estimatedUnits(prefix) + estimatedUnits(suffix);
   const separatorUnits = estimatedUnits(NARRATIVE_MATERIAL_SEPARATOR);
   const encoded = new Map();
@@ -118,7 +124,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     encoded.set(row.id, {row, payload, content, index, units: estimatedUnits(content)});
     await cooperate();
   }
-  const fullText = items => `${prefix}${items.map(item => item.content).join(NARRATIVE_MATERIAL_SEPARATOR)}${suffix}`;
+  const fullText = items => items.length ? `${prefix}${items.map(item => item.content).join(NARRATIVE_MATERIAL_SEPARATOR)}${suffix}` : emptyText;
   const insertionIndex = (items, index) => {
     let low = 0, high = items.length;
     while (low < high) { const middle = (low + high) >>> 1; if (items[middle].index < index) low = middle + 1; else high = middle; }
@@ -135,7 +141,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
       return Math.ceil(result);
     };
     const selected = requiredMemory.map(row => encoded.get(row.id)).sort((a, b) => a.index - b.index);
-    let units = fixedUnits + selected.reduce((sum, item) => sum + item.units, 0) + Math.max(0, selected.length - 1) * separatorUnits;
+    let units = (selected.length ? fixedUnits : emptyUnits) + selected.reduce((sum, item) => sum + item.units, 0) + Math.max(0, selected.length - 1) * separatorUnits;
     let tokens = useHost ? await count(fullText(selected)) : Math.ceil(units / 4);
     const requiredTokens = tokens;
     if (!deferredBudget && tokens > preferences.budget) {
@@ -146,7 +152,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
     let omittedMemoryCount = 0;
     for (const memory of historicalMemory) {
       await cooperate();
-      const item = encoded.get(memory.id), proposedUnits = units + item.units + (selected.length ? separatorUnits : 0);
+      const item = encoded.get(memory.id), proposedUnits = units + item.units + (selected.length ? separatorUnits : fixedUnits - emptyUnits);
       if (deferredBudget) {
         selected.push(item); units = proposedUnits; tokens = Math.ceil(proposedUnits / 4);
       } else if (!useHost) {
@@ -231,6 +237,9 @@ export async function prepareCombinedNarrativeRequest(input, {countTokens = null
         ticket.usage.omittedMemoryCount++;ticket.usage.trimmed = true;
       }
       await new Promise(resolve => setTimeout(resolve, 0));guard();
+    }
+    if (tickets.some(ticket => !ticket.materials.original.length && !ticket.materials.memory.length)) {
+      const error = new Error('预算内没有可读取的记忆，请提高预算或提供本批记忆'); error.code = 'NARRATIVE_NO_MATERIAL'; throw error;
     }
     const joint = {budget, inputTokens, outputReserve, totalTokens: inputTokens + outputReserve, estimated: !useHost, tokenMethod: useHost ? 'host' : 'estimate'};
     for (const ticket of tickets) {

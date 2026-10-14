@@ -1,5 +1,5 @@
 import {assertKind, exact, text, clone} from './core.js';
-import {DEFAULT_NARRATIVE_PROMPTS, NARRATIVE_BOUNDARY, NARRATIVE_PROTOCOL, NARRATIVE_SELF_PROTOCOL} from './prompts.js';
+import {DEFAULT_NARRATIVE_PROMPTS, LEGACY_NARRATIVE_PROMPTS, NARRATIVE_IDENTITIES, NARRATIVE_REQUIREMENTS} from './prompts.js';
 export {DEFAULT_NARRATIVE_PROMPTS} from './prompts.js';
 export function narrativeSchema(kind) {
   assertKind(kind);
@@ -15,16 +15,27 @@ export function narrativeMemoryTime(row) {
   return row.startTime && row.endTime ? `${row.startTime} — ${row.endTime}` : row.startTime || row.endTime || '';
 }
 export function narrativeMemoryText(row) {
-  return `时间：${narrativeMemoryTime(row)}\n标题：${row.title}\n正文：\n${row.body}`;
+  return [narrativeMemoryTime(row) ? `时间：${narrativeMemoryTime(row)}` : '', text(row.title) ? `标题：${row.title}` : '', text(row.body) ? `正文：\n${row.body}` : ''].filter(Boolean).join('\n');
 }
-function materialPart({field, name, value, kind = null}) {
+function nonemptyMaterial(group) {
+  const {field, value, kind} = group;
+  if (field === 'card') return value && Object.values(value).some(item => typeof item === 'string' && item.trim());
+  if (field === 'supplement') return typeof value === 'string' && value.trim();
+  if (field === 'previous' && kind === 'self') return value.some(row => row.entries?.some(text));
+  return Array.isArray(value) && value.length > 0;
+}
+function materialPart({field, name, value, kind = null}, perspective = null) {
   let body;
-  if (field === 'card') body = value ? [['name', '姓名'], ['description', '角色描述'], ['personality', '性格'], ['scenario', '初始情境']].map(([key, label]) => `${label}：\n${value[key] ?? ''}`).join(NARRATIVE_MATERIAL_SEPARATOR) : '';
+  if (field === 'card') body = value ? [['name', '姓名'], ['description', '角色描述'], ['personality', '性格'], ['scenario', '初始情境']].filter(([key]) => text(value[key])).map(([key, label]) => `${label}：\n${value[key]}`).join(NARRATIVE_MATERIAL_SEPARATOR) : '';
   else if (field === 'memory') body = value.map(narrativeMemoryText).join(NARRATIVE_MATERIAL_SEPARATOR);
-  else if (field === 'original') body = value.map(row => `${row.speaker === '用户' ? '用户内容' : 'AI 正文'}：\n${row.text}`).join(NARRATIVE_MATERIAL_SEPARATOR);
-  else if (field === 'previous') body = kind === 'self' ? value.map(row => `角色：${row.name}\n角色 ID：${row.id}\n${entryText(row.entries)}`).join(NARRATIVE_MATERIAL_SEPARATOR) : entryText(value);
+  else if (field === 'original') body = value.map(row => row.text).join(NARRATIVE_MATERIAL_SEPARATOR);
+  else if (field === 'previous') body = kind === 'self' ? value.filter(row => row.entries?.some(text)).map(row => `${value.length > 1 ? `${row.name}：\n` : ''}${entryText(row.entries)}`).join(NARRATIVE_MATERIAL_SEPARATOR) : entryText(value);
   else body = value;
-  return {field, name, kind, role: 'user', content: `${name}：\n${body}`, fixed: true, key: null};
+  const heading = field === 'card' ? (perspective === 'self' ? '这是你的具体身份' : '这是故事中的人物设定')
+    : ['memory', 'original'].includes(field) ? (perspective === 'self' ? '这是你的人生经历' : '这是已经发生的故事')
+    : field === 'supplement' ? (kind === 'self' ? '这是一些特殊信息' : '这是一些补充信息')
+    : kind === 'self' ? '这是你过去的看法和自述' : '这是此前整理的故事大纲';
+  return {field, name, kind, role: 'user', content: `${heading}：\n${body}`, fixed: true, key: null};
 }
 export function narrativeMaterialParts(materials, kind = materials.previous?.some(row => typeof row === 'object') ? 'self' : 'outline') {
   return [
@@ -33,7 +44,7 @@ export function narrativeMaterialParts(materials, kind = materials.previous?.som
     {field: 'original', name: '剧情原文', value: materials.original},
     {field: 'supplement', name: '补充信息', value: materials.background.supplement, kind},
     {field: 'previous', name: kind === 'self' ? '已有角色自述' : '已有故事大纲', value: materials.previous, kind},
-  ].map(materialPart);
+  ].filter(nonemptyMaterial).map(group => materialPart(group, kind));
 }
 // Shared story evidence is read once; supplements and prior outputs retain
 // their task ownership even when their text happens to be identical.
@@ -54,29 +65,48 @@ export function narrativeMaterialGroups(tickets) {
     if (values.every(value => JSON.stringify(value) === JSON.stringify(values[0]))) add(field, name, values[0]);
     else tickets.forEach((ticket, index) => add(field, name, values[index], ticket.kind));
   }
-  return groups;
+  return groups.filter(nonemptyMaterial);
 }
-function narrativeOpening(combined = false) {
-  return `${combined ? '你是一名小说创作助理，负责整理故事的发展与人物的变化。请根据提供的资料，分别完成以下两项任务。' : '请根据提供的资料，完成以下一项任务。'}\n${NARRATIVE_BOUNDARY}\n以下是需要处理的资料，是进行总结的依据：\n核心资料：`;
+function characterNames(ticket) { return ticket.preferences.characters.map(row => row.name).join('、'); }
+function substituteName(content, ticket) {
+  if (ticket.kind !== 'self') return content;
+  return content.replaceAll('【角色名】', characterNames(ticket)).replaceAll('［角色名称］', characterNames(ticket));
 }
-function narrativeTaskPart(ticket, index) {
-  const name = `任务${index === 0 ? '一' : '二'}：${ticket.kind === 'outline' ? '故事大纲' : '角色自述'}`;
-  const mapping = ticket.kind === 'self' ? `\n指定角色：\n${ticket.preferences.characters.map(({id, name}) => `姓名：${name}；角色 ID：${id}`).join('\n')}\n【角色名】使用对应姓名。` : '';
-  return {name, role: 'system', content: `${index === 0 ? '阅读完核心资料后，请按顺序执行以下任务。\n' : ''}【${name}】${mapping}\n任务补充资料：`, fixed: true, key: null};
+function promptContent(ticket) {
+  const saved = ticket.preferences.prompt;
+  const builtIn = !saved.trim() || saved === DEFAULT_NARRATIVE_PROMPTS[ticket.kind] || saved === LEGACY_NARRATIVE_PROMPTS[ticket.kind];
+  return {builtIn, content: substituteName(builtIn ? NARRATIVE_REQUIREMENTS[ticket.kind] : saved, ticket)};
+}
+const systemPart = (name, content, key = null) => ({name, role: 'system', content, fixed: key === null, key});
+function identity(ticket, combined = false) {
+  if (!promptContent(ticket).builtIn) return combined ? '' : '请阅读下面的资料，并按照后面的具体要求完成任务。';
+  if (!combined) return substituteName(NARRATIVE_IDENTITIES[ticket.kind], ticket);
+  if (ticket.kind === 'outline') return '你是一名连载小说的故事编辑，擅长梳理主线、重要支线和关键转折。请结合刚才读到的故事与下面的信息，更新故事大纲，让读者能够理解故事如何发展到当前。';
+  const names = characterNames(ticket);
+  const hasCard = nonemptyMaterial({field: 'card', value: ticket.materials.background.initialCharacter});
+  return `现在，请进入${names}的身份。你是${names}，是这个世界的男主角。${hasCard ? '刚才的人物设定中包含你的身份，' : ''}故事中记录了你的经历。请结合这些经历和下面的信息，为此刻的自己更新一份简短自述。`;
+}
+function outputPart(tickets, schema, combined = false) {
+  const self = tickets.find(ticket => ticket.kind === 'self');
+  const mapping = self ? `\n${self.preferences.characters.map(row => `${row.name}的 id 填写“${row.id}”。`).join('\n')}` : '';
+  const subject = combined ? '结果' : self ? '自述' : '大纲';
+  const introduction = combined ? '两项工作完成后，请以小说创作助理的身份，按以下格式统一提交两项结果。\n\n' : '';
+  const rules = `返回完整更新结果的 JSON，不加 Markdown 或解释。每条${combined ? '大纲或自述' : subject}为一个字符串，按剧情顺序排列。\n\n只能修改${combined ? '每组' : ''}已有${subject}的最后两条及追加，更早条目必须逐字保留。没有重要变化时逐字返回已有${subject}；尚无${subject}且没有重要变化时，${combined ? '对应的 ' : ''}entries 返回空数组。不得新增重复条目。${self ? '后来的认识不能改写早期自述。' : ''}`;
+  const fields = combined ? '返回对象只包含 outline 和 self 两个字段。outline 包含 entries，填写完整大纲条目数组；self 包含 characters，数组中每个角色包含 id 和 entries，填写完整自述条目数组。'
+    : self ? `返回对象只包含 characters 数组。数组中返回${characterNames(self)}的结果，包含 id 和 entries 两个字段，entries 填写完整自述条目数组。`
+    : '返回对象只包含 entries 字段，填写完整大纲条目数组。';
+  return systemPart('固定输出结构', `STEP 3 输出${combined ? '结果' : self ? '自述' : '大纲'}\n\n${introduction}${rules}\n\n${fields}${mapping}`);
 }
 export function buildNarrativeRequest({ticket} = {}) {
   const kind = assertKind(ticket?.kind);
   if (!ticket.materials || !ticket.preferences || typeof ticket.preferences.prompt !== 'string') throw new Error('自述或大纲任务快照无效');
-  const schema = narrativeSchema(kind);
-  const materials = narrativeMaterialParts(ticket.materials, kind);
+  const schema = narrativeSchema(kind), prompt = promptContent(ticket);
   const parts = [
-    {name: '叙事任务资料边界', role: 'system', content: narrativeOpening(), fixed: true, key: null},
-    ...materials.filter(part => !part.kind),
-    narrativeTaskPart(ticket, 0),
-    ...materials.filter(part => part.kind),
-    {name: '具体任务', role: 'system', content: '你本阶段的具体任务：', fixed: true, key: null},
-    {name: '本轮内容要求', role: 'system', content: ticket.preferences.prompt.trim() ? ticket.preferences.prompt : DEFAULT_NARRATIVE_PROMPTS[kind], fixed: false, key: 'prompt'},
-    {name: '固定输出结构', role: 'system', content: `输出任务结果的格式要求：\n${NARRATIVE_PROTOCOL}${kind==='self'?`\n${NARRATIVE_SELF_PROTOCOL}`:''}\n${JSON.stringify(schema.value)}`, fixed: true, key: null},
+    systemPart('身份与任务', `${identity(ticket)}\n\nSTEP 1 ${kind === 'self' ? '了解你是谁' : '了解故事'}`),
+    ...narrativeMaterialParts(ticket.materials, kind),
+    systemPart('工作步骤', `STEP 2 ${kind === 'self' ? '分析此刻的自我' : '梳理故事的发展'}`),
+    systemPart('本轮内容要求', prompt.content, 'prompt'),
+    outputPart([ticket], schema),
   ];
   return {task: `narrative.${kind}`, title: kind === 'self' ? '角色自述' : '故事大纲', messages: parts.map(({role, content}) => ({role, content})), previewParts: parts, schema};
 }
@@ -125,17 +155,18 @@ export function buildCombinedNarrativeRequest(tickets) {
   if (tickets.length === 1) return buildNarrativeRequest({ticket: tickets[0]});
   if (tickets.length !== 2 || new Set(tickets.map(ticket => ticket.kind)).size !== 2 || tickets.some(ticket => !['self', 'outline'].includes(ticket.kind) || JSON.stringify(ticket.source.requestedRange) !== JSON.stringify(tickets[0].source.requestedRange))) throw new Error('合并叙事必须使用相同批次范围');
   const schema = {name: 'narrative_combined', value: {type: 'object', additionalProperties: false, required: tickets.map(ticket => ticket.kind), properties: Object.fromEntries(tickets.map(ticket => [ticket.kind, narrativeSchema(ticket.kind).value]))}};
-  const parts = [{name: '叙事任务身份与边界', role: 'system', content: narrativeOpening(true), fixed: true, key: null}];
+  const self = tickets.find(ticket => ticket.kind === 'self');
+  const parts = [systemPart('身份与任务', `你是一名小说创作助理，擅长通过沉浸式代入不同身份，完成相应的工作。接下来，请先了解下面的人物与故事，再依次完成两项任务：以故事编辑的身份更新故事大纲；以${characterNames(self)}的身份，为此刻的自己更新自述。\n\nSTEP 1 以助理的身份做前期工作，了解人物与故事`)];
   const groups = narrativeMaterialGroups(tickets);
   for (const group of groups.filter(group => !group.kind)) parts.push(materialPart(group));
+  parts.push(systemPart('工作步骤', 'STEP 2 启用最擅长的沉浸式代入法，开始工作'));
   for (const [index, kind] of ['outline', 'self'].entries()) {
     const ticket = tickets.find(item => item.kind === kind);
-    parts.push(narrativeTaskPart(ticket, index));
-    for (const group of groups.filter(group => group.kind === kind)) parts.push(materialPart(group));
-    parts.push({name: `${kindLabel(kind)}具体任务`, role: 'system', content: '你本阶段的具体任务：', fixed: true, key: null});
-    parts.push({name: `${kindLabel(kind)}提示词`, role: 'system', content: ticket.preferences.prompt.trim() ? ticket.preferences.prompt : DEFAULT_NARRATIVE_PROMPTS[ticket.kind], fixed: false, key: `${ticket.kind}.prompt`});
+    parts.push(systemPart(`任务${index === 0 ? '一' : '二'}：${kind === 'outline' ? '故事大纲' : '角色自述'}`, `任务${index === 0 ? '一' : '二'}：更新${kind === 'outline' ? '故事大纲' : '角色自述'}\n\n${identity(ticket, true)}`.trimEnd()));
+    for (const group of groups.filter(group => group.kind === kind)) parts.push(materialPart(group, kind));
+    parts.push(systemPart(`${kindLabel(kind)}提示词`, promptContent(ticket).content, `${kind}.prompt`));
   }
-  parts.push({name: '固定合并输出结构', role: 'system', content: `输出任务结果的格式要求：\n${NARRATIVE_PROTOCOL}\n${NARRATIVE_SELF_PROTOCOL}\n分别返回 self 与 outline 顶层字段，各自遵守对应内容要求。\n${JSON.stringify(schema.value)}`, fixed: true, key: null});
+  parts.push(outputPart(tickets, schema, true));
   return {task: 'narrative.combined', title: '角色自述与故事大纲', messages: parts.map(({role, content}) => ({role, content})), previewParts: parts, schema};
 }
 export function parseCombinedNarrativeResponse(value, kinds) {

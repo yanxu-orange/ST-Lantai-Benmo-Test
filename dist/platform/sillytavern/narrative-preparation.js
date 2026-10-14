@@ -1,4 +1,4 @@
-import {reconcileNarrativeSource,narrativeHighWater} from '../../domain/narrative/data.js';
+import {reconcileNarrativeSource,narrativeHighWater,narrativeBatchSourceChoice} from '../../domain/narrative/data.js';
 import {prepareNarrativeUpdate,prepareCombinedNarrativeRequest,projectNarrativeMemory,estimateNarrativeTokens,narrativeCardFields} from '../../domain/narrative/source.js';
 import {buildCombinedNarrativeRequest} from '../../domain/narrative/requests.js';
 
@@ -41,14 +41,15 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materia
   const projected=projectNarrativeBatchBase(domain,raw,{kinds,restart,index,regenerateLatest});
   const events=projectNarrativeMemory(root,raw),tasks=[];
   const joint=materialKinds.length>1;
+  const originalOnly=materialKinds.some(kind=>(summarySource??projected.preferences[kind].autoSource)==='cumulative');
+  const sharedChoice=narrativeBatchSourceChoice(projected.preferences,materialKinds,{summary,summarySource});
   const materialSelection=joint?{
     card:projected.preferences.self.readCard?narrativeCardFields(card):null,
-    readOriginal:materialKinds.some(kind=>(summarySource??projected.preferences[kind].autoSource)==='cumulative'||projected.preferences[kind].readOriginal),
-    readMemory:materialKinds.some(kind=>(summarySource??projected.preferences[kind].autoSource)!=='cumulative'&&projected.preferences[kind].readMemory),
+    readOriginal:sharedChoice==='original',
+    readMemory:sharedChoice==='memory',
   }:null;
   const sharedRange=summary&&joint?{...range,startFloor:Math.max(range.startFloor,Math.min(...kinds.map(kind=>narrativeHighWater(domain,kind)+1)))}:null;
   for(const kind of kinds){
-    const originalOnly=(summarySource??projected.preferences[kind].autoSource)==='cumulative';
     const taskRange=sharedRange??(summary?{...range,startFloor:Math.max(range.startFloor,narrativeHighWater(domain,kind)+1)}:range);
     tasks.push(await prepareNarrativeUpdate(projected,raw,{kind,...taskRange,events,card,originalOnly,materialSelection,sharedMaterials:joint?tasks[0]:null,...(jointBudget!==undefined?{jointBudget}:{}),...(originalOnly&&sentFloors?{sentFloors}:{}),rules,countTokens:count,deferAccounting:jointBudget!==undefined,isCurrent:()=>{guard();return true;}}));
   }
