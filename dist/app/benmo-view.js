@@ -1,3 +1,4 @@
+import {estimateNarrativeTokens} from '../domain/narrative/source.js';
 import {narrativeSourceChoice} from '../domain/narrative/data.js';
 import {narrativeMaterialGroups, narrativeMemoryTime} from '../domain/narrative/requests.js';
 import {summaryPreviewSource,summaryPreviewPrompt,summaryPreviewStage,summaryPreviewTabs,summaryPreviewPanel} from './shared-ui/summary-preview.js';
@@ -72,7 +73,7 @@ export async function mountBenmoView({container: app, controller, availability =
   const selectedRecord = () => records().find(row => row.id === state.selected);
   const context = () => ['benmo', state.tab, state.kind, state.route, ['detail', 'edit', 'narrative-edit'].includes(state.route) ? state.selected ?? 'new' : ''].join(':');
   const blocked = () => loading || loadFailed || !!narrativeRecovery || summaryDraftHidden() || invalidated || externalPolicy().transient === true || value.writeBlocked === true || !policy()[activeKind()];
-  const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-record', 'toggle-excluded', 'restore-excluded', 'new', 'generate', 'generate-narrative', 'save-narrative-budget', 'start-narrative', 'continue-narrative', 'retry-narrative', 'skip-narrative', 'pause-narrative', 'confirm-narrative-review', 'regenerate-narrative', 'manual-summary', 'start-backfill'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
+  const button = (label, action, attrs = '', tone = 'tertiary') => `<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${blocked() && ['save', 'delete-narrative', 'delete-record', 'toggle-excluded', 'restore-excluded', 'new', 'generate', 'generate-narrative', 'save-narrative-budget', 'start-narrative', 'continue-narrative', 'retry-narrative', 'skip-narrative', 'pause-narrative', 'confirm-narrative-review', 'regenerate-narrative', 'manual-summary', 'start-backfill'].includes(action) ? 'disabled' : ''} ${attrs}>${label}</button>`;
   const bookTheme = () => ['paper-letter','purple-glow'].includes(surfaceTheme(app));
   const textEntry = (label, action, attrs = '') => button(bookTheme() && ['settings-summary','settings-tracking','settings-narrative'].includes(action) ? '设置' : label, action, attrs).replace('ui-button ui-button--tertiary', 'benmo-text-entry');
   const icon = (label, action, file, attrs = '') => `<button type="button" class="ui-icon-button ui-button--tertiary" aria-label="${esc(label)}" data-action="${action}" ${attrs}><img class="lt-icon" data-icon="${file}" src="${new URL(`./icons/${file}.svg`, import.meta.url)}" alt=""></button>`;
@@ -224,7 +225,7 @@ export async function mountBenmoView({container: app, controller, availability =
   // Decorative headings are hidden in every other appearance. They contain no
   // controls or source data; the existing fields keep their accessible labels.
   const springHeading = label => `<div class="benmo-spring-heading" hidden aria-hidden="true">${esc(label)}</div>`;
-  const formActions = () => `<div class="wk-editor-footer">${button('取消', 'cancel')}${button(acting ? '保存中…' : '保存', 'save', acting ? 'disabled aria-busy="true"' : '', 'primary')}</div>`;
+  const formActions = () => `<div class="wk-editor-footer">${state.route === 'narrative-edit' ? button('删除', 'delete-narrative', acting ? 'disabled' : '', 'danger') : button('取消', 'cancel')}${button(acting ? '保存中…' : '保存', 'save', acting ? 'disabled aria-busy="true"' : '', 'primary')}</div>`;
   function summarySettings() {
     const automatic=value.summary?.automatic?.message;
     return `<p class="meta" role="status" data-latest-automatic-status ${automatic?'':'hidden'}>${automatic?`自动生成：${esc(automatic)}`:''}</p><form id="benmo-edit-form" class="section">${springHeading('摘要处理')}<section class="card"><label class="ui-field"><span>最近多少楼使用原文</span><input class="ui-input" type="number" name="recentFloors" aria-label="最近多少楼使用原文" min="1" step="1" required value="${esc(draft.recentFloors)}" inputmode="numeric"></label><p class="meta">启用压缩前，请关闭预设中按 X 楼删除正文或只保留摘要的正则，以免重复处理。</p></section>${springHeading('最新摘要提示词')}<section class="card"><label class="ui-field"><span>最新摘要提示词</span><textarea class="lt-textarea lt-prompt-editor" name="prompt" rows="7" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-prompt')}</div></section></form>`;
@@ -286,9 +287,11 @@ export async function mountBenmoView({container: app, controller, availability =
   function narrativeView() {
     const kind = state.tab, preferences = narrativePreferences(), info = narrativeStatus(), result = narrativeResults();
     const floor = narrativeData().progress?.[kind]?.lastProcessedFloor;
-    const hasEntries = kind === 'self' ? result.some(character => character.entries?.length) : result.length > 0;
+    const entries = kind === 'self' ? result.flatMap(character => character.entries ?? []) : result;
+    const hasEntries = entries.length > 0;
+    const bodyTokens = estimateNarrativeTokens(entries.map(entry => entry.text).join('\n\n'));
     const entryMarkup = entry => `<article class="record benmo-narrative-entry"><div class="row"><span class="meta">${esc(rangesText(entry.sources))}</span>${button('编辑', 'edit-narrative', `data-id="${esc(entry.id)}"`)}</div><p class="reading">${esc(entry.text)}</p></article>`;
-    return `<div class="row"><span class="meta">${Number.isSafeInteger(floor) ? `已处理至第 ${floor} 楼` : hasEntries ? '当前聊天' : '尚未生成'}</span><div class="actions">${textEntry('设置', 'settings-narrative')}${button('生成', 'generate-narrative', '', 'secondary')}</div></div>${narrativeRunStatus() ? `<p class="meta" role="status">${esc(narrativeRunStatus())}</p><div class="actions">${narrativeRunActions()}</div>` : ''}${info.error && info.error !== (error || value.error) ? `<p class="lt-error" role="alert">${esc(info.error)}</p>` : ''}<div class="section">${kind === 'self' ? result.filter(character => character.entries?.length).map(character => { const selected = preferences.characters?.find(row => row.id === character.id); return `<section class="section benmo-narrative-group"><div class="row"><h2>${esc(character.name)}</h2><span class="meta">${selected ? selected.inject ? '每轮注入' : '未选择注入' : '保留的历史自述'}</span></div>${character.entries.map(entryMarkup).join('')}</section>`; }).join('') : result.map(entryMarkup).join('')}${hasEntries ? '' : `<p class="meta">暂无${TABS[kind]}</p>`}</div>${narrativeUsage()}`;
+    return `<div class="row"><span class="meta">${Number.isSafeInteger(floor) ? `已处理至第 ${floor} 楼` : hasEntries ? '当前聊天' : '尚未生成'} · 约 ${bodyTokens} token</span><div class="actions">${textEntry('设置', 'settings-narrative')}${button('生成', 'generate-narrative', '', 'secondary')}</div></div>${narrativeRunStatus() ? `<p class="meta" role="status">${esc(narrativeRunStatus())}</p><div class="actions">${narrativeRunActions()}</div>` : ''}${info.error && info.error !== (error || value.error) ? `<p class="lt-error" role="alert">${esc(info.error)}</p>` : ''}<div class="section">${kind === 'self' ? result.filter(character => character.entries?.length).map(character => { const selected = preferences.characters?.find(row => row.id === character.id); return `<section class="section benmo-narrative-group"><div class="row"><h2>${esc(character.name)}</h2><span class="meta">${selected ? selected.inject ? '每轮注入' : '未选择注入' : '保留的历史自述'}</span></div>${character.entries.map(entryMarkup).join('')}</section>`; }).join('') : result.map(entryMarkup).join('')}${hasEntries ? '' : `<p class="meta">暂无${TABS[kind]}</p>`}</div>${narrativeUsage()}`;
   }
   function clearNarrativePreview() { generationPreview.invalidate({close:true}); }
   const activeNarrativeKinds = () => ['running','paused','failed','awaiting-review'].includes(narrativeRun().status) ? narrativeRun().kinds ?? narrativeKinds ?? [state.tab] : narrativeKinds ?? [state.tab];
@@ -732,6 +735,7 @@ export async function mountBenmoView({container: app, controller, availability =
   app.addEventListener('compositionend', () => { composing = false; }, {signal: lifetime.signal});
   function syncWriteControls() {
     if (disposed || suspended) return;
+    for (const node of app.querySelectorAll('[data-action="delete-narrative"]')) node.disabled = blocked() || acting;
     for (const node of app.querySelectorAll('[data-action="save"]')) {
       node.disabled = blocked() || acting;
       if (acting) node.setAttribute('aria-busy', 'true'); else node.removeAttribute('aria-busy');
@@ -872,6 +876,19 @@ export async function mountBenmoView({container: app, controller, availability =
         toast(excluded ? '已暂停此记录追踪' : selectedRecord()?.excluded ? '已移除记录暂停；名称排除仍生效' : '已恢复追踪，不回补历史');
         return;
       }
+      if (action === 'delete-narrative' && state.route === 'narrative-edit' && draft && !blocked()) {
+        const kind = state.tab, entryId = draft.id, previous = clone(original), token = epoch, target = clone(narrativeDraftTarget);
+        confirm(`删除这条${TABS[kind]}？`, async () => {
+          if (blocked() || epoch !== token || !same(target, value.target)) throw new Error('聊天或资料已变化，请重新读取后修改');
+          const remove = entries => entries.filter(entry => entry.id !== entryId);
+          const entries = kind === 'self' ? previous.map(character => ({...character, entries: remove(character.entries)})) : remove(previous);
+          const next = await controller.saveNarrativeEntries(kind, entries, {original: previous});
+          if (disposed) return;
+          apply(next);
+          if (epoch !== token || suspended) return;
+          state.route = returnRoute; clearDraft(); dialog = null; render(); toast('已删除');
+        }, {confirmLabel: '删除'}); return;
+      }
       if (action === 'delete-record' && state.route === 'detail' && !blocked()) {
         const row = selectedRecord(), kind = state.kind, token = epoch; if (!row) return;
         confirm(`删除“${row.name}”这条${kind === 'item' ? '物品' : '角色'}记录？`, async () => {
@@ -908,7 +925,7 @@ export async function mountBenmoView({container: app, controller, availability =
     // A background receipt must never rebuild an active input or its baseline.
     if (generationDraftVisible() && app.querySelector('#benmo-narrative-generate-form') && policy()[state.tab] && !dialog && !suspended) { readDraft(); syncNarrativeDraft({receipt:true}); }
     else if (!draft && !acting && !dialog && !suspended) { remember(); render(); }
-    else for (const node of app.querySelectorAll('[data-action="save"],[data-action="delete-record"],[data-action="toggle-excluded"],[data-action="restore-excluded"]')) node.disabled = blocked() || acting;
+    else for (const node of app.querySelectorAll('[data-action="save"],[data-action="delete-narrative"],[data-action="delete-record"],[data-action="toggle-excluded"],[data-action="restore-excluded"]')) node.disabled = blocked() || acting;
   }); }
   function startSummaryVisibility() {
     if (disposed || suspended || loading || loadFailed || observingSummaryVisibility || !controller.observeSummaryVisibility) return;

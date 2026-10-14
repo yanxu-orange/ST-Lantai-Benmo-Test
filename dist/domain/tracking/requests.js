@@ -155,6 +155,8 @@ export function parseBatchTrackingResponseParts(value,{ticket,preferences=ticket
       if(Object.keys(row).some(key=>!allowed.includes(key)))throw new Error('批量追踪修改包含未知字段');
       if(kind==='npc'&&(!Object.hasOwn(row,'lastAppearanceFloor')||row.lastAppearanceFloor!==null&&!assistantFloors.has(row.lastAppearanceFloor)))throw new Error('NPC 出场楼层必须属于本批实际发送的 AI 正文');
       const sparse=Object.fromEntries(Object.entries(row).filter(([key,value])=>key==='id'||key==='lastAppearanceFloor'||value!==null));
+      // An empty custom-field delta is a no-op, including for new identities.
+      if(Array.isArray(sparse.customFields)&&sparse.customFields.length===0)delete sparse.customFields;
       if(Object.hasOwn(sparse,'customFields')&&ticket){
         const record=ticket.current.find(record=>record.id===sparse.id&&record.kind===kind);
         if(!record)throw new Error('自定义字段更新须指向这条记录已有的字段 ID');

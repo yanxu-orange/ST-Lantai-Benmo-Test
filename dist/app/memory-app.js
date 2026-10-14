@@ -337,7 +337,16 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
           if(state.pending||!selected.size)break;rootScroll[rootView]=$('.lt-main').scrollTop;clearSaved();const notice=noticeTicket;const work=session.setModeMany([...selected],target.dataset.action==='bulk-resident'?'resident':'trigger');updateSelection();
           try{const result=await work;if(result.applied&&!disposed&&multi&&notice===noticeTicket){pruneSelection();render({focus:false});if(result.changed)showSaved();}}catch{if(!disposed)updateError();}finally{if(!disposed)updateSelection();}break;
         }
-        case 'list': case 'timeline': rootScroll[rootView]=$('.lt-main').scrollTop;rootView=target.dataset.action;browserHistory?.replaceState({view:rootView,lantai:'list'},'','#memory');render();break;
+        case 'list': case 'timeline': {
+          if(rootView===target.dataset.action)break;
+          const main=$('.lt-main'),list=$('#lt-memory-list');
+          rootScroll[rootView]=main.scrollTop;rootView=target.dataset.action;
+          list.classList.toggle('lt-timeline',rootView==='timeline');
+          list.setAttribute('aria-label',`事件记忆${rootView==='timeline'?'时间线':'列表'}`);
+          for(const control of container.querySelectorAll('.lt-view-switch [data-action]'))control.setAttribute('aria-pressed',String(control.dataset.action===rootView));
+          updateCollection();main.scrollTop=rootScroll[rootView];
+          browserHistory?.replaceState({view:rootView,lantai:'list'},'','#memory');break;
+        }
         case 'search': searchOpen=!searchOpen;if(searchOpen){filterOpen=false;filterMode='all';filterWords='all';}updateCollection();(searchOpen?$('[data-query]'):$('.lt-list-icons [data-action=search]'))?.focus();break;
         case 'filter': filterOpen=!filterOpen;if(filterOpen){searchOpen=false;query='';}updateCollection();break;
         case 'new': rootScroll[rootView]=$('.lt-main').scrollTop;session.edit();openTerm=null;browserHistory?.pushState({view:rootView,lantai:'new'},'','#editor');render();break;
