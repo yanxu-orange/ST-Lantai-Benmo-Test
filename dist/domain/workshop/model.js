@@ -1,4 +1,4 @@
-import {assertLatestSource} from '../latest/source.js';
+import {assertLatestSource,storedLatestSource} from '../latest/source.js';
 const clone = structuredClone;
 const text = value => typeof value === 'string' && value.trim().length > 0;
 export const WORKSHOP_KINDS = ['prompt', 'collect', 'sync'];
@@ -35,6 +35,7 @@ export function validateModule(value) {
   return clone(value);
 }
 export function assertWorkshop(value) {
+  value=clone(value);
   if (!value || value.schema !== 1 || !Number.isSafeInteger(value.revision) || value.revision < 0
     || !Array.isArray(value.modules) || !Array.isArray(value.results) || !Array.isArray(value.imports)) {
     throw new Error('工坊数据结构无效');
@@ -58,14 +59,14 @@ export function assertWorkshop(value) {
       || typeof row.value !== 'string' || !(row.manualValue === null || typeof row.manualValue === 'string')
       || typeof row.deleted !== 'boolean' || typeof row.active !== 'boolean') throw new Error('工坊结果字段无效');
     if(row.generationSource!==undefined&&!WORKSHOP_GENERATION_SOURCES.includes(row.generationSource))throw new Error('工坊结果来源无效');
-    if(row.generationSource==='background'){assertLatestSource(row.sourceSnapshot);if(row.replyId!==row.sourceSnapshot.replyId||row.floor!==row.sourceSnapshot.assistantFloor)throw new Error('工坊结果与回复来源不符');}
+    if(row.generationSource==='background'){if([...(row.sourceSnapshot?.rawMessages??[]),...(row.sourceSnapshot?.sentFloors??[])].some(message=>message&&Object.hasOwn(message,'text')))row.sourceSnapshot=storedLatestSource(row.sourceSnapshot);assertLatestSource(row.sourceSnapshot);if(row.replyId!==row.sourceSnapshot.replyId||row.floor!==row.sourceSnapshot.assistantFloor)throw new Error('工坊结果与回复来源不符');}
     resultIds.add(row.id);
     const source = JSON.stringify([row.moduleId,row.replyId]);
     if(sources.has(source)) throw new Error('工坊结果来源重复');
     sources.add(source);
   }
   if (value.imports.some(id => !text(id)) || new Set(value.imports).size !== value.imports.length) throw new Error('工坊导入记录无效');
-  return clone(value);
+  return value;
 }
 export function workshopOf(root) { return assertWorkshop(root.workshop ?? emptyWorkshop()); }
 export function allocateCaptureTag(value, scope) {

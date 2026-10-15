@@ -16,29 +16,23 @@ export function mergeRanges(ranges) {
   }
   return result;
 }
-export function assertNarrativeSource(value) {
-  if (!exact(value, ['requestedRange', 'rawMessages', 'fingerprint']) || !range(value.requestedRange) || !Array.isArray(value.rawMessages) || !text(value.fingerprint)) throw new Error('自述或大纲来源证据无效');
-  assertRawSummarySource({epoch: 0, messages: value.rawMessages});
-  if (!value.rawMessages.length || value.rawMessages.at(-1).floor !== value.requestedRange.end
-    || value.rawMessages.some((row, index) => !exact(row, ['floor', 'identity', 'role', 'system', 'text', 'date', 'swipeId']) || row.floor !== index || !(row.swipeId === null || integer(row.swipeId)))
-    || sourceFingerprint(value.rawMessages) !== value.fingerprint) throw new Error('自述或大纲来源前缀不完整');
-  return clone(value);
+export function assertNarrativeSource(value, {copy = true} = {}) {
+  if (!value || !range(value.requestedRange)) throw new Error('自述或大纲来源范围无效');
+  const result={requestedRange:{...value.requestedRange}};
+  return result;
 }
-export function storedNarrativeSource(source) {
-  return assertNarrativeSource({requestedRange: clone(source.requestedRange), rawMessages: durableSourceMessages(source.rawMessages), fingerprint: source.fingerprint});
-}
+export function storedNarrativeSource(source) { return assertNarrativeSource(source); }
 export function matchesNarrativeSource(snapshot, raw) {
   try {
     const current = assertRawSummarySource(raw);
     return current.epoch === snapshot.epoch && same(current.messages.filter(row => row.floor <= snapshot.requestedRange.end).sort((a, b) => a.floor - b.floor), snapshot.rawMessages);
   } catch { return false; }
 }
-export function matchesStoredNarrativeSource(snapshot, raw) {
-  try {
-    assertNarrativeSource(snapshot);
-    const current = assertRawSummarySource(raw);
-    return same(durableSourceMessages(current.messages.filter(row => row.floor <= snapshot.requestedRange.end).sort((a, b) => a.floor - b.floor)), snapshot.rawMessages);
-  } catch { return false; }
+export function matchesStoredNarrativeSource(snapshot, raw, owner) {
+  try { const range=resolveNarrativeSource(snapshot,owner).requestedRange; return raw.messages.some(row=>row.floor===range.end); } catch { return false; }
+}
+export function narrativeMemoryRefs(rows,endFloor=Infinity) {
+  return rows.filter(row=>row.sources.every(source=>source.end<=endFloor)).map(row=>({id:row.id,sources:mergeRanges(row.sources)})).sort((a,b)=>a.sources[0].start-b.sources[0].start||a.sources.at(-1).end-b.sources.at(-1).end||a.id.localeCompare(b.id));
 }
 export function narrativeMemoryRows(events, endFloor) {
   if (!Array.isArray(events)) throw new Error('自述或大纲记忆来源无效');
@@ -57,4 +51,12 @@ export function matchesNarrativeMemory(ticket, events) {
     const selected = ticket.memorySnapshot, ids = new Set(selected.map(row => row.id));
     return same(selected, narrativeMemoryRows(events, ticket.source.requestedRange.end).filter(row => ids.has(row.id)));
   } catch { return false; }
+}
+
+export function resolveNarrativeSource(snapshot, owner) {
+  if (!snapshot || !Object.hasOwn(snapshot, 'sourceRef')) return snapshot;
+  const item = owner?.sourcePool?.[snapshot.sourceRef];
+  if (!exact(snapshot, ['requestedRange', 'sourceRef']) || !range(snapshot.requestedRange)
+    || !integer(snapshot.sourceRef) || !item || item.rawMessages.at(-1)?.floor !== snapshot.requestedRange.end) throw new Error('叙事共享来源引用无效');
+  return {requestedRange: snapshot.requestedRange, rawMessages: item.rawMessages, fingerprint: item.fingerprint};
 }

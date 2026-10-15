@@ -2,8 +2,8 @@ import { sameTarget } from '../memory/repository.js';
 import { equalData, exactKeys, validateIndexes } from '../memory/management-validation.js';
 import { validDrafts, draftsToEvents, applyIndexes, reviewEvents, normalizeSummaryAliases } from './candidates.js';
 import { buildSummaryRequest, summaryStages, summaryPreview } from './requests.js';
-import { prepareSummarySource, matchesSummarySource, matchesStoredSummarySource } from './source.js';
-import { publicSummarySettingsEvidence, normalizedSummarySettingsEvidence } from './data.js';
+import { prepareSummarySource, matchesSummarySource, matchesStoredSummarySource, storedSummarySource } from './source.js';
+import { publicSummarySettingsEvidence, normalizedSummarySettingsEvidence, publicSummaryTrackingTicket } from './data.js';
 import { prepareBatchTracking, applyBatchTracking } from '../tracking/batch.js';
 import { parseBatchTrackingResponseParts } from '../tracking/requests.js';
 
@@ -43,8 +43,10 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     if(stored&&selection.events.some(event=>event.supersededBy||event.mergedFrom))throw new Error('批成员参与合并，不能破坏撤销关系');
     const params={...preferences,...options};
     const raw=captureSource(target);
+    if(options.resumePending&&!matchesStoredSummarySource(options.resumePending.sourceSnapshot,raw))throw new Error('保留草稿的来源定位已变化');
     if(stored&&!matchesStoredSummarySource(stored.sourceSnapshot,raw))throw new Error('原批来源已变化或隐藏楼层角色无法确认；请按当前范围重新总结');
-    const source=prepareSummarySource(raw,{startFloor:range.start,endFloor:range.end,includeUser:stored?.sourceSnapshot?.includeUser??params.includeUser,excludedFloors:stored?.sourceSnapshot?.excludedFloors??selection.summary.excludedFloors,rules:settings.summaryCleaning.rules});
+    const savedSource=stored?.sourceSnapshot??options.resumePending?.sourceSnapshot;
+    const source=prepareSummarySource(raw,{startFloor:range.start,endFloor:range.end,includeUser:savedSource?.includeUser??params.includeUser,excludedFloors:savedSource?.excludedFloors??selection.summary.excludedFloors,rules:settings.summaryCleaning.rules});
     const snapshot={target,selection,settings,source,identities:readTrackingContext().identities,origin,operationId:uuid(),params:{includeUser:params.includeUser,reviewBeforeCommit:origin==='regeneration'||params.reviewBeforeCommit,hideOriginal:stored?.hideOriginal??params.hideOriginal},batchId:stored?.id??options.resumePending?.batchId??uuid()};
     const trackingPreferences={itemsEnabled:settings.trackingItemsEnabled===true,npcsEnabled:settings.trackingNpcsEnabled===true};
     if(trackingPreferences.itemsEnabled||trackingPreferences.npcsEnabled){
@@ -54,7 +56,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
       snapshot.tracking={ticket,context};
       const resumed=options.resumePending?.tracking;
       if(options.resumePending&&!resumed)throw new Error('保留草稿缺少同步追踪证据，请重新总结');
-      if(resumed){const {source:oldSource,...oldTicket}=resumed.ticket,{source:newSource,...newTicket}=ticket;if(!equalData(oldTicket,newTicket)||!equalData(durableTrackingContext(resumed.context),durableTrackingContext(context)))throw new Error('保留草稿的追踪资料已变化，请重新总结');}
+      if(resumed){if(!equalData(publicSummaryTrackingTicket(resumed.ticket),publicSummaryTrackingTicket(ticket))||!equalData(durableTrackingContext(resumed.context),durableTrackingContext(context)))throw new Error('保留草稿的追踪资料已变化，请重新总结');}
     }
     if(!targetCurrent(snapshot,target)||!sourceCurrent(snapshot,target))throw new Error('聊天来源或总结设置已变化');
     return snapshot;
@@ -91,7 +93,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     const result=await manager.confirm(taskId,async ctx=>{
       await repository.read(ctx.target);
       const snapshot=ctx.snapshot,selection=record.selection??snapshot.selection;
-      const batch={id:snapshot.batchId,taskId:`${taskId}:${snapshot.operationId}`,sourceType:snapshot.selection.batch?.sourceType??snapshot.origin,requestedRange:snapshot.source.requestedRange,actualRange:snapshot.source.actualRange,sourceSnapshot:snapshot.source,settingsEvidence:snapshot.settings,generationMode:{fast:'one',quality:'two',enhanced:'three'}[snapshot.settings.generationMode],hideOriginal:snapshot.params.hideOriginal,generatedCandidates:ctx.candidate.generatedCandidates};
+      const batch={id:snapshot.batchId,taskId:`${taskId}:${snapshot.operationId}`,sourceType:snapshot.selection.batch?.sourceType??snapshot.origin,requestedRange:snapshot.source.requestedRange,actualRange:snapshot.source.actualRange,sourceSnapshot:storedSummarySource(snapshot.source),settingsEvidence:snapshot.settings,generationMode:{fast:'one',quality:'two',enhanced:'three'}[snapshot.settings.generationMode],hideOriginal:snapshot.params.hideOriginal,generatedCandidates:ctx.candidate.generatedCandidates};
       try{
         const options={isCurrent:ctx.isCurrent,...(record.pendingId?{pendingId:record.pendingId}:{})};
         if(snapshot.tracking){
@@ -138,7 +140,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
           try{output=await request(stage,ctx,ctx.snapshot,events);}catch(error){
             if(!events.length||snapshot.origin==='regeneration'||!targetCurrent(snapshot,ctx.target)||!sourceCurrent(snapshot,ctx.target)||ctx.signal.aborted)throw error;
             const now=new Date().toISOString();
-            const pending={schema:1,id:execution.pendingId??snapshot.operationId,batchId:snapshot.batchId,origin:snapshot.origin,generationMode:{fast:'one',quality:'two',enhanced:'three'}[snapshot.settings.generationMode],completedStages,nextStage:stage,failedStage:stage,events,generatedCandidates,sourceSnapshot:snapshot.source,settingsEvidence:snapshot.settings,params:snapshot.params,createdAt:resume?.createdAt??now,updatedAt:now,...(snapshot.tracking?{tracking:{ticket:snapshot.tracking.ticket,context:durableTrackingContext(snapshot.tracking.context),parts:execution.trackingParts}}:{})};
+            const pending={schema:1,id:execution.pendingId??snapshot.operationId,batchId:snapshot.batchId,origin:snapshot.origin,generationMode:{fast:'one',quality:'two',enhanced:'three'}[snapshot.settings.generationMode],completedStages,nextStage:stage,failedStage:stage,events,generatedCandidates,sourceSnapshot:storedSummarySource(snapshot.source),settingsEvidence:snapshot.settings,params:snapshot.params,createdAt:resume?.createdAt??now,updatedAt:now,...(snapshot.tracking?{tracking:{ticket:publicSummaryTrackingTicket(snapshot.tracking.ticket),context:durableTrackingContext(snapshot.tracking.context),parts:execution.trackingParts}}:{})};
             let receipt;
             try{receipt=await repository.saveSummaryPending(ctx.target,execution.selection,pending,{isCurrent:()=>!ctx.signal.aborted&&targetCurrent(snapshot,ctx.target)&&sourceCurrent(snapshot,ctx.target)});}catch(writeError){if(writeError.code==='COMMIT_UNCONFIRMED')execution.outcome='unconfirmed';execution.errorMessage=writeError.message;throw writeError;}
             execution.selection=receipt.selection;execution.pendingId=pending.id;execution.reviewRequired=true;execution.errorMessage='后续生成失败，已保留正文；可重试后续阶段或编辑后明确采用。';

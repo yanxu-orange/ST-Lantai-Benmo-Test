@@ -6,6 +6,7 @@ import {emptySummary} from '../../domain/summary/data.js';
 import {emptyCumulative} from '../../domain/cumulative/data.js';
 import {emptyWorkshop} from '../../domain/workshop/model.js';
 import {assertWorkshopProof} from './workshop-identities.js';
+import {latestSourceMetadata} from './latest-source-metadata.js';
 import { getSillyTavernContext } from './context.js';
 import { emptyRoot, assertRoot, inheritMemoryRoot } from '../../domain/memory/model.js';
 import { sameTarget } from '../../domain/memory/repository.js';
@@ -103,7 +104,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
         else if(!difference)error='来源删除位置无法可靠确认，记忆已保留';
         else {
           try{target=captureTarget();}catch{const raw=getContext().chatMetadata[MEMORY_KEY];if(!raw)throw stale();assertRoot(raw,{rootId:raw.rootId});const observedBinding=observe();if(!sameBinding(raw.binding,observedBinding))throw stale();target=targetFor(raw,observedBinding);}
-          evidence={...difference,before:{epoch:previous.sourceEpoch,messages:chatSourceMessages(false,previous.objects)},after:{epoch:sourceEpoch,messages:chatSourceMessages()}};}
+          evidence={...difference,before:{epoch:previous.sourceEpoch,messages:chatSourceMessages(false,previous.objects,true)},after:{epoch:sourceEpoch,messages:chatSourceMessages(false,objects,true)}};}
       }
     } catch { /* An unprepared or changed chat has no authority to mutate. */ }
     snapshotMessages();refreshDeletionBaseline(true);
@@ -242,6 +243,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     return copy(next);
   }
   async function persist(target, next, guard = () => true, workshopProof) {
+    next=assertRoot(next,target);
     // A delayed older configuration snapshot must not land after a confirmed
     // memory result. Only protected writes wait for these host saves.
     const pending = [...configurationSaves].filter(save => save.chatId === target.chatId);
@@ -329,7 +331,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
             const points = live?.parent === parentName && live.rootId === raw.rootId ? [live.floor]
               : rows.slice(1).flatMap((message, floor) => Array.isArray(message.extra?.branches) && message.extra.branches.includes(current.name) ? [floor] : []);
             if (points.length !== 1 || rows[0].chat_metadata[MEMORY_KEY]?.rootId !== raw.rootId) throw new Error('无法确认准确分支楼层，未猜测继承记忆');
-            prepared = { ...inheritMemoryRoot(raw,uuid(),points[0],{timeMessages:(raw.time?.manualAnchor||raw.time?.scheduleTracking)?chatSourceMessages(true):null}), binding: current };
+            prepared = { ...inheritMemoryRoot(raw,uuid(),points[0],{timeMessages:(raw.time?.manualAnchor||raw.time?.scheduleTracking)?chatSourceMessages(true,getContext().chat,true):null}), binding: current };
           }
           await persist(targetFor(prepared, current), prepared);
         }
@@ -410,13 +412,13 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     // outside story sources even when hidden user/assistant rows are included.
     return (includeHidden||message.is_system!==true)&&typeof message.is_user==='boolean'&&!message.extra?.type&&!message.extra?.tool_invocations&&(!includeHidden||message.role!=='system'&&message.role!=='tool')?(message.is_user?'user':'assistant'):'system';
   }
-  function chatSourceMessages(includeHidden=false,messages=getContext().chat){
+  function chatSourceMessages(includeHidden=false,messages=getContext().chat,includeLatestMetadata=false){
     return messages.map((message,floor)=>{
         if(!message||typeof message.mes!=='string')throw new Error('总结原始消息不可用');
         const role=sourceRole(message,includeHidden);
         const date=message.send_date==null?null:String(message.send_date);
         const identity=JSON.stringify([floor,typeof message.id==='string'||Number.isSafeInteger(message.id)?message.id:null,date]);
-        return {floor,identity,objectTicket:messageIdentity(message,floor),revision:sourceVersions.get(floor)??0,role,system:message.is_system===true,text:message.mes,date,swipeId:Number.isSafeInteger(message.swipe_id)&&message.swipe_id>=0?message.swipe_id:null};
+        return {floor,identity,objectTicket:messageIdentity(message,floor),revision:sourceVersions.get(floor)??0,role,system:message.is_system===true,text:message.mes,date,swipeId:Number.isSafeInteger(message.swipe_id)&&message.swipe_id>=0?message.swipe_id:null,...(includeLatestMetadata?latestSourceMetadata(message):{})};
       });
   }
   function captureChatSource(target,includeHidden=false) {
@@ -522,7 +524,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       await reconcile();
       requireConfirmed(check(target));
       const raw = getContext().chatMetadata[MEMORY_KEY] ?? prepared;
-      assertRoot(raw, target); assertRoot(next, target);
+      assertRoot(raw, target); next=assertRoot(next, target);
       if (!sameBinding(raw.binding, binding()) || raw.revision !== expectedRevision || next.revision !== expectedRevision + 1) throw new Error('保存冲突，请返回列表重新读取');
       const candidate = { ...next, binding: binding() };
       if (!requireConfirmation && workshopProof === undefined && equal(protectedContent(raw), protectedContent(candidate))) {

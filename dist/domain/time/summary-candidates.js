@@ -46,7 +46,7 @@ export function importSummaryCandidates(time,batches,{calendarId=time.activeCale
    const sourceKey=summaryKey(batch.id,evidence);
    if(candidates.some(row=>row.sourceKey===sourceKey||row.sourceKeys?.includes(sourceKey)))continue;
    const resolvedCalendar=next.calendars.some(row=>row.id===calendarId)?calendarId:null;
-   const source={kind:'summary',batchId:batch.id,fingerprint:batch.sourceSnapshot.fingerprint,evidence:copy(evidence),originalCandidate:copy(original),range:copy(batch.actualRange)};
+   const source={kind:'summary',batchId:batch.id,evidence:copy(evidence),originalCandidate:copy(original),range:copy(batch.actualRange)};
    const candidate={id:'',kind:'anniversary',title:evidence.name.trim(),dateText:evidence.storyDate.trim(),reason:evidence.reason.trim(),description:evidence.reason.trim(),calendarId:resolvedCalendar,startDate:dateOf(next,evidence.storyDate,resolvedCalendar),repeat:'yearly',durationDays:1,status:'pending',sourceKey,source,sourceKeys:[sourceKey],sources:[source],itemId:null};
    const existing=candidates.find(row=>sameCandidate(row,candidate));
    if(existing){

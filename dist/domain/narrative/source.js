@@ -1,4 +1,5 @@
-import {assertRawSummarySource, sourceFingerprint, durableSourceMessages} from '../summary/source.js';
+import {semanticProgress} from './source-pool.js';
+import {assertRawSummarySource, sourceFingerprint, durableSourceMessages, storedSourceMessages} from '../summary/source.js';
 import {cleanSummaryFloors} from '../summary/cleaning.js';
 import {effectiveBatchPositions} from '../summary/source-positions.js';
 import {assertNarrative, narrativeSourceChoice} from './data.js';
@@ -16,13 +17,13 @@ export function narrativeCardFields(card) {
 // crossing, unlinked or manually re-ranged merged source is never guessed.
 export function projectNarrativeMemory(root, raw = null) {
   const events = clone(root.events ?? []), summary = root.summary ?? {batches: []}, batches = new Map((summary.batches ?? []).map(row => [row.id, row]));
-  const current = raw === null ? null : new Map(durableSourceMessages(assertRawSummarySource(raw).messages).map(row => [row.floor, row]));
+  const current = raw === null ? null : new Map(storedSourceMessages(assertRawSummarySource(raw).messages).map(row => [row.floor, row]));
   const projected = events.map(event => {
     if (!event.batch?.id) return clone(event);
     const batch = batches.get(event.batch.id);
     if (!batch) return {...event, sources: []};
     const positions = effectiveBatchPositions(batch, summary), originals = batch.sourceSnapshot.rawMessages;
-    if (current && positions.some((position, index) => position === null || !same({...durableSourceMessages([originals[index]])[0], floor: position.floor, identity: position.identity}, current.get(position.floor)))) return {...event, sources: []};
+    if (current && positions.some((position, index) => position === null || !same({...storedSourceMessages([originals[index]])[0], floor: position.floor, identity: position.identity}, current.get(position.floor)))) return {...event, sources: []};
     const byFloor = new Map(originals.map((row, index) => [row.floor, positions[index]]));
     const sources = (event.sources ?? []).map(source => {
       if (!range(source)) return null;
@@ -81,7 +82,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
   if (kind === 'self' && !preferences.characters.length) throw new Error('请先指定要生成自述的角色');
   const previous = clone(domain[kind]), previousEntries = kind === 'outline' ? previous : previous.flatMap(row => row.entries);
   if (previousEntries.some(entry => entry.sources.some(item => item.end > endFloor)) || domain.progress[kind]?.lastProcessedFloor > endFloor) throw new Error('已有结果包含截止楼层之后的内容，请选择更晚的结束楼层');
-  if (domain.progress[kind] && !matchesStoredNarrativeSource(domain.progress[kind].sourceSnapshot, raw)) throw new Error('已有自述或大纲来源已变化，请先更新来源投影');
+  if (domain.progress[kind] && !matchesStoredNarrativeSource(domain.progress[kind].sourceSnapshot, raw, domain)) throw new Error('已有自述或大纲来源已变化，请先更新来源投影');
   const rawMessages = source.messages.filter(row => row.floor <= endFloor).sort((a, b) => a.floor - b.floor);
   if (rawMessages.length !== endFloor + 1 || rawMessages.some((row, index) => row.floor !== index)) throw new Error('截至本批的原文前缀不可用，无法验证来源');
   const choice = narrativeSourceChoice(materialSelection ?? preferences, originalOnly);
@@ -95,7 +96,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
   const background = {initialCharacter: materialSelection ? materialSelection.card : kind === 'self' && preferences.readCard ? narrativeCardFields(clone(card)) : null, supplement: preferences.background};
   const previousPayload = kind === 'outline' ? previous.map(row => row.text) : preferences.characters.map(character => ({id: character.id, name: character.name, entries: previous.find(row => row.id === character.id)?.entries.map(row => row.text) ?? []}));
   const base = {background, previous: previousPayload, memory: [], original: sentFloors.map(row => ({floor: row.floor, speaker: row.role === 'user' ? '用户' : 'AI', time: row.date, text: row.text}))};
-  const ticket = {kind, revision: domain.revision, preferences, previous, progress: clone(domain.progress[kind]), source: {epoch: source.epoch, requestedRange, rawMessages, fingerprint: sourceFingerprint(rawMessages)}, eventsSnapshot};
+  const ticket = {kind, revision: domain.revision, preferences, previous, progress: semanticProgress(domain.progress[kind], domain), source: {epoch: source.epoch, requestedRange, rawMessages, fingerprint: sourceFingerprint(rawMessages)}, eventsSnapshot};
   if (sharedMaterials) {
     // The joint batch selected these sources once. Keep each task's settings,
     // background and previous prose, but use the same actual story evidence.

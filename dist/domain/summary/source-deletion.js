@@ -1,5 +1,5 @@
 import {summaryOf} from './data.js';
-import {effectiveBatchPositions} from './source-positions.js';
+import {deletionMapping,effectiveBatchPositions} from './source-positions.js';
 
 // Deletion evidence comes from retained host objects, never from a shorter
 // transcript, edited text, an event payload (ST supplies length), or a range.
@@ -39,4 +39,13 @@ export function affectedSummaryDeletion(root,deletion) {
   }
   if(summary.excludedFloors.some(record=>record.identity!==null&&before.get(record.floor)?.identity!==record.identity))unresolved.push('excluded-floor');
   return {normal:[...normal.values()],merged:[...merged.values()],batchIds,unresolved:[...new Set(unresolved)]};
+}
+
+export function isVerifiedTailDeletion(deletion) {
+  try {
+    const {before,after,removed}=deletionMapping(deletion);
+    return removed.every((floor,index)=>floor===after.messages.length+index)
+      && removed.at(-1)===before.messages.length-1
+      && deletion.floorMap.every(([old,current])=>old===current);
+  } catch { return false; }
 }

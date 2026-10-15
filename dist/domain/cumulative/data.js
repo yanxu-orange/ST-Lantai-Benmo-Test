@@ -1,4 +1,5 @@
-import {assertCumulativeSource,cumulativeRange} from './source.js';
+import {assertCumulativeSource,storedCumulativeSource,cumulativeRange} from './source.js';
+import {matchesSourceMetadata} from '../summary/source.js';
 import {assertCumulativeGeneration} from '../../shared/settings/model.js';
 import {normalizeCleaningRule} from '../summary/cleaning.js';
 const copy = structuredClone;
@@ -56,7 +57,7 @@ export function publicCumulativeEvidence(value) {
     const ids=new Set();for(const rule of value.summaryCleaning.rules){exact(rule,['id','name','enabled','action','pattern','captureGroup','replacement']);normalizeCleaningRule(rule);if(!text(rule.id)||!text(rule.name)||ids.has(rule.id))throw new Error('古法清洗证据无效');ids.add(rule.id);}
   }
   const visit = item => { if (item === null || typeof item === 'string' || typeof item === 'boolean' || typeof item === 'number' && Number.isFinite(item)) return; if (Array.isArray(item)) {item.forEach(visit);return;} if (!item || Object.getPrototypeOf(item) !== Object.prototype) throw new Error('古法配置证据无效'); for (const [key,child] of Object.entries(item)) {if (/^(ai|api|apiKey|password|credentials|credentialEpoch|authorization|secret|secretId|secretValue|endpoint|model|presets|activePresetId|epoch)$/i.test(key)) throw new Error('古法证据不得包含私有配置');visit(child);} };
-  visit(value); return copy(value);
+  visit(value); return copy(Object.fromEntries(['includeUser','checkBeforeSave','hideSource'].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]])));
 }
 export function assertCumulativeVersion(value) {
   exact(value,['id','taskId','body','startTime','endTime','baseSnapshot','sourceSnapshot','coverageRanges','settingsEvidence','createdAt','updatedAt']);
@@ -64,14 +65,14 @@ export function assertCumulativeVersion(value) {
   assertBase(value.baseSnapshot); assertCumulativeSource(value.sourceSnapshot); publicCumulativeEvidence(value.settingsEvidence);
   if(Object.hasOwn(value.settingsEvidence,'includeUser')&&value.settingsEvidence.includeUser!==value.sourceSnapshot.includeUser)throw new Error('古法来源和配置策略不符');
   if (!Array.isArray(value.coverageRanges) || !value.coverageRanges.length || !same(value.coverageRanges,cumulativeCoverage(value.coverageRanges)) || !value.coverageRanges.some(range=>range.start <= value.sourceSnapshot.requestedRange.start && range.end >= value.sourceSnapshot.requestedRange.end) || value.baseSnapshot?.versionId === value.id) throw new Error('古法累计来源不完整');
-  return copy(value);
+  return {...copy(value),sourceSnapshot:storedCumulativeSource(value.sourceSnapshot),settingsEvidence:publicCumulativeEvidence(value.settingsEvidence)};
 }
 export function assertCumulativePending(value) {
   exact(value,['schema','id','operation','version','createdAt','updatedAt']);
   if (value.schema !== 1 || ![value.id,value.createdAt,value.updatedAt].every(text) || !['append','replace'].includes(value.operation)) throw new Error('古法待审核身份无效');
   assertCumulativeVersion(value.version);
   if (value.version.taskId !== value.id) throw new Error('古法待审核任务不符');
-  return copy(value);
+  return {...copy(value),version:assertCumulativeVersion(value.version)};
 }
 export function assertCumulative(value) {
   exact(value,['schema','revision','preferences','excludedFloors','versions','currentVersionId','progress',...(Object.hasOwn(value,'pending')?['pending']:[]),...(Object.hasOwn(value,'hiddenSegments')?['hiddenSegments']:[])]);
@@ -88,9 +89,9 @@ export function assertCumulative(value) {
   if (value.currentVersionId !== (previous?.id ?? null) || value.progress.lastProcessedFloor !== floor) throw new Error('古法当前指针或进度不符');
   if (Object.hasOwn(value,'pending')) {
     const pending = assertCumulativePending(value.pending), version=pending.version;
-    if (pending.operation === 'append' ? ids.has(version.id) || tasks.has(version.taskId) || !same(version.baseSnapshot,baseSnapshotOf(previous)) || !same(version.coverageRanges,cumulativeCoverage([...(previous?.coverageRanges ?? []),version.sourceSnapshot.requestedRange])) : !previous || version.id !== previous.id || !same(version.baseSnapshot,previous.baseSnapshot) || !same(version.sourceSnapshot,previous.sourceSnapshot) || !same(version.coverageRanges,previous.coverageRanges)) throw new Error('古法待审核与正式版本冲突');
+    if (pending.operation === 'append' ? ids.has(version.id) || tasks.has(version.taskId) || !same(version.baseSnapshot,baseSnapshotOf(previous)) || !same(version.coverageRanges,cumulativeCoverage([...(previous?.coverageRanges ?? []),version.sourceSnapshot.requestedRange])) : !previous || version.id !== previous.id || !same(version.baseSnapshot,previous.baseSnapshot) || !same(version.sourceSnapshot.requestedRange,previous.sourceSnapshot.requestedRange)||!matchesSourceMetadata(version.sourceSnapshot.rawMessages,previous.sourceSnapshot.rawMessages) || !same(version.coverageRanges,previous.coverageRanges)) throw new Error('古法待审核与正式版本冲突');
   }
-  return copy(value);
+  return {...copy(value),versions:value.versions.map(assertCumulativeVersion),...(value.pending?{pending:assertCumulativePending(value.pending)}:{})};
 }
 export function cumulativeOf(root) {
   if(root.cumulative===undefined)return emptyCumulative();

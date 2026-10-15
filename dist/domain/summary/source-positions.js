@@ -29,7 +29,7 @@ export function positionedSummarySnapshot(batch,summary) {
   return {...source,...ranges,fingerprint:sourceFingerprint(source.rawMessages)};
 }
 
-function deletionMapping(deletion) {
+export function deletionMapping(deletion) {
   const before=assertRawSummarySource(deletion?.before),after=assertRawSummarySource(deletion?.after);
   const removed=deletion?.removedFloors,pairs=deletion?.floorMap;
   if(!Array.isArray(removed)||!removed.length||removed.some((floor,index)=>!Number.isSafeInteger(floor)||floor<0||index&&floor<=removed[index-1])||!Array.isArray(pairs))fail();

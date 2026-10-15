@@ -10,7 +10,7 @@ const supported = new Set(['normal','regenerate','swipe','continue']);
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const pendingProjection=message=>{const slot=message?.swipe_info?.[message.swipe_id??0]?.extra?.[WORKSHOP_REPLY_KEY],active=message?.extra?.[WORKSHOP_REPLY_KEY];return typeof slot==='string'&&!!slot&&typeof active==='string'&&!!active&&slot!==active;};
 const roleIds = {system:0,user:1,assistant:2};
-export function createWorkshopRuntime({repository,settings,getContext,captureSource,matchesSource,getControls}={}) {
+export function createWorkshopRuntime({repository,settings,getContext,captureSource,matchesSource,getControls,isSourceDeletionPending=()=>false}={}) {
   const gates=Object.fromEntries(['prompt','collect','sync'].map(key=>[key,featureGate(getControls,key)]));
   let disposed=false,serial=0,pending=null,identityUnconfirmed=true,backgroundSourceReader=null,lastCollection=null;
   const keys=new Set(),releases=[],listeners=new Set();
@@ -31,21 +31,21 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     if(okay)keys.clear();changed();return okay;
   }
   async function collect({target,readView:provided}={}){
-    if(disposed)return;
+    if(disposed||isSourceDeletionPending())return;
     const collectSerial=serial;
     if(!sameTarget(target,repository.captureTarget()))return;
     const config=settings.captureWorkshop(),readView=provided&&repository.matchesPanelData?.(target,provided)?provided:await repository.capturePanelData?.(target),selection=await repository.captureWorkshop(target,readView);
-    if(disposed||serial!==collectSerial||!sameTarget(target,repository.captureTarget())||!settings.matchesWorkshop(config))return;
+    if(disposed||isSourceDeletionPending()||serial!==collectSerial||!sameTarget(target,repository.captureTarget())||!settings.matchesWorkshop(config))return;
     const root=readView?await repository.readPanelRoot(target,readView):await repository.read(target);
     const modules=applicableModules(config.workshop,selection.workshop,root.binding?.kind==='character'?root.binding.owner:null).filter(module=>gates[module.lifecycle].allowed());
     const collectors=modules.filter(module=>module.lifecycle!=='prompt'&&generationSourceOf(module)==='story');
     if(!modules.some(module=>module.lifecycle!=='prompt')&&!selection.workshop.results.some(row=>row.generationSource==='background'))return {target,selection,config,modules,readView,binding:root.binding,displaySource:captureDisplaySource(target)};
-    if(disposed||serial!==collectSerial||!sameTarget(target,repository.captureTarget())||!settings.matchesWorkshop(config))return;
+    if(disposed||isSourceDeletionPending()||serial!==collectSerial||!sameTarget(target,repository.captureTarget())||!settings.matchesWorkshop(config))return;
     const prepared=prepareWorkshopIdentities(getContext().chat.map(message=>pendingProjection(message)?null:message),{allowPendingLast:true});
     if(prepared.changed)identityUnconfirmed=true;
     const source=captureSource?.(target);
     const displaySource=captureDisplaySource(target,source);
-    const guard=()=>!disposed&&serial===collectSerial&&sameTarget(target,repository.captureTarget())&&settings.matchesWorkshop(config)&&(!matchesSource||matchesSource(target,source));
+    const guard=()=>!disposed&&!isSourceDeletionPending()&&serial===collectSerial&&sameTarget(target,repository.captureTarget())&&settings.matchesWorkshop(config)&&(!matchesSource||matchesSource(target,source));
     if(!guard())return;
     const snapshots=collectors.flatMap(module=>prepared.selected.map(reply=>({moduleId:module.id,replyId:reply.replyId,floor:reply.floor,values:[module.captureTag,...(module.captureAliases??[]).filter(alias=>alias.rootId===target.rootId).map(alias=>alias.tag)].flatMap(tag=>extractResults(reply.text,tag))})));
     const backgroundSource=backgroundSourceReader?.(target),byFloor=new Map((backgroundSource?.messages??[]).map(row=>[row.floor,row]));
@@ -60,8 +60,7 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     for(const row of stories){
       const module=modules.find(item=>item.id===row.moduleId&&generationSourceOf(item)==='background');if(!module)continue;
       const reply=prepared.selected.find(item=>item.replyId===row.replyId);
-      const tags=[module.captureTag,...(module.captureAliases??[]).filter(alias=>alias.rootId===target.rootId).map(alias=>alias.tag)];
-      row.active=!!reply&&reply.floor===row.floor&&tags.flatMap(tag=>extractResults(reply.text,tag)).join('\n\n')===row.value;
+      row.active=!!reply&&reply.floor===row.floor;
     }
     const next={...selection.workshop,results:[...stories,...background]};
     const forceSave=prepared.changed||identityUnconfirmed;

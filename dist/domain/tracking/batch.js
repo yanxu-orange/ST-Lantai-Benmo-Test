@@ -1,6 +1,6 @@
-import { assertTracking, assertTrackingPreferences, currentTracking, countTrackingAiTurns, applyChanges, storedBatchTrackingSource, matchesBatchTrackingSource } from './data.js';
+import { assertTracking, assertTrackingPreferences, currentTracking, countTrackingAiTurns, applyChanges, storedBatchTrackingSource, matchesBatchTrackingSource, checkpointTrackingGeneration } from './data.js';
 import { assertRawSummarySource, matchesSummarySource } from '../summary/source.js';
-import { assertTrackingChanges, applyTrackingCustomFieldValues, trackingInteger, trackingText, TRACKING_FIELDS } from './model.js';
+import { assertTrackingChanges, assertTrackingRecord, applyTrackingCustomFieldValues, trackingInteger, trackingText, TRACKING_FIELDS } from './model.js';
 import { effectiveTrackingExclusions, filterTrackingChanges, trackingExclusionsOf, normalizeTrackingName, trackingRecordExcluded } from './exclusions.js';
 const clone = structuredClone;
 const lists = ['items', 'npcs'];
@@ -53,28 +53,38 @@ function protectRecords(snapshot, records) {
 }
 
 
-function successorBaseline(domain, raw, snapshot) {
+function successorBaseline(domain, snapshot) {
   const byId = new Map(domain.snapshots.map(row => [row.id, row])), ancestors = [], seen = new Set();
-  let key = snapshot.baseKey;
+  let key = snapshot.baseKey, nextFloor = snapshot.sourceSnapshot.assistantFloor;
   while (key !== null) {
     const row = byId.get(key);
-    if (!row || seen.has(key)) throw new Error('追踪前置版本链无效，无法安全合并');
-    seen.add(key); ancestors.unshift(row); key = row.baseKey;
+    if (!row || seen.has(key) || row.sourceSnapshot.assistantFloor >= nextFloor) throw new Error('追踪前置版本链无效，无法安全合并');
+    seen.add(key); ancestors.unshift(row); key = row.baseKey; nextFloor = row.sourceSnapshot.assistantFloor;
   }
   // Same-base siblings are alternative chains even when their floors differ.
   // Replay only this successor's ancestors; never borrow the visible branch.
-  // Restore saved source versions so dormant swipe ancestors can be protected
-  // independently without taking another swipe's record IDs.
-  const messages = new Map(raw.messages.map(row => [row.floor, clone(row)]));
-  for (const row of ancestors) {
-    const source = row.sourceSnapshot;
-    for (const saved of source.rawMessages) messages.set(saved.floor, { ...messages.get(saved.floor), ...clone(saved) });
-    if (source.kind === 'batch') for (const reply of source.replyIds) {
-      if (reply.replyId !== null) messages.get(reply.floor).replyId = reply.replyId;
-    } else messages.get(source.assistantFloor).replyId = source.replyId;
+  // Replay generated deltas through this exact predecessor chain. Dormant
+  // swipes require no reconstructed historical chat bodies or host mutation.
+  const records = domain.manual.filter(row => row.record !== null).map(row => clone(row.record));
+  const index = new Map(records.map((row, at) => [row.id, at])), active = new Set([null]);
+  const applyManual = key => {
+    for (const row of domain.manual) if (row.afterSnapshotId === key && index.has(row.id)) {
+      const at = index.get(row.id);
+      if (records[at].kind !== row.kind) throw new Error('人工追踪身份不符');
+      records[at] = assertTrackingRecord({ ...records[at], ...row.patch });
+    }
+  };
+  applyManual(null);
+  for (const ancestor of ancestors) {
+    applyChanges(records, ancestor.changes, ancestor.aiTurn, { mutate: true, index, stored: true });
+    if (ancestor.sourceSnapshot.kind === 'batch') for (const key of active) applyManual(key);
+    applyManual(ancestor.id); active.add(ancestor.id);
   }
-  const evidence = { ...raw, messages: [...messages.values()].sort((a, b) => a.floor - b.floor) };
-  return currentTracking({ ...domain, snapshots: ancestors, manual: domain.manual.map(row => ({ ...row, deleted: false })) }, evidence, { beforeFloor: snapshot.sourceSnapshot.assistantFloor }).records;
+  // Pin is a presentation override across branches, as in currentTracking.
+  return records.map(record => {
+    const manual = domain.manual.find(row => row.id === record.id);
+    return manual && Object.hasOwn(manual.patch, 'pinned') ? { ...record, pinned: manual.patch.pinned } : record;
+  });
 }
 
 export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => crypto.randomUUID(), batchId = ticket?.batchId } = {}) {
@@ -159,12 +169,15 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
   }
   const result = tracking => ({ tracking, errors, ...(rejected.items?.length || rejected.npcs?.length ? { rejected } : {}) });
   if (!accepted.size) return result(domain);
+  // Initialize the journal before adding this generation, preserving whether
+  // the pre-generation baseline is genuinely known.
+  domain.tailHistory ??= { schema: 1, sequence: 0, baseline: domain.snapshots.length === 0 && domain.manual.length === 0, checkpoints: [], inverse: [] };
   const id = previous?.id ?? freshId();
   const snapshot = { id, batchId, sourceSnapshot: source, aiTurn: ticket.aiTurn, baseKey: ticket.baseKey, changes, ...(previous?.batchRebases ? { batchRebases: clone(previous.batchRebases) } : {}) };
   const successorBase = previous?.id ?? ticket.baseKey;
   const successors = domain.snapshots.filter(row => row !== previous && row.sourceSnapshot.assistantFloor > source.requestedRange.end && row.baseKey === successorBase);
   const protection = new Map(successors.map(row => {
-    const baseline = successorBaseline(domain, raw, row);
+    const baseline = successorBaseline(domain, row);
     // Replay the successor's own changes, including inactive swipe versions;
     // using the currently active reply here would steal another version's IDs.
     return [row.id, applyChanges(baseline, row.changes, row.aiTurn, { stored: true })];
@@ -176,8 +189,10 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
     row.baseKey = id; row.changes = protectedChanges;
   }
   domain.snapshots.push(snapshot);
+  checkpointTrackingGeneration(domain, snapshot.id);
   domain.revision++;
   try { return result(assertTracking(domain)); } catch (error) {
     return { tracking: assertTracking(value), errors: Object.fromEntries(lists.map(list => [list, enabled(list) ? `批追踪无法安全合并：${error.message}` : errors[list]])) };
   }
 }
+

@@ -72,8 +72,9 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     const range=savedSource?.requestedRange??{start:options.startFloor??pref.startFloor,end:options.endFloor??(origin==='auto'?null:pref.endFloor)};
     if(range.end===null)range.end=raw.messages.length?Math.max(...raw.messages.map(item=>item.floor)):-1;
     if(savedSource&&!matchesStoredCumulativeSource(savedSource,raw))throw new Error('保留版本的原始来源已变化');
-    const prepared=prepareCumulativeSource(raw,{startFloor:range.start,endFloor:range.end,includeUser:savedSource?.includeUser??params.includeUser,excludedFloors:savedSource?.excludedFloors??domain.excludedFloors,rules:savedSource?[]:config.summaryCleaning.rules});
-    const source=savedSource?{...prepared,sentFloors:structuredClone(savedSource.sentFloors)}:prepared;
+    const prepared=prepareCumulativeSource(raw,{startFloor:range.start,endFloor:range.end,includeUser:savedSource?.includeUser??params.includeUser,excludedFloors:savedSource?.excludedFloors??domain.excludedFloors,rules:config.summaryCleaning.rules});
+    // Rebuild request text from the current host; saved sources contain locators only.
+    const source=prepared;
     params.includeUser=source.includeUser;
     const publicConfig=evidence(config,params);
     if(pending&&!equalData(pending.version.settingsEvidence,publicConfig))throw new Error('保留草稿的生成配置已变化');
@@ -135,7 +136,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
         let output;
         try{output=await provider.generateJson({...buildCumulativeRequest({source:ctx.snapshot.source,previousSummary:ctx.snapshot.baseSnapshot?.body??null,settings:ctx.snapshot.settings.generation}),signal:ctx.signal,isCurrent,validate:validCumulativeSummary});}catch(error){writeError(record,error);throw error;}
         if(!isCurrent()||!validCumulativeSummary(output?.data))throw new Error('古法结果或来源无效');
-        const timestamp=now(),version={id:snapshot.versionId,taskId:snapshot.operationId,body:output.data.summary,startTime:snapshot.startTime,endTime:snapshot.endTime,baseSnapshot:snapshot.baseSnapshot,sourceSnapshot:origin==='regeneration'?snapshot.selection.cumulative.versions.at(-1).sourceSnapshot:storedCumulativeSource(snapshot.source),coverageRanges:snapshot.coverageRanges,settingsEvidence:snapshot.settingsEvidence,createdAt:timestamp,updatedAt:timestamp};
+        const timestamp=now(),version={id:snapshot.versionId,taskId:snapshot.operationId,body:output.data.summary,startTime:snapshot.startTime,endTime:snapshot.endTime,baseSnapshot:snapshot.baseSnapshot,sourceSnapshot:storedCumulativeSource(snapshot.source),coverageRanges:snapshot.coverageRanges,settingsEvidence:snapshot.settingsEvidence,createdAt:timestamp,updatedAt:timestamp};
         if(record.reviewRequired){const draft={schema:1,id:version.taskId,operation:origin==='regeneration'?'replace':'append',version,createdAt:timestamp,updatedAt:timestamp};record.pendingId=draft.id;
           record.writeInFlight=true;try{const receipt=await repository.saveCumulativePending(ctx.target,record.selection,draft,{isCurrent});record.selection=receipt.selection;}catch(error){if(error.code!=='COMMIT_UNCONFIRMED')record.pendingId=null;writeError(record,error);throw error;}finally{record.writeInFlight=false;}
         }

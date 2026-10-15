@@ -1,3 +1,5 @@
+import {cleanSummaryFloors} from '../../domain/summary/cleaning.js';
+import {importNarrativeProgress} from '../../domain/narrative/source-pool.js';
 import {reconcileNarrativeSource,narrativeHighWater,narrativeBatchSourceChoice} from '../../domain/narrative/data.js';
 import {prepareNarrativeUpdate,prepareCombinedNarrativeRequest,projectNarrativeMemory,estimateNarrativeTokens,narrativeCardFields} from '../../domain/narrative/source.js';
 import {buildCombinedNarrativeRequest} from '../../domain/narrative/requests.js';
@@ -10,7 +12,7 @@ export function projectNarrativeBatchBase(domain,raw,{kinds,restart=false,index=
       if(regenerateLatest){
         const baseline=domain.latestGeneration?.[kind]?.baseline;
         if(!baseline||!Array.isArray(baseline.entries)||!Object.hasOwn(baseline,'progress'))throw Object.assign(new Error('最新生成缺少可用的生成前基版，无法重新生成'),{code:'NARRATIVE_REGENERATION_UNAVAILABLE'});
-        projected[kind]=structuredClone(baseline.entries);projected.progress[kind]=structuredClone(baseline.progress);
+        projected[kind]=structuredClone(baseline.entries);projected.progress[kind]=importNarrativeProgress(projected,baseline.progress,domain);
       }else{projected[kind]=[];projected.progress[kind]=null;}
     }
   }
@@ -39,6 +41,7 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materia
     return value;
   }:null;
   const projected=projectNarrativeBatchBase(domain,raw,{kinds,restart,index,regenerateLatest});
+  if(sentFloors?.some(row=>typeof row.text!=='string')){const floors=new Set(sentFloors.map(row=>row.floor));sentFloors=cleanSummaryFloors(raw.messages.filter(row=>floors.has(row.floor)),{includeUser:true,rules});}
   const events=projectNarrativeMemory(root,raw),tasks=[];
   const joint=materialKinds.length>1;
   const originalOnly=materialKinds.some(kind=>(summarySource??projected.preferences[kind].autoSource)==='cumulative');

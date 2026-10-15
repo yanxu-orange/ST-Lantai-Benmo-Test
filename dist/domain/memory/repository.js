@@ -1,19 +1,25 @@
+import {normalizeResultSources} from './results-persistence.js';
+import {rollbackNarrativeTail, invalidateNarrativeRollback} from '../narrative/rollback.js';
+import {rollbackTrackingTail,invalidateTrackingTailHistory} from '../tracking/data.js';
 import {narrativeOf,assertNarrative} from '../narrative/data.js';
 import {trackingOf,assertTracking} from '../tracking/data.js';
 import {latestOf,assertLatest,assertLatestPreferences,assertLatestRecord,migrateLatestPreferences} from '../latest/data.js';
 import {storedLatestSource} from '../latest/source.js';
-import {affectedSummaryDeletion} from '../summary/source-deletion.js';
-import {rebaseSummaryPositions} from '../summary/source-positions.js';
+import {affectedSummaryDeletion,isVerifiedTailDeletion} from '../summary/source-deletion.js';
+import {rebaseSummaryPositions,effectiveBatchPositions} from '../summary/source-positions.js';
 import {assertChatControls,defaultChatControls} from '../controls/model.js';
 import {workshopOf,assertWorkshop} from '../workshop/model.js';
 import {timeOf,assertTime} from '../time/data.js';
 import {importSummaryCandidates} from '../time/summary-candidates.js';
 import { assertRoot, validateEvent, validateEventForSave, activeEvents } from './model.js';
 import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence,normalizedSummarySettingsEvidence} from '../summary/data.js';
-import {matchesStoredSummarySource} from '../summary/source.js';
+import {matchesStoredSummarySource,matchesSourceMetadata} from '../summary/source.js';
 import {cumulativeOf,assertCumulativePreferences,assertCumulativeExclusions,assertCumulativePending,assertCumulativeVersion,baseSnapshotOf,cumulativeCoverage} from '../cumulative/data.js';
 export function sameTarget(a, b) { return !!a && !!b && !!a.chatId && !!a.rootId && Number.isSafeInteger(a.epoch) && a.chatId === b.chatId && a.rootId === b.rootId && a.epoch === b.epoch; }
 const copy = value => structuredClone(value);
+// Normalize only the domain being compared, after the caller's currentness
+// callback. Cloning authority before that callback could hide a synchronous edit.
+const comparisonRoot=(root,...keys)=>({...root,...normalizeResultSources(Object.fromEntries(keys.filter(key=>Object.hasOwn(root,key)).map(key=>[key,copy(root[key])]))) });
 const equal = (a, b) => {
   if (Object.is(a, b)) return true;
   if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) !== Array.isArray(b)) return false;
@@ -84,8 +90,8 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
   const panelRead=(target,view)=>view===undefined?read(target):readPanelRoot(target,view);
   const commit = async (target, root, next, guard = () => true, options = {}) => {
     const check = current => { requireTarget(target); if (guard(current) !== true) throw new Error('任务已取消或来源已失效'); return true; };
-    assertRoot(next, target); check(root);
-    const committed = await adapter.commit(target, next, root.revision, { ...options, guard: check });
+    const candidate=assertRoot(next, target); check(root);
+    const committed = await adapter.commit(target, candidate, root.revision, { ...options, guard: check });
     requireTarget(target);
     return assertRoot(committed, target);
   };
@@ -95,10 +101,11 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     return true;
   };
   const matchSummary=(root,target,snapshot)=>{
+    root=comparisonRoot(root,'summary');
     if(!snapshot||!sameTarget(target,snapshot.target)||!equal(summaryOf(root),snapshot.summary))throw new Error('总结参数或批历史已变化');
     if(snapshot.batch){const batch=summaryOf(root).batches.find(item=>item.id===snapshot.batch.id);if(!equal(batch,snapshot.batch)||!equal(root.events.filter(event=>batch.eventIds.includes(event.id)),snapshot.events))throw new Error('所属批成员已变化');}
   };
-  const summaryGuard=(target,snapshot,options)=>current=>{if(typeof options.isCurrent!=='function'||options.isCurrent()!==true)throw new Error('总结来源或配置已失效');matchSummary(current,target,snapshot);if(options.trackingUpdate&&trackingOf(current).revision!==options.trackingUpdate.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');return true;};
+  const summaryGuard=(target,snapshot,options)=>current=>{if(typeof options.isCurrent!=='function'||options.isCurrent()!==true)throw new Error('总结来源或配置已失效');matchSummary(current,target,snapshot);if(options.trackingUpdate&&trackingOf(comparisonRoot(current,'tracking')).revision!==options.trackingUpdate.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');return true;};
   const summaryTracking=(root,options)=>{if(!options.trackingUpdate)return {};const current=trackingOf(root),update=options.trackingUpdate;if(current.revision!==update.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');const tracking=assertTracking(update.value);if(equal(current,tracking))return {};if(tracking.revision<current.revision||tracking.revision>current.revision+1)throw new Error('同步追踪版本无效');return {tracking};};
   const summaryTime=(root,batch)=>{const current=timeOf(root),next=importSummaryCandidates(current,[batch]);return equal(current,next)?{}:{time:{...next,revision:current.revision+1}};};
   const consumePending=(summary,options,draft,candidates)=>{
@@ -114,6 +121,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
   };
   const captureCumulativeRoot=(target,root)=>freeze({target:copy(target),cumulative:cumulativeOf(root)});
   const matchCumulative=(root,target,snapshot)=>{
+    root=comparisonRoot(root,'cumulative');
     if(!snapshot||!sameTarget(target,snapshot.target)||!equal(cumulativeOf(root),snapshot.cumulative))throw new Error('古法基版、配置或进度已变化');
   };
   const cumulativeGuard=(target,snapshot,options,required=false)=>current=>{
@@ -142,7 +150,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     const guard=root=>{
       requireTarget(frozen);
       if((options.isCurrent??(()=>true))()!==true||!snapshot||!sameTarget(frozen,snapshot.target))throw new Error('最新摘要来源或配置已变化');
-      const current=latestOf(root);current.preferences=migrateLatestPreferences(current.preferences);
+      const current=latestOf(comparisonRoot(root,'latest'));current.preferences=migrateLatestPreferences(current.preferences);
       if(!equal(current,snapshot.latest))throw new Error('最新摘要来源或配置已变化');return true;
     };
     return enqueue(async()=>{
@@ -159,7 +167,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     matchesNarrative(target,selection){try{requireTarget(target);const root=assertRoot(adapter.peekConfirmed(target),target);return !!selection&&sameTarget(target,selection.target)&&equal(narrativeOf(root),selection.narrative);}catch{return false;}},
     updateNarrative(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertNarrative(value);
-      const guard=root=>{requireTarget(frozen);if(!isCurrent()||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(narrativeOf(root),snapshot.narrative))throw new Error('自述或大纲资料已变化，请重新读取');return true;};
+      const guard=root=>{requireTarget(frozen);if(!isCurrent()||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(narrativeOf(comparisonRoot(root,'narrative')),snapshot.narrative))throw new Error('自述或大纲资料已变化，请重新读取');return true;};
       return enqueue(async()=>{
         const root=await read(frozen);guard(root);const current=narrativeOf(root),next={...candidate,revision:current.revision};
         if(equal(current,next))return {status:'unchanged',root,selection:freeze({target:frozen,narrative:current})};
@@ -172,7 +180,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     async captureTracking(target,readView){const frozen=copy(target);return freeze({target:frozen,tracking:trackingOf(await panelRead(frozen,readView))});},
     updateTracking(target,selection,value,{isCurrent=()=>true,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertTracking(value);
-      const guard=root=>{requireTarget(frozen);if(!isCurrent()||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(trackingOf(root),snapshot.tracking))throw new Error('追踪来源或资料已变化');return true;};
+      const guard=root=>{requireTarget(frozen);if(!isCurrent()||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(trackingOf(comparisonRoot(root,'tracking')),snapshot.tracking))throw new Error('追踪来源或资料已变化');return true;};
       return enqueue(async()=>{
         const root=await read(frozen);guard(root);const current=trackingOf(root),next={...candidate,revision:current.revision};
         if(equal(current,next))return {status:'unchanged',root,selection:freeze({target:frozen,tracking:current})};
@@ -264,7 +272,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
       const frozen=copy(target);
       return enqueue(async()=>{
         const root=await read(frozen),current=timeOf(root),batches=summaryOf(root).batches,nextTime=importSummaryCandidates(current,batches);
-        const guard=stored=>{requireTarget(frozen);if(isCurrent()!==true||!equal(timeOf(stored),current)||!equal(summaryOf(stored).batches,batches))throw new Error('纪念日补录来源已变化');return true;};guard(root);
+        const guard=stored=>{requireTarget(frozen);if(isCurrent()!==true||!equal(timeOf(stored),current)||!equal(summaryOf(comparisonRoot(stored,'summary')).batches,batches))throw new Error('纪念日补录来源已变化');return true;};guard(root);
         if(equal(current,nextTime))return {status:'unchanged',root,selection:freeze({target:frozen,time:current})};
         nextTime.revision=current.revision+1;
         const saved=await commit(frozen,root,{...root,revision:root.revision+1,time:nextTime},guard,{requireConfirmation:true});
@@ -274,7 +282,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     async captureWorkshop(target,readView){const frozen=copy(target);return freeze({target:frozen,workshop:workshopOf(await panelRead(frozen,readView))});},
     updateWorkshop(target,selection,value,{isCurrent=()=>true,workshopProof,forceSave=false,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertWorkshop(value);
-      const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(workshopOf(root),snapshot.workshop))throw new Error('工坊来源或配置已变化');return true;};
+      const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(workshopOf(comparisonRoot(root,'workshop')),snapshot.workshop))throw new Error('工坊来源或配置已变化');return true;};
       return enqueue(async()=>{
         const root=await read(frozen);guard(root);const current=workshopOf(root);
         const nextWorkshop={...candidate,revision:current.revision};
@@ -328,7 +336,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     replaceCumulative(target,selection,version,options={}) {
       const draft=assertCumulativeVersion(version);return cumulativeMutation(target,selection,options,domain=>{
         const previous=domain.versions.at(-1);
-        if(!previous||draft.id!==previous.id||domain.versions.slice(0,-1).some(item=>item.taskId===draft.taskId)||!equal(draft.baseSnapshot,previous.baseSnapshot)||!equal(draft.sourceSnapshot,previous.sourceSnapshot)||!equal(draft.coverageRanges,previous.coverageRanges))throw new Error('古法再生成必须保留冻结基版和原始来源');
+        if(!previous||draft.id!==previous.id||domain.versions.slice(0,-1).some(item=>item.taskId===draft.taskId)||!equal(draft.baseSnapshot,previous.baseSnapshot)||!equal(draft.sourceSnapshot.requestedRange,previous.sourceSnapshot.requestedRange)||!matchesSourceMetadata(draft.sourceSnapshot.rawMessages,previous.sourceSnapshot.rawMessages)||!equal(draft.coverageRanges,previous.coverageRanges))throw new Error('古法再生成必须保留冻结基版和原始来源');
         if(!domain.pending||domain.pending.operation!=='replace')throw new Error('古法再生成须明确审核采用');
         const record={...draft,createdAt:previous.createdAt,updatedAt:now()};
         return {...consumeCumulativePending(domain,draft,'replace',options),versions:[...domain.versions.slice(0,-1),record]};
@@ -375,14 +383,14 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         if(expectedSummaryRevision!==undefined&&revision!==expectedSummaryRevision)throw new Error('总结设置已变化');
         const preferences=assertSummaryPreferences({...summary.preferences,...Object.fromEntries(Object.entries(draft).map(([key,value])=>[key,{...summary.preferences[key],...value}]))});
         const nextSummary={...summary,revision:revision+1,preferences};
-        const guard=current=>{if(isCurrent()!==true||summaryOf(current).revision!==revision)throw new Error('总结设置已变化');return true;};
+        const guard=current=>{if(isCurrent()!==true||summaryOf(comparisonRoot(current,'summary')).revision!==revision)throw new Error('总结设置已变化');return true;};
         return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,summary:nextSummary},guard)};
       });
     },
     setSummaryExcludedFloors(target,records,{expectedSummaryRevision,isCurrent=()=>true}={}) {
       const frozen=copy(target),excludedFloors=assertExcludedFloors(records);
       return enqueue(async()=>{const root=await read(frozen),summary=summaryOf(root),revision=summary.revision;if(expectedSummaryRevision!==undefined&&revision!==expectedSummaryRevision)throw new Error('排除策略已变化');
-        const guard=current=>{if(isCurrent()!==true||summaryOf(current).revision!==revision)throw new Error('排除策略已变化');return true;};
+        const guard=current=>{if(isCurrent()!==true||summaryOf(comparisonRoot(current,'summary')).revision!==revision)throw new Error('排除策略已变化');return true;};
         return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,summary:{...summary,revision:revision+1,excludedFloors}},guard)};
       });
     },
@@ -436,29 +444,73 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     },
     reconcileSummarySourceDeletion(target,deletions,{isCurrent=()=>true}={}) {
       const frozen=copy(target),evidence=copy(deletions),key=JSON.stringify([frozen,evidence.map(item=>[item.before.epoch,item.after.epoch,item.removedFloors])]);
+      // Receipts cover every changed domain, including merge tombstones. An
+      // unknown successful save can be adopted without deleting or undoing twice.
+      const receipt=raw=>{const root=comparisonRoot(raw,'summary','narrative','tracking');return {summary:summaryOf(root),events:copy(root.events),deletedMergeIds:copy(root.deletedMergeIds??[]),narrative:root.narrative===undefined?undefined:assertNarrative(root.narrative),tracking:root.tracking===undefined?undefined:assertTracking(root.tracking)};};
       return enqueue(async()=>{
         const recovery=sourceDeletionReceipts.get(key);
         if(recovery){
           if(recovery.superseded)throw new Error('该来源删除操作已处理');
           const current=await read(frozen);
           if(!isCurrent())throw new Error('聊天目标已变化');
-          if(equal(current.events,recovery.events)&&equal(summaryOf(current),recovery.nextSummary))return recovery.proposal;
-          if(!equal(current.events,recovery.events)||!equal(summaryOf(current),recovery.previousSummary))throw new Error('来源定位保存后数据已变化，请重新查看记忆');
+          const confirmed=receipt(current);
+          if(equal(confirmed,recovery.next))return recovery.proposal;
+          if(!equal(confirmed,recovery.previous))throw new Error('来源定位保存后数据已变化，请重新查看记忆');
         }
-        const root=await read(frozen),normal=new Map(),merged=new Map(),batchIds=new Set(),unresolved=new Set();let next=root;
+        const root=await read(frozen),normal=new Map(),merged=new Map(),batchIds=new Set(),unresolved=new Set(),rollbackOutcomes=[],retractedBatchIds=new Set(),removedIds=new Set(),clearedPendingIds=new Set(),restoredIds=new Set();let next=root;
         for(const deletion of evidence){
-          const affected=affectedSummaryDeletion(next,deletion);
-          for(const kind of ['normal','merged'])for(const event of affected[kind])(kind==='normal'?normal:merged).set(event.id,event);
+          const affected=affectedSummaryDeletion(next,deletion),tail=isVerifiedTailDeletion(deletion);
           affected.batchIds.forEach(id=>batchIds.add(id));affected.unresolved.forEach(id=>unresolved.add(id));
+          // Only the independently verified non-tail path opens the existing
+          // review dialog. Tail outcomes are withdrawn in this root candidate.
+          if(!tail)for(const kind of ['normal','merged'])for(const event of affected[kind])(kind==='normal'?normal:merged).set(event.id,event);
           next=rebaseSummaryPositions(next,deletion);
+          if(tail){
+            const pending=next.summary?.pending;
+            if(pending){
+              const removed=new Set(deletion.removedFloors),before=new Map(deletion.before.messages.map(row=>[row.floor,row]));
+              const deleted=pending.sourceSnapshot.rawMessages.filter(row=>removed.has(row.floor));
+              if(deleted.some(row=>before.get(row.floor)?.identity===row.identity)){
+                const summary={...next.summary};delete summary.pending;next={...next,summary};clearedPendingIds.add(pending.id);
+              }else if(deleted.length)unresolved.add(`pending:${pending.id}`);
+            }
+            if(affected.batchIds.length){
+              const selected=new Set([...affected.normal,...affected.merged].map(event=>event.id)),merges=new Set(affected.merged.map(event=>event.id)),retracted=new Set(affected.batchIds);
+              const members=new Set(next.summary.batches.filter(batch=>retracted.has(batch.id)).flatMap(batch=>batch.eventIds));
+              selected.forEach(id=>removedIds.add(id));retracted.forEach(id=>retractedBatchIds.add(id));
+              // The root validator proves complete merge ownership. Reuse undo
+              // semantics, restoring unaffected originals rather than keeping a
+              // contaminated result or trying to edit its generated prose.
+              next={...next,events:next.events.flatMap(event=>{
+                if(selected.has(event.id)||members.has(event.id)&&(!event.supersededBy||merges.has(event.supersededBy)))return [];
+                if(merges.has(event.supersededBy)){const restored={...event};delete restored.supersededBy;restoredIds.add(event.id);return [restored];}
+                // A previously deleted merge has no result to undo. Its hidden
+                // originals remain hidden; never reverse a user's earlier delete.
+                if(members.has(event.id)&&event.supersededBy)unresolved.add(`deleted-merge:${event.supersededBy}`);
+                return [event];
+              })};
+              const summary=summaryOf(next),batches=summary.batches.filter(batch=>!retracted.has(batch.id)),sourcePositions=Object.fromEntries(Object.entries(summary.sourcePositions??{}).filter(([id])=>!retracted.has(id)));
+              let lastProcessedFloor=null;
+              for(const batch of batches){
+                const positions=effectiveBatchPositions(batch,summary).filter((_,index)=>batch.sourceSnapshot.rawMessages[index].floor<=batch.actualRange.end);
+                if(positions.length&&positions.every((position,index)=>position!==null&&(!index||position.floor===positions[index-1].floor+1)))lastProcessedFloor=Math.max(lastProcessedFloor??-1,positions.at(-1).floor);
+              }
+              const nextSummary={...summary,batches,progress:{...summary.progress,lastProcessedFloor}};
+              delete nextSummary.sourcePositions;if(Object.keys(sourcePositions).length)nextSummary.sourcePositions=sourcePositions;
+              next={...next,summary:nextSummary};
+            }
+            if(next.narrative){const result=rollbackNarrativeTail(next.narrative,deletion);next={...next,narrative:assertNarrative(result.domain)};rollbackOutcomes.push(...result.outcomes);}
+            if(next.tracking){const result=rollbackTrackingTail(next.tracking,deletion.before,deletion.after);next={...next,tracking:assertTracking(result.tracking)};if(result.rolledBack)rollbackOutcomes.push({kind:'tracking',status:'restored'});if(result.unavailable)rollbackOutcomes.push({kind:'tracking',status:'unavailable',rebuildFrom:result.fromFloor??0,error:`追踪历史不足，无法回退；请从第 ${result.fromFloor??0} 楼重新生成`});}
+          }else{if(next.narrative?.rollback)next={...next,narrative:invalidateNarrativeRollback(copy(next.narrative))};if(next.tracking?.tailHistory)next={...next,tracking:invalidateTrackingTailHistory(next.tracking)};}
         }
-        const guard=current=>{if(!isCurrent()||!equal(summaryOf(current),summaryOf(root))||!equal(current.events,root.events))throw new Error('来源删除期间记忆已变化，请重新查看');return true;};
+        const previous=receipt(root),guard=current=>{if(!isCurrent()||!equal(receipt(current),previous))throw new Error('来源删除期间记忆已变化，请重新查看');return true;};
         guard(root);
-        const candidate=equal(next,root)?root:{...next,revision:root.revision+1,summary:{...summaryOf(next),revision:summaryOf(root).revision+1}};
-        const proposal=freeze({target:frozen,normal:[...normal.values()],merged:[...merged.values()],batchIds:[...batchIds],batchCount:batchIds.size,unresolved:[...unresolved],summary:summaryOf(candidate),events:copy(candidate.events),deletedMergeIds:copy(candidate.deletedMergeIds??[])});
+        const candidate=equal(next,root)?root:assertRoot({...next,revision:root.revision+1,...(!equal(next.summary,root.summary)?{summary:{...summaryOf(next),revision:summaryOf(root).revision+1}}:{})},frozen);
+        const remaining=rows=>[...rows.values()].filter(event=>candidate.events.some(current=>current.id===event.id&&!current.supersededBy));
+        const proposal=freeze({target:frozen,rollbackApplied:rollbackOutcomes.length>0||retractedBatchIds.size>0||clearedPendingIds.size>0,rollbackOutcomes,clearedPendingIds:[...clearedPendingIds],restoredIds:[...restoredIds].filter(id=>candidate.events.some(event=>event.id===id&&!event.supersededBy)),removed:removedIds.size,retractedBatchIds:[...retractedBatchIds],normal:remaining(normal),merged:remaining(merged),batchIds:[...batchIds],batchCount:batchIds.size,unresolved:[...unresolved],summary:summaryOf(candidate),events:copy(candidate.events),deletedMergeIds:copy(candidate.deletedMergeIds??[])});
         for(const oldKey of sourceDeletionReceipts.keys())if(oldKey!==key)sourceDeletionReceipts.set(oldKey,{superseded:true});
-        sourceDeletionReceipts.set(key,{previousSummary:summaryOf(root),nextSummary:summaryOf(candidate),events:copy(root.events),proposal});
-        if(candidate!==root)await commit(frozen,root,candidate,guard);
+        sourceDeletionReceipts.set(key,{previous,next:receipt(candidate),proposal});
+        if(candidate!==root)await commit(frozen,root,candidate,guard,{requireConfirmation:true});
         return proposal;
       });
     },
@@ -472,7 +524,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
       if(!choice||typeof choice.normal!=='boolean'||typeof choice.merged!=='boolean')throw new Error('请选择要删除的记忆类别');
       const ids=[...(choice.normal?snapshot.normal:[]),...(choice.merged?snapshot.merged:[])].map(event=>event.id),selected=selectedIds(ids,true);
       const guard=root=>{
-        if(!isCurrent()||!sameTarget(frozen,snapshot.target)||!equal(root.events,snapshot.events)||!equal(summaryOf(root),snapshot.summary)||!equal(root.deletedMergeIds??[],snapshot.deletedMergeIds))throw new Error('记忆或批次已变化，未执行删除，请重新查看');
+        if(!isCurrent()||!sameTarget(frozen,snapshot.target)||!equal(root.events,snapshot.events)||!equal(summaryOf(comparisonRoot(root,'summary')),snapshot.summary)||!equal(root.deletedMergeIds??[],snapshot.deletedMergeIds))throw new Error('记忆或批次已变化，未执行删除，请重新查看');
         select(root,[...selected]);return true;
       };
       return enqueue(async()=>{

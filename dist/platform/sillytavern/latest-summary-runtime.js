@@ -4,7 +4,7 @@ import {latestArchivedFloors} from '../../domain/latest/coverage.js';
 import {cleanSummaryFloors,createDefaultCleaningRules,normalizeCleaningRule} from '../../domain/summary/cleaning.js';
 import {sameTarget} from '../../domain/memory/repository.js';
 import {DEFAULT_LATEST_PROMPT,emptyLatest,pruneLatestRecords} from '../../domain/latest/data.js';
-import {prepareLatestSource,prepareManualLatestSource,storedLatestSource,matchesLatestSource,matchesStoredLatestSource,createStoredLatestSourceMatcher} from '../../domain/latest/source.js';
+import {prepareLatestSource,prepareManualLatestSource,matchesLatestSource,matchesStoredLatestSource,createStoredLatestSourceMatcher} from '../../domain/latest/source.js';
 import {buildLatestRequest,promptIdentities} from '../../domain/latest/requests.js';
 import {planLatestBackfill,buildLatestBackfillRequest,parseLatestBackfillResponse} from '../../domain/latest/backfill.js';
 import {buildBackgroundRoundRequest,parseBackgroundRoundResponse} from '../../domain/background/round.js';
@@ -12,22 +12,16 @@ import {resultText} from '../../domain/workshop/results.js';
 import {transformLatestMessages} from '../../domain/latest/transform.js';
 import {prepareWorkshopIdentities,WORKSHOP_REPLY_KEY} from './workshop-identities.js';
 import {mapSummaryPromptFloors} from './summary-history.js';
+import {latestSourceMetadata,pendingProjection} from './latest-source-metadata.js';
 
 const copy=value=>structuredClone(value);
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const summarySettings=({enabled,...preferences})=>preferences;
 const normalizedRules=rules=>(rules??createDefaultCleaningRules()).map(normalizeCleaningRule);
 const supported=new Set(['normal','regenerate','swipe','continue']);
-const specialKeys=['reasoning','reasoning_content','thinking','tool_calls','function_call','tool_invocations','image','images','media','file','files','attachments','audio','video'];
 const failureLabels={preparation:'准备',config:'配置',request:'请求',parse:'解析',save:'保存'};
 const safeLocalFailures=new Set(['未收到该任务的完整结果','该任务分段格式无效或发生嵌套','该任务返回了空白结果','该任务分段未完整闭合','该任务出现重复分段','清洗后没有可总结的 AI 正文','该楼层没有可总结的 AI 正文','后台任务数量无效','后台任务分段无效','最新摘要设置已变化，请重试','最新摘要已修改，请重新读取']);
 const safeFailure=(error,stage)=>`${failureLabels[stage]}失败：${error instanceof AiProviderError?new AiProviderError(error.code).message:error instanceof SettingsError?new SettingsError(error.code).message:safeLocalFailures.has(error?.message)?error.message:error?.code==='COMMIT_UNCONFIRMED'?'保存结果尚未确认，请重新读取后核对。':'请重试。'}`;
-const present=value=>value!==undefined&&value!==null&&value!==false&&value!==''&&(!Array.isArray(value)||value.length>0);
-const special=message=>specialKeys.some(key=>present(message?.[key])||present(message?.extra?.[key]))||present(message?.extra?.type);
-const pendingProjection=message=>{
-  const slot=message?.swipe_info?.[message.swipe_id??0]?.extra?.[WORKSHOP_REPLY_KEY],active=message?.extra?.[WORKSHOP_REPLY_KEY];
-  return typeof slot==='string'&&!!slot&&typeof active==='string'&&!!active&&slot!==active;
-};
 // Capture only names the host explicitly binds; never infer a story person from
 // the user/assistant author labels on a message.
 export function captureLatestPromptIdentities(context={}){
@@ -35,7 +29,7 @@ export function captureLatestPromptIdentities(context={}){
   return promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name});
 }
 // Latest owns neither provider configuration nor event/ancient summary progress.
-export function createLatestSummaryRuntime({repository,adapter,settings,provider,getGenerationSettings,getContext,getControls,workshopRuntime,trackingRuntime,scheduleRuntime,autoInitialize=true}={}) {
+export function createLatestSummaryRuntime({repository,adapter,settings,provider,getGenerationSettings,getContext,getControls,workshopRuntime,trackingRuntime,scheduleRuntime,isSourceDeletionPending=()=>false,autoInitialize=true}={}) {
   let latestEpoch=0,disposed=false,serial=0,readSerial=0,target=null,selection=null,pending=null,receipt=null,enabled=true,generationQueue=Promise.resolve(),foregroundStopped=false,foregroundType=null,foregroundEnded=false;
   let workshopState=null,workshopFloorStates={},trackingState=null,trackingFloorStates={},scheduleState=null,scheduleFloorStates={};
   let libraryCache=null,displayEpoch=0,lastReadView=null,displayReadDirty=false,initialized=autoInitialize;
@@ -63,21 +57,15 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   function cancel(){stopBackfill();for(const [key,value] of automaticReceipts)if(['queued','running'].includes(value.status))automaticReceipts.set(key,{...value,status:'cancelled',message:'本轮自动生成已取消，未自动重试'});if(['waiting','queued','running'].includes(automaticState.status))automaticState={...automaticState,status:'cancelled',message:'本轮自动生成已取消，未自动重试'};serial++;foregroundType=null;for(const [key,value] of Object.entries(scheduleFloorStates))if(value.status==='running')scheduleFloorStates[key]={status:'idle',error:''};scheduleRuntime?.cancel?.();for(const [key,value] of Object.entries(trackingFloorStates))if(value.status==='running')trackingFloorStates[key]={status:'idle',error:''};for(const tasks of Object.values(workshopFloorStates))for(const [key,value] of Object.entries(tasks))if(value.status==='running')tasks[key]={status:'idle',error:''};receipt=null;foregroundEnded=false;generationQueue=Promise.resolve();queuedFloors.clear();displayBatches.clear();for(const job of jobs)job.abort();jobs.clear();for(const [key,value] of Object.entries(state.floorStates))if(value.status==='running')state.floorStates[key]={status:'idle',error:''};if(state.status==='running')state.status='ready';publish();}
   function raw(t,retention=false){
     const snapshot=retention&&adapter.captureLatestRetentionSource?adapter.captureLatestRetentionSource(t):adapter.captureChatSource(t),chat=getContext().chat;
-    snapshot.messages=snapshot.messages.map(item=>{
-      const message=chat[item.floor],swipes=message?.swipes,current=message?.swipe_id??0;
-      // New swipes first have no slot. Deletion changes the selected slot before
-      // syncSwipeToMes updates mes/extra. Neither stale projection owns a reply.
-      const pending=Array.isArray(swipes)&&swipes.length&&typeof swipes[current]!=='string'||pendingProjection(message);
-      return {...item,replyId:pending?null:message?.extra?.[WORKSHOP_REPLY_KEY]??null,specialPayload:!!special(message)};
-    });
+    snapshot.messages=snapshot.messages.map(item=>({...item,...latestSourceMetadata(chat[item.floor])}));
     return snapshot;
   }
   function matchesRaw(t,source){
     if(!source||!adapter.matchesChatSource(t,source))return false;
     const chat=getContext().chat;
-    return source.messages.every(item=>{const message=chat[item.floor],swipes=message?.swipes,current=message?.swipe_id??0;
-      const unsettled=Array.isArray(swipes)&&swipes.length&&typeof swipes[current]!=='string'||pendingProjection(message);
-      return item.replyId===(unsettled?null:message?.extra?.[WORKSHOP_REPLY_KEY]??null)&&item.specialPayload===!!special(message);
+    return source.messages.every(item=>{
+      const metadata=latestSourceMetadata(chat[item.floor]);
+      return item.replyId===metadata.replyId&&item.specialPayload===metadata.specialPayload;
     });
   }
   const archivedFloor=(t,floor)=>latestArchivedFloors(adapter.peekConfirmed(t),raw(t,true)).has(floor);
@@ -95,7 +83,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   }
   function maintenanceMatches(proof,readView){
     try{
-      if(!proof||disposed||proof.serial!==serial||invalidatedFloors.size||!current(proof.target)||!matchesRaw(proof.target,proof.source)||!sameVersions(proof.versions,versions())||!equal(proof.config,maintenanceConfiguration()))return false;
+      if(!proof||disposed||isSourceDeletionPending()||proof.serial!==serial||invalidatedFloors.size||!current(proof.target)||!matchesRaw(proof.target,proof.source)||!sameVersions(proof.versions,versions())||!equal(proof.config,maintenanceConfiguration()))return false;
       if(proof.workshopSource&&!workshopRuntime.matchesDisplaySource(proof.target,proof.workshopSource))return false;
       if(readView){
         if(!repository.matchesPanelData(proof.target,readView))return false;
@@ -139,11 +127,13 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   }
   async function reconcile(){
     maintenanceProof=null;
+    // Verified suffix rollback owns all source-bound domains in one root write.
+    if(isSourceDeletionPending())return;
     let config;try{config=maintenanceConfiguration();}catch{/* Unconfirmed settings cannot grant reuse. */}
     const ticket=serial,t=await adapter.prepare(),workshopPass=await workshopRuntime?.request();
     const readView=workshopPass?.readView??await repository.capturePanelData?.(t);let captured=await repository.captureLatest(t,readView);
     const sharedSource=raw(t),workshop=await workshopRuntime?.backgroundState(t,{readView}),tracking=await trackingRuntime?.backgroundState(t,{readView,raw:sharedSource}),schedule=await scheduleRuntime?.backgroundState(t,{readView,raw:sharedSource});
-    if(disposed||ticket!==serial||!current(t))return;
+    if(disposed||ticket!==serial||!current(t)||isSourceDeletionPending())return;
     // Disabling generation must not disable ownership maintenance for saved
     // summaries: ST copies extension metadata into newly generated swipes.
     // Keep an unsettled host projection untouched until syncSwipeToMes runs;
@@ -153,21 +143,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     let maintainedProof=null;
     if(config&&readView&&(!workshopRuntime||workshopPass?.displaySource||!config.gates.some(row=>['prompt','collect','sync'].includes(row.key)&&row.allowed))){const root=repository.readPanelRoot(t,readView);maintainedProof={target:copy(t),serial:ticket,source,versions:versions(),config,binding:[root.binding?.kind,root.binding?.owner],modules:copy(root.workshop?.modules??[]),workshopSource:workshopPass?.displaySource??null};}
     const next=pruneLatestRecords(captured.latest,raw(t,true),{replyVersions:versions(),retainStale:true});
-    let rules=null,rebound=false;try{rules=cleaningRules();}catch{/* Missing configuration cannot prove equal generated input. */}
-    next.records=next.records.map(record=>{
-      const snapshot=record.sourceSnapshot;
-      let retained=invalidatedFloors.has(snapshot.assistantFloor)||invalidatedFloors.has(snapshot.userFloor)?{...record,stale:true}:record;
-      if(retained.stale&&rules&&record.cleaningRules&&equal(rules,record.cleaningRules)){
-        try{
-          const prepared=storedLatestSource(prepareLatestSource(source,{floor:snapshot.assistantFloor,rules}));
-          if(prepared.replyId===snapshot.replyId&&prepared.userFloor===snapshot.userFloor&&equal(prepared.sentFloors,snapshot.sentFloors)){
-            const {stale,...unchanged}=retained;retained={...unchanged,sourceSnapshot:prepared};rebound=true;
-          }
-        }catch{/* Keep the old result visible without claiming it matches. */}
-      }
-      return retained;
-    });
-    const valid=()=>{try{return !disposed&&ticket===serial&&current(t)&&matchesRaw(t,source)&&(!rebound||equal(cleaningRules(),rules));}catch{return false;}};
+    const valid=()=>{try{return !disposed&&!isSourceDeletionPending()&&ticket===serial&&current(t)&&matchesRaw(t,source);}catch{return false;}};
     if(prepared.changed||!equal(next,captured.latest)){
       const saved=await repository.updateLatest(t,captured,next,{isCurrent:valid,forceSave:prepared.changed,workshopProof:prepared.selected.map(({floor,swipeId,replyId})=>({floor,swipeId,replyId}))});
       captured=saved.selection;
@@ -635,7 +611,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   // ST streaming ends its UI before MESSAGE_RECEIVED; non-streaming reverses
   // this order. Both receipts are required, with successful-stream evidence.
   on('GENERATION_ENDED',()=>{foregroundEnded=true;if(!receipt&&automaticState.status==='waiting')automaticStatus('waiting','已收到结束信号，等待宿主正文回执');flushReceipt();});
-  for(const name of ['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,payload=>{const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;if(name==='MESSAGE_EDITED'){for(const [index,message] of (getContext().chat??[]).entries())if(!Number.isSafeInteger(floor)||index===floor||index===floor+1){const id=message?.extra?.[WORKSHOP_REPLY_KEY];if(id){delete state.floorStates[id];delete workshopFloorStates[id];delete trackingFloorStates[id];delete scheduleFloorStates[id];}}if(Number.isSafeInteger(floor)&&floor>=0)invalidatedFloors.add(floor);else for(const record of [...state.records,...(workshopState?.selection.workshop.results.filter(row=>row.generationSource==='background')??[]),...(trackingState?.tracking.snapshots??[]),...(scheduleState?.receipts??[])])for(const row of record.sourceSnapshot.rawMessages)invalidatedFloors.add(row.floor);}cancel();publish();void refresh().catch(()=>{});});
+  for(const name of ['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,payload=>{const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;if(name==='MESSAGE_EDITED'){for(const [index,message] of (getContext().chat??[]).entries())if(!Number.isSafeInteger(floor)||index===floor||index===floor+1){const id=message?.extra?.[WORKSHOP_REPLY_KEY];if(id){delete state.floorStates[id];delete workshopFloorStates[id];delete trackingFloorStates[id];delete scheduleFloorStates[id];}}}cancel();publish();void refresh().catch(()=>{});});
   for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{cancel();resetBackfill();readSerial++;invalidatedFloors.clear();target=null;selection=null;state={...emptyLatest(),status:'idle',error:'',floorStates:{}};workshopState=null;workshopFloorStates={};trackingState=null;trackingFloorStates={};scheduleState=null;scheduleFloorStates={};scheduleRuntime?.reset?.();automaticReceipts.clear();automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};publish();void refresh().catch(()=>{});});
   let displayReadQueued=false;
   const updateWorkshopDisplay=()=>{if(disposed||!initialized)return;if(pending){displayReadDirty=true;return;}if(displayReadQueued)return;displayReadQueued=true;queueMicrotask(()=>{displayReadQueued=false;if(!disposed){if(pending)displayReadDirty=true;else void read().catch(()=>{});}});};

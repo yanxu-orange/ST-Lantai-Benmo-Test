@@ -15,7 +15,7 @@ function validEventSentEvidence(source) {
     const original=originals.get(message?.floor);
     if(!original||!sameMessage(message,original)||seen.has(message.floor)||excluded.has(message.floor)||message.system
       ||!['assistant','user'].includes(message.role)||!source.includeUser&&message.role==='user'
-      ||message.floor>source.actualRange.end||typeof message.text!=='string'||!message.text.trim())return false;
+      ||message.floor>source.actualRange.end)return false;
     seen.add(message.floor);return true;
   });
 }
@@ -37,7 +37,7 @@ function eventCoverage(root,raw,floors) {
     for(const message of source.sentFloors) {
       const original=originals.get(message.floor);
       if(assistant(message)&&original&&sameMessage(message,original)&&!excluded.has(message.floor)
-        &&message.floor<=source.actualRange.end&&typeof message.text==='string'&&message.text.trim())floors.add(message.floor);
+        &&message.floor<=source.actualRange.end)floors.add(message.floor);
     }
   }
 }
@@ -73,7 +73,7 @@ function cumulativeCoverage(root,raw,floors) {
   const cumulative=cumulativeOf(root);
   if(!cumulative.currentVersionId||!cumulative.hiddenSegments?.length)return;
   // cumulativeOf validates the complete current ancestor chain. Only the actual
-  // sent messages of snapshots that still match this reply/text/swipe qualify.
+  // sent locators of snapshots that still match this reply identity/swipe qualify.
   // coverageRanges, generation settings and regeneration task IDs are not proof.
   const represented=new Set();
   for(const version of cumulative.versions) {

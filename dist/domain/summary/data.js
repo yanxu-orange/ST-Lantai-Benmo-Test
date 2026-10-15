@@ -1,5 +1,4 @@
-import {migrateSummaryPromptOverrides} from '../../shared/settings/summary-prompts.js';
-import {sourceFingerprint} from './source.js';
+import {sourceFingerprint,storedSummarySource,assertStoredSourceMessages} from './source.js';
 import {validateEvent} from '../memory/event-model.js';
 const copy=value=>structuredClone(value);
 const validRange=value=>value&&Number.isSafeInteger(value.start)&&value.start>=0&&Number.isSafeInteger(value.end)&&value.end>=value.start;
@@ -47,10 +46,17 @@ export function publicSummarySettingsEvidence(value) {
   const result=Object.fromEntries(keys.filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]]));
   const noPrivate=item=>{if(Array.isArray(item)){item.forEach(noPrivate);return;}if(item&&typeof item==='object')for(const [key,child] of Object.entries(item)){if(/^(ai|api|apiKey|password|credentials|credentialEpoch|authorization|secret|secretId|secretValue|endpoint|model|presets|activePresetId)$/i.test(key))throw new Error('待审核证据不得包含 AI 私有配置');noPrivate(child);}};
   noPrivate(result);
-  jsonEvidence(result);return copy(result);
+  jsonEvidence(result);return copy(Object.fromEntries(['generationMode','trackingItemsEnabled','trackingNpcsEnabled'].filter(key=>Object.hasOwn(result,key)).map(key=>[key,result[key]])));
 }
 // These two optional flags were absent in already saved pending batches.
-export function normalizedSummarySettingsEvidence(value){const result=publicSummarySettingsEvidence(value);return {...result,...(result.promptOverrides?{promptOverrides:migrateSummaryPromptOverrides(result.promptOverrides)}:{}),trackingItemsEnabled:result.trackingItemsEnabled===true,trackingNpcsEnabled:result.trackingNpcsEnabled===true};}
+export function normalizedSummarySettingsEvidence(value){const result=publicSummarySettingsEvidence(value);return {...result,trackingItemsEnabled:result.trackingItemsEnabled===true,trackingNpcsEnabled:result.trackingNpcsEnabled===true};}
+// Failed-stage checkpoints retain only the identity needed to rebuild the
+// current tracking context. Parsed output lives independently in tracking.parts.
+export function publicSummaryTrackingTicket(ticket) {
+  if(!ticket||!integer(ticket.revision)||!(ticket.baseKey===null||text(ticket.baseKey))||!integer(ticket.aiTurn)||!(ticket.batchId===null||text(ticket.batchId)))throw new Error('待审核追踪身份无效');
+  exact(ticket.preferences,['itemsEnabled','npcsEnabled']);if(Object.values(ticket.preferences).some(value=>typeof value!=='boolean'))throw new Error('待审核追踪设置无效');
+  return copy({revision:ticket.revision,baseKey:ticket.baseKey,preferences:ticket.preferences,aiTurn:ticket.aiTurn,batchId:ticket.batchId});
+}
 export function assertSummaryPending(value) {
   exact(value,['schema','id','batchId','origin','generationMode','completedStages','nextStage','failedStage','events','generatedCandidates','sourceSnapshot','settingsEvidence','params','createdAt','updatedAt',...(Object.hasOwn(value??{},'tracking')?['tracking']:[])]);
   if(value.schema!==1||!text(value.id)||!text(value.batchId)||!['manual','auto'].includes(value.origin)||!text(value.createdAt)||!text(value.updatedAt))throw new Error('待审核身份无效');
@@ -65,18 +71,19 @@ export function assertSummaryPending(value) {
   assertBatch({id:value.batchId,taskId:value.id,ordinal:1,sourceType:value.origin,requestedRange:value.sourceSnapshot?.requestedRange,actualRange:value.sourceSnapshot?.actualRange,sourceSnapshot:value.sourceSnapshot,settingsEvidence:publicSummarySettingsEvidence(value.settingsEvidence),generationMode:value.generationMode,hideOriginal:value.params.hideOriginal,generatedCandidates:value.generatedCandidates,eventIds:value.events.map(event=>event.id),createdAt:value.createdAt,completedAt:value.updatedAt});
   jsonEvidence(value.events);
   if(Object.hasOwn(value,'tracking')){exact(value.tracking,['ticket','context','parts']);if(!value.tracking.ticket||!integer(value.tracking.ticket.revision)||!value.tracking.context||!value.tracking.parts)throw new Error('待审核追踪证据无效');jsonEvidence(value.tracking);}
-  return {...copy(value),settingsEvidence:publicSummarySettingsEvidence(value.settingsEvidence)};
+  return {...copy(value),sourceSnapshot:storedSummarySource(value.sourceSnapshot),settingsEvidence:publicSummarySettingsEvidence(value.settingsEvidence),...(value.tracking?{tracking:{...copy(value.tracking),ticket:publicSummaryTrackingTicket(value.tracking.ticket)}}:{})};
 }
 export function assertBatch(batch) {
   exact(batch,['id','taskId','ordinal','sourceType','requestedRange','actualRange','sourceSnapshot','settingsEvidence','generationMode','hideOriginal','generatedCandidates','eventIds','createdAt','completedAt']);
   if(!text(batch.id)||!text(batch.taskId)||!integer(batch.ordinal,1)||!['manual','auto'].includes(batch.sourceType)||!validRange(batch.requestedRange)||!validRange(batch.actualRange)||batch.actualRange.start!==batch.requestedRange.start||batch.actualRange.end>batch.requestedRange.end||!['one','two','three'].includes(batch.generationMode)||typeof batch.hideOriginal!=='boolean'||!text(batch.createdAt)||!text(batch.completedAt))throw new Error('总结批记录无效');
   if(!Array.isArray(batch.eventIds)||!batch.eventIds.length||batch.eventIds.some(id=>!text(id))||new Set(batch.eventIds).size!==batch.eventIds.length)throw new Error('批成员身份无效');
-  const source=batch.sourceSnapshot;
+  const source=storedSummarySource(batch.sourceSnapshot);
   if(!source||!integer(source.epoch)||!text(source.fingerprint)||!Array.isArray(source.rawMessages)||source.rawMessages.length!==batch.requestedRange.end-batch.requestedRange.start+1||JSON.stringify(source.requestedRange)!==JSON.stringify(batch.requestedRange)||JSON.stringify(source.actualRange)!==JSON.stringify(batch.actualRange))throw new Error('批来源证据无效');
-  for(let i=0;i<source.rawMessages.length;i++){const message=source.rawMessages[i];if(message.floor!==batch.requestedRange.start+i||!text(message.identity)||!['user','assistant','system'].includes(message.role)||typeof message.system!=='boolean'||typeof message.text!=='string'||!(message.date===null||typeof message.date==='string'))throw new Error('批消息证据无效');}
-  if(sourceFingerprint(source.rawMessages)!==source.fingerprint)throw new Error('批来源指纹不符');
+  for(let i=0;i<source.rawMessages.length;i++){const message=source.rawMessages[i];if(message.floor!==batch.requestedRange.start+i||!text(message.identity)||!['user','assistant','system'].includes(message.role)||typeof message.system!=='boolean'||!(message.date===null||typeof message.date==='string'))throw new Error('批消息证据无效');}
+  assertStoredSourceMessages(source.rawMessages);assertStoredSourceMessages(source.sentFloors);
+  if(sourceFingerprint(source.rawMessages)!==batch.sourceSnapshot.fingerprint)throw new Error('批来源指纹不符');
   assertGeneratedEvidence(batch.generatedCandidates);jsonEvidence(source);jsonEvidence(batch.settingsEvidence);
-  return copy(batch);
+  return {...copy(batch),sourceSnapshot:source,settingsEvidence:publicSummarySettingsEvidence(batch.settingsEvidence)};
 }
 export function assertSummary(summary,events=[]) {
   exact(summary,['schema','revision','preferences','excludedFloors','batches','progress',...(Object.hasOwn(summary,'pending')?['pending']:[]),...(Object.hasOwn(summary,'sourcePositions')?['sourcePositions']:[])]);
@@ -89,7 +96,7 @@ export function assertSummary(summary,events=[]) {
   for(const event of events){if(ids.has(event.batch?.id)&&!summary.batches.find(batch=>batch.id===event.batch.id).eventIds.includes(event.id))throw new Error('批成员不在正式历史中');}
   if(Object.hasOwn(summary,'sourcePositions'))assertSummarySourcePositions(summary.sourcePositions,summary.batches);
   if(Object.hasOwn(summary,'pending')&&summary.pending!==null){const pending=assertSummaryPending(summary.pending);if(ids.has(pending.batchId)||tasks.has(pending.id)||pending.events.some(candidate=>events.some(event=>event.id===candidate.id)))throw new Error('待审核与正式身份冲突');}
-  return {...copy(summary),preferences};
+  return {...copy(summary),preferences,batches:summary.batches.map(assertBatch),...(summary.pending?{pending:assertSummaryPending(summary.pending)}:{})};
 }
 export function assertSummarySourcePositions(value,batches) {
   if(!value||Object.getPrototypeOf(value)!==Object.prototype)throw new Error('总结来源位置无效');

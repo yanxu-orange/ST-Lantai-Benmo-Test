@@ -1,12 +1,12 @@
 import {storyDate} from './point.js';
 // Persist only a small source boundary for a user's explicit date calibration.
-// Full chat text is not copied into the anchor.
+// Only source locators are durable; prior message bodies are never retained.
 export function createManualAnchor(calendar,date,messages,{now=()=>new Date().toISOString()}={}){
  if(!Array.isArray(messages))throw new TypeError('校准来源无效');
  const boundary=messages.slice(-3).map((message,index)=>{
   const floor=messages.length-Math.min(3,messages.length)+index;
-  if(!message||typeof message.identity!=='string'||!message.identity||typeof message.text!=='string'||!['user','assistant','system','tool'].includes(message.role))throw new Error('校准来源身份无效');
-  return {floor,identity:message.identity,text:message.text,role:message.role};
+  if(!message||typeof message.identity!=='string'||!message.identity||!['user','assistant','system','tool'].includes(message.role))throw new Error('校准来源身份无效');
+  return {floor,identity:message.identity,role:message.role,system:message.system??message.role==='system',date:message.date??null,swipeId:message.swipeId??null};
  });
  return {date:storyDate(calendar,date),nextFloor:messages.length,boundary,setAt:now()};
 }
@@ -22,7 +22,7 @@ export function resolveManualAnchor(calendar,anchor,messages,{branch=false}={}){
  if(anchor.nextFloor>0&&!anchor.boundary.length)return null;
  let startIndex=0;
  if(branch){
-  if(anchor.nextFloor>messages.length||anchor.boundary.some(item=>!Number.isSafeInteger(item.floor)||item.floor<0||item.floor>=anchor.nextFloor||!messages[item.floor]||messages[item.floor].identity!==item.identity||messages[item.floor].text!==item.text||messages[item.floor].role!==item.role))return null;
+  if(anchor.nextFloor>messages.length||anchor.boundary.some(item=>!Number.isSafeInteger(item.floor)||item.floor<0||item.floor>=anchor.nextFloor||!messages[item.floor]||messages[item.floor].identity!==item.identity||messages[item.floor].role!==item.role))return null;
   startIndex=anchor.nextFloor;
  }else if(anchor.nextFloor>0){
   let found=false;

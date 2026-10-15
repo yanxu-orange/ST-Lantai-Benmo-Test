@@ -204,7 +204,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       sourceDeletionNotices=createManagementNotifications({document:doc,controller:{subscribeNotices(fn){listeners.add(fn);return()=>listeners.delete(fn);}},styles:notificationStyles,openTask:()=>sourceDeletionRuntime?.retry()??false});
       const themedDialog=createSourceDeletionDialog({document:doc,fetch:request,getTheme:()=>appearance.inspect().previewTheme??appearance.inspect().theme});
       const dialog={async show(options){await appearance.ensure();if(options.signal?.aborted)return null;return themedDialog.show(options);},dispose:()=>themedDialog.dispose()};
-      sourceDeletionRuntime=createSourceDeletionRuntime({adapter,repository,dialog,onNotice:(message,retry=false)=>{for(const fn of listeners)fn({id:'lantai-source-deletion-notice',phase:retry?'failed':'complete',action:retry,message});},onCommitted:()=>{recallRuntime?.clear();if(app&&app.session.state.route!=='editor')void app.refresh();}});
+      sourceDeletionRuntime=createSourceDeletionRuntime({adapter,repository,dialog,onPending:()=>{recallEntryRequest++;recallRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();},onNotice:(message,retry=false)=>{for(const fn of listeners)fn({id:'lantai-source-deletion-notice',phase:retry?'failed':'complete',action:retry,message});},onCommitted:()=>{recallRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();void latestRuntime?.refresh().catch(()=>{});void narrativeRuntime?.load().catch(()=>{});if(app&&app.session.state.route!=='editor')void app.refresh();}});
     }
     timeRuntime=createTimeRuntime({adapter,repository,getContext,getControls:()=>controls});
     // The proof is this round's guarded IN_CHAT system-slot write receipt.
@@ -292,10 +292,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(runtime.settings?.captureWorkshop)workshopRegex=createWorkshopRegexInstaller({settings:runtime.settings,getContext,fetchImpl:request,...runtimeOptions.workshopRegexOptions,isCurrent:()=>!disposed&&!lifetime.signal.aborted&&allowed('workshop')});
         if(workshopRegex&&allowed('workshop')){try{await workshopRegex.ensure({settingsReady:true});}catch(error){workshopRegexError=error;}}
         if(disposed){value.dispose();return null;}
-        if(runtime.settings?.captureWorkshop)workshopRuntime=createWorkshopRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,captureSource:t=>adapter.captureChatSource(t),matchesSource:(t,s)=>adapter.matchesChatSource(t,s)});
+        if(runtime.settings?.captureWorkshop)workshopRuntime=createWorkshopRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,captureSource:t=>adapter.captureChatSource(t),matchesSource:(t,s)=>adapter.matchesChatSource(t,s),isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true});
         trackingRuntime=createTrackingRuntime({repository,adapter,settings:runtime.settings,getContext,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t),onChange:()=>{void latestRuntime.refresh().catch(()=>{});}});
         scheduleRuntime=createScheduleRuntime({repository,settings:runtime.settings,dateRuntime:timeRuntime,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t)});
-        latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,autoInitialize:false});
+        latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true,autoInitialize:false});
         narrativeRuntime=createNarrativeRuntime({repository,adapter,manager:runtime.manager,getSummaryActive:()=>runtime.summaryService.isBusy()||runtime.cumulativeService?.isBusy(),settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
         const summaryNarrativeActions={event:createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.summaryService,runner:runtime.summaryController.runner}),cumulative:createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.cumulativeService,runner:runtime.cumulativeRunner})};
         const narrativeActions=Object.fromEntries(['retry','resume','skip','pause'].map(action=>[action,()=>summaryNarrativeActions[narrativeRuntime.snapshot().run?.summarySource==='cumulative'?'cumulative':'event'][action]()]));
@@ -957,6 +957,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(!current())return;await ensureRuntime();
         if(disposed||request!==recallEntryRequest||!sameTarget(target,repository.captureTarget()))return;
         await controls.ensure();if(!current())return;
+        if(sourceDeletionRuntime?.hasPendingRollback()){recallRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();return;}
         await timePrompts?.intercept(...args);if(!current())return;
         await recallRuntime?.intercept(...args);if(!current())return;
         await cumulativeRuntime?.intercept(...args);if(!current())return;

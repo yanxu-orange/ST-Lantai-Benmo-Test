@@ -1,6 +1,6 @@
 import {assertTime} from './data.js';
 import {createCalendar} from './calendar.js';
-import {durableSourceMessages} from '../summary/source.js';
+import {storedSourceMessages} from '../summary/source.js';
 import {storedLatestSource,latestSourceKey,matchesLatestSource,createStoredLatestSourceMatcher} from '../latest/source.js';
 import {calendarCandidateKey,hasScheduleDateClue,emptyScheduleLedger,reconcileScheduleLedger,sameScheduleValue as equal} from './schedule-model.js';
 export {calendarCandidateKey} from './schedule-model.js';
@@ -16,17 +16,17 @@ function sourceRetained(saved,source,versionsByReply){
  if(source.matches(saved))return versionsByReply===undefined||versionsByReply.get(saved.replyId)?.length===1;
  const current=source.messageAt(saved.assistantFloor);
  if(versionsByReply===undefined)return !!current&&current.role==='assistant'&&!current.system&&current.replyId!==saved.replyId;
- const versions=versionsByReply.get(saved.replyId)??[],version=versions[0],original=saved.rawMessages.at(-1);
- if(versions.length!==1||version.floor!==saved.assistantFloor||version.text!==original.text||!current||current.role!=='assistant'||current.system||current.replyId===saved.replyId)return false;
+ const versions=versionsByReply.get(saved.replyId)??[],version=versions[0];
+ if(versions.length!==1||version.floor!==saved.assistantFloor||!current||current.role!=='assistant'||current.system||current.replyId===saved.replyId)return false;
  const user=saved.userFloor===null?null:saved.rawMessages[0],currentUser=user?source.messageAt(user.floor):null;
- return !user||!!currentUser&&!currentUser.specialPayload&&equal(durableSourceMessages([currentUser]),[user]);
+ return !user||!!currentUser&&!currentUser.specialPayload&&equal(storedSourceMessages([currentUser]),[user]);
 }
 // Roll back only changes still equal to our saved output, then replay currently
 // proven sources and predecessor links. Manual changes are never overwritten.
 export function pruneScheduleSources(value,raw,{replyVersions=raw?.replyVersions,invalidatedFloors=[]}={}){
  const time=assertTime(value);if(!time.scheduleTracking)return time;
  const source=createStoredLatestSourceMatcher(raw);
- if(!Array.isArray(invalidatedFloors)||invalidatedFloors.some(floor=>!Number.isSafeInteger(floor)||floor<0)||replyVersions!==undefined&&(!Array.isArray(replyVersions)||replyVersions.some(row=>!text(row?.replyId)||!Number.isSafeInteger(row.floor)||row.floor<0||!Number.isSafeInteger(row.swipeId)||row.swipeId<0||typeof row.text!=='string')))throw new Error('日程来源版本证据无效');
+ if(!Array.isArray(invalidatedFloors)||invalidatedFloors.some(floor=>!Number.isSafeInteger(floor)||floor<0)||replyVersions!==undefined&&(!Array.isArray(replyVersions)||replyVersions.some(row=>!text(row?.replyId)||!Number.isSafeInteger(row.floor)||row.floor<0||!Number.isSafeInteger(row.swipeId)||row.swipeId<0)))throw new Error('日程来源版本证据无效');
  const invalid=new Set(invalidatedFloors),versionsByReply=replyVersions===undefined?undefined:new Map();
  for(const version of replyVersions??[]){const versions=versionsByReply.get(version.replyId)??[];versions.push(version);versionsByReply.set(version.replyId,versions);}
  reconcileScheduleLedger(time,{isRetained:saved=>!saved.rawMessages.some(message=>invalid.has(message.floor))&&sourceRetained(saved,source,versionsByReply),isActive:saved=>source.matches(saved)});

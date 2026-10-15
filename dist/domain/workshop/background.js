@@ -21,7 +21,7 @@ export function reconcileBackgroundResults(results,raw,{replyVersions,invalidate
   const source=assertRawSummarySource(raw),byFloor=new Map(source.messages.map(row=>[row.floor,row]));
   const versions=replyVersions===undefined?raw.replyVersions:replyVersions,byReply=new Map(),invalid=new Set(invalidatedFloors);
   if(versions!==undefined){
-    if(!Array.isArray(versions)||versions.some(row=>typeof row?.replyId!=='string'||!row.replyId.trim()||!Number.isSafeInteger(row.floor)||row.floor<0||!Number.isSafeInteger(row.swipeId)||row.swipeId<0||typeof row.text!=='string'))throw new Error('最新摘要回复版本证据无效');
+    if(!Array.isArray(versions)||versions.some(row=>typeof row?.replyId!=='string'||!row.replyId.trim()||!Number.isSafeInteger(row.floor)||row.floor<0||!Number.isSafeInteger(row.swipeId)||row.swipeId<0))throw new Error('最新摘要回复版本证据无效');
     for(const version of versions){const bucket=byReply.get(version.replyId)??[];bucket.push(version);byReply.set(version.replyId,bucket);}
   }
   return results.flatMap(row=>{

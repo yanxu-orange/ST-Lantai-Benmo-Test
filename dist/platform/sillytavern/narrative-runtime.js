@@ -1,6 +1,8 @@
+import {recordNarrativeManual} from '../../domain/narrative/rollback.js';
+import {compactNarrativePool, resolveNarrativeSource, importNarrativeSource, importNarrativeProgress, semanticProgress, semanticLatest} from '../../domain/narrative/source-pool.js';
 import {createBackgroundTaskManager} from '../../shared/runtime/background-tasks.js';
 import {sameTarget} from '../../domain/memory/repository.js';
-import {sourceFingerprint,durableSourceMessages} from '../../domain/summary/source.js';
+import {sourceFingerprint,durableSourceMessages,storedSourceMessages} from '../../domain/summary/source.js';
 import {matchesStoredNarrativeSource,narrativeMemoryRows} from '../../domain/narrative/core.js';
 import {prepareNarrativeBatch,projectNarrativeBatchBase} from './narrative-preparation.js';
 import {emptyNarrative,narrativeOf,assertNarrative,applyNarrativeResponse,reconcileNarrativeSource,narrativeHighWater,narrativeJointBudget,narrativeBatchSourceChoice,recordNarrativeGeneration} from '../../domain/narrative/data.js';
@@ -17,6 +19,7 @@ const content=(domain,kind)=>kind==='self'?domain.self:domain.outline;
 const stable=value=>value&&typeof value==='object'?Array.isArray(value)?value.map(stable):Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):value;
 async function digest(value){const bytes=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(stable(value))));return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');}
 const materialPreferences=(domain,selected)=>selected.map(kind=>{const p=domain.preferences[kind];return {kind,readMemory:p.readMemory,readOriginal:p.readOriginal,autoSource:p.autoSource??'event',...(kind==='self'?{readCard:p.readCard}:{})};});
+const semanticReview=(review,owner)=>review?{...review,progress:Object.fromEntries(review.kinds.map(kind=>[kind,semanticProgress(review.progress[kind],owner)]))}:review;
 const durableGeneration=value=>Object.fromEntries(Object.entries(value).filter(([key])=>!['epoch','generationEpoch'].includes(key)));
 
 // A host generateRaw/tokenizer promise can ignore AbortSignal indefinitely.
@@ -69,7 +72,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const captured=await repository.captureNarrative(t,readView);
     if(disposed||ticket!==serial||readTicket!==readSerial||!current(t))throw new Error('聊天已变化，请重新读取本末');
     unconfirmed=false;
-    if(!sequencePromise){const pending=captured.narrative.pendingRun;sequenceRun=pending?{...clone(pending),...(pending.kinds.length>1?{jointBudget:pending.jointBudget??narrativeJointBudget(captured.narrative)}:{}),target:clone(t),stage:pending.status,error:pending.status==='failed'?'上次叙事批次未完成，请重试或跳过':'已保留完成的批次，请继续',pauseRequested:pending.pauseRequested===true,skipped:0}:null;reviewGuards=null;}
+    if(!sequencePromise){const pending=captured.narrative.pendingRun;sequenceRun=pending?{...clone(pending),sourcePool:clone(captured.narrative.sourcePool??[]),...(pending.kinds.length>1?{jointBudget:pending.jointBudget??narrativeJointBudget(captured.narrative)}:{}),target:clone(t),stage:pending.status,error:pending.status==='failed'?'上次叙事批次未完成，请重试或跳过':'已保留完成的批次，请继续',pauseRequested:pending.pauseRequested===true,skipped:0}:null;reviewGuards=null;compactActiveSources(sequenceRun);}
     adopt(t,captured,{publish:false});publishRun();return snapshot();
   }
   function clearSlots(){
@@ -131,7 +134,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     return mutate(kind,domain=>{
       const previous=new Map((kind==='self'?domain.self.flatMap(row=>row.entries):domain.outline).map(row=>[row.id,row]));
       const update=rows=>rows.map(row=>({...row,updatedAt:previous.get(row.id)?.text===row.text?row.updatedAt:new Date().toISOString()}));
-      return {...domain,[kind]:kind==='self'?value.map(row=>({...row,entries:update(row.entries)})):update(value)};
+      return recordNarrativeManual({...domain,[kind]:kind==='self'?value.map(row=>({...row,entries:update(row.entries)})):update(value)},domain,kind);
     },options);
   }
   function cardSnapshot(){
@@ -147,16 +150,30 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
   const runPreferences=domain=>domain.preferences.run??{auto:true,batchSize:10};
   let sequenceRun=null,sequencePromise=null;
   const publishRun=()=>{state={...state,run:sequenceRun?{status:sequenceRun.status,stage:sequenceRun.stage,kinds:[...sequenceRun.kinds],jointBudget:sequenceRun.jointBudget??null,review:clone(sequenceRun.review??null),reviewBeforeCommit:sequenceRun.reviewBeforeCommit===true,target:clone(sequenceRun.target),summary:sequenceRun.summary===true,summarySource:sequenceRun.summarySource??'event',range:clone(sequenceRun.ranges[sequenceRun.index]??null),index:sequenceRun.index,total:sequenceRun.ranges.length,error:sequenceRun.error,pauseRequested:sequenceRun.pauseRequested,failedKinds:[...sequenceRun.failedKinds],skipped:sequenceRun.skipped,usage:clone(sequenceRun.usage??null)}:null};notify();};
-  function pendingCheckpoint(active,completedKind=null){
+  function compactActiveSources(active){
+    if(!active)return;
+    const holder={sourcePool:active.sourcePool??[],progress:{self:null,outline:null},pendingRun:{review:active.review}};
+    if(active.review)holder.pendingRun.review={...active.review,progress:Object.fromEntries(active.review.kinds.map(kind=>[kind,importNarrativeProgress(holder,active.review.progress[kind],active)]))};
+    if(active.summarySnapshot)holder.pendingRun.summarySnapshot=importNarrativeSource(holder,active.summarySnapshot,active);
+    compactNarrativePool(holder);
+    active.sourcePool=holder.sourcePool;
+    if(active.review)active.review=holder.pendingRun.review;
+    if(active.summarySnapshot)active.summarySnapshot=holder.pendingRun.summarySnapshot;
+  }
+  function pendingCheckpoint(active,owner,completedKind=null){
     let failedKinds=active.failedKinds.filter(kind=>kind!==completedKind),index=active.index;
     if(completedKind&&!failedKinds.length){index++;failedKinds=[];}
     if(index>=active.ranges.length)return null;
-    return {ranges:clone(active.ranges),index,kinds:[...active.kinds],failedKinds,...(active.jointBudget!==undefined?{jointBudget:active.jointBudget}:{}),...(active.pairId&&index===active.index?{pairId:active.pairId}:{}),...(active.reviewBeforeCommit?{reviewBeforeCommit:true}:{}),...(active.regenerateLatest?{regenerateLatest:true}:{}),...(active.pauseRequested?{pauseRequested:true}:{}),...(active.review&&index===active.index?{review:clone(active.review)}:{}),restart:active.restart===true,summary:active.summary===true,status:active.review&&index===active.index?'awaiting-review':active.status==='failed'?'failed':'paused',...(active.summarySource?{summarySource:active.summarySource}:{}),...(active.sentFloors?{sentFloors:clone(active.sentFloors),summarySnapshot:clone(active.summarySnapshot)}:{})};
+    const pending = {ranges:clone(active.ranges),index,kinds:[...active.kinds],failedKinds,...(active.jointBudget!==undefined?{jointBudget:active.jointBudget}:{}),...(active.pairId&&index===active.index?{pairId:active.pairId}:{}),...(active.reviewBeforeCommit?{reviewBeforeCommit:true}:{}),...(active.regenerateLatest?{regenerateLatest:true}:{}),...(active.pauseRequested?{pauseRequested:true}:{}),...(active.review&&index===active.index?{review:clone(active.review)}:{}),restart:active.restart===true,summary:active.summary===true,status:active.review&&index===active.index?'awaiting-review':active.status==='failed'?'failed':'paused',...(active.summarySource?{summarySource:active.summarySource}:{}),...(active.sentFloors?{sentFloors:storedSourceMessages(active.sentFloors),summarySnapshot:clone(active.summarySnapshot)}:{})};
+    if (pending.summarySnapshot) pending.summarySnapshot=importNarrativeSource(owner,pending.summarySnapshot,active);
+    if (pending.review) for (const kind of pending.review.kinds) pending.review.progress[kind]=importNarrativeProgress(owner,pending.review.progress[kind],active);
+    return pending;
   }
+  function checkpointDomain(domain,active){const next=clone(domain);next.pendingRun=pendingCheckpoint(active,next);return next;}
   async function persistCheckpoint(active,isCurrent=()=>true){
     const t=active.target,ticket=serial;
     if(!current(t)||sequenceRun!==active||!isCurrent())return;
-    const latest=await repository.captureNarrative(t),next={...latest.narrative,pendingRun:pendingCheckpoint(active)};
+    const latest=await repository.captureNarrative(t),next=checkpointDomain(latest.narrative,active);
     const saved=await repository.updateNarrative(t,latest,next,{isCurrent:()=>!unconfirmed&&current(t)&&ticket===serial&&sequenceRun===active&&isCurrent(),requireConfirmation:true});
     adopt(t,saved.selection);
   }
@@ -188,7 +205,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     if(!current(t))throw new Error('聊天已变化，请重新选择范围');
     if(options.regenerateLatest===true){
       const latest=active.map(kind=>domain.latestGeneration?.[kind]);
-      if(!active.length||latest.some((row,index)=>!row||domain.generationRecords?.[active[index]]?.at(-1)?.id!==row.recordId||!matchesStoredNarrativeSource(row.sourceSnapshot,raw)))throw new Error('缺少有效的最新生成前基版，不能重新生成');
+      if(!active.length||latest.some((row,index)=>!row||domain.generationRecords?.[active[index]]?.at(-1)?.id!==row.recordId||!matchesStoredNarrativeSource(row.sourceSnapshot,raw,domain)))throw new Error('缺少有效的最新生成前基版，不能重新生成');
       if(latest.length>1&&latest.some(row=>row.pairId!==latest[0].pairId||!equal(row.range,latest[0].range)))throw new Error('两项最新生成并非同一批，请分别重新生成');
       const range=clone(latest[0].range);
       return {status:'ready',kinds:active,...range,latestFloor:raw.messages.filter(completeFloor).at(-1)?.floor??-1,batchSize:range.endFloor-range.startFloor+1,ranges:[range],restart:false,regenerateLatest:true,...(active.length>1?{jointBudget:options.jointBudget??narrativeJointBudget(domain)}:{})};
@@ -255,12 +272,12 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const authority=options.authority??active.kinds.filter(allowed).map(kind=>proof(kind,active.target));
     const authorized=()=>sequenceRun===active&&authority.every(matches);
     if(!authorized())throw new Error('聊天或功能开关已变化，生成已停止');
-    active.usage=null;currentRequestPreview=null;previewGuard=null;active.pairId??=crypto.randomUUID();publishRun();
+    compactActiveSources(active);active.usage=null;currentRequestPreview=null;previewGuard=null;active.pairId??=crypto.randomUUID();publishRun();
     const t=active.target,{captured,root,raw}=await captureInputs(t),projectedAtStart=reconcileNarrativeSource(captured.narrative,raw).domain;
     if(!authorized())throw new Error('聊天或功能开关已变化，生成已停止');
     const proofs=authority.filter(({kind})=>allowed(kind)&&(!active.summary||(captured.narrative.preferences[kind].autoSource??'event')===(active.summarySource??'event'))&&(!options.only||options.only.includes(kind))&&(active.restart||active.regenerateLatest||(active.summary?narrativeHighWater(captured.narrative,kind):(projectedAtStart.progress[kind]?.lastProcessedFloor??-1))<range.endFloor));
     if(!proofs.length){active.index++;await persistCheckpoint(active);return;}
-    if(active.summarySnapshot&&!matchesStoredNarrativeSource(active.summarySnapshot,raw))throw new Error('已保存总结的原文来源已变化，请跳过本批');
+    if(active.summarySnapshot&&!matchesStoredNarrativeSource(active.summarySnapshot,raw,active))throw new Error('已保存总结的原文来源已变化，请跳过本批');
     const durable=active.reviewBeforeCommit&&!active.summary,bind=durable?digest:async()=>null;
     const config=clone(generation()),usesCard=active.kinds.includes('self')&&captured.narrative.preferences.self.readCard,card=usesCard?cardSnapshot():null,tasks=[];
     let signal;
@@ -293,10 +310,10 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       for(const task of tasks){
         const kind=task.kind;
         try{
-          if(!equal(latest.narrative.preferences[kind],captured.narrative.preferences[kind])||!equal(latest.narrative[kind],captured.narrative[kind])||!equal(latest.narrative.progress[kind],captured.narrative.progress[kind]))throw new Error('本末内容已变化，请重试');
+          if(!equal(latest.narrative.preferences[kind],captured.narrative.preferences[kind])||!equal(latest.narrative[kind],captured.narrative[kind])||!equal(semanticProgress(latest.narrative.progress[kind],latest.narrative),semanticProgress(captured.narrative.progress[kind],captured.narrative)))throw new Error('本末内容已变化，请重试');
           const applied=applyNarrativeResponse(prepared.projected,task,responses[kind],source(t),{events:projectNarrativeMemory(latestRoot,source(t))});
-          results[kind]=applied[kind];progress[kind]=applied.progress[kind];
-          categories[kind]={preferences:await bind(latest.narrative.preferences[kind]),entries:await bind(latest.narrative[kind]),progress:await bind(latest.narrative.progress[kind]),latestGeneration:await bind(latest.narrative.latestGeneration?.[kind]??null),memory:await bind(task.memorySnapshot),memoryIds:task.memorySnapshot.map(row=>row.id),readMemory:task.memorySnapshot.length>0};
+          results[kind]=applied[kind];progress[kind]=importNarrativeProgress(active,applied.progress[kind],applied);
+          categories[kind]={preferences:await bind(latest.narrative.preferences[kind]),entries:await bind(latest.narrative[kind]),progress:null,latestGeneration:null,memory:null,memoryIds:[],readMemory:false};
         }catch(error){errors.push(error.message);categoryStatus(kind,{status:'failed',error:error.message});}
       }
       if(durable&&errors.length)throw new Error(errors[0]);
@@ -306,8 +323,8 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       if(!valid())throw new Error('材料、设置或聊天已变化，生成已停止');
       if(active.reviewBeforeCommit&&!active.summary){
         active.review=review;active.status='awaiting-review';active.stage='awaiting-review';reviewGuards={active,valid};
-        try{const saved=await repository.updateNarrative(t,latest,{...latest.narrative,pendingRun:pendingCheckpoint(active)},{isCurrent:valid,requireConfirmation:true});adopt(t,saved.selection);}
-        catch(error){active.review=null;reviewGuards=null;if(error.code==='COMMIT_UNCONFIRMED')blockWrites(error);throw error;}
+        try{const saved=await repository.updateNarrative(t,latest,checkpointDomain(latest.narrative,active),{isCurrent:valid,requireConfirmation:true});adopt(t,saved.selection);}
+        catch(error){active.review=null;compactActiveSources(active);reviewGuards=null;if(error.code==='COMMIT_UNCONFIRMED')blockWrites(error);throw error;}
         for(const kind of review.kinds)categoryStatus(kind,{status:'awaiting-review',error:''});publishRun();
       }
       return {review,errors};
@@ -389,32 +406,32 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const t=active.target,proofs=review.kinds.map(kind=>proof(kind,t)),config=clone(generation()),card=review.bindings.card===null?null:cardSnapshot();
     let latest,raw,events;
     const valid=()=>{
-      try{return isCurrent()&&!unconfirmed&&sequenceRun===active&&(!persisted||equal(active.review,review))&&current(t)&&proofs.every(matches)&&equal(config,generation())&&(review.bindings.card===null||equal(card,cardSnapshot()))&&(!reviewGuards||reviewGuards.active!==active||reviewGuards.valid())&&review.kinds.every(kind=>matchesStoredNarrativeSource(review.progress[kind].sourceSnapshot,source(t)))&&(!events||typeof adapter.peekConfirmed!=='function'||review.kinds.every(kind=>{const binding=review.bindings.categories[kind];return !binding.readMemory||equal(narrativeMemoryRows(projectNarrativeMemory(adapter.peekConfirmed(t),source(t)),review.range.endFloor).filter(row=>binding.memoryIds.includes(row.id)),events[kind]);}));}catch{return false;}
+      try{return isCurrent()&&!unconfirmed&&sequenceRun===active&&(!persisted||equal(active.review,review))&&current(t)&&proofs.every(matches)&&equal(config,generation())&&(review.bindings.card===null||equal(card,cardSnapshot()))&&(!reviewGuards||reviewGuards.active!==active||reviewGuards.valid())&&review.kinds.every(kind=>matchesStoredNarrativeSource(review.progress[kind].sourceSnapshot,source(t),active))&&(!events||typeof adapter.peekConfirmed!=='function'||review.kinds.every(kind=>{const binding=review.bindings.categories[kind];return !binding.readMemory||equal(narrativeMemoryRows(projectNarrativeMemory(adapter.peekConfirmed(t),source(t)),review.range.endFloor).filter(row=>binding.memoryIds.includes(row.id)),events[kind]);}));}catch{return false;}
     };
     try{
       const inputs=preparedInputs??await captureInputs(t);latest=inputs.captured;const root=inputs.root;raw=inputs.raw;
-      if(!valid()||persisted&&!equal(latest.narrative.pendingRun?.review,review))throw new Error('待采用内容、材料或设置已变化，请放弃本批后重新生成');
+      if(!valid()||persisted&&!equal(semanticReview(latest.narrative.pendingRun?.review,latest.narrative),semanticReview(review,active)))throw new Error('待采用内容、材料或设置已变化，请放弃本批后重新生成');
       if(persisted&&(await digest(durableConfig(config))!==review.bindings.generation||review.bindings.card!==null&&await digest(card)!==review.bindings.card))throw new Error('生成设置或角色资料已变化，请重新生成');
       events={};
       for(const kind of review.kinds){
         const binding=review.bindings.categories[kind];
-        if(persisted?(await digest(latest.narrative.preferences[kind])!==binding.preferences||await digest(latest.narrative[kind])!==binding.entries||await digest(latest.narrative.progress[kind])!==binding.progress||await digest(latest.narrative.latestGeneration?.[kind]??null)!==binding.latestGeneration):(!equal(latest.narrative.preferences[kind],expected.narrative.preferences[kind])||!equal(latest.narrative[kind],expected.narrative[kind])||!equal(latest.narrative.progress[kind],expected.narrative.progress[kind])||!equal(latest.narrative.latestGeneration?.[kind],expected.narrative.latestGeneration?.[kind])))throw new Error('本末内容或设置已变化，请重新生成');
+        if(persisted?(await digest(latest.narrative.preferences[kind])!==binding.preferences||await digest(latest.narrative[kind])!==binding.entries||binding.progress!==null&&await digest(semanticProgress(latest.narrative.progress[kind],latest.narrative))!==binding.progress||binding.latestGeneration!==null&&await digest(semanticLatest(latest.narrative.latestGeneration?.[kind]??null,latest.narrative))!==binding.latestGeneration):(!equal(latest.narrative.preferences[kind],expected.narrative.preferences[kind])||!equal(latest.narrative[kind],expected.narrative[kind])||!equal(semanticProgress(latest.narrative.progress[kind],latest.narrative),semanticProgress(expected.narrative.progress[kind],expected.narrative))||!equal(semanticLatest(latest.narrative.latestGeneration?.[kind],latest.narrative),semanticLatest(expected.narrative.latestGeneration?.[kind],expected.narrative))))throw new Error('本末内容或设置已变化，请重新生成');
         events[kind]=narrativeMemoryRows(projectNarrativeMemory(root,raw),review.range.endFloor).filter(row=>binding.memoryIds.includes(row.id));
-        if(persisted&&binding.readMemory&&await digest(events[kind])!==binding.memory)throw new Error('记忆材料已变化，请重新生成');
+        if(persisted&&binding.memory!==null&&binding.readMemory&&await digest(events[kind])!==binding.memory)throw new Error('记忆材料已变化，请重新生成');
       }
       if(!valid())throw new Error('材料、设置或聊天已变化，请重新生成');
       const baseline=projectNarrativeBatchBase(latest.narrative,raw,{kinds:review.kinds,restart:active.restart,index:active.index,regenerateLatest:active.regenerateLatest});
       let next=clone(latest.narrative);
       for(const kind of review.kinds){
-        next[kind]=clone(review.results[kind]);next.progress[kind]=clone(review.progress[kind]);
+        next[kind]=clone(review.results[kind]);next.progress[kind]=importNarrativeProgress(next,review.progress[kind],active);
         next.highWater={...(next.highWater??{self:null,outline:null}),[kind]:Math.max(narrativeHighWater(latest.narrative,kind),review.progress[kind].lastProcessedFloor)};
-        next=recordNarrativeGeneration(next,baseline,kind,{range:review.range,pairId:review.pairId,source:(active.summarySource??next.preferences[kind].autoSource)==='cumulative'?'cumulative':'event',regenerateLatest:active.regenerateLatest===true});
+        next=recordNarrativeGeneration(next,baseline,kind,{range:review.range,pairId:review.pairId,source:(active.summarySource??next.preferences[kind].autoSource)==='cumulative'?'cumulative':'event',regenerateLatest:active.regenerateLatest===true,persistedBefore:latest.narrative,nonlinear:active.restart===true});
       }
       const remaining=active.failedKinds.filter(kind=>!review.kinds.includes(kind));
-      next.pendingRun=pendingCheckpoint({...active,status:remaining.length?'failed':active.status,index:active.index+(remaining.length?0:1),review:null,pairId:remaining.length?active.pairId:null,failedKinds:remaining});
+      next.pendingRun=pendingCheckpoint({...active,status:remaining.length?'failed':active.status,index:active.index+(remaining.length?0:1),review:null,pairId:remaining.length?active.pairId:null,failedKinds:remaining},next);
       const saved=await repository.updateNarrative(t,latest,next,{isCurrent:valid,requireConfirmation:true});
       if(!valid())throw new Error('聊天或功能开关已变化，生成已停止');
-      active.review=null;reviewGuards=null;if(!remaining.length){active.pairId=null;active.index++;}active.failedKinds=remaining;active.usage=null;currentRequestPreview=null;previewGuard=null;
+      active.review=null;compactActiveSources(active);reviewGuards=null;if(!remaining.length){active.pairId=null;active.index++;}active.failedKinds=remaining;active.usage=null;currentRequestPreview=null;previewGuard=null;
       for(const kind of review.kinds){
         const beforeEntries=kind==='self'?baseline.self.flatMap(row=>row.entries):baseline.outline,afterEntries=kind==='self'?review.results.self.flatMap(row=>row.entries):review.results.outline,beforeById=new Map(beforeEntries.map(row=>[row.id,row.text]));
         categoryStatus(kind,{status:'ready',error:'',addedCount:afterEntries.filter(row=>!beforeById.has(row.id)).length,changedCount:afterEntries.filter(row=>beforeById.has(row.id)&&beforeById.get(row.id)!==row.text).length});
@@ -467,7 +484,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
   function skip(){
     if(sequencePromise)throw new Error('请等待当前批次结束');
     if(!sequenceRun||!['failed','paused','awaiting-review'].includes(sequenceRun.status))return Promise.resolve(snapshot());
-    sequenceRun.review=null;reviewGuards=null;currentRequestPreview=null;previewGuard=null;sequenceRun.pairId=null;sequenceRun.index++;sequenceRun.skipped++;sequenceRun.failedKinds=[];sequenceRun.usage=null;sequenceRun.pauseRequested=false;return drive(sequenceRun);
+    sequenceRun.review=null;compactActiveSources(sequenceRun);reviewGuards=null;currentRequestPreview=null;previewGuard=null;sequenceRun.pairId=null;sequenceRun.index++;sequenceRun.skipped++;sequenceRun.failedKinds=[];sequenceRun.usage=null;sequenceRun.pauseRequested=false;return drive(sequenceRun);
   }
   async function intercept(messages,_size,_abort,type='normal'){
     if(disposed)return;

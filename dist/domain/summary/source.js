@@ -2,13 +2,31 @@ import {cleanSummaryFloors} from './cleaning.js';
 const copy=value=>structuredClone(value);
 const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
 const range=value=>value&&Number.isSafeInteger(value.start)&&value.start>=0&&Number.isSafeInteger(value.end)&&value.end>=value.start;
+// Stored provenance contains locators only. Text and full runtime tickets are
+// request-local and are never part of the durable label or reload comparison.
 export function sourceFingerprint(messages) {
-  // Equality uses the complete ticket as well; this digest is an inspectable provenance label.
-  const text=JSON.stringify(durableSourceMessages(messages));let hash=2166136261;for(let i=0;i<text.length;i++){hash^=text.charCodeAt(i);hash=Math.imul(hash,16777619);}return (hash>>>0).toString(16).padStart(8,'0');
+  const metadata=JSON.stringify(storedSourceMessages(messages));let hash=2166136261;for(let i=0;i<metadata.length;i++){hash^=metadata.charCodeAt(i);hash=Math.imul(hash,16777619);}return (hash>>>0).toString(16).padStart(8,'0');
 }
+export function storedSourceMessages(messages){return messages.map(({floor,identity,role,system,date,swipeId=null})=>({floor,identity,role,system,date,swipeId}));}
+export function assertStoredSourceMessages(messages){
+  if(!Array.isArray(messages))throw new Error('来源定位消息无效');
+  const keys=['floor','identity','role','system','date','swipeId'],seen=new Set();
+  for(const message of messages){
+    if(!message||Object.getPrototypeOf(message)!==Object.prototype||Object.keys(message).length!==keys.length||keys.some(key=>!Object.hasOwn(message,key))||!Number.isSafeInteger(message.floor)||message.floor<0||seen.has(message.floor)||typeof message.identity!=='string'||!message.identity||!['user','assistant','system'].includes(message.role)||typeof message.system!=='boolean'||!(message.date===null||typeof message.date==='string')||!(message.swipeId===null||Number.isSafeInteger(message.swipeId)&&message.swipeId>=0))throw new Error('来源定位消息无效');
+    seen.add(message.floor);
+  }
+  return copy(messages);
+}
+export function matchesSourceMetadata(left,right){
+  try{return JSON.stringify(assertStoredSourceMessages(storedSourceMessages(left)))===JSON.stringify(assertStoredSourceMessages(storedSourceMessages(right)));}catch{return false;}
+}
+export function storedSummarySource(snapshot){
+  return {epoch:snapshot.epoch,requestedRange:copy(snapshot.requestedRange),actualRange:copy(snapshot.actualRange),rawMessages:storedSourceMessages(snapshot.rawMessages),fingerprint:sourceFingerprint(snapshot.rawMessages),includeUser:snapshot.includeUser,excludedFloors:copy(snapshot.excludedFloors),sentFloors:storedSourceMessages(snapshot.sentFloors)};
+}
+// Full text is retained only in an active operation's guard, never serialized.
 export function durableSourceMessages(messages){return messages.map(({floor,identity,role,system,text,date,swipeId=null})=>({floor,identity,role,system,text,date,swipeId}));}
 export function matchesStoredSummarySource(snapshot,raw){
-  try{const current=assertRawSummarySource(raw),range=snapshot.requestedRange;const messages=current.messages.filter(message=>message.floor>=range.start&&message.floor<=range.end).sort((a,b)=>a.floor-b.floor);return JSON.stringify(durableSourceMessages(messages))===JSON.stringify(durableSourceMessages(snapshot.rawMessages))&&sourceFingerprint(messages)===snapshot.fingerprint;}catch{return false;}
+  try{const requested=snapshot.requestedRange;if(!range(requested)||!Array.isArray(raw?.messages))return false;const messages=raw.messages.filter(message=>message.floor>=requested.start&&message.floor<=requested.end).sort((a,b)=>a.floor-b.floor);return matchesSourceMetadata(messages,snapshot.rawMessages)&&sourceFingerprint(messages)===snapshot.fingerprint;}catch{return false;}
 }
 export function assertRawSummarySource(raw) {
   if(!raw||!Number.isSafeInteger(raw.epoch)||raw.epoch<0||!Array.isArray(raw.messages))throw new Error('总结来源能力不可用');

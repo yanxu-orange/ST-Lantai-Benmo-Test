@@ -1,4 +1,5 @@
-import {assertNarrative,inheritNarrative} from '../narrative/data.js';
+import {normalizeResultSources} from './results-persistence.js';
+import {validateNarrative,assertNarrative,inheritNarrative} from '../narrative/data.js';
 import {assertTracking,inheritTracking} from '../tracking/data.js';
 import {assertChatControls} from '../controls/model.js';
 import {assertWorkshop,inheritWorkshop} from '../workshop/model.js';
@@ -15,18 +16,19 @@ export const SCHEMA = 1;
 export function emptyRoot(rootId) { return { schema: SCHEMA, rootId, revision: 0, events: [], summary:emptySummary() }; }
 export function assertRoot(root, target) {
   if (!root || root.schema !== SCHEMA || root.rootId !== target.rootId || (!Number.isSafeInteger(root.revision) || root.revision < 0) || !Array.isArray(root.events)) throw new Error('数据版本或归属无法确认，已停止读取和写入');
+  root=normalizeResultSources(clone(root));
   const ids = new Set();
   for (const event of root.events) { validateEvent(event); if(ids.has(event.id)) throw new Error('重复记忆身份'); ids.add(event.id); }
   assertMergeRelations(root.events, Object.hasOwn(root, 'deletedMergeIds') ? root.deletedMergeIds : []);
-  if(Object.hasOwn(root,'summary')){assertSummary(root.summary,root.events);if(root.summary.pending?.events.some(event=>root.deletedMergeIds?.includes(event.id)))throw new Error('待审核身份占用合并删除证明');}
-  if(Object.hasOwn(root,'cumulative'))assertCumulative(root.cumulative);
-  if(Object.hasOwn(root,'latest'))assertLatest(root.latest);
-  if(Object.hasOwn(root,'narrative'))assertNarrative(root.narrative);
-  if(Object.hasOwn(root,'tracking'))assertTracking(root.tracking);
-  if(Object.hasOwn(root,'time'))assertTime(root.time);
+  if(Object.hasOwn(root,'summary')){root.summary=assertSummary(root.summary,root.events);if(root.summary.pending?.events.some(event=>root.deletedMergeIds?.includes(event.id)))throw new Error('待审核身份占用合并删除证明');}
+  if(Object.hasOwn(root,'cumulative'))root.cumulative=assertCumulative(root.cumulative);
+  if(Object.hasOwn(root,'latest'))root.latest=assertLatest(root.latest);
+  if(Object.hasOwn(root,'narrative'))root.narrative=assertNarrative(root.narrative);
+  if(Object.hasOwn(root,'tracking'))root.tracking=assertTracking(root.tracking);
+  if(Object.hasOwn(root,'time'))root.time=assertTime(root.time);
   if(Object.hasOwn(root,'controls'))assertChatControls(root.controls);
-  if(Object.hasOwn(root,'workshop'))assertWorkshop(root.workshop);
-  const normalized=clone(root);
+  if(Object.hasOwn(root,'workshop'))root.workshop=assertWorkshop(root.workshop);
+  const normalized=root;
   // Upgrade only an exact shipped default in the returned view. Reading a chat
   // never writes metadata, changes revisions, or rewrites a user's prompt.
   if(normalized.latest)normalized.latest.preferences=migrateLatestPreferences(normalized.latest.preferences);

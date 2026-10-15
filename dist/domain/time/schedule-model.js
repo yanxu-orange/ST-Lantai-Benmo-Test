@@ -13,7 +13,7 @@ export function calendarCandidateKey(value){
 export function assertScheduleSource(source){
  if(!object(source)||!['round','summary'].includes(source.kind))throw new Error('日程来源无效');
  if(source.kind==='round')assertLatestSource(source.sourceSnapshot);
- else if(!text(source.batchId)||!text(source.fingerprint)||!object(source.evidence))throw new Error('纪念日批来源无效');
+ else if(!text(source.batchId)||Object.hasOwn(source,'fingerprint')||!object(source.evidence))throw new Error('纪念日批来源无效');
  return clone(source);
 }
 export function assertScheduleCandidate(value,{calendars=new Map(),validateItem}={}){

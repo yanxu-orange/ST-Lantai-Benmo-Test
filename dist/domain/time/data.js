@@ -4,13 +4,16 @@ import {storyDate} from './point.js';
 import {createCalendar,normalizeCalendar} from './calendar.js';
 import {normalizeChronology} from './chronology.js';
 import {recognitionSettings} from './source.js';
-import {durableSourceMessages} from '../summary/source.js';
+import {storedSourceMessages} from '../summary/source.js';
+import {migrateTimeSources} from './persistence.js';
 import {assertScheduleCandidate,assertScheduleLedger,reconcileScheduleLedger,retainScheduleSummarySources} from './schedule-model.js';
 const clone=structuredClone;
 const integer=value=>Number.isSafeInteger(value)&&value>=0;
 const text=value=>typeof value==='string'&&!!value.trim();
 export function emptyTime(){return {schema:1,revision:0,calendars:[],activeCalendarId:null,recognition:recognitionSettings(),chronology:{eras:[]},items:[],currentDate:null,manualAnchor:null};}
 export function assertTime(value){
+ if(!value||Object.getPrototypeOf(value)!==Object.prototype)throw new Error('时间数据字段无效');
+ value=migrateTimeSources(clone(value));
  const keys=['schema','revision','calendars','activeCalendarId','recognition','chronology','items','currentDate','manualAnchor',...['candidates','scheduleTracking'].filter(key=>Object.hasOwn(value??{},key))];
  if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).length!==keys.length||keys.some(key=>!Object.hasOwn(value,key)))throw new Error('时间数据字段无效');
  if(!value||value.schema!==1||!integer(value.revision)||!Array.isArray(value.calendars)||!Array.isArray(value.items))throw new Error('时间数据结构无效');
@@ -24,7 +27,7 @@ export function assertTime(value){
   const anchor=value.manualAnchor,calendar=calendars.get(anchor?.date?.calendarId);
   if(!calendar||anchor.date.calendarId!==value.activeCalendarId||!integer(anchor.nextFloor)||!Array.isArray(anchor.boundary))throw new Error('手动日期锚点无效');storyDate(calendar,anchor.date);
   let previous=-1;
-  for(const message of anchor.boundary){if(!message||!integer(message.floor)||message.floor<=previous||message.floor>=anchor.nextFloor||!text(message.identity)||typeof message.text!=='string'||!['user','assistant','system','tool'].includes(message.role))throw new Error('手动日期边界无效');previous=message.floor;}
+  for(const message of anchor.boundary){if(!message||!integer(message.floor)||message.floor<=previous||message.floor>=anchor.nextFloor||!text(message.identity)||typeof message.system!=='boolean'||!(message.date===null||typeof message.date==='string')||!(message.swipeId===null||integer(message.swipeId))||!['user','assistant','system','tool'].includes(message.role))throw new Error('手动日期边界无效');previous=message.floor;}
  }
  const ids=new Set();
  const validateItem=item=>{
@@ -49,7 +52,7 @@ export function assertTime(value){
   for(const candidate of value.candidates){assertScheduleCandidate(candidate,{calendars,validateItem});if(ids.has(candidate?.id))throw new Error('日程候选身份重复');ids.add(candidate.id);}
  }
  if(Object.hasOwn(value,'scheduleTracking'))assertScheduleLedger(value.scheduleTracking,{validateItem,calendars});
- const result={...clone(value),calendars:normalizedCalendars,recognition:recognitionSettings(value.recognition),chronology:normalizeChronology(value.chronology)};
+ const result={...value,calendars:normalizedCalendars,recognition:recognitionSettings(value.recognition),chronology:normalizeChronology(value.chronology)};
  if(result.currentDate!==null)result.currentDate=storyDate(calendars.get(value.activeCalendarId),result.currentDate);
  if(result.manualAnchor!==null)result.manualAnchor.date=storyDate(calendars.get(value.activeCalendarId),result.manualAnchor.date);
  result.items=result.items.map(item=>item.dateRule?{...item,dateRule:normalizeDateRule(item.dateRule),startDate:null}:{...item,startDate:calendars.get(item.calendarId).validate(item.startDate)});
@@ -59,7 +62,7 @@ export function timeOf(root){return Object.hasOwn(root,'time')?assertTime(root.t
 // The caller must prove the full anchor boundary in the actual child before reuse.
 export function inheritTime(value,{messages=null,floor=Infinity,retainedSummaryBatchIds=[]}={}){
  const result=assertTime(value),anchor=result.manualAnchor,definition=result.calendars.find(item=>item.id===result.activeCalendarId);
- const proven=saved=>Array.isArray(messages)&&saved.rawMessages.every(original=>{if(original.floor>=floor)return false;const current=messages.find((row,index)=>(row.floor??index)===original.floor);if(!current)return false;const comparable={...current,floor:original.floor,system:current.role==='system',swipeId:original.swipeId};return JSON.stringify(durableSourceMessages([comparable]))===JSON.stringify([original]);});
+ const proven=saved=>Array.isArray(messages)&&saved.rawMessages.every(original=>{if(original.floor>=floor)return false;const current=messages.find((row,index)=>(row.floor??index)===original.floor);if(!current||original.floor===saved.assistantFloor&&current.replyId!==saved.replyId)return false;const comparable={...current,floor:original.floor,system:current.role==='system',swipeId:original.swipeId};return JSON.stringify(storedSourceMessages([comparable]))===JSON.stringify([original]);});
  reconcileScheduleLedger(result,{isRetained:proven,isActive:proven});
  retainScheduleSummarySources(result,retainedSummaryBatchIds);
  result.revision=0;result.currentDate=null;

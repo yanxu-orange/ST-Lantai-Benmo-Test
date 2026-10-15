@@ -1,4 +1,4 @@
-import {assertRawSummarySource, durableSourceMessages, sourceFingerprint} from '../summary/source.js';
+import {assertRawSummarySource, storedSourceMessages, assertStoredSourceMessages, matchesSourceMetadata, sourceFingerprint} from '../summary/source.js';
 import {cleanSummaryFloors} from '../summary/cleaning.js';
 const copy = structuredClone;
 const freeze = value => {if(value && typeof value === 'object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
@@ -21,12 +21,12 @@ export function prepareCumulativeSource(raw, {startFloor, endFloor, includeUser,
   return freeze({epoch:source.epoch,requestedRange,rawMessages:copy(rawMessages),fingerprint:sourceFingerprint(rawMessages),includeUser,excludedFloors:copy(excludedFloors),sentFloors});
 }
 export function storedCumulativeSource(snapshot) {
-  return assertCumulativeSource({requestedRange:copy(snapshot.requestedRange),rawMessages:durableSourceMessages(snapshot.rawMessages),fingerprint:snapshot.fingerprint,includeUser:snapshot.includeUser,excludedFloors:copy(snapshot.excludedFloors),sentFloors:durableSourceMessages(snapshot.sentFloors)});
+  return assertCumulativeSource({requestedRange:copy(snapshot.requestedRange),rawMessages:storedSourceMessages(snapshot.rawMessages),fingerprint:sourceFingerprint(snapshot.rawMessages),includeUser:snapshot.includeUser,excludedFloors:copy(snapshot.excludedFloors),sentFloors:storedSourceMessages(snapshot.sentFloors)});
 }
 export function assertCumulativeSource(value) {
   if (!exact(value,['requestedRange','rawMessages','fingerprint','includeUser','excludedFloors','sentFloors']) || !cumulativeRange(value.requestedRange) || typeof value.includeUser !== 'boolean' || !Array.isArray(value.rawMessages) || value.rawMessages.length !== value.requestedRange.end-value.requestedRange.start+1) throw new Error('古法来源证据无效');
-  assertRawSummarySource({epoch:0,messages:value.rawMessages});
-  if (value.rawMessages.some((message,index) => !exact(message,['floor','identity','role','system','text','date','swipeId']) || message.floor !== value.requestedRange.start+index || !(message.swipeId === null || Number.isSafeInteger(message.swipeId) && message.swipeId >= 0)) || sourceFingerprint(value.rawMessages) !== value.fingerprint) throw new Error('古法来源指纹或楼层不符');
+  assertStoredSourceMessages(value.rawMessages);
+  if (value.rawMessages.some((message,index) => !exact(message,['floor','identity','role','system','date','swipeId']) || message.floor !== value.requestedRange.start+index || !(message.swipeId === null || Number.isSafeInteger(message.swipeId) && message.swipeId >= 0)) || sourceFingerprint(value.rawMessages) !== value.fingerprint) throw new Error('古法来源指纹或楼层不符');
   const excluded = new Set();
   if (!Array.isArray(value.excludedFloors)) throw new Error('古法排除楼层无效');
   for (const record of value.excludedFloors) {
@@ -39,13 +39,13 @@ export function assertCumulativeSource(value) {
   if (!Array.isArray(value.sentFloors) || !value.sentFloors.length) throw new Error('古法有效正文不能为空');
   for (const item of value.sentFloors) {
     const original = value.rawMessages.find(message => message.floor === item.floor);
-    if (!exact(item,['floor','identity','role','system','text','date','swipeId']) || !original || item.identity !== original.identity || item.role !== original.role || item.system !== original.system || item.date !== original.date || item.swipeId !== original.swipeId || sent.has(item.floor) || excluded.has(item.floor) || original.system || original.role === 'system' || !value.includeUser && original.role === 'user' || typeof item.text !== 'string' || !item.text.trim()) throw new Error('古法发送来源无效');
+    if (!exact(item,['floor','identity','role','system','date','swipeId']) || !original || item.identity !== original.identity || item.role !== original.role || item.system !== original.system || item.date !== original.date || item.swipeId !== original.swipeId || sent.has(item.floor) || excluded.has(item.floor) || original.system || original.role === 'system' || !value.includeUser && original.role === 'user') throw new Error('古法发送来源无效');
     sent.add(item.floor);
   }
   return copy(value);
 }
-// Runtime epoch and full tickets reject edit-and-revert ABA. Durable evidence is
-// for reloaded pending and branching, never an authority over saved memory.
+// Runtime epoch and full tickets reject edit-and-revert ABA. Stored locators
+// support reloaded pending and branching without retaining or comparing old text.
 export function matchesCumulativeSource(snapshot, raw) {
   try {
     const current = assertRawSummarySource(raw);
@@ -56,7 +56,8 @@ export function matchesCumulativeSource(snapshot, raw) {
 export function matchesStoredCumulativeSource(snapshot, raw) {
   try {
     assertCumulativeSource(snapshot);
-    const current = assertRawSummarySource(raw), messages = current.messages.filter(item => item.floor >= snapshot.requestedRange.start && item.floor <= snapshot.requestedRange.end).sort((a,b)=>a.floor-b.floor);
-    return JSON.stringify(durableSourceMessages(messages)) === JSON.stringify(snapshot.rawMessages);
+    if(!Array.isArray(raw?.messages))return false;
+    const messages = raw.messages.filter(item => item.floor >= snapshot.requestedRange.start && item.floor <= snapshot.requestedRange.end).sort((a,b)=>a.floor-b.floor);
+    return matchesSourceMetadata(messages,snapshot.rawMessages);
   } catch { return false; }
 }

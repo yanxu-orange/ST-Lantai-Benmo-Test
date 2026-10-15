@@ -157,7 +157,8 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     if(disposed||!clear()||pendingExclusions||!gate.allowed()||!Object.values(effectivePreferences()).some(Boolean)||!supported.has(type)||messages?.some(row=>String(row?.mes??row?.content??'').includes('[LANTAI_BACKGROUND_TASK:')))return;
     const ticket=serial,t=repository.captureTarget(),proof=gate.capture(),categoryProofs=captureCategories(),preferences=effectivePreferences();
     try{
-      const captured=await repository.captureTracking(t),raw=captureSource(t),projected=currentTracking(captured.tracking,raw),config=settings.captureRecall();
+      const captured=await repository.captureTracking(t);
+      const raw=captureSource(t),projected=currentTracking(captured.tracking,raw),config=settings.captureRecall();
       const valid=()=>!disposed&&ticket===serial&&current(t)&&gate.matches(proof)&&['items','npcs'].every(key=>!preferences[`${key}Enabled`]||categoryGates[key].matches(categoryProofs[key]))&&settings.captureRecall().epoch===config.epoch&&equal(captureSource(t),raw);
       if(!valid())return;
       const context=getContext(),inputs=recallInputs(messages,config.recall.recentFloorCount,context.chat);
