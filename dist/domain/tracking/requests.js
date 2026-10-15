@@ -101,10 +101,10 @@ function batchTrackingSchema(preferences) {
   const properties={};
   for(const [list,kind] of [['items','item'],['npcs','npc']]){
     if(!preferences[`${list}Enabled`])continue;
-    const fields={id:{type:['string','null']},name:nullable({type:'string'}),aliases:nullable({type:'array',items:{type:'string'}}),
+    const fields={id:nullable({type:'string'}),name:nullable({type:'string'}),aliases:nullable({type:'array',items:{type:'string'}}),
       ...Object.fromEntries(TRACKING_FIELDS[kind].map(field=>[field,nullable({type:'string'})])),
       customFields:nullable({type:'array',items:{type:'object',additionalProperties:false,required:['id','value'],properties:{id:{type:'string'},value:{type:'string'}}}}),
-      ...(kind==='npc'?{lastAppearanceFloor:{type:['integer','null']}}:{})};
+      ...(kind==='npc'?{lastAppearanceFloor:nullable({type:'integer'})}:{})};
     properties[list]={type:'array',items:{type:'object',additionalProperties:false,required:Object.keys(fields),properties:fields}};
   }
   return {type:'object',additionalProperties:false,required:Object.keys(properties),properties};

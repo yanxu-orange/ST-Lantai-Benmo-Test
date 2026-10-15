@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "503a027f2928e2f6b66babd03e1a62188fbec6f21eecc1d3e45b7977861b7332"
+    "sha256": "0954191ac82a32bd55ae0f615168c2d23a155683b4c3cb036a97c7782870accb"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -497,7 +497,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "c2f131a2d5ac9e7c8dce1699e2769625bf31c4fdfa6910e4952ed9e7366512bc"
+    "sha256": "0f19d4f63392dc9d7802d60f4c388ae4e5e8196a155f59a151889e1ad740f3ec"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -869,7 +869,7 @@
   },
   {
     "path": "dist/domain/tracking/requests.js",
-    "sha256": "df6f9d3fd4709b62c2e7fb553e6387a538168de4f91505c5a5f9d667e203f1e0"
+    "sha256": "9b2a27dcb7f69fa60d6740e9a4c40f38140c7488ecfd6ee93fd05acc46fbe5e7"
   },
   {
     "path": "dist/domain/workshop/background.js",
@@ -1125,10 +1125,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "63da1b45014243954bcae6cdec0b180fd6cc6406db3243585aa7f7821e22d36e"
+    "sha256": "52e17d38e553917824349e8528bfab4ff77f0e89e8e7f262ddb972eea67caf87"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "bb25259f38111c388627a9a6e2a4f730002b3b431c356d965aefd0e8728e482d"
+    "sha256": "3e9405e15f5e96f17d5be626a45bd5e5da02e63549bfade82b8c1777791f6092"
   }
 ]
