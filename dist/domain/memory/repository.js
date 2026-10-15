@@ -1,3 +1,4 @@
+import {mergeLocationAliases} from './location-aliases.js';
 import {normalizeResultSources} from './results-persistence.js';
 import {rollbackNarrativeTail, invalidateNarrativeRollback} from '../narrative/rollback.js';
 import {rollbackTrackingTail,invalidateTrackingTailHistory} from '../tracking/data.js';
@@ -54,7 +55,8 @@ export function mergeRanges(ranges) {
 }
 // Initial candidate values only; reviewed participant edits are authoritative.
 export function mergeParticipants(events) {
-  return { people: [...new Set(events.flatMap(event => event.people))], places: [...new Set(events.flatMap(event => event.places))] };
+  const places = [...new Set(events.flatMap(event => event.places))];
+  return { people: [...new Set(events.flatMap(event => event.people))], places, ...(events.some(event => Object.hasOwn(event,'locationAliases')) ? {locationAliases:mergeLocationAliases(events,places)} : {}) };
 }
 export function createRepository(adapter, now = () => new Date().toISOString()) {
   let queue = Promise.resolve();

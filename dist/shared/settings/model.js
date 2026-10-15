@@ -49,9 +49,9 @@ function ai(value) {
 }
 function generation(value) {
   if (!value || Object.getPrototypeOf(value) !== Object.prototype) invalid();
-  const trackingKeys = ['trackingItemsEnabled', 'trackingNpcsEnabled'];
+  const trackingKeys = ['trackingItemsEnabled', 'trackingNpcsEnabled', 'trackingIdentityReferencesEnabled'];
   const legacy = Object.keys(value).filter(key => !trackingKeys.includes(key)).length === 2;
-  value = { trackingItemsEnabled: false, trackingNpcsEnabled: false, ...value };
+  value = { trackingItemsEnabled: false, trackingNpcsEnabled: false, trackingIdentityReferencesEnabled: true, ...value };
   exact(value, [...(legacy ? ['eventWords', 'promptOverrides'] : ['eventWords', 'promptOverrides', 'generationMode', 'customPrompts', 'summaryCleaning']), ...trackingKeys]);
   if (trackingKeys.some(key => typeof value[key] !== 'boolean')) invalid();
   if (!Array.isArray(value.eventWords)) invalid();
@@ -115,7 +115,7 @@ export function assertRecallSettings(value) {
 }
 export function emptySettings() {
   return { schema: 2, revision: 0, domainRevisions: { ai: 0, eventGeneration: 0,recall:0 },recall:defaultRecallSettings(), credentials: [], ai: { source: null, activePresetId: null, presets: [] },
-    eventGeneration: { trackingItemsEnabled: false, trackingNpcsEnabled: false, eventWords: createDefaultEventWords(), promptOverrides: {}, generationMode: 'quality', customPrompts: [], summaryCleaning: { rules: createDefaultCleaningRules() } } };
+    eventGeneration: { trackingItemsEnabled: false, trackingNpcsEnabled: false, trackingIdentityReferencesEnabled: true, eventWords: createDefaultEventWords(), promptOverrides: {}, generationMode: 'quality', customPrompts: [], summaryCleaning: { rules: createDefaultCleaningRules() } } };
 }
 export function assertCumulativeGeneration(value) {
   try {

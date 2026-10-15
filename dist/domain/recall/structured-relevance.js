@@ -124,7 +124,10 @@ function witnessValue(witness, key, stats, config, order) {
     const repetition = (documentFrequency - 1) / stats.triggerCount;
     const frequencyAdjustment = Math.max(config.frequencyFloor, 1 - repetition);
     const sourceReliability = 1 / (1 + config.sourceDecayRate * witness.distanceFromCurrent);
-    const length = meaningfulLength(witness.storedValue);
+    // Location frequency/consumption stay on the full parent identity, but a
+    // short alias cannot borrow the full name's lexical specificity.
+    const length = meaningfulLength(witness.field === 'locations' && witness.matchedAlias !== undefined
+        ? witness.usedComponents.map(component => component.value).join('') : witness.storedValue);
     const typedDetailIdentity = hasTypedDetailIdentity(witness);
     const specificityAdjustment = Math.min(1, length / Math.max(1, policy.minimumLength));
     return { witness, order, role, documentFrequency, prevalence,

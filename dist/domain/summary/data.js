@@ -41,15 +41,15 @@ export function assertGeneratedEvidence(candidates) {
 }
 export function publicSummarySettingsEvidence(value) {
   if(!value||Object.getPrototypeOf(value)!==Object.prototype)throw new Error('总结配置证据无效');
-  const keys=['generationMode','promptOverrides','customPrompts','eventWords','summaryCleaning','trackingItemsEnabled','trackingNpcsEnabled'];
+  const keys=['generationMode','promptOverrides','customPrompts','eventWords','summaryCleaning','trackingItemsEnabled','trackingNpcsEnabled','trackingIdentityReferencesEnabled'];
   if(Object.keys(value).some(key=>!keys.includes(key)&&!['epoch','generationEpoch'].includes(key)))throw new Error('待审核证据不得包含 AI 私有配置');
   const result=Object.fromEntries(keys.filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]]));
   const noPrivate=item=>{if(Array.isArray(item)){item.forEach(noPrivate);return;}if(item&&typeof item==='object')for(const [key,child] of Object.entries(item)){if(/^(ai|api|apiKey|password|credentials|credentialEpoch|authorization|secret|secretId|secretValue|endpoint|model|presets|activePresetId)$/i.test(key))throw new Error('待审核证据不得包含 AI 私有配置');noPrivate(child);}};
   noPrivate(result);
-  jsonEvidence(result);return copy(Object.fromEntries(['generationMode','trackingItemsEnabled','trackingNpcsEnabled'].filter(key=>Object.hasOwn(result,key)).map(key=>[key,result[key]])));
+  jsonEvidence(result);return copy(Object.fromEntries(['generationMode','trackingItemsEnabled','trackingNpcsEnabled','trackingIdentityReferencesEnabled'].filter(key=>Object.hasOwn(result,key)).map(key=>[key,result[key]])));
 }
-// These two optional flags were absent in already saved pending batches.
-export function normalizedSummarySettingsEvidence(value){const result=publicSummarySettingsEvidence(value);return {...result,trackingItemsEnabled:result.trackingItemsEnabled===true,trackingNpcsEnabled:result.trackingNpcsEnabled===true};}
+// Optional tracking flags were absent in already saved pending batches.
+export function normalizedSummarySettingsEvidence(value){const result=publicSummarySettingsEvidence(value);return {...result,trackingItemsEnabled:result.trackingItemsEnabled===true,trackingNpcsEnabled:result.trackingNpcsEnabled===true,trackingIdentityReferencesEnabled:result.trackingIdentityReferencesEnabled!==false};}
 // Failed-stage checkpoints retain only the identity needed to rebuild the
 // current tracking context. Parsed output lives independently in tracking.parts.
 export function publicSummaryTrackingTicket(ticket) {

@@ -28,6 +28,9 @@ function evidenceMemories(events,settings,batches){
   }
   return events.map(event=>({id:event.id,mode:event.mode,title:excluded.has(event.title)?'':event.title,body:event.body,
     people:event.people.filter(word=>!excluded.has(word)),locations:event.places.filter(word=>!excluded.has(word)),
+    ...(event.locationAliases===undefined?{}:{locationAliases:event.locationAliases
+      .filter(binding=>!excluded.has(binding.parentLocation))
+      .map(binding=>({...binding,aliases:binding.aliases.filter(alias=>!excluded.has(alias))}))}),
     keywords:{event:event.eventWords.filter(word=>!excluded.has(word)),detail:event.detailWords.filter(term=>!excluded.has(term.word)).map(term=>term.word)},
     time:{start:parseStoryTimePoint(event.startTime),end:parseStoryTimePoint(event.endTime)},source:ordinals.get(event.id)??{},
     terms:event.detailWords.filter(term=>!excluded.has(term.word)).map(term=>({...term,aliases:term.aliases.filter(alias=>!excluded.has(alias))}))}));
@@ -35,7 +38,8 @@ function evidenceMemories(events,settings,batches){
 function bindings(memories){return memories.flatMap(memory=>memory.terms.map((term,detailIndex)=>({memoryId:memory.id,termId:term.id,detailIndex,parentDetail:term.word,aliases:term.aliases})));}
 function reasonsOf(evaluation,aliases,id){
   const reasons=[];
-  for(const parent of evaluation?.structuredEvidence?.evidence?.parentFacts??[])for(const witness of parent.witnesses??[])reasons.push({code:'keyword-match',field:witness.field,term:witness.storedValue,sourceKind:witness.sourceKind,distanceFromCurrent:witness.distanceFromCurrent,fragmentId:witness.fragmentId});
+  for(const parent of evaluation?.structuredEvidence?.evidence?.parentFacts??[])for(const witness of parent.witnesses??[])reasons.push({code:'keyword-match',field:witness.field,term:witness.storedValue,sourceKind:witness.sourceKind,distanceFromCurrent:witness.distanceFromCurrent,fragmentId:witness.fragmentId,
+    ...(witness.matchedAlias===undefined?{}:{matchedAlias:witness.matchedAlias,usedComponents:witness.usedComponents})});
   for(const alias of aliases?.candidates??[])if(alias.memoryId===id)reasons.push({code:'alias-match',term:alias.parentDetail,alias:alias.matchedAlias,sourceKind:alias.sourceKind,distanceFromCurrent:alias.distanceFromCurrent,qualified:alias.qualificationEligible,rankingEligible:alias.rankingEligible,suppressionReasons:alias.suppressionReasons});
   for(const path of evaluation?.qualificationPaths??[])reasons.push({code:path.reason?.code??path.channel,sourceKind:path.sourceKind,distanceFromCurrent:path.distanceFromCurrent});
   return [...new Map(reasons.map(reason=>[JSON.stringify(reason),reason])).values()];
@@ -44,6 +48,7 @@ function rankingFacts(entry,rank){
   const evidence=entry.structuredEvidence;
   return {rank,score:entry.structuredRelevance??0,
     contributions:(evidence?.parentContributions??[]).map(parent=>({term:parent.selectedWitness?.storedValue,
+      ...(parent.selectedWitness?.matchedAlias===undefined?{}:{matchedAlias:parent.selectedWitness.matchedAlias,usedComponents:parent.selectedWitness.usedComponents}),
       field:parent.selectedWitness?.field,sourceKind:parent.selectedWitness?.sourceKind,distanceFromCurrent:parent.selectedWitness?.distanceFromCurrent,
       value:parent.consumedValue,sourceReliability:parent.sourceReliability,frequencyAdjustment:parent.frequencyAdjustment,
       specificityAdjustment:parent.specificityAdjustment,matchReliability:parent.matchReliability,saturationFactor:parent.saturationFactor??1,

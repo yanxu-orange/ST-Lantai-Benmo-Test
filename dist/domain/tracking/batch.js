@@ -2,6 +2,7 @@ import { assertTracking, assertTrackingPreferences, currentTracking, countTracki
 import { assertRawSummarySource, matchesSummarySource } from '../summary/source.js';
 import { assertTrackingChanges, assertTrackingRecord, applyTrackingCustomFieldValues, trackingInteger, trackingText, TRACKING_FIELDS } from './model.js';
 import { effectiveTrackingExclusions, filterTrackingChanges, trackingExclusionsOf, normalizeTrackingName, trackingRecordExcluded } from './exclusions.js';
+import { trackingIdentityReference, matchTrackingIdentity, trackingResultIds } from './identity.js';
 const clone = structuredClone;
 const lists = ['items', 'npcs'];
 const freeze = value => { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
@@ -33,16 +34,22 @@ export function prepareBatchTracking(value, raw, source, preferences, { batchId 
   assertRawSummarySource(raw); storedBatchTrackingSource(source);
   if (!matchesSummarySource(source, raw)) throw new Error('批追踪来源已变化，请重新运行');
   const current = historicalCurrent(domain, raw, source.actualRange.start);
-  return freeze({ source: clone(source), revision: domain.revision, baseKey: current.baseKey, current: current.records,
+  const latest = currentTracking(domain, raw, { includeResultFloors: true });
+  const knownIdentities = trackingIdentityReference(latest.records);
+  return freeze({ source: clone(source), revision: domain.revision, baseKey: current.baseKey, current: current.records, knownIdentities, resultFloors: latest.resultFloors,
     preferences: assertTrackingPreferences(preferences ?? domain.preferences), exclusions: effectiveTrackingExclusions(domain, current.records),
     aiTurn: countTrackingAiTurns(raw, { beforeFloor: source.actualRange.end + 1 }), batchId });
 }
 
-function protectRecords(snapshot, records) {
+function protectRecords(snapshot, records, baseline) {
   // A later snapshot remains authoritative for every fact it already knew.
   // Keep its identity/provenance and creations, so its manual anchors survive.
   const changes = clone(snapshot.changes);
-  for (const record of records) {
+  const returnedIds = new Set(trackingResultIds(snapshot)), actualIds = new Set(trackingResultIds(snapshot, baseline));
+  // Null appearance alone supplies no later information. Preserve its old
+  // form in the proof without letting it undo accepted earlier results.
+  for (const list of lists) changes[list] = changes[list].filter(row => !returnedIds.has(row.id) || actualIds.has(row.id));
+  for (const record of records.filter(row => actualIds.has(row.id))) {
     const list = record.kind === 'item' ? 'items' : 'npcs';
     const existing = changes[list].find(row => row.id === record.id);
     const patch = Object.fromEntries(['name', 'aliases', ...TRACKING_FIELDS[record.kind], ...(record.customFields ? ['customFields'] : []), ...(record.kind === 'npc' ? ['lastAppearanceTurn'] : [])].map(key => [key, clone(record[key])]));
@@ -95,6 +102,9 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
     || !matchesSummarySource(ticket.source, raw)) return conflict('批追踪来源或资料已变化，请重新运行');
   const source = storedBatchTrackingSource(ticket.source), current = historicalCurrent(domain, raw, source.actualRange.start);
   if (!same(current.records, ticket.current) || current.baseKey !== ticket.baseKey || ticket.aiTurn !== countTrackingAiTurns(raw, { beforeFloor: source.assistantFloor + 1 })) return conflict('批追踪历史资料已变化，请重新运行');
+  const latest = currentTracking(domain, raw, { includeResultFloors: true });
+  const knownIdentities = trackingIdentityReference(latest.records);
+  if (ticket.knownIdentities && !same(knownIdentities, ticket.knownIdentities)) return conflict('批追踪身份资料已变化，请重新运行');
   const previous = domain.snapshots.find(row => row.batchId === batchId);
   if (previous && (!same(previous.sourceSnapshot.requestedRange, source.requestedRange) || !matchesBatchTrackingSource(previous.sourceSnapshot, raw))) return conflict('已有批追踪的来源已变化，保留原版本');
   const overlapping = domain.snapshots.filter(row => row !== previous && row.sourceSnapshot.assistantFloor >= source.actualRange.start && (row.sourceSnapshot.kind === 'batch' ? row.sourceSnapshot.requestedRange.start : row.sourceSnapshot.assistantFloor) <= source.requestedRange.end);
@@ -130,11 +140,25 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
       if (kind === 'npc' && lastAppearanceFloor !== undefined && lastAppearanceFloor !== null
         && (!trackingInteger(lastAppearanceFloor) || !ticket.source.sentFloors.some(row => row.floor === lastAppearanceFloor && row.role === 'assistant' && !row.system))) throw new Error('NPC 出场楼层须为本批实际发送的 AI 楼层');
       assertTrackingChanges({ items: [], npcs: [], [list]: [fields] });
-      const record = ticket.current.find(row => row.id === change.id && row.kind === kind);
-      const inferred = change.id !== null && !record;
-      let matches = change.id === null ? oldCreates.filter(old => old.name === change.name) : [];
-      // Explicit null keeps its existing creation semantics. Only malformed IDs
-      // need this conservative, exact-name/alias identity check.
+      let record = ticket.current.find(row => row.id === change.id && row.kind === kind);
+      const known = knownIdentities.find(row => row.id === change.id && row.kind === kind);
+      let matches = change.id === null ? oldCreates.filter(old => normalizeTrackingName(old.name) === normalizeTrackingName(change.name)) : [];
+      let resolved = known ?? record;
+      if (change.id === null) {
+        // A same-batch retry can reuse its one prior creation. Other null-ID
+        // collisions need independent distinguishing evidence, never name alone.
+        const old = matches.length === 1 ? matches[0] : null;
+        const collisions = knownIdentities.filter(row => row.kind === kind && labels(row).some(name => labels(change).includes(name)));
+        if (old && collisions.every(row => row.id === old.id)) resolved = knownIdentities.find(row => row.id === old.id) ?? { id: old.id, kind };
+        else resolved = matchTrackingIdentity(change, knownIdentities, kind);
+        if (!resolved && identities.some(row => labels(row).some(name => labels(change).includes(name)))) throw new Error('名称或别名关联已有身份，无法确认新增；请沿用已确认的记录 ID 或使用能区分新对象的名称');
+        if (resolved) record = ticket.current.find(row => row.id === resolved.id && row.kind === kind);
+      }
+      // Entity freshness is independent of NPC appearance and other entities.
+      // Ignore the entire older response, including names, empty fields and
+      // appearance evidence; previously saved historical changes stay intact.
+      if (resolved && latest.resultFloors[resolved.id] > source.assistantFloor) { accepted.add(list); continue; }
+      const inferred = change.id !== null && !record && !known;
       if (inferred) {
         if (!trackingText(change.name) || Object.hasOwn(change, 'customFields')) throw new Error('未知 ID 无法确认新增：须有名称且不能包含自定义字段更新');
         const names = labels(change);
@@ -147,11 +171,14 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
         if (trackingRecordExcluded({ ...change, kind }, ticket.exclusions)) throw new Error('该身份或名称已暂停追踪，未按新记录创建');
       }
       if (matches.length > 1) throw new Error('已有批追踪名称对应多个身份，无法安全重跑');
-      const create = change.id === null || inferred;
-      const patch = { ...fields, id: create ? matches[0]?.id ?? freshId() : change.id, create };
+      if (matches.length === 1 && latest.resultFloors[matches[0].id] > source.assistantFloor) { accepted.add(list); continue; }
+      const create = inferred || change.id === null && !resolved || !!oldCreates.find(old => old.id === resolved?.id);
+      const id = resolved?.id ?? (create ? matches[0]?.id ?? freshId() : change.id);
+      if (!create && !record) throw new Error('追踪更新须指向批开始前已确认的记录 ID');
+      const patch = { ...fields, id, create };
       if (used.has(patch.id)) throw new Error('追踪输出对应同一身份，不能重复采用');
       if (Object.hasOwn(change, 'customFields')) patch.customFields = applyTrackingCustomFieldValues(record, change.customFields);
-      if (kind === 'npc' && lastAppearanceFloor !== undefined) patch.lastAppearanceTurn = lastAppearanceFloor === null ? (record?.lastAppearanceTurn ?? null) : countTrackingAiTurns(raw, { beforeFloor: lastAppearanceFloor + 1 });
+      if (kind === 'npc' && lastAppearanceFloor !== undefined && (lastAppearanceFloor !== null || previous?.changes.npcs.some(row => row.id === patch.id && Object.hasOwn(row, 'lastAppearanceTurn')))) patch.lastAppearanceTurn = lastAppearanceFloor === null ? (record?.lastAppearanceTurn ?? null) : countTrackingAiTurns(raw, { beforeFloor: lastAppearanceFloor + 1 });
       const rows = filterTrackingChanges({ items: [], npcs: [], [list]: [patch] }, ticket.current, ticket.exclusions)[list];
       const next = clone(changes[list]);
       for (const row of rows) {
@@ -159,7 +186,8 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
         if (at < 0) next.push(row); else next[at] = { ...next[at], ...row };
       }
       applyChanges(ticket.current, { items: [], npcs: [], [list]: next }, ticket.aiTurn, { stored: true });
-      changes[list] = next; used.add(patch.id); accepted.add(list);
+      changes[list] = next.filter(row => row.create || Object.keys(row).some(key => !['id', 'create'].includes(key)));
+      used.add(patch.id); accepted.add(list);
     } catch (error) {
       rejected[list] ??= [];
       const originalIndex = originalIndexes[index];
@@ -180,11 +208,11 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
     const baseline = successorBaseline(domain, row);
     // Replay the successor's own changes, including inactive swipe versions;
     // using the currently active reply here would steal another version's IDs.
-    return [row.id, applyChanges(baseline, row.changes, row.aiTurn, { stored: true })];
+    return [row.id, { baseline, records: applyChanges(baseline, row.changes, row.aiTurn, { stored: true }) }];
   }));
   domain.snapshots = domain.snapshots.filter(row => row !== previous);
   for (const row of successors) {
-    const protectedChanges = protectRecords(row, protection.get(row.id));
+    const protectedChanges = protectRecords(row, protection.get(row.id).records, protection.get(row.id).baseline);
     if (!previous) row.batchRebases = [...(row.batchRebases ?? []), { batchSnapshotId: id, baseKey: row.baseKey, changes: clone(row.changes), protectedChanges: clone(protectedChanges) }];
     row.baseKey = id; row.changes = protectedChanges;
   }

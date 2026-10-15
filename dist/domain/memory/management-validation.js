@@ -1,3 +1,4 @@
+import {pruneLocationAliases} from './location-aliases.js';
 import { detailWordError, validateEventForSave } from './model.js';
 export const equalData = (a,b) => {
  if(Object.is(a,b))return true;if(!a||!b||typeof a!=='object'||typeof b!=='object'||Array.isArray(a)!==Array.isArray(b))return false;
@@ -25,7 +26,7 @@ export function validateMergedText(value) {
 }
 export function validateReview(fields,base) {
  if(!exactKeys(fields,['title','body','people','places','startTime','endTime'])||!strings(fields.people)||!strings(fields.places))throw new Error('审核字段无效');
- return validateEventForSave({...base,...fields});
+ return validateEventForSave(pruneLocationAliases({...base,...fields}));
 }
 export function originalSnapshot(value,ranges) {
  if(!exactKeys(value,['messages'])||!Array.isArray(value.messages))throw new Error('原文来源快照无效');

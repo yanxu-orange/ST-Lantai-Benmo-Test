@@ -2,6 +2,7 @@ import { trackingExclusionsOf, assertTrackingExclusions, effectiveTrackingExclus
 import { assertRawSummarySource, storedSourceMessages, assertStoredSourceMessages, matchesSourceMetadata, sourceFingerprint, matchesStoredSummarySource } from '../summary/source.js';
 import { prepareLatestSource, storedLatestSource, assertLatestSource, matchesLatestSource, matchesStoredLatestSource } from '../latest/source.js';
 import { assertTrackingRecord, blankTrackingRecord, assertTrackingPatch, assertTrackingChanges, applyTrackingCustomFieldValues, trackingExact, trackingText, trackingInteger, npcAbsenceTurns, TRACKING_FIELDS } from './model.js';
+import { trackingResultIds } from './identity.js';
 const clone = structuredClone;
 const freeze = value => { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 const generatedId = () => crypto.randomUUID();
@@ -114,7 +115,7 @@ function sourceIndex(source, beforeFloor = Infinity) {
 }
 // Only versions whose exact reply evidence and predecessor are currently active
 // contribute. A reroll keeps the AI ordinal and can restore its old version later.
-export function currentTracking(value, raw, { beforeFloor = Infinity } = {}) {
+export function currentTracking(value, raw, { beforeFloor = Infinity, includeResultFloors = false } = {}) {
   const domain = assertTracking(value), source = trackingSource(assertRawSummarySource(raw)), indexed = sourceIndex(source, beforeFloor);
   const records = domain.manual.filter(row => row.record !== null).map(row => row.record), index = new Map(records.map((row, at) => [row.id, at]));
   const manualById = new Map(domain.manual.map(row => [row.id, row])), manualBySnapshot = new Map();
@@ -129,12 +130,14 @@ export function currentTracking(value, raw, { beforeFloor = Infinity } = {}) {
       records[at] = assertTrackingRecord({ ...records[at], ...row.patch });
     }
   };
+  const resultFloors = {};
   let baseKey = null; const activeKeys = new Set([null]); applyManual(null);
   const invalidBatches = new Set(domain.snapshots.filter(row => row.sourceSnapshot.kind === 'batch' && (row.aiTurn !== indexed.turns.get(row.sourceSnapshot.assistantFloor) || !matchesBatchTrackingSource(row.sourceSnapshot, source))).map(row => row.id));
   const snapshots = restoreTrackingBatchRebases(domain.snapshots, invalidBatches).filter(row => row.sourceSnapshot.assistantFloor < beforeFloor).sort((a, b) => a.sourceSnapshot.assistantFloor - b.sourceSnapshot.assistantFloor);
   for (const snapshot of snapshots) {
     if (snapshot.baseKey !== baseKey || snapshot.aiTurn !== indexed.turns.get(snapshot.sourceSnapshot.assistantFloor)
       || !(snapshot.sourceSnapshot.kind === 'batch' ? matchesBatchTrackingSource(snapshot.sourceSnapshot, source) : matchesStoredLatestSource(snapshot.sourceSnapshot, indexed.relevant(snapshot.sourceSnapshot)))) continue;
+    if (includeResultFloors) for (const id of trackingResultIds(snapshot, records)) Object.defineProperty(resultFloors, id, { value: snapshot.sourceSnapshot.assistantFloor, enumerable: true, configurable: true });
     applyChanges(records, snapshot.changes, snapshot.aiTurn, { mutate: true, index, stored: true });
     // A manual anchor is not an edit timestamp. Historical backfill cannot
     // overwrite corrections merely because they were anchored to an old reply.
@@ -145,7 +148,7 @@ export function currentTracking(value, raw, { beforeFloor = Infinity } = {}) {
     const edit = manualById.get(record.id);
     return edit && Object.hasOwn(edit.patch, 'pinned') ? { ...record, pinned: edit.patch.pinned } : record;
   });
-  return { records: visible, items: visible.filter(row => row.kind === 'item'), npcs: visible.filter(row => row.kind === 'npc'), aiTurn: indexed.aiTurn, baseKey,
+  return { ...(includeResultFloors ? { resultFloors } : {}), records: visible, items: visible.filter(row => row.kind === 'item'), npcs: visible.filter(row => row.kind === 'npc'), aiTurn: indexed.aiTurn, baseKey,
     absenceTurns: Object.fromEntries(visible.filter(row => row.kind === 'npc').map(row => [row.id, npcAbsenceTurns(row, indexed.aiTurn)])) };
 }
 export function prepareTrackingUpdate(value, raw, { floor, rules } = {}) {

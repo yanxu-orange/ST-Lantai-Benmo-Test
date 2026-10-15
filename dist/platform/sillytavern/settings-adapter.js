@@ -134,7 +134,8 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
     const root = raw === undefined ? assertSettings(emptySettings()) : assertSettings(raw);
     // A save starting during readback cannot be mistaken for confirmed data.
     if (marker !== previousMarker || marker?.inFlight) throw new SettingsError('SETTINGS_COMMIT_UNCONFIRMED');
-    unchanged(ticket);
+    // install re-observes this ticket before replacing the namespace; nothing
+    // below invokes a caller callback or yields before that same check.
     const ownPending = previousMarker && ticket.fingerprint === previousMarker.stagedFingerprint;
     if (!ownPending && !ticket.absent && !equalSettings(root, ticket.root) && root.revision <= ticket.root.revision) throw new SettingsError('SETTINGS_CONFLICT');
     return install(raw, root, ticket);

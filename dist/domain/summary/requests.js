@@ -28,6 +28,7 @@ const stageSchema=stage=>stage==='fast'||stage.endsWith('Summary')?summarySchema
 function formatContent(stage,schema=stageSchema(stage)) {
   const root=schema.value.properties,fields=(root.memories??root.indexes).items.properties;
   const rules=['只返回符合此 JSON Schema 的对象，不输出 Markdown 或解释。'];
+  if(Object.hasOwn(fields,'locationAliases'))rules.push('locationAliases 为本条 locations 的对应名称数组，每项含 parentLocation 和 aliases；无对应名称用 []。');
   if(Object.hasOwn(fields,'classificationTags'))rules.push('classificationTags 固定为空数组。');
   if(Object.hasOwn(fields,'draftId'))rules.push('每个输入 draftId 恰好出现一次，并按输入顺序返回。');
   if(Object.hasOwn(fields,'detailAliases'))rules.push('检索简称为父细节词中的连续汉字或数字片段，不能等于完整父词。');
@@ -48,7 +49,7 @@ export function summaryStages(mode) {
   if(mode==='fast')return ['fast'];if(mode==='quality')return ['qualitySummary','qualityIndexes'];if(mode==='enhanced')return ['enhancedSummary','enhancedKeywords','aliases'];
   throw new Error('总结生成模式无效');
 }
-export function buildSummaryRequest(stage,{source,events=[],settings,tracking=null,identities=tracking?.identities??{}}={}) {
+export function buildSummaryRequest(stage,{source,events=[],settings,tracking=null,identities=tracking?.identities??{},origin='manual'}={}) {
   if(!Object.hasOwn(editableKeys,stage))throw new Error('总结阶段无效');
   settings={...settings,promptOverrides:migrateSummaryPromptOverrides(settings.promptOverrides??{})};
   const parts=[],add=(name,role,content,fixed=true,key=null)=>parts.push({name,role,content,fixed,key});
@@ -66,7 +67,7 @@ export function buildSummaryRequest(stage,{source,events=[],settings,tracking=nu
   let batchTracking=null;
   if(tracking&&(stage==='fast'||stage.endsWith('Summary'))){
     if(!tracking.ticket?.source?.sentFloors?.length||JSON.stringify(summarySourcePayload(source))!==JSON.stringify(summarySourcePayload(tracking.ticket?.source??{})))throw new Error('总结与批量追踪必须使用同一份正文');
-    const task=buildBatchTrackingTask({...tracking,identities});
+    const task=buildBatchTrackingTask({...tracking,identities,includeIdentityReferences:origin==='regeneration'&&settings.trackingIdentityReferencesEnabled!==false});
     if(task.schema.required.length){batchTracking=task;schema.value.properties.tracking=task.schema;schema.value.required.push('tracking');}
   }
   const group=Object.values(SUMMARY_PROMPT_GROUPS).flat().find(group=>group.items.some(item=>item.key===editableKeys[stage][0]));
@@ -77,6 +78,15 @@ export function buildSummaryRequest(stage,{source,events=[],settings,tracking=nu
       if(item.key==='informationTracking'){
         const enabled=batchTracking?.schema.required??[];
         add('本次信息追踪启用范围','system',`纪念日候选启用；NPC 追踪${enabled.includes('npcs')?'启用':'关闭'}；物品追踪${enabled.includes('items')?'启用':'关闭'}。仅执行启用类别的要求，按 JSON Schema 输出结果。`);
+        if(batchTracking){
+          const {knownIdentities,...materials}=batchTracking.materials;
+          add('本批追踪专属资料','user',JSON.stringify(materials,null,2));
+          if(knownIdentities){
+            add('补充角色与物品对照表','user','以下是补充角色与物品对照表：\n'+JSON.stringify(knownIdentities,null,2));
+            add('对照表使用要求','system',batchTracking.identityInstructions);
+          }
+          parts.push(...batchTracking.parts);
+        }
         const mode={fast:'fast',qualitySummary:'quality',enhancedSummary:'enhanced'}[stage];
         if(!overridden&&hasCustomSummaryFieldRules(settings,mode))add('自定义字段规则优先边界','system','若字段填写规则与信息追踪要求冲突，以字段填写规则为准。');
       }
@@ -84,12 +94,8 @@ export function buildSummaryRequest(stage,{source,events=[],settings,tracking=nu
     }
     add(item.name,item.kind==='format'?'system':'user',batchTracking&&item.kind==='format'?formatContent(stage,schema):readonlyContent(item,{stage,source,events,settings}),true,item.key);
   }
-  if(batchTracking){
-    add('本批追踪专属资料','user',JSON.stringify(batchTracking.materials,null,2));
-    parts.push(...batchTracking.parts);
-  }
   return {task:`event.summary.${stage}`,jsonSchema:schema,messages:parts.map(({role,content})=>({role,content})),previewParts:parts,title:names[stage]};
 }
-export function summaryPreview(source,settings,tracking=null,identities=tracking?.identities??{}) {
-  return {source,stages:summaryStages(settings.generationMode).map((stage,index)=>index?{stage,title:names[stage],pending:true}: {stage,...buildSummaryRequest(stage,{source,settings,tracking,identities}),pending:false})};
+export function summaryPreview(source,settings,tracking=null,identities=tracking?.identities??{},origin='manual') {
+  return {source,stages:summaryStages(settings.generationMode).map((stage,index)=>index?{stage,title:names[stage],pending:true}: {stage,...buildSummaryRequest(stage,{source,settings,tracking,identities,origin}),pending:false})};
 }

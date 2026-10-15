@@ -34,16 +34,25 @@ export function createSettingsRepository(adapter) {
     }
     const expectedEpoch = requestedEpoch ?? adapter.epochs()[field];
     const work = queue.then(async () => {
-      // Ordinary settings follow the current ST window. Cross-window edits
-      // require a user refresh; do not fetch the whole server settings before
-      // every small write. Explicit API/credential edits keep reconciliation.
-      const root = field === 'ai' || requireConfirmation ? await adapter.read({ waitForPendingSaves: true }) : adapter.peek();
+      // API edits use this window's confirmed authority, just like ordinary
+      // settings. Lost authority still requires reconciliation; never write a
+      // stale cached root. The adapter retains pending-save ordering and final
+      // server confirmation for an actual API write.
+      let root;
+      if (requireConfirmation) root = await adapter.read({ waitForPendingSaves: true });
+      else if (field === 'ai') {
+        try { root = adapter.peek(); }
+        catch (error) {
+          if (error?.code !== 'SETTINGS_COMMIT_UNCONFIRMED') throw error;
+          root = await adapter.read({ waitForPendingSaves: true });
+        }
+      } else root = adapter.peek();
       const epochs = adapter.epochs();
       if (!guard()) throw new SettingsError('SETTINGS_CONFLICT');
       // Caller guards can synchronously mutate host settings without an event.
       // Re-observe authority after the callback, including the no-op path.
       let current, currentEpochs;
-      try { current = adapter.peek(); currentEpochs = adapter.epochs(); }
+      try { ({ root: current, epochs: currentEpochs } = adapter.snapshot()); }
       catch { throw new SettingsError('SETTINGS_CONFLICT'); }
       if (currentEpochs.epoch !== epochs.epoch || currentEpochs[field] !== expectedEpoch
         || !equalSettings(current, root) || (previous && !equalSettings(root[field], previous[field]))) throw new SettingsError('SETTINGS_CONFLICT');

@@ -1,9 +1,11 @@
+import {assertLocationAliases} from '../memory/location-aliases.js';
 import { blankEvent, validateEventForSave } from '../memory/model.js';
 import { exactKeys, strings, validateIndexes } from '../memory/management-validation.js';
 
 const draftKeys = ['title','storyTime','body','people','locations','classificationTags','specialDateCandidates'];
+const locationAliasSchema = {type:'array',items:{type:'object',additionalProperties:false,required:['parentLocation','aliases'],properties:{parentLocation:{type:'string'},aliases:{type:'array',minItems:1,items:{type:'string'}}}}};
 const textArray = { type:'array',items:{type:'string'} };
-const properties = {title:{type:'string'},body:{type:'string'},storyTime:{type:'object',additionalProperties:false,required:['start','end'],properties:{start:{type:'string'},end:{type:'string'}}},people:textArray,locations:textArray,classificationTags:textArray,specialDateCandidates:{type:'array',items:{type:'object',additionalProperties:false,required:['name','storyDate','reason'],properties:{name:{type:'string'},storyDate:{type:'string'},reason:{type:'string'}}}}};
+const properties = {title:{type:'string'},body:{type:'string'},storyTime:{type:'object',additionalProperties:false,required:['start','end'],properties:{start:{type:'string'},end:{type:'string'}}},people:textArray,locations:textArray,locationAliases:locationAliasSchema,classificationTags:textArray,specialDateCandidates:{type:'array',items:{type:'object',additionalProperties:false,required:['name','storyDate','reason'],properties:{name:{type:'string'},storyDate:{type:'string'},reason:{type:'string'}}}}};
 // Only invalid alias text is disposable. Structure and ownership stay strict.
 export function normalizeSummaryAliases(data,{stage,events=[]}={}) {
   const copy=structuredClone(data),diagnostics=[];
@@ -29,6 +31,27 @@ export function normalizeSummaryAliases(data,{stage,events=[]}={}) {
   }
   return {data:copy,diagnostics};
 }
+export function normalizeSummaryLocationAliases(data) {
+  const copy=structuredClone(data),diagnostics=[];
+  if(!Array.isArray(copy?.memories))return {data:copy,diagnostics};
+  for(const [rowIndex,item] of copy.memories.entries()) {
+    if(!Object.hasOwn(item??{},'locationAliases'))continue;
+    if(!Array.isArray(item.locationAliases)||!Array.isArray(item.locations))throw new Error('地点别名结构无效');
+    const parents=new Set(),filtered=[];
+    for(const [relationIndex,row] of item.locationAliases.entries()) {
+      if(!exactKeys(row,['parentLocation','aliases'])||!item.locations.includes(row.parentLocation)||parents.has(row.parentLocation)||!Array.isArray(row.aliases)||row.aliases.some(alias=>typeof alias!=='string'))throw new Error('地点别名结构或所属地点无效');
+      parents.add(row.parentLocation);
+      const seen=new Set(),aliases=[];
+      for(const [aliasIndex,alias] of row.aliases.entries()) {
+        if(!alias.trim()||alias!==alias.trim()||alias===row.parentLocation||seen.has(alias))diagnostics.push({rowIndex,relationIndex,aliasIndex,code:'invalid-location-alias-discarded'});
+        else {seen.add(alias);aliases.push(alias);}
+      }
+      if(aliases.length)filtered.push({...row,aliases});
+    }
+    item.locationAliases=filtered;
+  }
+  return {data:copy,diagnostics};
+}
 export function summarySchema(complete=false) {
   const fields=complete?{...properties,eventKeywords:textArray,detailKeywords:textArray,detailAliases:{type:'array',items:{type:'object',additionalProperties:false,required:['parentDetail','aliases'],properties:{parentDetail:{type:'string'},aliases:textArray}}}}:properties;
   return {name:complete?'event_summary':'event_summary_drafts',value:{type:'object',additionalProperties:false,required:['memories'],properties:{memories:{type:'array',minItems:1,items:{type:'object',additionalProperties:false,required:Object.keys(fields),properties:fields}}}}};
@@ -36,13 +59,14 @@ export function summarySchema(complete=false) {
 export function validDrafts(data,{complete=false,availableNames=[]}={}) {
   if(!exactKeys(data,['memories'])||!Array.isArray(data.memories)||!data.memories.length)return false;
   return data.memories.every((item,index)=>{
-    if(!exactKeys(item,complete?[...draftKeys,'eventKeywords','detailKeywords','detailAliases']:draftKeys)||!exactKeys(item.storyTime,['start','end'])||[item.title,item.body,item.storyTime.start,item.storyTime.end].some(value=>typeof value!=='string')||!item.body.trim()||!strings(item.people)||!strings(item.locations)||!Array.isArray(item.classificationTags)||item.classificationTags.length||!Array.isArray(item.specialDateCandidates))return false;
+    if(!exactKeys(item,[...draftKeys,...(Object.hasOwn(item??{},'locationAliases')?['locationAliases']:[]),...(complete?['eventKeywords','detailKeywords','detailAliases']:[])])||!exactKeys(item.storyTime,['start','end'])||[item.title,item.body,item.storyTime.start,item.storyTime.end].some(value=>typeof value!=='string')||!item.body.trim()||!strings(item.people)||!strings(item.locations)||!Array.isArray(item.classificationTags)||item.classificationTags.length||!Array.isArray(item.specialDateCandidates))return false;
     if(item.specialDateCandidates.some(date=>!exactKeys(date,['name','storyDate','reason'])||[date.name,date.storyDate,date.reason].some(value=>typeof value!=='string'||!value.trim())))return false;
+    try { if(Object.hasOwn(item,'locationAliases'))assertLocationAliases(item.locationAliases,item.locations); } catch { return false; }
     return !complete||validateIndexes({indexes:[{draftId:String(index),eventKeywords:item.eventKeywords,detailKeywords:item.detailKeywords,detailAliases:item.detailAliases}]},[String(index)],availableNames);
   });
 }
 export function draftsToEvents(data,ranges,uuid=()=>crypto.randomUUID()) {
-  return data.memories.map(item=>({...blankEvent(uuid()),title:item.title,body:item.body,startTime:item.storyTime.start,endTime:item.storyTime.end,people:[...item.people],places:[...item.locations],sources:structuredClone(ranges)}));
+  return data.memories.map(item=>({...blankEvent(uuid()),title:item.title,body:item.body,startTime:item.storyTime.start,endTime:item.storyTime.end,people:[...item.people],places:[...item.locations],...(Object.hasOwn(item,'locationAliases')?{locationAliases:structuredClone(item.locationAliases)}:{}),sources:structuredClone(ranges)}));
 }
 export function applyIndexes(events,data,uuid=()=>crypto.randomUUID()) {
   return events.map(event=>{
@@ -57,7 +81,7 @@ export function reviewEvents(value,originals) {
   const termIds=new Set();
   return copied.map(event=>{
     const original=originals.find(item=>item.id===event?.id);
-    if(!original||!exactKeys(event,Object.keys(original))||JSON.stringify(event.sources)!==JSON.stringify(original.sources)||JSON.stringify(event.batch)!==JSON.stringify(original.batch)||event.createdAt!==original.createdAt||event.updatedAt!==original.updatedAt)throw new Error('候选身份或来源已变化');
+    if(!original||!exactKeys(event,[...Object.keys(original).filter(key=>key!=='locationAliases'),...(Object.hasOwn(event,'locationAliases')?['locationAliases']:[])])||JSON.stringify(event.sources)!==JSON.stringify(original.sources)||JSON.stringify(event.batch)!==JSON.stringify(original.batch)||event.createdAt!==original.createdAt||event.updatedAt!==original.updatedAt)throw new Error('候选身份或来源已变化');
     for(const term of event.detailWords){if(termIds.has(term.id)||owners.has(term.id)&&owners.get(term.id)!==event.id)throw new Error('细节词绑定无效');termIds.add(term.id);}
     return validateEventForSave(event);
   });

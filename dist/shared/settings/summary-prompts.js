@@ -435,9 +435,17 @@ lastAppearanceFloor 记录角色在本批原文中最后一次实际出场、行
 
 赠送、转移或归属改变已经发生时，记录转出方、接收方及简要原因。计划和承诺保留为尚未完成的安排。物品多次转移时，填写本批最后一次已完成转移的转出方、接收方和原因。`,
 });
+export const LOCATION_ALIAS_RULES = `
+
+地点对应名称 locationAliases
+
+locations 保留完整地点，例如“澜州·玉龙湖公园·湖边石阶”。原文中明确指向这一地点的名称可以记录为对应名称，例如“玉龙湖公园”“玉龙湖”；原文明示的别称如“月亮湾”也可以使用，不限于完整地点的连续字面片段。
+
+每项包含 parentLocation 和 aliases。parentLocation 原样引用本条记忆 locations 中的一项；aliases 只收录故事原文明确使用且能确认对应的名称。不按分隔符拆词，不自动补简称，不将“公园”“湖边”等泛称当作地点名称。同名不等于同一地点，不能把不同城市或无法确认对应的地点合并。仅建立本条记忆内的对应关系。没有可靠对应名称时填写 []。`;
+export const LEGACY_LOCATION_FIELD_DEFAULTS = freeze(Object.fromEntries(Object.entries(APPROVED_SUMMARY_PROMPT_GROUPS).flatMap(([mode,groups]) => groups.flatMap(group => group.items.filter(item=>item.key===SUMMARY_FIELD_KEYS[mode]).map(item=>[item.key,item.defaultText.split(ANNIVERSARY_SECTION)[0]])))));
 export const SUMMARY_PROMPT_GROUPS = freeze(Object.fromEntries(Object.entries(APPROVED_SUMMARY_PROMPT_GROUPS).map(([mode, groups]) => [mode,
   groups.map(group => ({ ...group, items: group.items.flatMap(item => item.key === SUMMARY_FIELD_KEYS[mode]
-    ? [{ ...item, defaultText: item.defaultText.split(ANNIVERSARY_SECTION)[0] }, INFORMATION_TRACKING_PROMPT]
+    ? [{ ...item, defaultText: item.defaultText.split(ANNIVERSARY_SECTION)[0] + LOCATION_ALIAS_RULES }, INFORMATION_TRACKING_PROMPT]
     : [item]) })),
 ])));
 export const MERGE_PROMPT_FIELDS = freeze([
@@ -471,12 +479,13 @@ export function summaryPromptDefault(key){ const item=SUMMARY_PROMPT_FIELDS.find
 export function migrateSummaryPromptOverrides(overrides) {
   const prior = { ...LEGACY_SUMMARY_PROMPT_DEFAULTS, ...LEGACY_INFORMATION_TRACKING_FIELD_DEFAULTS };
   return Object.fromEntries(Object.entries(overrides).map(([key, content]) => [key,
-    Object.hasOwn(prior, key) && content === prior[key] ? summaryPromptDefault(key) : content,
+    (Object.hasOwn(prior, key) && content === prior[key] || Object.hasOwn(LEGACY_LOCATION_FIELD_DEFAULTS,key) && content === LEGACY_LOCATION_FIELD_DEFAULTS[key]) ? summaryPromptDefault(key) : content,
   ]));
 }
 export function hasCustomSummaryFieldRules(settings, mode) {
   const key = SUMMARY_FIELD_KEYS[mode], overrides = settings?.promptOverrides ?? {};
   return !!key && Object.hasOwn(overrides, key)
     && overrides[key] !== summaryPromptDefault(key)
-    && overrides[key] !== LEGACY_INFORMATION_TRACKING_FIELD_DEFAULTS[key];
+    && overrides[key] !== LEGACY_INFORMATION_TRACKING_FIELD_DEFAULTS[key]
+    && overrides[key] !== LEGACY_LOCATION_FIELD_DEFAULTS[key];
 }

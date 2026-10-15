@@ -1,3 +1,4 @@
+import {assertLocationAliases} from './location-aliases.js';
 // Pure event shape and validation; no chat aggregate or summary dependencies.
 const clone = value => structuredClone(value);
 export function blankEvent(id = crypto.randomUUID()) {
@@ -18,6 +19,7 @@ export function validateEvent(event) {
   if (!event.body.trim()) throw new Error('请填写正文');
   if (!Array.isArray(event.sources) || !event.sources.every(validRange)) throw new Error('来源楼层须为完整的非负整数区间，起点不能晚于终点');
   for (const key of ['people','places','eventWords']) if (!Array.isArray(event[key]) || event[key].some(word => typeof word !== 'string' || !word.trim())) throw new Error('词条不能为空');
+  if (Object.hasOwn(event, 'locationAliases')) assertLocationAliases(event.locationAliases, event.places);
   if (!Array.isArray(event.detailWords)) throw new Error('细节词无效');
   const ids = new Set();
   for (const term of event.detailWords) {

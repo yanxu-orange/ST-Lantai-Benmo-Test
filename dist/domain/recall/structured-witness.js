@@ -100,31 +100,78 @@ function fieldValues(memory, field, getter) {
     return assertStructuredList(values, `memory.${field}`);
 }
 
+// Aliases are confirmed surfaces of one stored location, never additional
+// location facts. Resolve collisions locally, including other full names, using
+// the same conservative normalization as literal matching. Do not infer cities,
+// split names, or share bindings between memories.
+function locationAliasesByParent(memory) {
+    const locations = assertStructuredList(memory.locations ?? [], 'memory.locations');
+    const bindings = memory.locationAliases === undefined ? [] : memory.locationAliases;
+    if (!Array.isArray(bindings)) throw new TypeError('memory.locationAliases must be an array');
+    if (!bindings.length) return new Map();
+    const surfaceKey = value => canonicalFactKey(value).toLowerCase();
+    const parents = new Set(locations);
+    const owners = new Map();
+    const aliasesByParent = new Map();
+    const addOwner = (surface, parent) => {
+        const key = surfaceKey(surface);
+        if (!key) return;
+        if (!owners.has(key)) owners.set(key, new Set());
+        owners.get(key).add(parent);
+    };
+    locations.forEach(location => addOwner(location, location));
+    bindings.forEach((binding, index) => {
+        if (!binding || typeof binding !== 'object') throw new TypeError(`memory.locationAliases[${index}] must be an object`);
+        assertString(binding.parentLocation, `memory.locationAliases[${index}].parentLocation`);
+        assertStructuredList(binding.aliases, `memory.locationAliases[${index}].aliases`);
+        if (!parents.has(binding.parentLocation)) return;
+        if (!aliasesByParent.has(binding.parentLocation)) aliasesByParent.set(binding.parentLocation, new Map());
+        const aliases = aliasesByParent.get(binding.parentLocation);
+        for (const alias of binding.aliases) {
+            const key = surfaceKey(alias);
+            if (!key) continue;
+            addOwner(alias, binding.parentLocation);
+            if (!aliases.has(key)) aliases.set(key, alias);
+        }
+    });
+    return new Map([...aliasesByParent].map(([parent, aliases]) => [parent,
+        [...aliases].filter(([key]) => owners.get(key).size === 1 && key !== surfaceKey(parent)).map(([, alias]) => alias),
+    ]));
+}
+
 function collectOccurrenceWitnesses(memoryId, occurrence, fragments) {
     const model = occurrence.field === 'detail' ? buildDetailQuerySurfaceModel(occurrence.storedValue) : null;
+    const querySurfaces = [{ value: occurrence.storedValue }, ...(occurrence.aliases ?? [])
+        .map(alias => ({ value: alias, matchedAlias: alias }))];
     const witnesses = [];
     for (const [fragmentIndex, fragment] of fragments.entries()) {
         if (!fragment.cleanedText) continue;
-        const surface = model
-            ? matchDetailQuerySurface(model, fragment.cleanedText)
-            : matchLiteralSurface(occurrence.storedValue, fragment.cleanedText);
-        if (!surface?.matched && occurrence.field === 'detail') continue;
-        if (!surface) continue;
-        witnesses.push({
-            id: JSON.stringify([memoryId, occurrence.field, occurrence.fieldIndex, fragment.id]),
-            memoryId, parentFactId: null, fragmentId: fragment.id,
-            sourceKind: fragment.sourceKind, rawPosition: fragment.rawPosition,
-            distanceFromCurrent: fragment.distanceFromCurrent,
-            field: occurrence.field, fieldIndex: occurrence.fieldIndex,
-            storedValue: occurrence.storedValue,
-            matchClass: surface.matchClass, ruleFamily: surface.ruleFamily,
-            normalizedQuery: surface.normalizedQuery,
-            coordinateSystem: surface.coordinateSystem,
-            usedComponents: surface.usedComponents.map(component => ({
-                ...component, range: [...component.range],
-            })),
-            _fragmentIndex: fragmentIndex,
-        });
+        for (const querySurface of querySurfaces) {
+            const surface = model
+                ? matchDetailQuerySurface(model, fragment.cleanedText)
+                : matchLiteralSurface(querySurface.value, fragment.cleanedText);
+            if (!surface?.matched && occurrence.field === 'detail') continue;
+            if (!surface) continue;
+            const alias = querySurface.matchedAlias;
+            witnesses.push({
+                id: JSON.stringify([memoryId, occurrence.field, occurrence.fieldIndex, fragment.id,
+                    ...(alias === undefined ? [] : ['location-alias', alias])]),
+                memoryId, parentFactId: null, fragmentId: fragment.id,
+                sourceKind: fragment.sourceKind, rawPosition: fragment.rawPosition,
+                distanceFromCurrent: fragment.distanceFromCurrent,
+                field: occurrence.field, fieldIndex: occurrence.fieldIndex,
+                storedValue: occurrence.storedValue,
+                ...(alias === undefined ? {} : { matchedAlias: alias }),
+                matchClass: surface.matchClass, ruleFamily: alias === undefined ? surface.ruleFamily : 'explicit-location-alias',
+                normalizedQuery: surface.normalizedQuery,
+                coordinateSystem: surface.coordinateSystem,
+                usedComponents: surface.usedComponents.map(component => ({
+                    ...component, range: [...component.range],
+                    ...(alias === undefined ? {} : { kind: 'location-alias', relation: 'confirmed-location-alias' }),
+                })),
+                _fragmentIndex: fragmentIndex,
+            });
+        }
     }
     return witnesses;
 }
@@ -164,12 +211,14 @@ export function collectMemoryStructuredWitnesses(memory, fragments) {
     });
 
     const matchedOccurrences = [];
+    const locationAliases = locationAliasesByParent(memory);
     FIELD_SPECS.forEach(([field, getter], fieldRank) => {
         fieldValues(memory, field, getter).forEach((storedValue, fieldIndex) => {
             if (!storedValue.trim()) return;
             const occurrence = {
                 field, fieldIndex, fieldRank, storedValue,
                 canonicalKey: canonicalFactKey(storedValue),
+                ...(field === 'locations' ? { aliases: locationAliases.get(storedValue) ?? [] } : {}),
             };
             const witnesses = collectOccurrenceWitnesses(memory.id, occurrence, fragments);
             if (witnesses.length) matchedOccurrences.push({ ...occurrence, witnesses });

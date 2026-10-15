@@ -1,6 +1,6 @@
 import { sameTarget } from '../memory/repository.js';
 import { equalData, exactKeys, validateIndexes } from '../memory/management-validation.js';
-import { validDrafts, draftsToEvents, applyIndexes, reviewEvents, normalizeSummaryAliases } from './candidates.js';
+import { validDrafts, draftsToEvents, applyIndexes, reviewEvents, normalizeSummaryAliases, normalizeSummaryLocationAliases } from './candidates.js';
 import { buildSummaryRequest, summaryStages, summaryPreview } from './requests.js';
 import { prepareSummarySource, matchesSummarySource, matchesStoredSummarySource, storedSummarySource } from './source.js';
 import { publicSummarySettingsEvidence, normalizedSummarySettingsEvidence, publicSummaryTrackingTicket } from './data.js';
@@ -65,7 +65,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     await repository.read(ctx.target);
     const current=()=>!ctx.signal.aborted&&targetCurrent(snapshot,ctx.target)&&sourceCurrent(snapshot,ctx.target);
     if(!current())throw new Error('聊天来源或总结设置已变化');
-    const spec=buildSummaryRequest(stage,{source:snapshot.source,events,settings:snapshot.settings,identities:snapshot.identities,tracking:snapshot.tracking?{ticket:snapshot.tracking.ticket,...snapshot.tracking.context}:null}),ids=events.map(event=>event.id),names=available(snapshot.settings);
+    const spec=buildSummaryRequest(stage,{origin:snapshot.origin,source:snapshot.source,events,settings:snapshot.settings,identities:snapshot.identities,tracking:snapshot.tracking?{ticket:snapshot.tracking.ticket,...snapshot.tracking.context}:null}),ids=events.map(event=>event.id),names=available(snapshot.settings);
     const validateRaw=data=>{
       if(stage==='fast'||stage.endsWith('Summary'))return validDrafts(data,{complete:stage==='fast',availableNames:names});
       if(stage==='qualityIndexes')return validateIndexes(data,ids,names);
@@ -75,7 +75,11 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     };
     const trackingStage=!!snapshot.tracking&&(stage==='fast'||stage.endsWith('Summary'));
     const eventData=data=>{if(!trackingStage||!data||typeof data!=='object'||Array.isArray(data))return data;const {tracking,...events}=data;return events;};
-    const normalize=data=>['fast','qualityIndexes','aliases'].includes(stage)?normalizeSummaryAliases(data,{stage,events}):{data,diagnostics:[]};
+    const normalize=data=>{
+      const details=['fast','qualityIndexes','aliases'].includes(stage)?normalizeSummaryAliases(data,{stage,events}):{data,diagnostics:[]};
+      const locations=stage==='fast'||stage.endsWith('Summary')?normalizeSummaryLocationAliases(details.data):{data:details.data,diagnostics:[]};
+      return {data:locations.data,diagnostics:[...details.diagnostics,...locations.diagnostics]};
+    };
     const validate=data=>{try{return validateRaw(normalize(eventData(data)).data);}catch{return false;}};
     records.get(ctx.taskId).stage=stage;notify(ctx.taskId);
     const output=await provider.generateJson({...spec,signal:ctx.signal,isCurrent:current,validate});
@@ -117,7 +121,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     if(state.status==='awaiting-user'&&!state.reviewPending&&!record.reviewRequired&&!record.autoConfirmScheduled){record.autoConfirmScheduled=true;queueMicrotask(()=>void confirm(state.taskId).then(result=>{if(result.status==='invalid'){record.errorMessage=result.error;record.invalidAuto=true;notify(state.taskId);}}));}
   });
     return Object.freeze({
-    async preview(origin,options) {const snapshot=await capture(origin,options);return {...summaryPreview(snapshot.source,snapshot.settings,snapshot.tracking?{ticket:snapshot.tracking.ticket,...snapshot.tracking.context}:null,snapshot.identities),snapshot};},
+    async preview(origin,options) {const snapshot=await capture(origin,options);return {...summaryPreview(snapshot.source,snapshot.settings,snapshot.tracking?{ticket:snapshot.tracking.ticket,...snapshot.tracking.context}:null,snapshot.identities,snapshot.origin),snapshot};},
     async start(origin='manual',options={}) {
       const operationProof=control?.capture();if(control&&!control.allowed())throw new Error('功能已关闭');
       if(!['manual','auto','regeneration'].includes(origin))throw new Error('总结来源无效');

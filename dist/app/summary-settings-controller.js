@@ -171,6 +171,10 @@ export function createSummarySettingsController({ settings, exclusions, getContr
       if (state.draft?.[key] !== true && !trackingAllowed(key === 'trackingItemsEnabled' ? 'item' : 'npc')) return Promise.resolve(false);
       return lightChange(draft => { draft[key] = !draft[key]; });
     },
+    setIdentityReferences(enabled) {
+      if (typeof enabled !== 'boolean') return Promise.resolve(false);
+      return lightChange(draft => { draft.trackingIdentityReferencesEnabled = enabled; });
+    },
     async toggleNarrative(kind) {
       if (!['self', 'outline'].includes(kind) || !narrativeRuntime || !editable() || state.autoSaving || narrativeSettings().narrativeWriteBlocked) return false;
       const autoSource = narrativeSettings().narrativeAutoSources[kind] === 'event' ? 'none' : 'event';

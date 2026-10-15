@@ -1,7 +1,7 @@
 import {mainNavigation,rootTitle} from './navigation.js';
 import { surfaceTheme } from './styles/theme.js';
 import { sameTarget } from '../domain/memory/repository.js';
-import { filterMemories } from '../domain/memory/query.js';
+import { filterMemories, orderMemoryList } from '../domain/memory/query.js';
 import { buildTimeline } from '../domain/memory/timeline.js';
 import { detailWordError } from '../domain/memory/model.js';
 import { createMemorySession, splitWords } from './memory-session.js';
@@ -9,6 +9,8 @@ import { createManagementController } from './management-controller.js';
 import { managementView,managementParticipantTags } from './management-view.js';
 import { eventEditorSections } from './event-editor-sections.js';
 import { formatMemoryCardTime } from './memory-card-time.js';
+import {setLocationAliases,renameLocation,removeLocation} from '../domain/memory/location-aliases.js';
+import {locationEditorRows,syncLocationEditor,updateLocationEditorRow,setLocationEditorError,focusLocationEditorError} from './location-alias-editor.js';
 import { mountCumulativeRootView } from './cumulative-root-view.js';
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const icon = (name,label,action,disabled=false) => `<button type="button" class="ui-icon-button${['back','close','cancel-delete'].includes(action)?' ui-button--tertiary':''}" data-action="${action}" aria-label="${label}" ${disabled?'title="首片尚未实现"':''}><img class="lt-icon" src="${new URL(`./icons/${name}.svg`,import.meta.url)}" alt=""></button>`;
@@ -25,6 +27,7 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
   const session = createMemorySession(repository), state = session.state;
   const management=managementController??createManagementController({service:managementService,repository,originalAvailable,getSettingsEpoch,getOriginalSnapshot});
   let managementVisible=false,refreshingManagement=false,enteringManagement=false;
+  let openLocation=null,openLocationEvent=null;
   let openTerm = null, rootView = 'list', rootScroll = { list: 0, timeline: 0 }, disposed = false, routeTicket=0, noticeTicket=0, savedTimer=null;
   let multi=false, selected=new Set(), confirmation=null;
   let memoryType=(initialMemoryType==='cumulative'||!availability().event)&&availability().cumulative&&cumulativeController?'cumulative':'event',cumulativeRoot=null,cumulativeSuspended=false;
@@ -54,7 +57,7 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
     return `<div class="lt-entry" id="lt-search-panel" ${searchOpen?'':'hidden'}><input class="ui-input" type="search" data-query aria-label="搜索记忆" placeholder="搜索标题与正文" value="${escape(query)}">${button('收起','search')}</div><div class="lt-section" id="lt-filter-panel" ${filterOpen?'':'hidden'}>${filterGroup('召回方式','filterMode',[['all','全部'],['resident','常驻'],['trigger','触发']],filterMode)}${filterGroup('关键词','filterWords',[['all','全部'],['event','缺事件词'],['detail','缺细节词'],['none','无新词']],filterWords)}</div><p class="lt-meta" id="lt-query-state" role="status" ${hasQuery()||hasFilters()?'':'hidden'}>${visibleMemories().length} 条</p>`;
   }
   function collection(events=visibleMemories()) {
-    return events.length?(rootView==='timeline'?timeline(events):events.map(card).join('')):`<p class="lt-meta">${state.root?.events.length?'没有符合条件的记忆':'尚无事件记忆'}</p>`;
+    return events.length?(rootView==='timeline'?timeline(events):orderMemoryList(events).map(card).join('')):`<p class="lt-meta">${state.root?.events.length?'没有符合条件的记忆':'尚无事件记忆'}</p>`;
   }
   function updateCollection() {
     if(confirmation||state.route!=='list'||!$('#lt-memory-list'))return;
@@ -83,6 +86,7 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
   function tagSection(label,key) {
     return `<div class="lt-stack"><h3 class="ui-field__label">${label}</h3><div class="lt-tags" data-tags="${key}">${tags(key)}</div><div class="lt-entry"><input class="ui-input" data-entry="${key}" aria-label="添加${label}" placeholder="输入${label}"><button type="button" class="ui-button ui-button--tertiary" data-add="${key}" disabled>添加</button></div></div>`;
   }
+  function locationSection() { return `<div class="lt-stack"><h3 class="ui-field__label">地点</h3><div class="lt-terms" data-location-list>${locationEditorRows(state.draft,openLocation)}</div><div class="lt-entry"><input class="ui-input" data-entry="places" aria-label="添加地点" placeholder="输入地点"><button type="button" class="ui-button ui-button--tertiary" data-add="places" disabled>添加</button></div></div>`; }
   function tags(key) { return state.draft[key].map((word,index)=>`<span class="ui-tag">${escape(word)}<button type="button" class="ui-icon-button ui-button--tertiary" data-remove="${key}" data-index="${index}" aria-label="删除${escape(word)}"><img class="lt-icon" src="${new URL('./icons/close.svg',import.meta.url)}" alt=""></button></span>`).join(''); }
   function terms() {
     const ordered=[...state.draft.detailWords], active=ordered.findIndex(term=>term.id===openTerm);
@@ -91,8 +95,8 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
   }
   function fieldSection(label,html) { return `<details open class="lt-section"><summary>${label}</summary><div class="lt-stack">${html}</div></details>`; }
   function editor() {
-    const draft=state.draft;
-    return `<form class="lt-editor" id="lt-editor" novalidate>${eventEditorSections({modes:`<fieldset class="lt-modes" aria-label="召回方式"><legend class="ui-field__label">召回方式</legend>${[['resident','常驻'],['trigger','触发']].map(([value,label])=>`<label class="lt-mode"><input type="radio" name="mode" value="${value}" ${draft.mode===value?'checked':''}>${label}</label>`).join('')}</fieldset>`,title:text('标题','title',draft.title,2),body:text('正文','body',draft.body,7),times:`<div class="lt-range">${input('故事时间起点','startTime',draft.startTime)}<span>—</span>${input('故事时间终点','endTime',draft.endTime)}</div>`,sources:`<div id="lt-sources">${sourceRows()}</div>${button('增加区间','add-source')}`,participants:tagSection('人物','people')+tagSection('地点','places'),keywords:tagSection('事件词','eventWords')+`<h3 class="ui-field__label" id="lt-term-count">细节词与简称<span class="lt-meta"> · ${draft.detailWords.length}</span></h3><div class="lt-terms" id="lt-terms">${terms()}</div><div class="lt-entry"><input class="ui-input" data-entry="detailWords" aria-label="添加细节词" placeholder="输入细节词"><button class="ui-button ui-button--tertiary" type="button" data-add="detailWords" disabled>添加</button></div>`})}</form>`;
+    const draft=state.draft;if(openLocationEvent!==draft.id){openLocation=null;openLocationEvent=draft.id;}
+    return `<form class="lt-editor" id="lt-editor" novalidate>${eventEditorSections({modes:`<fieldset class="lt-modes" aria-label="召回方式"><legend class="ui-field__label">召回方式</legend>${[['resident','常驻'],['trigger','触发']].map(([value,label])=>`<label class="lt-mode"><input type="radio" name="mode" value="${value}" ${draft.mode===value?'checked':''}>${label}</label>`).join('')}</fieldset>`,title:text('标题','title',draft.title,2),body:text('正文','body',draft.body,7),times:`<div class="lt-range">${input('故事时间起点','startTime',draft.startTime)}<span>—</span>${input('故事时间终点','endTime',draft.endTime)}</div>`,sources:`<div id="lt-sources">${sourceRows()}</div>${button('增加区间','add-source')}`,participants:tagSection('人物','people')+locationSection(),keywords:tagSection('事件词','eventWords')+`<h3 class="ui-field__label" id="lt-term-count">细节词与简称<span class="lt-meta"> · ${draft.detailWords.length}</span></h3><div class="lt-terms" id="lt-terms">${terms()}</div><div class="lt-entry"><input class="ui-input" data-entry="detailWords" aria-label="添加细节词" placeholder="输入细节词"><button class="ui-button ui-button--tertiary" type="button" data-add="detailWords" disabled>添加</button></div>`})}</form>`;
   }
   function sourceRows() { return (state.draft.sources.length?state.draft.sources:[{start:'',end:''}]).map((range,index)=>`<div class="lt-range ${state.draft.sources.length>1?'lt-source-range':''}">${input(`来源起点${index+1}`,'sourceStart',range.start,index)}<span>—</span>${input(`来源终点${index+1}`,'sourceEnd',range.end,index)}${state.draft.sources.length>1?`<button type="button" class="ui-icon-button ui-button--tertiary" data-action="remove-source" data-index="${index}" aria-label="删除区间${index+1}"><img class="lt-icon" src="${new URL('./icons/close.svg',import.meta.url)}" alt=""></button>`:''}</div>`).join(''); }
   function card(event) { const accent=stableAccent(event.id);const displayTime=multi?[event.startTime,event.endTime].filter(Boolean).join('—'):formatMemoryCardTime(event.startTime,event.endTime);const normal=`<button type="button" class="ui-row ui-row--interactive ui-graphic-card lt-row" data-edit="${escape(event.id)}" aria-label="编辑记忆：${escape(event.title||'无标题')}"><span class="lt-card-head"><span class="lt-tags lt-event-meta ui-tag-group"><span class="ui-tag" data-memory-mode="${event.mode}" data-ui-tone="${accent}">${event.mode==='resident'?'常驻':'触发'}</span><span class="lt-meta">${escape(event.sources.map(range=>`${range.start}—${range.end}楼`).join('、'))}</span></span><span class="lt-meta ui-meta-time">${escape(displayTime)}</span></span>${event.title?`<span class="ui-row__title lt-title">${escape(event.title)}</span>`:''}<span class="ui-reading lt-copy">${escape(event.body)}</span><span class="lt-tags ui-tag-group">${event.eventWords.map(word=>`<span class="ui-tag lt-tag--event" data-ui-tone="${stableAccent(`${event.id}:event:${word}`)}">${escape(word)}</span>`).join('')}${event.detailWords.map(term=>`<span class="ui-tag lt-tag--detail" data-ui-tone="${stableAccent(`${event.id}:detail:${term.id}`)}">${escape(term.word)}</span>`).join('')}</span></button>`;if(!multi)return normal;const body=normal.slice(normal.indexOf('>')+1,-9);return `<label class="ui-row lt-row lt-selection-row" data-selected="${selected.has(event.id)}"><input type="checkbox" data-select="${escape(event.id)}" aria-label="选择记忆：${escape(event.title||'无标题')}" ${selected.has(event.id)?'checked':''} ${state.pending?'disabled':''}><span class="lt-selection-content">${body}</span></label>`; }
@@ -232,7 +236,7 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
   function renderTerms() { $('#lt-terms').innerHTML=terms();$('#lt-term-count').innerHTML=`细节词与简称<span class="lt-meta"> · ${state.draft.detailWords.length}</span>`; }
   function updateError() {
     if(confirmation){const box=$('#lt-delete-error');if(box){box.textContent=state.error;box.hidden=!state.error;}return;}
-    for(const field of container.querySelectorAll('[aria-invalid]')){field.removeAttribute('aria-invalid');field.removeAttribute('aria-describedby');}
+    for(const field of container.querySelectorAll('[aria-invalid]')){if(field.hasAttribute('data-location-error'))continue;field.removeAttribute('aria-invalid');field.removeAttribute('aria-describedby');}
     const timeFailure=state.error.includes('故事时间');
     const termFailure=state.error.includes('简称')||state.error.includes('细节词');
     const term=termFailure?state.draft?.detailWords.find(term=>detailWordError(term,state.draft.detailWords)):null;
@@ -249,7 +253,7 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
     const words=splitWords(field.value); if(!words.length)return;clearSaved();noticeTicket++;
     session.change(draft=>{ if(key==='detailWords'){ for(const word of words) if(!draft.detailWords.some(term=>term.word===word))draft.detailWords.push({id:crypto.randomUUID(),word,aliases:[]}); }else draft[key]=[...new Set([...draft[key],...words])]; });
     field.value=''; $(`[data-add="${key}"]`).disabled=true;
-    if(key==='detailWords')renderTerms();else $(`[data-tags="${key}"]`).innerHTML=tags(key);
+    if(key==='detailWords')renderTerms();else if(key==='places')syncLocationEditor($('[data-location-list]'),state.draft,openLocation);else $(`[data-tags="${key}"]`).innerHTML=tags(key);
   }
   function flush() { for(const field of container.querySelectorAll('[data-entry]'))addWords(field.dataset.entry); }
   async function route(id,push=false) {
@@ -285,9 +289,11 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
         else if(action==='settings'){openSettings();return;}
         if(managementVisible)renderManagement();return;
       }
-      if(target.dataset.remove||target.dataset.deleteTerm||['remove-source','add-source'].includes(target.dataset.action)){clearSaved();noticeTicket++;}
+      if(target.hasAttribute('data-location-remove')||target.dataset.remove||target.dataset.deleteTerm||['remove-source','add-source'].includes(target.dataset.action)){clearSaved();noticeTicket++;}
       if(target.dataset.edit){rootScroll[rootView]=$('.lt-main').scrollTop;session.edit(target.dataset.edit);browserHistory?.pushState({view:rootView,lantai:target.dataset.edit},'','#editor');render();return;}
       if(target.dataset.add){addWords(target.dataset.add);return;}
+      if(target.hasAttribute('data-location-toggle')){if(container.querySelector('[data-composing=true]')||focusLocationEditorError(container))return;const index=Number(target.dataset.locationToggle);openLocation=openLocation===index?null:index;syncLocationEditor($('[data-location-list]'),state.draft,openLocation);target.focus({preventScroll:true});return;}
+      if(target.hasAttribute('data-location-remove')){if(container.querySelector('[data-composing=true]'))return;const index=Number(target.dataset.locationRemove),list=$('[data-location-list]');session.change(draft=>removeLocation(draft,index));target.closest('[data-location-row]').remove();if(openLocation===index)openLocation=null;else if(openLocation>index)openLocation--;syncLocationEditor(list,state.draft,openLocation);(list.querySelector('[data-location-toggle]')??$('[data-entry="places"]'))?.focus({preventScroll:true});return;}
       if(target.dataset.remove){session.change(draft=>draft[target.dataset.remove].splice(Number(target.dataset.index),1));$(`[data-tags="${target.dataset.remove}"]`).innerHTML=tags(target.dataset.remove);return;}
       if(target.dataset.term){openTerm=openTerm===target.dataset.term?null:target.dataset.term;renderTerms();return;}
       if(target.dataset.deleteTerm){session.change(draft=>draft.detailWords=draft.detailWords.filter(term=>term.id!==target.dataset.deleteTerm));renderTerms();return;}
@@ -356,7 +362,7 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
         case 'remove-source':session.change(draft=>draft.sources.splice(Number(target.dataset.index),1));$('#lt-sources').innerHTML=sourceRows();updateError();break;
         case 'add-source':session.change(draft=>{if(!draft.sources.length)draft.sources.push({start:'',end:''});draft.sources.push({start:'',end:''});});$('#lt-sources').innerHTML=sourceRows();break;
         case 'save': {
-          if([...container.querySelectorAll('[data-composing=true]')].length)return;
+          if([...container.querySelectorAll('[data-composing=true]')].length||focusLocationEditorError(container))return;
           clearSaved();flush();const saveNoticeTicket=noticeTicket;const saving=session.save();target.disabled=true;target.textContent='保存中…';
           try{const result=await saving;if(state.route==='list')render({focus:false});if(state.route==='editor'&&target.isConnected){if(result.draftApplied&&saveNoticeTicket===noticeTicket)showSaved();else $('#lt-status').textContent='有未保存修改';browserHistory?.replaceState({view:rootView,lantai:state.draft.id},'','#editor');}}catch{updateError();if(state.route==='editor'&&!state.error.includes('故事时间'))$(state.error.includes('简称')||state.error.includes('细节词')?'#lt-alias-error':'#lt-error')?.scrollIntoView({block:'nearest'});}
           finally{if(target.isConnected){target.disabled=false;target.textContent='保存';}}break;
@@ -378,6 +384,13 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
     if(field.hasAttribute('data-query')){const changed=query!==field.value;query=field.value;if(changed&&!event.isComposing&&field.dataset.composing!=='true')updateCollection();return;}
     if(field.dataset.filter){if(!field.checked)return;if(field.dataset.filter==='filterMode')filterMode=field.value;else filterWords=field.value;updateCollection();return;}
     if(field.dataset.entry){$(`[data-add="${field.dataset.entry}"]`).disabled=!field.value.trim();return;}
+    if(field.dataset.locationField){
+      if(event.isComposing||field.dataset.composing==='true')return;
+      const node=field.closest('[data-location-row]'),index=Number(node.dataset.locationRow);
+      try{session.change(draft=>{if(field.dataset.locationField==='name')renameLocation(draft,index,field.value);else setLocationAliases(draft,draft.places[index],splitWords(field.value));});setLocationEditorError(field);updateLocationEditorRow(node,state.draft,index);updateError();if($('#lt-status'))$('#lt-status').textContent='';}
+      catch(error){setLocationEditorError(field,error.message);}
+      return;
+    }
     session.change(draft=>{
       if(field.name==='mode')draft.mode=field.value;
       else if(field.dataset.field?.startsWith('source')){const value=field.value.trim();if(!draft.sources[Number(field.dataset.index)])draft.sources[Number(field.dataset.index)]={start:'',end:''};draft.sources[Number(field.dataset.index)][field.dataset.field==='sourceStart'?'start':'end']=value===''?'':Number(value);}
@@ -389,7 +402,7 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
   const keydown=event=>{if(event.defaultPrevented)return;if(event.key==='Escape'){if(memoryType==='cumulative'){if(event.isComposing||event.target.dataset.composing==='true')return;const value=cumulativeController.inspect();if(value.restore){event.preventDefault();event.stopPropagation();cumulativeController.cancelRestore();return;}if(value.editDraft){event.preventDefault();event.stopPropagation();cumulativeController.cancelEdit();return;}}if(event.isComposing||event.target.dataset.composing==='true')return;if(managementVisible){event.preventDefault();event.stopPropagation();management.setScroll($('.lt-main')?.scrollTop??0);void returnManagement();return;}if(confirmation){event.preventDefault();event.stopPropagation();cancelDelete();return;}if($('#lt-operation-menu')){event.preventDefault();event.stopPropagation();const control=$('[aria-controls=lt-operation-menu][aria-expanded=true]');$('#lt-operation-menu').remove();control?.setAttribute('aria-expanded','false');control?.focus();return;}event.preventDefault();event.stopPropagation();resetQuery();session.close();browserHistory?.replaceState({view:rootView,lantai:'closed'},'','#closed');render();onClose();}else if(event.key==='Enter'&&event.target.dataset.indexEntry&&!event.isComposing&&event.target.dataset.composing!=='true'){event.preventDefault();addIndexWords(event.target);}else if(event.key==='Enter'&&event.target.dataset.managementEntry&&!event.isComposing&&event.target.dataset.composing!=='true'){event.preventDefault();addManagementWords(event.target.dataset.managementEntry);}else if(event.key==='Enter'&&event.target.dataset.entry&&!event.isComposing&&event.target.dataset.composing!=='true'){event.preventDefault();addWords(event.target.dataset.entry);}};
   const blur=event=>{if(event.target.dataset.managementEntry&&event.relatedTarget?.closest('[data-management-add],[data-action=mgmt-review]')==null)addManagementWords(event.target.dataset.managementEntry);if(event.target.dataset.entry)addWords(event.target.dataset.entry);};
   const compositionStart=event=>{event.target.dataset.composing='true';};
-  const compositionEnd=event=>{delete event.target.dataset.composing;if(event.target.hasAttribute('data-query')){query=event.target.value;updateCollection();}};
+  const compositionEnd=event=>{delete event.target.dataset.composing;if(event.target.hasAttribute('data-query')){query=event.target.value;updateCollection();}else if(event.target.dataset.locationField)inputEvent({target:event.target,isComposing:false});};
   const pop=event=>{if(managementVisible){management.setScroll($('.lt-main')?.scrollTop??0);void returnManagement();return;}if(state.route==='list'&&$('.lt-main'))rootScroll[rootView]=$('.lt-main').scrollTop;if(['list','timeline'].includes(event.state?.view))rootView=event.state.view;if(event.state?.lantai==='closed'){resetQuery();session.close();render();}else route(event.state?.lantai==='list'?null:event.state?.lantai);};
   container.addEventListener('click',click);container.addEventListener('input',inputEvent);container.addEventListener('change',inputEvent);container.addEventListener('keydown',keydown);container.addEventListener('focusout',blur);container.addEventListener('compositionstart',compositionStart);container.addEventListener('compositionend',compositionEnd);browserWindow?.addEventListener('popstate',pop);
   const submit=event=>event.preventDefault();container.addEventListener('submit',submit);

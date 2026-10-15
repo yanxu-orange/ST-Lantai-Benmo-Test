@@ -58,6 +58,9 @@ export function createWorkshopRegexInstaller({settings,getContext,fetchImpl=glob
       const saving=save();trackSettingsSave(hostSettings,saving);await saving;
       check();const disk=await readDisk();check();
       if(!Array.isArray(disk)||!disk.some(rule=>matches(rule,definition)))throw new Error('正则保存尚未确认');
+      // An API save can stage while the independent regex readback is in
+      // flight. Rejoin the existing settings queue before capturing its marker.
+      await settings.ensure();check();
       snapshot=settings.captureWorkshop();
       if(!snapshot.workshop.imports.includes(definition.marker))await saveMarker(snapshot,definition.marker);
       outcomes.push({name:definition.rule.scriptName,status:index<0?'installed':'kept-existing'});

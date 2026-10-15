@@ -147,8 +147,8 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
           // read, still checking this draft's original epoch before writing.
         }
         if (current && current.epoch !== baseline.epoch) throw { code: 'SETTINGS_CONFLICT' };
-        // Confirmed authority needs only the repository's queued fresh read
-        // and its final server confirmation, with no outer network read.
+        // Confirmed current-window authority skips the pre-save network read;
+        // actual writes still require the repository's final server confirmation.
         const result = await repository.saveAi(draft, { expectedEpoch: baseline.epoch, credentials });
         if (result?.status !== 'committed') throw { code: 'SETTINGS_COMMIT_UNCONFIRMED' };
         if (closed) return true;
