@@ -106,8 +106,8 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
   const knownIdentities = trackingIdentityReference(latest.records);
   if (ticket.knownIdentities && !same(knownIdentities, ticket.knownIdentities)) return conflict('批追踪身份资料已变化，请重新运行');
   const previous = domain.snapshots.find(row => row.batchId === batchId);
-  if (previous && (!same(previous.sourceSnapshot.requestedRange, source.requestedRange) || !matchesBatchTrackingSource(previous.sourceSnapshot, raw))) return conflict('已有批追踪的来源已变化，保留原版本');
-  const overlapping = domain.snapshots.filter(row => row !== previous && row.sourceSnapshot.assistantFloor >= source.actualRange.start && (row.sourceSnapshot.kind === 'batch' ? row.sourceSnapshot.requestedRange.start : row.sourceSnapshot.assistantFloor) <= source.requestedRange.end);
+  if (previous && (!same(previous.sourceSnapshot.actualRange, source.actualRange) || !matchesBatchTrackingSource(previous.sourceSnapshot, raw))) return conflict('已有批追踪的来源已变化，保留原版本');
+  const overlapping = domain.snapshots.filter(row => row !== previous && row.sourceSnapshot.assistantFloor >= source.actualRange.start && (row.sourceSnapshot.kind === 'batch' ? row.sourceSnapshot.actualRange.start : row.sourceSnapshot.assistantFloor) <= source.actualRange.end);
   if (overlapping.length) return conflict('所选范围已有追踪版本，无法安全合并；已保留原追踪资料');
   const allIds = new Set([...domain.snapshots.flatMap(row => [row.id, ...lists.flatMap(list => row.changes[list].map(change => change.id))]), ...domain.manual.map(row => row.id)]);
   const freshId = () => { const id = makeId(); if (!trackingText(id) || allIds.has(id)) throw new Error('追踪身份重复'); allIds.add(id); return id; };
@@ -203,7 +203,7 @@ export function applyBatchTracking(value, ticket, parts, raw, { makeId = () => c
   const id = previous?.id ?? freshId();
   const snapshot = { id, batchId, sourceSnapshot: source, aiTurn: ticket.aiTurn, baseKey: ticket.baseKey, changes, ...(previous?.batchRebases ? { batchRebases: clone(previous.batchRebases) } : {}) };
   const successorBase = previous?.id ?? ticket.baseKey;
-  const successors = domain.snapshots.filter(row => row !== previous && row.sourceSnapshot.assistantFloor > source.requestedRange.end && row.baseKey === successorBase);
+  const successors = domain.snapshots.filter(row => row !== previous && row.sourceSnapshot.assistantFloor > source.actualRange.end && row.baseKey === successorBase);
   const protection = new Map(successors.map(row => {
     const baseline = successorBaseline(domain, row);
     // Replay the successor's own changes, including inactive swipe versions;

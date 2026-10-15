@@ -153,7 +153,7 @@ export function currentTracking(value, raw, { beforeFloor = Infinity, includeRes
 }
 export function prepareTrackingUpdate(value, raw, { floor, rules } = {}) {
   const domain = assertTracking(value);
-  if (domain.snapshots.some(row => row.sourceSnapshot.kind === 'batch' && floor >= row.sourceSnapshot.requestedRange.start && floor <= row.sourceSnapshot.requestedRange.end && matchesBatchTrackingSource(row.sourceSnapshot, raw))) throw new Error('该楼层已属于批追踪，请重跑整批以保留完整来源');
+  if (domain.snapshots.some(row => row.sourceSnapshot.kind === 'batch' && floor >= row.sourceSnapshot.actualRange.start && floor <= row.sourceSnapshot.actualRange.end && matchesBatchTrackingSource(row.sourceSnapshot, raw))) throw new Error('该楼层已属于批追踪，请重跑整批以保留完整来源');
   const source = prepareLatestSource(raw, { floor, rules });
   const prior = currentTracking(domain, raw, { beforeFloor: floor }), current = currentTracking(domain, raw, { beforeFloor: floor + 1 });
   return freeze({ source, aiTurn: countTrackingAiTurns(raw, { beforeFloor: floor + 1 }), baseKey: prior.baseKey,
@@ -161,7 +161,7 @@ export function prepareTrackingUpdate(value, raw, { floor, rules } = {}) {
 }
 export function applyTrackingResponse(value, ticket, response, raw, { makeId = generatedId, errors = {} } = {}) {
   const domain = assertTracking(value); let changes = assertTrackingChanges(response);
-  if (domain.snapshots.some(row => row.sourceSnapshot.kind === 'batch' && ticket?.source?.assistantFloor >= row.sourceSnapshot.requestedRange.start && ticket.source.assistantFloor <= row.sourceSnapshot.requestedRange.end && matchesBatchTrackingSource(row.sourceSnapshot, raw))) throw new Error('该楼层已属于批追踪，请重跑整批以保留完整来源');
+  if (domain.snapshots.some(row => row.sourceSnapshot.kind === 'batch' && ticket?.source?.assistantFloor >= row.sourceSnapshot.actualRange.start && ticket.source.assistantFloor <= row.sourceSnapshot.actualRange.end && matchesBatchTrackingSource(row.sourceSnapshot, raw))) throw new Error('该楼层已属于批追踪，请重跑整批以保留完整来源');
   if (!ticket || ticket.revision !== domain.revision || (ticket.exclusions?.epoch ?? 0) !== trackingExclusionsOf(domain).epoch || !matchesLatestSource(ticket.source, raw)
     || ticket.aiTurn !== countTrackingAiTurns(raw, { beforeFloor: ticket.source.assistantFloor + 1 })
     || currentTracking(domain, raw, { beforeFloor: ticket.source.assistantFloor }).baseKey !== ticket.baseKey) throw new Error('追踪来源或资料已变化，请重新运行');
@@ -313,7 +313,7 @@ export function setTrackingRecordExcluded(value, raw, kind, id, excluded) {
 export function assertBatchTrackingSource(value) {
   if (!trackingExact(value, ['kind', 'assistantFloor', 'requestedRange', 'actualRange', 'rawMessages', 'sentFloors', 'fingerprint', 'replyIds']) || value.kind !== 'batch') throw new Error('批追踪来源无效');
   for (const range of [value.requestedRange, value.actualRange]) if (!trackingExact(range, ['start', 'end']) || !trackingInteger(range.start) || !trackingInteger(range.end) || range.end < range.start) throw new Error('批追踪范围无效');
-  if (value.actualRange.start !== value.requestedRange.start || value.actualRange.end > value.requestedRange.end || value.assistantFloor !== value.actualRange.end) throw new Error('批追踪范围不符');
+  if (value.actualRange.start !== value.requestedRange.start || value.actualRange.end !== value.requestedRange.end || value.assistantFloor !== value.actualRange.end) throw new Error('批追踪范围不符');
   assertStoredSourceMessages(value.rawMessages);
   assertStoredSourceMessages(value.sentFloors);
   if (value.rawMessages.length !== value.requestedRange.end - value.requestedRange.start + 1 || value.rawMessages.some((row, index) => row.floor !== value.requestedRange.start + index) || value.fingerprint !== sourceFingerprint(value.rawMessages)) throw new Error('批追踪来源指纹不符');
@@ -418,13 +418,13 @@ function recordTrackingManualInverse(domain, id) {
 export function checkpointTrackingGeneration(domain, snapshotId) {
   const history = ensureTrackingTailHistory(domain), snapshot = domain.snapshots.find(row => row.id === snapshotId);
   const prior = history.checkpoints.at(-1), previous = domain.snapshots.find(row => row.id === prior?.snapshotId);
-  const start = snapshot.sourceSnapshot.kind === 'batch' ? snapshot.sourceSnapshot.requestedRange.start : snapshot.sourceSnapshot.assistantFloor;
+  const start = snapshot.sourceSnapshot.kind === 'batch' ? snapshot.sourceSnapshot.actualRange.start : snapshot.sourceSnapshot.assistantFloor;
   // Replacing/retrying an old result or inserting a historical batch destroys
   // append-only coverage. The committed state becomes a new, honest boundary.
   if (prior && (!previous || previous.id === snapshotId || prior.throughFloor >= start)) {
     history.baseline = false; history.checkpoints = []; history.inverse = [];
   }
-  history.checkpoints.push({ sequence: ++history.sequence, snapshotId, throughFloor: Math.max(...domain.snapshots.map(row => row.sourceSnapshot.requestedRange?.end ?? row.sourceSnapshot.assistantFloor)) });
+  history.checkpoints.push({ sequence: ++history.sequence, snapshotId, throughFloor: Math.max(...domain.snapshots.map(row => row.sourceSnapshot.actualRange?.end ?? row.sourceSnapshot.assistantFloor)) });
 }
 
 // The root transaction supplies verified host-object deletion evidence. This

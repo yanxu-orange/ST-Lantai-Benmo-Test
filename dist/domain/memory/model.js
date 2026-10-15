@@ -65,9 +65,8 @@ export function inheritMemoryRoot(root,rootId,floor,{timeMessages=null}={}) {
   // saved, including original ranges; their copied overlay holds current floors.
   const projected=branchPositionedEvents(root.events,summary);
   let selected=inheritEvents(projected,floor), previous;
-  summary.batches=summary.batches.filter(batch=>{const ranges=effectiveBatchRanges(batch,summary);return ranges&&ranges.requestedRange.end<floor&&ranges.actualRange.end<floor;});
-  // A ledger's requested tail can cross the branch even when its event range
-  // does not. Removing that batch must also remove overlapping merge groups.
+  summary.batches=summary.batches.filter(batch=>{const ranges=effectiveBatchRanges(batch,summary);return ranges&&ranges.actualRange.end<floor;});
+  // Removing an ineligible batch must also remove overlapping merge groups.
   do {
     previous=JSON.stringify([selected.map(event=>event.id),summary.batches.map(batch=>batch.id)]);
     const inherited=new Set(selected.map(event=>event.id));

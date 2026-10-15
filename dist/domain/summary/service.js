@@ -39,7 +39,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
   async function capture(origin,options={}) {
     const target=repository.captureTarget(),selection=origin==='regeneration'?await repository.captureBatch(target,options.batchId):await repository.captureSummary(target),settings=readSettings();
     const preferences=selection.summary.preferences[origin==='auto'?'auto':'manual'];
-    const stored=selection.batch,range=stored?.requestedRange??{start:options.startFloor??preferences.startFloor,end:options.endFloor??preferences.endFloor};
+    const stored=selection.batch,range=stored?.actualRange??{start:options.startFloor??preferences.startFloor,end:options.endFloor??preferences.endFloor};
     if(stored&&selection.events.some(event=>event.supersededBy||event.mergedFrom))throw new Error('批成员参与合并，不能破坏撤销关系');
     const params={...preferences,...options};
     const raw=captureSource(target);
@@ -213,7 +213,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
       if(!matchesStoredSummarySource(pending.sourceSnapshot,captureSource(target)))throw new Error('保留草稿的来源已变化或隐藏楼层角色无法确认；请按当前范围重新总结');
       const current=publicSummarySettingsEvidence(readSettings()),saved=pending.settingsEvidence;
       if(!equalData(normalizedSummarySettingsEvidence(current),normalizedSummarySettingsEvidence(saved)))throw new Error('保留草稿的生成配置已变化');
-      return this.start(pending.origin,{...pending.params,startFloor:pending.sourceSnapshot.requestedRange.start,endFloor:pending.sourceSnapshot.requestedRange.end,resumePending:pending,restoreOnly:true});
+      return this.start(pending.origin,{...pending.params,startFloor:pending.sourceSnapshot.actualRange.start,endFloor:pending.sourceSnapshot.actualRange.end,resumePending:pending,restoreOnly:true});
     },
     retry(taskId,edited){
       const record=records.get(taskId),state=inspect(taskId);if(!record||record.outcome==='unconfirmed'||record.invalidAuto)return false;
@@ -227,7 +227,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
           }
           if(!targetCurrent(state.snapshot,state.target)||!sourceCurrent(state.snapshot,state.target))return false;
           manager.cancel(taskId);
-          return this.start(pending.origin,{...pending.params,startFloor:pending.sourceSnapshot.requestedRange.start,endFloor:pending.sourceSnapshot.requestedRange.end,resumePending:pending});
+          return this.start(pending.origin,{...pending.params,startFloor:pending.sourceSnapshot.actualRange.start,endFloor:pending.sourceSnapshot.actualRange.end,resumePending:pending});
         })();
       }
       record.autoConfirmScheduled=false;return manager.retry(taskId)?taskId:false;

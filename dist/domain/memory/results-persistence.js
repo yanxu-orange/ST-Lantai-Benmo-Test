@@ -1,5 +1,20 @@
-import {storedSourceMessages,sourceFingerprint} from '../summary/source.js';
+import {storedSourceMessages,sourceFingerprint,assertStoredSourceMessages} from '../summary/source.js';
 import {migrateTimeSources} from '../time/persistence.js';
+// Older event batches also owned a selected-but-unsent trailing user turn.
+// Convert only intact envelopes; keep exclusions and holes inside the actual
+// range, and leave malformed evidence for normal validation to reject.
+function trimSummaryTail(source) {
+  const requested=source?.requestedRange,actual=source?.actualRange,rows=source?.rawMessages;
+  if(!requested||!actual||actual.start!==requested.start||!Number.isSafeInteger(actual.start)||actual.start<0||!Number.isSafeInteger(actual.end)||actual.end<actual.start||!Number.isSafeInteger(requested.end)||requested.end<=actual.end||!Array.isArray(rows)||rows.length!==requested.end-requested.start+1||rows.some((row,index)=>row.floor!==requested.start+index)||!Array.isArray(source.sentFloors)||source.sentFloors.some(row=>row.floor<actual.start||row.floor>actual.end)||source.fingerprint!==sourceFingerprint(rows))return false;
+  assertStoredSourceMessages(rows);assertStoredSourceMessages(source.sentFloors);
+  source.requestedRange={...actual};
+  source.rawMessages=rows.filter(row=>row.floor<=actual.end);
+  source.sentFloors=source.sentFloors.filter(row=>row.floor>=actual.start&&row.floor<=actual.end);
+  if(Array.isArray(source.excludedFloors))source.excludedFloors=source.excludedFloors.filter(row=>row.floor>=actual.start&&row.floor<=actual.end);
+  if(Array.isArray(source.replyIds))source.replyIds=source.replyIds.filter(row=>row.floor>=actual.start&&row.floor<=actual.end);
+  source.fingerprint=sourceFingerprint(source.rawMessages);
+  return true;
+}
 // Operates only on an owned root copy. Reading never writes the host chat.
 export function normalizeResultSources(root) {
   const narrative=root.narrative;
@@ -37,6 +52,25 @@ export function normalizeResultSources(root) {
     }
   };
   for(const key of ['summary','cumulative','latest','tracking','workshop'])normalize(root[key]);
+  for(const batch of root.summary?.batches??[]){
+    const oldRows=batch.sourceSnapshot?.rawMessages;
+    if(JSON.stringify(batch.requestedRange)===JSON.stringify(batch.sourceSnapshot?.requestedRange)&&JSON.stringify(batch.actualRange)===JSON.stringify(batch.sourceSnapshot?.actualRange)&&trimSummaryTail(batch.sourceSnapshot)){
+      batch.requestedRange={...batch.actualRange};
+      const positions=root.summary.sourcePositions?.[batch.id];
+      if(Array.isArray(positions)&&positions.length===oldRows.length)root.summary.sourcePositions[batch.id]=positions.filter((_,index)=>oldRows[index].floor<=batch.actualRange.end);
+    }
+  }
+  if(root.summary?.pending)trimSummaryTail(root.summary.pending.sourceSnapshot);
+  const tracking=root.tracking;
+  // Old tail-history guards used the selected end too. Only rewrite a boundary
+  // proven by its retained snapshot; never reconstruct lost history.
+  const oldEnds=new Map((tracking?.snapshots??[]).map(row=>[row.id,row.sourceSnapshot.requestedRange?.end??row.sourceSnapshot.assistantFloor]));
+  const trimmed=new Set();
+  for(const row of tracking?.snapshots??[])if(row.sourceSnapshot.kind==='batch'&&trimSummaryTail(row.sourceSnapshot))trimmed.add(row.id);
+  for(const checkpoint of tracking?.tailHistory?.checkpoints??[]){
+    if(!oldEnds.has(checkpoint.snapshotId)||![...trimmed].some(id=>oldEnds.get(id)===checkpoint.throughFloor))continue;
+    checkpoint.throughFloor=Math.max(...tracking.snapshots.filter(row=>oldEnds.get(row.id)<=checkpoint.throughFloor).map(row=>row.sourceSnapshot.actualRange?.end??row.sourceSnapshot.assistantFloor));
+  }
   if(root.time)migrateTimeSources(root.time);
   if(root.tracking)delete root.tracking.rollbackUnavailable;
   for(const record of root.latest?.records??[])delete record.stale;
