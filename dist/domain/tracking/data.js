@@ -56,9 +56,15 @@ export function assertTracking(value) {
   return clone(value);
 }
 export function trackingOf(root) { return assertTracking(root.tracking === undefined ? emptyTracking() : root.tracking); }
+// Visibility is a generation eligibility flag, not a chronological deletion.
+// The host supplies the semantic speaker; never infer it from hidden text.
+function trackingSource(raw) {
+  return {...raw, messages: raw.messages.map(row => ['user', 'assistant', 'system'].includes(row.semanticRole)
+    ? {...row, role: row.semanticRole, system: row.semanticRole === 'system'} : row)};
+}
 export function countTrackingAiTurns(raw, { beforeFloor = Infinity } = {}) {
   if (!(beforeFloor === Infinity || trackingInteger(beforeFloor))) throw new Error('追踪楼层无效');
-  return assertRawSummarySource(raw).messages.filter(row => row.floor < beforeFloor && row.role === 'assistant' && !row.system).length;
+  return trackingSource(assertRawSummarySource(raw)).messages.filter(row => row.floor < beforeFloor && row.role === 'assistant' && !row.system).length;
 }
 export function applyChanges(records, changes, aiTurn, { mutate = false, index = null, stored = false } = {}) {
   const next = mutate ? records : clone(records);
@@ -109,7 +115,7 @@ function sourceIndex(source, beforeFloor = Infinity) {
 // Only versions whose exact reply evidence and predecessor are currently active
 // contribute. A reroll keeps the AI ordinal and can restore its old version later.
 export function currentTracking(value, raw, { beforeFloor = Infinity } = {}) {
-  const domain = assertTracking(value), source = assertRawSummarySource(raw), indexed = sourceIndex(source, beforeFloor);
+  const domain = assertTracking(value), source = trackingSource(assertRawSummarySource(raw)), indexed = sourceIndex(source, beforeFloor);
   const records = domain.manual.filter(row => row.record !== null).map(row => row.record), index = new Map(records.map((row, at) => [row.id, at]));
   const manualById = new Map(domain.manual.map(row => [row.id, row])), manualBySnapshot = new Map();
   for (const row of domain.manual) {
@@ -248,13 +254,17 @@ export function applyTrackingResponseParts(value, ticket, parts, raw, options = 
   return { tracking: applyTrackingResponse(value, ticket, changes, raw, { ...options, errors }), errors };
 }
 export function pruneTrackingSnapshots(value, raw, { replyVersions = raw?.replyVersions } = {}) {
-  const domain = assertTracking(value), source = assertRawSummarySource(raw), indexed = sourceIndex(source), { byFloor } = indexed;
+  const domain = assertTracking(value), source = trackingSource(assertRawSummarySource(raw)), indexed = sourceIndex(source), { byFloor } = indexed;
   if (replyVersions !== undefined && (!Array.isArray(replyVersions) || replyVersions.some(row => !trackingText(row?.replyId) || !trackingInteger(row.floor) || !trackingInteger(row.swipeId)))) throw new Error('追踪回复版本证据无效');
   const counts = new Map(), byReply = new Map();
   for (const row of replyVersions ?? []) { counts.set(row.replyId, (counts.get(row.replyId) ?? 0) + 1); byReply.set(row.replyId, row); }
   const retained = domain.snapshots.filter(snapshot => {
     const saved = snapshot.sourceSnapshot;
-    if (snapshot.aiTurn !== indexed.turns.get(saved.assistantFloor)) return false;
+    // Old per-turn snapshots counted only visible predecessors. Preserve a
+    // lower legacy ordinal when its actual source still passes ownership
+    // checks below; projection stays strict and never guesses NPC history.
+    const currentTurn = indexed.turns.get(saved.assistantFloor);
+    if (snapshot.aiTurn !== currentTurn && !(saved.kind !== 'batch' && snapshot.aiTurn < currentTurn)) return false;
     if (saved.kind === 'batch') return matchesBatchTrackingSource(saved, source);
     if (matchesStoredLatestSource(saved, indexed.relevant(saved))) return replyVersions === undefined || counts.get(saved.replyId) === 1;
     const current = byFloor.get(saved.assistantFloor), version = byReply.get(saved.replyId);
@@ -319,7 +329,10 @@ export function storedBatchTrackingSource(source) {
 export function matchesBatchTrackingSource(source, raw) {
   try {
     assertBatchTrackingSource(source);
-    return matchesStoredSummarySource(source, raw) && source.replyIds.every(row => (raw.messages.find(message => message.floor === row.floor)?.replyId ?? null) === row.replyId);
+    const current = trackingSource(raw);
+    // Older batches predate reply UUID initialization. Their strict floor,
+    // speaker, date and swipe locators still apply; known UUIDs stay exact.
+    return matchesStoredSummarySource(source, current) && source.replyIds.every(row => row.replyId === null || (current.messages.find(message => message.floor === row.floor)?.replyId ?? null) === row.replyId);
   } catch { return false; }
 }
 

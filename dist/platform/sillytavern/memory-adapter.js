@@ -418,17 +418,17 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
         const role=sourceRole(message,includeHidden);
         const date=message.send_date==null?null:String(message.send_date);
         const identity=JSON.stringify([floor,typeof message.id==='string'||Number.isSafeInteger(message.id)?message.id:null,date]);
-        return {floor,identity,objectTicket:messageIdentity(message,floor),revision:sourceVersions.get(floor)??0,role,system:message.is_system===true,text:message.mes,date,swipeId:Number.isSafeInteger(message.swipe_id)&&message.swipe_id>=0?message.swipe_id:null,...(includeLatestMetadata?latestSourceMetadata(message):{})};
+        return {floor,identity,objectTicket:messageIdentity(message,floor),revision:sourceVersions.get(floor)??0,role,semanticRole:sourceRole(message,true),system:message.is_system===true,text:message.mes,date,swipeId:Number.isSafeInteger(message.swipe_id)&&message.swipe_id>=0?message.swipe_id:null,...(includeLatestMetadata?latestSourceMetadata(message):{})};
       });
   }
-  function captureChatSource(target,includeHidden=false) {
+  function captureChatSource(target,includeHidden=false,includeLatestMetadata=false) {
       const current=check(target);requireConfirmed(current);
       if(['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED'].some(name=>!context.eventTypes[name]))throw new Error('酒馆缺少总结来源变化监听能力');
-      const messages=chatSourceMessages(includeHidden);
+      const messages=chatSourceMessages(includeHidden,getContext().chat,includeLatestMetadata);
       check(target);return copy({epoch:sourceEpoch,messages});
   }
    function captureSummarySource(target) {
-     const source=captureChatSource(target,true);
+     const source=captureChatSource(target,true,true);
      // SillyTavern also sets is_system when a normal chat row is hidden. Event
      // summaries use the semantic role. Old system-only rows cannot safely
      // prove the hidden speaker or an unchanged regeneration input set.
@@ -444,7 +444,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
           const role=sourceRole(message,includeHidden);
           const date=message.send_date==null?null:String(message.send_date),id=typeof message.id==='string'||Number.isSafeInteger(message.id)?message.id:null;
           const swipeId=Number.isSafeInteger(message.swipe_id)&&message.swipe_id>=0?message.swipe_id:null;
-          return saved.floor===floor&&saved.identity===JSON.stringify([floor,id,date])&&saved.objectTicket===messageIdentity(message,floor)&&saved.revision===(sourceVersions.get(floor)??0)&&saved.role===role&&saved.system===(message.is_system===true)&&saved.text===message.mes&&saved.date===date&&saved.swipeId===swipeId;
+          return saved.floor===floor&&saved.identity===JSON.stringify([floor,id,date])&&saved.objectTicket===messageIdentity(message,floor)&&saved.revision===(sourceVersions.get(floor)??0)&&saved.role===role&&(!Object.hasOwn(saved,'semanticRole')||saved.semanticRole===sourceRole(message,true))&&saved.system===(message.is_system===true)&&saved.text===message.mes&&saved.date===date&&saved.swipeId===swipeId;
         });
         check(target);return matches;
       } catch {return false;}
