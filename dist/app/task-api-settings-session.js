@@ -1,8 +1,8 @@
 import {defaultTaskRoutes} from '../shared/settings/model.js';
 const copy = value => structuredClone(value);
 export const TASK_API_GROUPS = Object.freeze([
-  ['event', '事件记忆总结'], ['cumulative', '古法总结'],
-  ['narrative', '角色自述与故事大纲'], ['latest', '最新摘要与工坊'],
+  ['event', '事件记忆'], ['cumulative', '古法总结'],
+  ['narrative', '自述与大纲'], ['latest', '最新摘要与工坊'],
 ]);
 const messages = {
   INVALID_SETTINGS: '请检查任务 API 选择。',

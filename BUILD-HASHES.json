@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "0580eaec8ce696fae8965a31cc101361dea81d83cdb555597fa6309e8a0a88bb"
+    "sha256": "3d50ffe3df8ae3ffd1f1d84b5b8a08cb9e1a1d475633192ee1687e56d7041ef5"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -481,11 +481,11 @@
   },
   {
     "path": "dist/app/task-api-settings-session.js",
-    "sha256": "eb3c5414195ed351d067a72aa781c68e44a32172901897a258ffd3a2262e1a23"
+    "sha256": "99e3ce0c9092d97b4bfd06d2ad5a083da04e1678a95f8b3576f9ba7b327a5ce5"
   },
   {
     "path": "dist/app/task-api-settings-view.js",
-    "sha256": "6ac0c6be4022b9cb8685862353c596cebd0a176676fee6c65a5b67f7c4543b92"
+    "sha256": "9f5c78ecd485ada1e12688a765bb48cc98f9e81205eac64fefbc4104d1806c27"
   },
   {
     "path": "dist/app/time-controller.js",
@@ -509,7 +509,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "2c75ecfb28459d5adf02f0fd55d79d1f89f3b7cfe97bf7d50c553bc5d44c9958"
+    "sha256": "0b2cf28da6f0e987f90bf4dc4d10dfda474f010c506df3717525571b1b8bc11f"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1145,10 +1145,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "231f774c91515b399d82bd87d7450460409bcd351bd60b1edc4213f40c5b8d4f"
+    "sha256": "4303e55ac59ae8ee13d4fc1bcbc4c7afdec35b471dba8b133f50e655fcfabe1c"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "963634134bd8266d692f7267bea20f6d9f40aa815f4be44212891d09ec183e90"
+    "sha256": "d6338ae1760f93f51685c7bc618350c9d516e03762a0e3015d44cb1676f01408"
   }
 ]
