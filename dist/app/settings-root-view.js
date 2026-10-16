@@ -6,14 +6,14 @@ import {APP_VERSION} from './version.js';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon=(name,label,action)=>`<button type="button" class="ui-icon-button ui-button--tertiary" data-settings-action="${action}" aria-label="${label}"><img class="lt-icon" src="${new URL(`./icons/${name}.svg`,import.meta.url)}" alt=""></button>`;
 const brand=`<svg class="lt-brand-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 6a4 4 0 1 1 8 0c0 2-2 3-2 5v1h3a4 4 0 0 1 4 4v3H3v-3a4 4 0 0 1 4-4h3v-1c0-2-2-3-2-5Zm-5 15h18v2H3Z"/></svg>`;
-export function mountSettingsRootView(container,{controls,appearance,settings,onSchedule,availability=()=>controls.inspect().policy,onApi,onNavigate,onClose,focusAction=null}={}){
+export function mountSettingsRootView(container,{controls,appearance,settings,onSchedule,availability=()=>controls.inspect().policy,onApi,onTaskApi,onNavigate,onClose,focusAction=null}={}){
  const lifetime=new AbortController();let route='root',disposed=false,renderedBook=false,pendingThemeFocus=false,scheduleView=null;
  const row=(label,key,scope='control')=>`<div class="lt-settings-row"><span>${label}</span><button type="button" class="ui-switch" role="switch" aria-label="${label}" data-${scope}="${key}" aria-checked="false"><span class="ui-switch__track"><span class="ui-switch__knob"></span></span></button></div>`;
  const entry=(label,action)=>`<button type="button" class="lt-settings-entry" data-settings-action="${action}"><span>${label}</span><span aria-hidden="true">›</span></button>`;
  function rootContent(){
   const book=['paper-letter','purple-glow'].includes(surfaceTheme(container));
   const toggles=row('启用兰台','enabled')+row('在当前聊天中使用','chat');
-  const services=entry('功能管理','features')+entry('API 设置','api');
+  const services=entry('功能管理','features')+entry('API 设置','api')+entry('任务 API','task-api');
   const appearanceFields=`<label class="ui-field"><span class="ui-field__label">界面皮肤</span><select class="ui-input" data-settings-theme>${THEMES.map(theme=>`<option value="${theme.id}">${theme.label}</option>`).join('')}</select></label><p class="lt-status" data-appearance-status hidden></p><button type="button" class="ui-button ui-button--secondary" data-settings-action="appearance-read" hidden>重新读取外观</button>`;
   const identity=`<div class="lt-settings-brand"><div>${brand}<span>兰台本末</span><span class="lt-meta">v${esc(APP_VERSION)}</span></div><p class="lt-meta">剧情记忆与故事时间</p></div>`;
   if(!book)return `<section class="lt-settings-group"><h2>插件</h2>${toggles}${services}</section><section class="lt-settings-group"><h2>外观</h2>${appearanceFields}</section>${identity}`;
@@ -51,7 +51,7 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
   const action=button.dataset.settingsAction;
   if(action==='schedule'&&settings){route='schedule';scheduleView=mountScheduleSettingsView(container,{settings,controls,onSchedule,onClose,onBack:()=>{route='features';render();}});return;}
   if(action==='features'){route='features';render('back');}else if(action==='back'){route='root';render('features');}
-  else if(action==='api')onApi?.();else if(action==='close')onClose?.();
+  else if(action==='api')onApi?.();else if(action==='task-api')onTaskApi?.();else if(action==='close')onClose?.();
   else if(action==='appearance-read')void appearance.read();else if(action==='retry')void controls.refresh();else if(action!=='settings')onNavigate?.(action);
  },{signal:lifetime.signal});
  container.addEventListener('change',e=>{

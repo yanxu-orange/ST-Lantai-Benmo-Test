@@ -64,7 +64,7 @@ export function prepareSillyTavernAiRequest({ task, messages, jsonSchema = null,
 // Host calls and private backend routes live only in this platform adapter.
 export function createSillyTavernAiTransport({ getContext = getSillyTavernContext, fetchImpl = globalThis.fetch, resolveCredential } = {}) {
   return Object.freeze({
-    async generate({ config: configured, task, messages, jsonSchema = null, signal, isCurrent = () => true, maxTokens, maxOutputTokens }) {
+    async generate({ config: configured, task, taskGroup, messages, jsonSchema = null, signal, isCurrent = () => true, maxTokens, maxOutputTokens }) {
       if (maxTokens !== undefined && (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > 128)) throw new AiProviderError('request');
       assertMaxOutputTokens(maxOutputTokens);
       if (maxTokens !== undefined && maxOutputTokens !== undefined) throw new AiProviderError('request');
@@ -101,7 +101,7 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
             trimNames: false, quietToLoud: false, instructOverride: false, ...(outputLimit === undefined ? {} : { responseLength: outputLimit }) });
         } else {
           let key;
-          try { key = resolveCredential(config); } catch { throw new AiProviderError('configuration'); }
+          try { key = resolveCredential(config, { taskGroup }); } catch { throw new AiProviderError('configuration'); }
           if (typeof key !== 'string' || !key.trim() || key.length > 8192 || /[\u0000-\u001f\u007f-\u009f]/.test(key)) throw new AiProviderError('configuration');
           const authorization = JSON.stringify({ Authorization: `Bearer ${key}` });
           key = null;

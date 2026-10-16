@@ -15,7 +15,7 @@ import {importSummaryCandidates} from '../time/summary-candidates.js';
 import { assertRoot, validateEvent, validateEventForSave, activeEvents } from './model.js';
 import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence,normalizedSummarySettingsEvidence} from '../summary/data.js';
 import {matchesStoredSummarySource,matchesSourceMetadata} from '../summary/source.js';
-import {cumulativeOf,assertCumulativePreferences,assertCumulativeExclusions,assertCumulativePending,assertCumulativeVersion,baseSnapshotOf,cumulativeCoverage} from '../cumulative/data.js';
+import {cumulativeOf,assertCumulativePreferences,assertCumulativeExclusions,assertCumulativePending,assertCumulativeVersion,baseSnapshotOf,cumulativeCoverage,matchesCumulativeReplacementSource} from '../cumulative/data.js';
 export function sameTarget(a, b) { return !!a && !!b && !!a.chatId && !!a.rootId && Number.isSafeInteger(a.epoch) && a.chatId === b.chatId && a.rootId === b.rootId && a.epoch === b.epoch; }
 const copy = value => structuredClone(value);
 // Normalize only the domain being compared, after the caller's currentness
@@ -128,13 +128,13 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
   };
   const cumulativeGuard=(target,snapshot,options,required=false)=>current=>{
     if(required&&typeof options.isCurrent!=='function'||(options.isCurrent??(()=>true))()!==true)throw new Error('古法来源或配置已失效');
-    matchCumulative(current,target,snapshot);return true;
+    matchCumulative(current,target,snapshot);if(options.trackingUpdate&&trackingOf(comparisonRoot(current,'tracking')).revision!==options.trackingUpdate.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');return true;
   };
   const cumulativeMutation=(target,selection,options,change,required=false)=>{
     const frozen=copy(target),snapshot=copy(selection);
     return enqueue(async()=>{const root=await read(frozen);matchCumulative(root,frozen,snapshot);const domain=cumulativeOf(root),guard=cumulativeGuard(frozen,snapshot,options,required);guard(root);
       const changed=change(domain);if(!changed)return {status:'unchanged',root,selection:captureCumulativeRoot(frozen,root)};
-      const next={...root,revision:root.revision+1,cumulative:{...changed,revision:domain.revision+1}};
+      const next={...root,revision:root.revision+1,cumulative:{...changed,revision:domain.revision+1},...summaryTracking(root,options)};
       const committed=await commit(frozen,root,next,guard);
       return {status:'committed',root:committed,selection:captureCumulativeRoot(frozen,committed)};
     });
@@ -338,10 +338,10 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     replaceCumulative(target,selection,version,options={}) {
       const draft=assertCumulativeVersion(version);return cumulativeMutation(target,selection,options,domain=>{
         const previous=domain.versions.at(-1);
-        if(!previous||draft.id!==previous.id||domain.versions.slice(0,-1).some(item=>item.taskId===draft.taskId)||!equal(draft.baseSnapshot,previous.baseSnapshot)||!equal(draft.sourceSnapshot.requestedRange,previous.sourceSnapshot.requestedRange)||!matchesSourceMetadata(draft.sourceSnapshot.rawMessages,previous.sourceSnapshot.rawMessages)||!equal(draft.coverageRanges,previous.coverageRanges))throw new Error('古法再生成必须保留冻结基版和原始来源');
+        if(!previous||draft.id!==previous.id||domain.versions.slice(0,-1).some(item=>item.taskId===draft.taskId)||!equal(draft.baseSnapshot,previous.baseSnapshot)||!matchesCumulativeReplacementSource(previous,draft)||!equal(draft.coverageRanges,cumulativeCoverage([...(domain.versions.at(-2)?.coverageRanges??[]),draft.sourceSnapshot.requestedRange])))throw new Error('古法再生成必须保留冻结基版和原始来源');
         if(!domain.pending||domain.pending.operation!=='replace')throw new Error('古法再生成须明确审核采用');
         const record={...draft,createdAt:previous.createdAt,updatedAt:now()};
-        return {...consumeCumulativePending(domain,draft,'replace',options),versions:[...domain.versions.slice(0,-1),record]};
+        return {...consumeCumulativePending(domain,draft,'replace',options),versions:[...domain.versions.slice(0,-1),record],progress:{lastProcessedFloor:Math.max(...record.coverageRanges.map(range=>range.end))}};
       },true);
     },
     editCurrentCumulative(target,selection,patch,options={}) {

@@ -7,8 +7,8 @@ import {clone, same, integer, text, range, exact, assertKind, mergeRanges, asser
 import {parseNarrativeResponse, validateNarrativeEntries} from './requests.js';
 export function emptyNarrative() {
   return {schema: 1, revision: 0, preferences: {
-    self: {readMemory: true, readOriginal: false, autoSource: 'event', readCard: true, background: '', budget: 30000, depth: 9999, prompt: '', characters: []},
-    outline: {readMemory: true, readOriginal: false, autoSource: 'event', background: '', budget: 30000, depth: 9999, prompt: ''},
+    self: {readMemory: true, readOriginal: false, autoSource: 'none', readCard: true, background: '', budget: 30000, depth: 9999, prompt: '', characters: []},
+    outline: {readMemory: true, readOriginal: false, autoSource: 'none', background: '', budget: 30000, depth: 9999, prompt: ''},
     run: {auto: true, batchSize: 10},
   }, self: [], outline: [], progress: {self: null, outline: null}};
 }

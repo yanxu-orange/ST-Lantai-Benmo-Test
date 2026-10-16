@@ -23,7 +23,7 @@ export async function createManagementRuntime({ repository, getContext, document
   fetchImpl = globalThis.fetch, settingsOptions = {}, mainIdentityOptions = {}, jquery = globalThis.jQuery, signal, captureSummarySource,getControls,afterSummaryCommit,retrySummaryCommit,skipSummaryCommit,getPendingNarrative } = {}) {
   const allowed=key=>!getControls||!!getControls()?.allowed(key);
   const manager = createBackgroundTaskManager(), releases = [];
-  let settings = null, controller = null, summaryService=null, summaryController=null, disposed = false, effective = null, epoch = 0, mainEpoch = 0, lastMain = null, jqueryCapable = false;
+  let settings = null, controller = null, summaryService=null, summaryController=null, disposed = false, mainEpoch = 0, lastMain = null, jqueryCapable = false;
   const reported = new Map();
   let cumulativeService=null,cumulativeRunner=null,cumulativeController=null,cumulativeAiEpoch=0,lastCumulativeAi=null;
   const abort = () => {
@@ -116,28 +116,31 @@ export async function createManagementRuntime({ repository, getContext, document
       jqueryCapable = true;
     }
   }
-  function getConfig() {
+  function getConfig(taskGroup) {
     if (disposed || !settings) throw new AiProviderError('configuration');
-    const config = settings.getAiConfig();
+    const config = settings.getAiConfig(taskGroup);
     if (config.source === 'sillytavern') mainIdentity();
     return config;
   }
-  function getGenerationSettings() {
+  const generationStates = new Map();
+  function getGenerationSettings(taskGroup) {
     if (disposed || !settings) throw new AiProviderError('configuration');
-    const value = settings.getGenerationSettings(), config = settings.getAiConfig();
+    const value = settings.getGenerationSettings(), config = settings.getAiConfig(taskGroup);
     let identity = null;
     if (config.source === 'sillytavern') { mainIdentity(); observeMain(); identity = mainEpoch; }
     if (config.source === 'plugin') identity = config.credentialEpoch;
     const next = JSON.stringify([value.generationEpoch, settings.captureAi().epoch, config.source, identity]);
-    if (effective !== next) { effective = next; epoch++; }
-    return { ...value, epoch };
+    const key = taskGroup ?? 'default', previous = generationStates.get(key);
+    const groupEpoch = previous?.next === next ? previous.epoch : (previous?.epoch ?? 0) + 1;
+    generationStates.set(key, { next, epoch: groupEpoch });
+    return { ...value, epoch: groupEpoch };
   }
   function getCumulativeGenerationSettings() {
     if(disposed||!settings)throw new AiProviderError('configuration');
     const cumulative=settings.captureCumulativeGeneration(),shared=settings.captureEventGeneration(),ai=settings.captureAi();
-    const config=settings.getAiConfig();let identity=null;
+    const config=settings.getAiConfig('cumulative');let identity=null;
     if(config.source==='sillytavern'){mainIdentity();observeMain();identity=JSON.stringify(['sillytavern',mainEpoch]);}
-    else if(config.source==='plugin')identity=JSON.stringify(['plugin',ai.ai.activePresetId]);
+    else if(config.source==='plugin')identity=JSON.stringify(['plugin',config.credentialId]);
     const ticket=JSON.stringify([ai.epoch,identity]);
     if(ticket!==lastCumulativeAi){lastCumulativeAi=ticket;cumulativeAiEpoch++;}
     return {generation:cumulative.generation,cumulativeEpoch:cumulative.epoch,summaryCleaning:shared.generation.summaryCleaning,cleaningEpoch:shared.epoch,aiIdentity:identity,aiEpoch:cumulativeAiEpoch};
@@ -168,14 +171,14 @@ export async function createManagementRuntime({ repository, getContext, document
       getLantaiMainIdentity: mainIdentity };
   };
   const provider = createAiProvider({ getConfig, transport: createSillyTavernAiTransport({ getContext: transportContext, fetchImpl,
-    resolveCredential: config => settings.resolveCredential(config) }) });
+    resolveCredential: (config, context) => settings.resolveCredential(config, context) }) });
   const apiOperations = createApiSettingsOperations({ getContext: transportContext, fetchImpl,
     captureMain() { if (disposed) throw new AiProviderError('unavailable'); mainIdentity(); observeMain(); return mainEpoch; } });
-  const eventGeneration=()=>{if(!allowed('event'))throw new Error('事件记忆已关闭');return getGenerationSettings();};
+  const eventGeneration=()=>{if(!allowed('event'))throw new Error('事件记忆已关闭');return getGenerationSettings('event');};
   const cumulativeGeneration=()=>{if(!allowed('cumulative'))throw new Error('古法总结已关闭');return getCumulativeGenerationSettings();};
   const service = createMemoryManagementService({ repository, manager, provider, getGenerationSettings:eventGeneration,control:featureGate(getControls,'event'), getOriginalSnapshot });
   controller = createManagementController({ service, repository, originalAvailable, getOriginalSnapshot,
-    getSettingsEpoch: () => getGenerationSettings().epoch });
+    getSettingsEpoch: () => getGenerationSettings('event').epoch });
   const narrativeHooks=summarySource=>({
     afterSummaryCommit:afterSummaryCommit?args=>afterSummaryCommit({...args,summarySource}):null,
     retrySummaryCommit:retrySummaryCommit?()=>retrySummaryCommit({summarySource}):null,
@@ -184,10 +187,11 @@ export async function createManagementRuntime({ repository, getContext, document
     // Each service independently filters the owner only when restoring controls.
     getPendingNarrative:getPendingNarrative??null,
   });
+  const trackingContext=()=>{const context=getContext(),character=context.characters?.[context.characterId];return {identities:promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name}),allowed:{itemsEnabled:allowed('item'),npcsEnabled:allowed('npc')},proofs:{items:getControls?.()?.capture('item')??null,npcs:getControls?.()?.capture('npc')??null}};};
   if(typeof captureSummarySource==='function') {
-    summaryService=createEventSummaryService({repository,manager,provider,...narrativeHooks('event'),getGenerationSettings:eventGeneration,getTrackingContext:()=>{const context=getContext(),character=context.characters?.[context.characterId];return {identities:promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name}),allowed:{itemsEnabled:allowed('item'),npcsEnabled:allowed('npc')},proofs:{items:getControls?.()?.capture('item')??null,npcs:getControls?.()?.capture('npc')??null}};},control:featureGate(getControls,'event'),captureSource:captureSummarySource});
+    summaryService=createEventSummaryService({repository,manager,provider,...narrativeHooks('event'),getGenerationSettings:eventGeneration,getTrackingContext:trackingContext,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
     summaryController=createSummaryController({repository,service:summaryService,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
-    cumulativeService=createCumulativeSummaryService({repository,manager,provider,...narrativeHooks('cumulative'),getGenerationSettings:cumulativeGeneration,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
+    cumulativeService=createCumulativeSummaryService({repository,manager,provider,...narrativeHooks('cumulative'),getGenerationSettings:cumulativeGeneration,getTrackingContext:trackingContext,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     cumulativeRunner=createAutomaticCumulativeRunner({repository,service:cumulativeService,captureSource:captureSummarySource});
     cumulativeController=createCumulativeController({repository,service:cumulativeService,runner:cumulativeRunner,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     let replyRun=null,quietDepth=0,lastReplyFloor=(ctx?.chat?.length??0)-1;

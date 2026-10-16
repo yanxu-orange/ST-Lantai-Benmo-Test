@@ -4,12 +4,14 @@ import {normalizeControls, assertControls, defaultControls} from '../../domain/c
 import {assertWorkshop, emptyWorkshop} from '../../domain/workshop/model.js';
 import {validateTimeReminders, defaultTimeReminders, reviseTimeRemindersDefaults} from './time-reminders.js';
 import { createDefaultEventWords } from './default-event-words.js';
+import { CUMULATIVE_PROMPT_KEYS } from './cumulative-prompts.js';
 import { SUMMARY_PROMPT_KEYS, migrateSummaryPromptOverrides } from './summary-prompts.js';
 import { createDefaultCleaningRules, normalizeCleaningRule } from '../../domain/summary/cleaning.js';
 
 export const SETTINGS_KEY = 'lantai_benmo';
 export const PROMPT_KEYS = SUMMARY_PROMPT_KEYS;
 const messages = Object.freeze({
+  TASK_PRESET_MISSING: '此任务选择的 API 方案不存在，请在任务 API 设置中重新选择。',
   INVALID_SETTINGS: '兰台设置格式无效，请检查设置内容。',
   SETTINGS_CONFLICT: '设置已发生变化，请重新读取后保存。',
   SETTINGS_COMMIT_UNCONFIRMED: '设置保存结果尚未确认，可能已经保存；请恢复连接后重新读取，不要重复提交。',
@@ -27,8 +29,19 @@ function exact(value, keys) {
     || keys.some(key => !Object.hasOwn(value, key)) || Object.keys(value).some(key => !keys.includes(key))) invalid();
 }
 const text = (value, empty = false) => typeof value === 'string' && value.trim() === value && (empty || !!value);
+export const AI_TASK_GROUPS = Object.freeze(['event', 'cumulative', 'narrative', 'latest']);
+export function defaultTaskRoutes() { return Object.fromEntries(AI_TASK_GROUPS.map(group => [group, { source: 'inherit', presetId: null, model: '' }])); }
+export function assertTaskRoutes(value) {
+  exact(value, AI_TASK_GROUPS);
+  for (const route of Object.values(value)) {
+    exact(route, ['source', 'presetId', 'model']);
+    if (!['inherit', 'sillytavern', 'plugin'].includes(route.source) || !(route.presetId === null || text(route.presetId)) || !text(route.model, true)) invalid();
+  }
+  return value;
+}
 function ai(value) {
-  exact(value, ['source', 'activePresetId', 'presets']);
+  exact(value, ['source', 'activePresetId', 'presets', ...(Object.hasOwn(value ?? {}, 'taskRoutes') ? ['taskRoutes'] : [])]);
+  if (Object.hasOwn(value, 'taskRoutes')) assertTaskRoutes(value.taskRoutes);
   if (![null, 'sillytavern', 'plugin'].includes(value.source) || !Array.isArray(value.presets)
     || !(value.activePresetId === null || text(value.activePresetId))) invalid();
   const ids = new Set(), names = new Set();
@@ -117,12 +130,18 @@ export function emptySettings() {
   return { schema: 2, revision: 0, domainRevisions: { ai: 0, eventGeneration: 0,recall:0 },recall:defaultRecallSettings(), credentials: [], ai: { source: null, activePresetId: null, presets: [] },
     eventGeneration: { trackingItemsEnabled: false, trackingNpcsEnabled: false, trackingIdentityReferencesEnabled: true, eventWords: createDefaultEventWords(), promptOverrides: {}, generationMode: 'quality', customPrompts: [], summaryCleaning: { rules: createDefaultCleaningRules() } } };
 }
+export function defaultCumulativeGeneration() {
+  return { trackingItemsEnabled: false, trackingNpcsEnabled: false, trackingIdentityReferencesEnabled: true };
+}
 export function assertCumulativeGeneration(value) {
   try {
-    if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).some(key=>!['promptOverrides','injectionPosition'].includes(key)))invalid();
+    const trackingKeys = Object.keys(defaultCumulativeGeneration());
+    if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).some(key=>!['promptOverrides','injectionPosition',...trackingKeys].includes(key)))invalid();
+    value = { ...defaultCumulativeGeneration(), ...value };
+    if (trackingKeys.some(key => typeof value[key] !== 'boolean')) invalid();
     if(Object.hasOwn(value,'promptOverrides')) {
       const prompts=value.promptOverrides;
-      if(!prompts||Object.getPrototypeOf(prompts)!==Object.prototype||Object.entries(prompts).some(([key,item])=>!['identity','rules','outputFormat'].includes(key)||typeof item!=='string'))invalid();
+      if(!prompts||Object.getPrototypeOf(prompts)!==Object.prototype||Object.entries(prompts).some(([key,item])=>!CUMULATIVE_PROMPT_KEYS.includes(key)||typeof item!=='string'))invalid();
     }
     if(Object.hasOwn(value,'injectionPosition')&&(!Number.isSafeInteger(value.injectionPosition)||value.injectionPosition<0||value.injectionPosition>10000))invalid();
     return frozenSettingsCopy(value);
@@ -178,7 +197,7 @@ export const SETTINGS_DOMAINS = Object.freeze(Object.fromEntries(Object.entries(
   ai: { validate: assertAiSettings, credentials: true },
   eventGeneration: { validate: assertEventGeneration },
   recall: { validate: assertRecallSettings, optional: true },
-  cumulativeGeneration: { validate: assertCumulativeGeneration, optional: true, fingerprintAbsent: true, readDefault: () => ({}) },
+  cumulativeGeneration: { validate: assertCumulativeGeneration, optional: true, fingerprintAbsent: true, readDefault: defaultCumulativeGeneration },
   timeReminders: { validate: assertTimeReminders, optional: true, fingerprintAbsent: true, readDefault: defaultTimeReminders, noOpDefault: defaultTimeReminders },
   workshop: { validate: assertWorkshop, optional: true, fingerprintAbsent: true, readDefault: emptyWorkshop, noOpDefault: emptyWorkshop },
   controls: { validate: assertControls, optional: true, fingerprintAbsent: true, readDefault: defaultControls, noOpDefault: defaultControls },
@@ -203,9 +222,16 @@ export function assertCredential(value) {
 export function publicSettings(root) {
   return frozenSettingsCopy({ ...root, credentials: root.credentials.map(({ presetId }) => ({ presetId })) });
 }
-export function aiConfig(root, epoch) {
-  if (root.ai.source === 'sillytavern') return Object.freeze({ source: 'sillytavern' });
-  const preset = root.ai.presets.find(item => item.id === root.ai.activePresetId);
-  if (root.ai.source !== 'plugin' || !preset?.endpoint || !preset.model || !root.credentials.some(item => item.presetId === preset.id)) return Object.freeze({ source: null });
-  return Object.freeze({ source: 'plugin', endpoint: preset.endpoint, model: preset.model, credentialId: preset.id, credentialEpoch: epoch });
+export function aiConfig(root, epoch, taskGroup) {
+  if (taskGroup !== undefined && !AI_TASK_GROUPS.includes(taskGroup)) throw new SettingsError();
+  const route = taskGroup ? root.ai.taskRoutes?.[taskGroup] : null;
+  const explicit = route && route.source !== 'inherit';
+  const source = explicit ? route.source : root.ai.source;
+  if (source === 'sillytavern') return Object.freeze({ source });
+  const presetId = explicit ? route.presetId : root.ai.activePresetId;
+  const preset = root.ai.presets.find(item => item.id === presetId);
+  if (source === 'plugin' && explicit && !preset) throw new SettingsError('TASK_PRESET_MISSING');
+  const model = explicit && route.model ? route.model : preset?.model;
+  if (source !== 'plugin' || !preset?.endpoint || !model || !root.credentials.some(item => item.presetId === preset.id)) return Object.freeze({ source: null });
+  return Object.freeze({ source: 'plugin', endpoint: preset.endpoint, model, credentialId: preset.id, credentialEpoch: epoch });
 }

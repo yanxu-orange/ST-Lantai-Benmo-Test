@@ -34,6 +34,8 @@ import { getSillyTavernContext } from './context.js';
 import { createManagementRuntime } from './management-runtime.js';
 import { createApiSettingsSession } from '../../app/api-settings-session.js';
 import { mountApiSettingsView } from '../../app/api-settings-view.js';
+import { createTaskApiSettingsSession } from '../../app/task-api-settings-session.js';
+import { mountTaskApiSettingsView } from '../../app/task-api-settings-view.js';
 import { createManagementNotifications } from './management-notifications.js';
 import { mountSummaryView } from '../../app/summary-view.js';
 import { createSummarySettingsController } from '../../app/summary-settings-controller.js';
@@ -295,8 +297,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(runtime.settings?.captureWorkshop)workshopRuntime=createWorkshopRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,captureSource:t=>adapter.captureChatSource(t),matchesSource:(t,s)=>adapter.matchesChatSource(t,s),isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true});
         trackingRuntime=createTrackingRuntime({repository,adapter,settings:runtime.settings,getContext,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t),onChange:()=>{void latestRuntime.refresh().catch(()=>{});}});
         scheduleRuntime=createScheduleRuntime({repository,settings:runtime.settings,dateRuntime:timeRuntime,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t)});
-        latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true,autoInitialize:false});
-        narrativeRuntime=createNarrativeRuntime({repository,adapter,manager:runtime.manager,getSummaryActive:()=>runtime.summaryService.isBusy()||runtime.cumulativeService?.isBusy(),settings:runtime.settings,provider:runtime.provider,getGenerationSettings:runtime.getGenerationSettings,getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
+        latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:()=>runtime.getGenerationSettings('latest'),getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true,autoInitialize:false});
+        narrativeRuntime=createNarrativeRuntime({repository,adapter,manager:runtime.manager,getSummaryActive:()=>runtime.summaryService.isBusy()||runtime.cumulativeService?.isBusy(),settings:runtime.settings,provider:runtime.provider,getGenerationSettings:()=>runtime.getGenerationSettings('narrative'),getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
         const summaryNarrativeActions={event:createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.summaryService,runner:runtime.summaryController.runner}),cumulative:createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.cumulativeService,runner:runtime.cumulativeRunner})};
         const narrativeActions=Object.fromEntries(['retry','resume','skip','pause'].map(action=>[action,()=>summaryNarrativeActions[narrativeRuntime.snapshot().run?.summarySource==='cumulative'?'cumulative':'event'][action]()]));
         benmoController=createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime:{...narrativeRuntime,...narrativeActions},repository,adapter,getContext,getControls:()=>controls});
@@ -614,7 +616,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     else { memoryContent.tabIndex = -1; memoryContent.focus({ preventScroll: true }); }
     returnFocus = returnTarget = null;
   }
-  function generationEpoch() { try { return runtime.getGenerationSettings().epoch; } catch { return null; } }
+  function generationEpoch() { try { return runtime.getGenerationSettings('event').epoch; } catch { return null; } }
   function openSettings() {
     if (settingsOpen || !panel || !runtime) return;
     settingsOpen=true;
@@ -634,7 +636,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function mountSettingsRoot(focusAction=null){
     if(!panel||closing||replacingPage)return;
     settingsRootView?.dispose();apiView?.dispose();apiView=null;
-    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,availability,focusAction,onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
+    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,availability,focusAction,onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onTaskApi:openTaskApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
     syncAppearance();
   }
   function openApiSettings(){
@@ -646,6 +648,17 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(reason==='close')close();else mountSettingsRoot('api');
     }});
     apiView=mountApiSettingsView(settingsContent,apiSession);settingsContent.querySelector('[data-api-action=back]')?.focus({preventScroll:true});void apiSession.initialize();
+  }
+
+  function openTaskApiSettings(){
+    if(!settingsOpen||apiSession||!panel)return;
+    settingsRootView?.dispose();settingsRootView=null;
+    apiSession=createTaskApiSettingsSession({repository:runtime.settings,operations:runtime.apiOperations,onExit:reason=>{
+      apiView?.dispose();apiView=null;apiSession=null;
+      if(closing||replacingPage)return;
+      if(reason==='close')close();else mountSettingsRoot('task-api');
+    }});
+    apiView=mountTaskApiSettingsView(settingsContent,apiSession);settingsContent.querySelector('[data-task-api-action=back]')?.focus({preventScroll:true});void apiSession.initialize();
   }
 
   async function notificationStyles() {
@@ -708,7 +721,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(!cumulativeSettingsController||!sameTarget(target,cumulativeSettingsTarget)){
       cumulativeSettingsController?.dispose();cumulativeSettingsTarget=target;
       const narrativeSettings=narrativeSettingsAccess(target);
-      cumulativeSettingsController=createCumulativeSettingsController({settings:runtime.settings,narrativeRuntime:narrativeSettings,exclusions:cumulativeExclusions(target,narrativeSettings),isCurrent:()=>sameTarget(target,repository.captureTarget()),onBack:()=>{if(cumulativeReturnPage==='root')void returnFromCumulative();else void showCumulative(cumulativeReturnPage);},onClose:close,onOpenCleaning:()=>void openCumulativeCleaning()});
+      cumulativeSettingsController=createCumulativeSettingsController({settings:runtime.settings,getControls:()=>controls,narrativeRuntime:narrativeSettings,exclusions:cumulativeExclusions(target,narrativeSettings),isCurrent:()=>sameTarget(target,repository.captureTarget()),onBack:()=>{if(cumulativeReturnPage==='root')void returnFromCumulative();else void showCumulative(cumulativeReturnPage);},onClose:close,onOpenCleaning:()=>void openCumulativeCleaning()});
     }
     if(!preserve)cumulativeReturnPage=from;
     unmountCumulative();unmountSummary();unmountRecall();app?.suspendCumulative();
@@ -913,7 +926,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       const memoryProof=captureMemoryRead();
       app = mountMemoryApp(memoryContent, repository, { history: null, window: null, onClose: close,
         managementService: runtime?.service, managementController: runtime?.controller,
-        getSettingsEpoch: () => runtime.getGenerationSettings().epoch,
+        getSettingsEpoch: () => runtime.getGenerationSettings('event').epoch,
         getOriginalSnapshot: runtime?.getOriginalSnapshot, originalAvailable: runtime?.originalAvailable, openSettings,
         openBenmo:()=>void openBenmo(),openWorkshop:()=>void openWorkshop(),openTime:()=>void openTime(),openSummary:origin=>void showSummary(origin),openSummarySettings:()=>void openSummarySettings(true),openRecall:()=>void openRecall(),regenerateBatch:id=>void showSummary('manual',id),cumulativeController:runtime.cumulativeController,initialMemoryType:memoryType,availability,onMemoryType:type=>{memoryType=type;cumulativePage='root';},openCumulative:origin=>void showCumulative(origin),openCumulativeSettings:()=>void openCumulativeSettings('root') });
       const mountedApp=app,reopenPage=cumulativePage,reopenTarget=cumulativePageTarget;await mountedApp.ready;

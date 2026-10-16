@@ -1,5 +1,6 @@
 import {assertCumulativeSource,storedCumulativeSource,cumulativeRange} from './source.js';
 import {matchesSourceMetadata} from '../summary/source.js';
+import {publicSummaryTrackingTicket,assertSummaryJsonEvidence} from '../summary/data.js';
 import {assertCumulativeGeneration} from '../../shared/settings/model.js';
 import {normalizeCleaningRule} from '../summary/cleaning.js';
 const copy = structuredClone;
@@ -48,16 +49,16 @@ function assertBase(value) {
   if (!text(value.versionId) || !text(value.body) || typeof value.startTime !== 'string' || typeof value.endTime !== 'string') throw new Error('古法完整基版无效');
 }
 export function publicCumulativeEvidence(value) {
-  const allowed = ['promptOverrides','injectionPosition','summaryCleaning','includeUser','checkBeforeSave','hideSource'];
+  const allowed = ['promptOverrides','injectionPosition','summaryCleaning','includeUser','checkBeforeSave','hideSource','trackingItemsEnabled','trackingNpcsEnabled','trackingIdentityReferencesEnabled'];
   if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).some(key=>!allowed.includes(key))) throw new Error('古法公开配置证据无效');
-  assertCumulativeGeneration(Object.fromEntries(['promptOverrides','injectionPosition'].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]])));
+  assertCumulativeGeneration(Object.fromEntries(['promptOverrides','injectionPosition','trackingItemsEnabled','trackingNpcsEnabled','trackingIdentityReferencesEnabled'].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]])));
   if(['includeUser','checkBeforeSave','hideSource'].some(key=>Object.hasOwn(value,key)&&typeof value[key]!=='boolean'))throw new Error('古法配置策略无效');
   if(Object.hasOwn(value,'summaryCleaning')) {
     exact(value.summaryCleaning,['rules']);if(!Array.isArray(value.summaryCleaning.rules))throw new Error('古法清洗证据无效');
     const ids=new Set();for(const rule of value.summaryCleaning.rules){exact(rule,['id','name','enabled','action','pattern','captureGroup','replacement']);normalizeCleaningRule(rule);if(!text(rule.id)||!text(rule.name)||ids.has(rule.id))throw new Error('古法清洗证据无效');ids.add(rule.id);}
   }
   const visit = item => { if (item === null || typeof item === 'string' || typeof item === 'boolean' || typeof item === 'number' && Number.isFinite(item)) return; if (Array.isArray(item)) {item.forEach(visit);return;} if (!item || Object.getPrototypeOf(item) !== Object.prototype) throw new Error('古法配置证据无效'); for (const [key,child] of Object.entries(item)) {if (/^(ai|api|apiKey|password|credentials|credentialEpoch|authorization|secret|secretId|secretValue|endpoint|model|presets|activePresetId|epoch)$/i.test(key)) throw new Error('古法证据不得包含私有配置');visit(child);} };
-  visit(value); return copy(Object.fromEntries(['includeUser','checkBeforeSave','hideSource'].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]])));
+  visit(value); return copy(Object.fromEntries(['includeUser','checkBeforeSave','hideSource','trackingItemsEnabled','trackingNpcsEnabled','trackingIdentityReferencesEnabled'].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]])));
 }
 export function assertCumulativeVersion(value) {
   exact(value,['id','taskId','body','startTime','endTime','baseSnapshot','sourceSnapshot','coverageRanges','settingsEvidence','createdAt','updatedAt']);
@@ -67,12 +68,25 @@ export function assertCumulativeVersion(value) {
   if (!Array.isArray(value.coverageRanges) || !value.coverageRanges.length || !same(value.coverageRanges,cumulativeCoverage(value.coverageRanges)) || !value.coverageRanges.some(range=>range.start <= value.sourceSnapshot.requestedRange.start && range.end >= value.sourceSnapshot.requestedRange.end) || value.baseSnapshot?.versionId === value.id) throw new Error('古法累计来源不完整');
   return {...copy(value),sourceSnapshot:storedCumulativeSource(value.sourceSnapshot),settingsEvidence:publicCumulativeEvidence(value.settingsEvidence)};
 }
+// Opting a saved user-tailed version into tracking may shorten only its tail.
+// Keep the same ancestor and exact retained provenance; never move its start.
+export function matchesCumulativeReplacementSource(previous, next) {
+  const before=previous.sourceSnapshot,after=next.sourceSnapshot;
+  if(same(before.requestedRange,after.requestedRange))return matchesSourceMetadata(after.rawMessages,before.rawMessages);
+  const range=after.requestedRange;
+  return (next.settingsEvidence.trackingItemsEnabled===true||next.settingsEvidence.trackingNpcsEnabled===true)
+    &&before.rawMessages.at(-1)?.role==='user'&&!before.rawMessages.at(-1)?.system
+    &&range.start===before.requestedRange.start&&range.end===before.rawMessages.filter(row=>row.role==='assistant'&&!row.system).at(-1)?.floor&&range.end<before.requestedRange.end
+    &&after.rawMessages.at(-1)?.role==='assistant'&&!after.rawMessages.at(-1)?.system
+    &&matchesSourceMetadata(after.rawMessages,before.rawMessages.filter(row=>row.floor<=range.end));
+}
 export function assertCumulativePending(value) {
-  exact(value,['schema','id','operation','version','createdAt','updatedAt']);
+  exact(value,['schema','id','operation','version','createdAt','updatedAt',...(Object.hasOwn(value,'tracking')?['tracking']:[])]);
+  if(Object.hasOwn(value,'tracking')){exact(value.tracking,['ticket','context','parts']);publicSummaryTrackingTicket(value.tracking.ticket);if(!value.tracking.context||!value.tracking.parts)throw new Error('古法待审核追踪无效');assertSummaryJsonEvidence(value.tracking);}
   if (value.schema !== 1 || ![value.id,value.createdAt,value.updatedAt].every(text) || !['append','replace'].includes(value.operation)) throw new Error('古法待审核身份无效');
   assertCumulativeVersion(value.version);
   if (value.version.taskId !== value.id) throw new Error('古法待审核任务不符');
-  return {...copy(value),version:assertCumulativeVersion(value.version)};
+  return {...copy(value),version:assertCumulativeVersion(value.version),...(value.tracking?{tracking:{...copy(value.tracking),ticket:publicSummaryTrackingTicket(value.tracking.ticket)}}:{})};
 }
 export function assertCumulative(value) {
   exact(value,['schema','revision','preferences','excludedFloors','versions','currentVersionId','progress',...(Object.hasOwn(value,'pending')?['pending']:[]),...(Object.hasOwn(value,'hiddenSegments')?['hiddenSegments']:[])]);
@@ -89,7 +103,7 @@ export function assertCumulative(value) {
   if (value.currentVersionId !== (previous?.id ?? null) || value.progress.lastProcessedFloor !== floor) throw new Error('古法当前指针或进度不符');
   if (Object.hasOwn(value,'pending')) {
     const pending = assertCumulativePending(value.pending), version=pending.version;
-    if (pending.operation === 'append' ? ids.has(version.id) || tasks.has(version.taskId) || !same(version.baseSnapshot,baseSnapshotOf(previous)) || !same(version.coverageRanges,cumulativeCoverage([...(previous?.coverageRanges ?? []),version.sourceSnapshot.requestedRange])) : !previous || version.id !== previous.id || !same(version.baseSnapshot,previous.baseSnapshot) || !same(version.sourceSnapshot.requestedRange,previous.sourceSnapshot.requestedRange)||!matchesSourceMetadata(version.sourceSnapshot.rawMessages,previous.sourceSnapshot.rawMessages) || !same(version.coverageRanges,previous.coverageRanges)) throw new Error('古法待审核与正式版本冲突');
+    if (pending.operation === 'append' ? ids.has(version.id) || tasks.has(version.taskId) || !same(version.baseSnapshot,baseSnapshotOf(previous)) || !same(version.coverageRanges,cumulativeCoverage([...(previous?.coverageRanges ?? []),version.sourceSnapshot.requestedRange])) : !previous || version.id !== previous.id || !same(version.baseSnapshot,previous.baseSnapshot) || !matchesCumulativeReplacementSource(previous,version) || !same(version.coverageRanges,cumulativeCoverage([...(value.versions.at(-2)?.coverageRanges??[]),version.sourceSnapshot.requestedRange]))) throw new Error('古法待审核与正式版本冲突');
   }
   return {...copy(value),versions:value.versions.map(assertCumulativeVersion),...(value.pending?{pending:assertCumulativePending(value.pending)}:{})};
 }

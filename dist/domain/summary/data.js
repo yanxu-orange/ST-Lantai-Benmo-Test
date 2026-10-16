@@ -30,6 +30,7 @@ function jsonEvidence(value) {
   if(!value||Object.getPrototypeOf(value)!==Object.prototype)throw new Error('生成证据无效');
   for(const [key,item] of Object.entries(value)){if(/^(apiKey|password|credentials|authorization|secretValue)$/i.test(key))throw new Error('生成证据不得包含凭证');jsonEvidence(item);}
 }
+export {jsonEvidence as assertSummaryJsonEvidence};
 export function assertGeneratedEvidence(candidates) {
   if(!Array.isArray(candidates)||!candidates.length)throw new Error('生成证据不能为空');
   jsonEvidence(candidates);

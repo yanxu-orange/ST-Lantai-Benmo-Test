@@ -1,4 +1,14 @@
+// Task names are business semantics, not provider or prompt configuration.
+export function aiTaskGroup(task) {
+  if (typeof task !== 'string') return undefined;
+  if (task.startsWith('event.summary.') || ['memory.indexes', 'memory.merge'].includes(task)) return 'event';
+  if (task.startsWith('cumulative.')) return 'cumulative';
+  if (task.startsWith('narrative.')) return 'narrative';
+  if (task.startsWith('latest.') || task === 'background.round' || task === 'tracking.update') return 'latest';
+  return undefined;
+}
 const MESSAGES = Object.freeze({
+  task_preset_missing: '此任务选择的 API 方案不存在，请在任务 API 设置中重新选择。',
   configuration: '请先在 API 设置中选择来源并完成配置。',
   unavailable: '当前 AI 生成接口不可用，请检查 API 设置。',
   cancelled: 'AI 任务已取消。',
@@ -181,23 +191,24 @@ export function createAiProvider({ getConfig, transport } = {}) {
   if (typeof getConfig !== 'function' || typeof transport?.generate !== 'function') {
     throw new AiProviderError('configuration');
   }
-  function readConfig() {
-    try { return freezeAiConfig(getConfig()); }
-    catch { throw new AiProviderError('configuration'); }
+  function readConfig(taskGroup) {
+    try { return freezeAiConfig(getConfig(taskGroup)); }
+    catch (error) { throw new AiProviderError(error?.code === 'TASK_PRESET_MISSING' || error?.code === 'task_preset_missing' ? 'task_preset_missing' : 'configuration'); }
   }
   return Object.freeze({
     async generateText({ task, messages, signal, isCurrent, maxOutputTokens } = {}) {
       if (typeof isCurrent !== 'function') throw new AiProviderError('request');
       assertAiCurrent(signal, isCurrent);
-      const config = readConfig(), fingerprint = JSON.stringify(config);
+      const taskGroup = aiTaskGroup(task);
+      const config = readConfig(taskGroup), fingerprint = JSON.stringify(config);
       const request = requestCopy({ task, messages, maxOutputTokens });
       const current = () => {
-        try { return isCurrent() === true && JSON.stringify(readConfig()) === fingerprint; }
+        try { return isCurrent() === true && JSON.stringify(readConfig(taskGroup)) === fingerprint; }
         catch { return false; }
       };
       try {
         assertAiCurrent(signal, current);
-        const text = await transport.generate({ ...request, config, signal, isCurrent: current });
+        const text = await transport.generate({ ...request, ...(taskGroup ? {taskGroup} : {}), config, signal, isCurrent: current });
         assertAiCurrent(signal, current);
         if (typeof text !== 'string' || !text.trim()) throw new AiProviderError('empty_output');
         return { text: text.trim(), provider: Object.freeze({ source: config.source }) };
@@ -209,16 +220,17 @@ export function createAiProvider({ getConfig, transport } = {}) {
     async generateJson({ task, messages, jsonSchema = null, signal, isCurrent, validate, maxOutputTokens } = {}) {
       if (typeof validate !== 'function' || typeof isCurrent !== 'function') throw new AiProviderError('request');
       assertAiCurrent(signal, isCurrent);
-      const config = readConfig();
+      const taskGroup = aiTaskGroup(task);
+      const config = readConfig(taskGroup);
       const fingerprint = JSON.stringify(config);
       const request = requestCopy({ task, messages, jsonSchema, maxOutputTokens });
       const current = () => {
-        try { return isCurrent() === true && JSON.stringify(readConfig()) === fingerprint; }
+        try { return isCurrent() === true && JSON.stringify(readConfig(taskGroup)) === fingerprint; }
         catch { return false; }
       };
       try {
         assertAiCurrent(signal, current);
-        const text = await transport.generate({ ...request, config, signal, isCurrent: current });
+        const text = await transport.generate({ ...request, ...(taskGroup ? {taskGroup} : {}), config, signal, isCurrent: current });
         assertAiCurrent(signal, current);
         const data = parseStrictJson(text);
         try { if (validate(data) !== true) throw new Error(); }

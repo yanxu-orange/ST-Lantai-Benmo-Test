@@ -1,4 +1,4 @@
-import { SETTINGS_DOMAINS, settingsDomainValue, assertCredential, aiConfig, equalSettings, frozenSettingsCopy, publicSettings, SettingsError } from './model.js';
+import { assertTaskRoutes, defaultTaskRoutes, SETTINGS_DOMAINS, settingsDomainValue, assertCredential, aiConfig, equalSettings, frozenSettingsCopy, publicSettings, SettingsError } from './model.js';
 
 export function createSettingsRepository(adapter) {
   let queue = Promise.resolve();
@@ -81,6 +81,13 @@ export function createSettingsRepository(adapter) {
     read:()=>readSettings(),
     ensure:()=>readSettings(true),
     saveAi: (value, options) => update('ai', value, options),
+    saveTaskRoutes(routes, options = {}) {
+      // Capture only confirmed authority; the existing queue and AI epoch guard
+      // reject interleaved preset edits rather than overwriting them.
+      const { root, epochs } = adapter.snapshot();
+      const unchangedLegacy = !Object.hasOwn(root.ai, 'taskRoutes') && equalSettings(assertTaskRoutes(routes), defaultTaskRoutes());
+      return update('ai', unchangedLegacy ? root.ai : { ...root.ai, taskRoutes: routes }, { ...options, expectedEpoch: options.expectedEpoch ?? epochs.ai, credentials: [] });
+    },
     saveEventGeneration: (value, options) => update('eventGeneration', value, options),
     saveRecall: (value,options)=>update('recall',value,options),
     saveCumulativeGeneration:(value,options)=>update('cumulativeGeneration',value,options),
@@ -115,7 +122,7 @@ export function createSettingsRepository(adapter) {
       const { root, epochs } = adapter.snapshot();
       return frozenSettingsCopy({ ai: root.ai, credentialPresetIds: root.credentials.map(item => item.presetId), epoch: epochs.ai });
     },
-    getAiConfig: () => { const { root, epochs } = adapter.snapshot(); return aiConfig(root, epochs.ai); },
+    getAiConfig: taskGroup => { const { root, epochs } = adapter.snapshot(); return aiConfig(root, epochs.ai, taskGroup); },
     resolvePresetCredential({ presetId, expectedEpoch }) {
       try {
         const root = adapter.peek(), epoch = adapter.epochs().ai;
@@ -125,9 +132,9 @@ export function createSettingsRepository(adapter) {
         return value;
       } catch { throw new SettingsError('SETTINGS_CONFLICT'); }
     },
-    resolveCredential(config) {
+    resolveCredential(config, { taskGroup } = {}) {
       try {
-        const root = adapter.peek(), current = aiConfig(root, adapter.epochs().ai);
+        const root = adapter.peek(), current = aiConfig(root, adapter.epochs().ai, taskGroup);
         if (current.source !== 'plugin' || config?.source !== 'plugin' || config?.credentialId !== current.credentialId
           || config?.credentialEpoch !== current.credentialEpoch || config.model !== current.model
           || new URL(config.endpoint).toString().replace(/\/$/, '') !== new URL(current.endpoint).toString().replace(/\/$/, '')) throw new SettingsError('SETTINGS_CONFLICT');

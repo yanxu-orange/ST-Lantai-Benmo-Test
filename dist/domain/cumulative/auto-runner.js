@@ -1,9 +1,10 @@
 import {sameTarget} from '../memory/repository.js';
 import {assertRawSummarySource} from '../summary/source.js';
-export function automaticCumulativePlan(cumulative,raw) {
+export function automaticCumulativePlan(cumulative,raw,{trackingEnabled=false}={}) {
   const source=assertRawSummarySource(raw),config=cumulative.preferences.auto;
   const start=Math.max(config.startFloor,(cumulative.progress.lastProcessedFloor??(config.startFloor-1))+1),end=start+config.batchSize-1;
   if(!Number.isSafeInteger(start)||start<0||!Number.isSafeInteger(end)||!Number.isSafeInteger(config.batchSize)||config.batchSize<1)throw new Error('古法自动范围无效');
+  if(trackingEnabled){const endpoint=source.messages.find(message=>message.floor>=end&&message.role==='assistant'&&!message.system);return {status:endpoint?'ready':'waiting',startFloor:start,endFloor:endpoint?.floor??end};}
   const selected=source.messages.filter(message=>message.floor>=start&&message.floor<=end);
   return {status:selected.length===config.batchSize?'ready':'waiting',startFloor:start,endFloor:end};
 }
@@ -20,7 +21,7 @@ export function createAutomaticCumulativeRunner({service,repository,captureSourc
         if(!targetCurrent(active)){active.status='stopped';break;}if(active.stopRequested){active.status='stopped';break;}
         const selection=await repository.captureCumulative(active.target);if(!targetCurrent(active)){active.status='stopped';break;}
         if(active.stopRequested){active.status='stopped';break;}
-        const plan=automaticCumulativePlan(selection.cumulative,captureSource(active.target));if(plan.status!=='ready'){active.status='waiting';break;}
+        const raw=captureSource(active.target),plan=service.automaticPlan?.(selection.cumulative,raw)??automaticCumulativePlan(selection.cumulative,raw);if(plan.status!=='ready'){active.status='waiting';break;}
         active.taskId=await service.start('auto',plan);notify();const result=await service.completed(active.taskId);
         if(run!==active||disposed)return;
         if(result?.status==='awaiting-user'){active.status='awaiting-user';break;}

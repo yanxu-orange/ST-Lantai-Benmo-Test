@@ -3,7 +3,7 @@ import { CUMULATIVE_PROMPT_KEYS, cumulativePromptDefault } from '../shared/setti
 const copy = value => structuredClone(value);
 
 export function createCumulativeSettingsController({
-  settings, exclusions, narrativeRuntime, isCurrent = () => true,
+  settings, exclusions, getControls, narrativeRuntime, isCurrent = () => true,
   onBack = () => {}, onClose = () => {}, onOpenCleaning = () => {}
 } = {}) {
   const listeners = new Set();
@@ -13,12 +13,13 @@ export function createCumulativeSettingsController({
     excludedFloors: [], opened: {}, scroll: {}, message: '', error: null,
     savedSequence: 0, injectionDraft: null, floorDraft: ''
   };
+  const trackingAllowed = key => { try { return !getControls || getControls()?.allowed(key) === true; } catch { return false; } };
   const narrativeSettings = () => {
     if (!narrativeRuntime) return {};
     const snapshot = narrativeRuntime.snapshot();
     return { narrativeAutoSources: Object.fromEntries(['self', 'outline'].map(kind => [kind, snapshot.narrative.preferences[kind].autoSource ?? 'event'])), narrativeWriteBlocked: !snapshot.target || snapshot.preferencesWriteBlocked === true };
   };
-  const inspect = () => copy({ ...state, ...narrativeSettings() }), notify = () => {
+  const inspect = () => copy({ ...state, ...narrativeSettings(), trackingAvailability: { trackingItemsEnabled: trackingAllowed('item'), trackingNpcsEnabled: trackingAllowed('npc') } }), notify = () => {
     if (!disposed) for (const listener of [...listeners]) try {
       listener(inspect());
     } catch { /* view only */ }
@@ -179,6 +180,7 @@ export function createCumulativeSettingsController({
     }
   });
   const offNarrative = narrativeRuntime?.subscribe?.(() => { if (!disposed) notify(); });
+  const offControls = getControls?.()?.subscribe?.(() => { if (!disposed) notify(); });
 
   const controller = {
     inspect,
@@ -187,6 +189,15 @@ export function createCumulativeSettingsController({
       return load(false, true);
     },
     read: () => load(true),
+    toggleTracking(key) {
+      if (!['trackingItemsEnabled', 'trackingNpcsEnabled'].includes(key)) return Promise.resolve(false);
+      if (state.draft?.[key] !== true && !trackingAllowed(key === 'trackingItemsEnabled' ? 'item' : 'npc')) return Promise.resolve(false);
+      return commit(draft => { draft[key] = !draft[key]; });
+    },
+    setIdentityReferences(enabled) {
+      if (typeof enabled !== 'boolean') return Promise.resolve(false);
+      return commit(draft => { draft.trackingIdentityReferencesEnabled = enabled; });
+    },
     async toggleNarrative(kind) {
       if (!['self', 'outline'].includes(kind) || !narrativeRuntime || !editable() || narrativeSettings().narrativeWriteBlocked) return false;
       const autoSource = narrativeSettings().narrativeAutoSources[kind] === 'cumulative' ? 'none' : 'cumulative';
@@ -257,6 +268,7 @@ export function createCumulativeSettingsController({
       disposed = true;
       off?.();
       offNarrative?.();
+      offControls?.();
       listeners.clear();
     }
   };

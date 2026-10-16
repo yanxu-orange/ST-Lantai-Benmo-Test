@@ -4,11 +4,17 @@ import {assertCumulativeGeneration} from '../../shared/settings/model.js';
 import {baseSnapshotOf,cumulativeOf,cumulativeCoverage,publicCumulativeEvidence} from './data.js';
 import {prepareCumulativeSource,storedCumulativeSource,matchesCumulativeSource,matchesStoredCumulativeSource} from './source.js';
 import {buildCumulativeRequest,validCumulativeSummary} from './requests.js';
+import {prepareBatchTracking,applyBatchTracking} from '../tracking/batch.js';
+import {parseBatchTrackingResponseParts} from '../tracking/requests.js';
+import {prepareSummarySource} from '../summary/source.js';
+import {automaticCumulativePlan} from './auto-runner.js';
+import {publicSummaryTrackingTicket} from '../summary/data.js';
 import {AiProviderError} from '../../shared/ai/provider.js';
 
 // Diagnose only trusted provider codes. Never forward arbitrary error text or
 // response details from the transport into the user-facing task state.
 const AI_FAILURE_MESSAGES=Object.freeze({
+  task_preset_missing:'此任务选择的 API 方案不存在，请在任务 API 设置中重新选择',
   configuration:'AI 配置不完整，请在 API 设置中选择来源并完成配置后重新生成',
   unavailable:'当前 AI 生成接口不可用，请检查 API 设置后重新生成',
   cancelled:'AI 任务已取消，需要时请重新生成',
@@ -24,8 +30,12 @@ const AI_FAILURE_MESSAGES=Object.freeze({
 // The host supplies PUBLIC tickets only:
 // {generation,cumulativeEpoch,summaryCleaning,cleaningEpoch,aiIdentity,aiEpoch}.
 // aiIdentity is an opaque public selection identity, never a credential or API object.
-export function createCumulativeSummaryService({repository,manager,provider,captureSource,getGenerationSettings,control=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}) {
+export function createCumulativeSummaryService({repository,manager,provider,captureSource,getGenerationSettings,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}) {
   const records=new Map(),listeners=new Set(),reservations=new Set(),restorations=new Map(),reboundReceipts=new WeakSet();let disposed=false;
+  const durableTrackingContext=context=>({identities:context.identities??{},allowed:context.allowed??{itemsEnabled:true,npcsEnabled:true}});
+  const readTrackingContext=()=>structuredClone(getTrackingContext());
+  const trackingRequest=snapshot=>snapshot.tracking?{ticket:snapshot.tracking.ticket,...snapshot.tracking.context}:null;
+  const request=snapshot=>buildCumulativeRequest({source:snapshot.source,previousSummary:snapshot.baseSnapshot?.body??null,settings:snapshot.settings.generation,tracking:trackingRequest(snapshot),origin:snapshot.origin});
   const frozen=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(frozen);Object.freeze(value);}return value;};
   function reboundGuard(previous,next,isCurrent){
     if(disposed||typeof isCurrent!=='function'||isCurrent()!==true||!sameTarget(previous,previous)||!sameTarget(next,next)||previous.chatId!==next.chatId||previous.rootId!==next.rootId||previous.epoch===next.epoch||!sameTarget(next,repository.captureTarget()))throw new Error('重载目标或读取来路已变化');
@@ -35,16 +45,16 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).length!==keys.length||keys.some(key=>!Object.hasOwn(value,key))||['cumulativeEpoch','cleaningEpoch','aiEpoch'].some(key=>!Number.isSafeInteger(value[key])||value[key]<0)||!(value.aiIdentity===null||typeof value.aiIdentity==='string'&&value.aiIdentity.trim()))throw new Error('古法公开配置票据无效');
     assertCumulativeGeneration(value.generation);publicCumulativeEvidence({...value.generation,summaryCleaning:value.summaryCleaning});return value;
   }
-  const targetCurrent=(snapshot,target)=>{try{return !disposed&&sameTarget(target,repository.captureTarget())&&equalData(snapshot.settings,settings());}catch{return false;}};
+  const targetCurrent=(snapshot,target)=>{try{return !disposed&&sameTarget(target,repository.captureTarget())&&equalData(snapshot.settings,settings())&&(!snapshot.tracking||equalData(snapshot.tracking.context,readTrackingContext()));}catch{return false;}};
   function sourceCurrent(snapshot,target) {
     const record=[...records.values()].find(item=>item.operationId===snapshot.operationId);
-    try{return repository.matchesCumulative(target,record?.selection??snapshot.selection)&&matchesCumulativeSource(snapshot.source,captureSource(target));}catch{return false;}
+    try{return repository.matchesCumulative(target,record?.selection??snapshot.selection)&&(!snapshot.tracking||repository.matchesTrackingRevision(target,snapshot.tracking.ticket.revision))&&matchesCumulativeSource(snapshot.source,captureSource(target));}catch{return false;}
   }
   const current=(snapshot,target)=>targetCurrent(snapshot,target)&&sourceCurrent(snapshot,target);
   function inspect(taskId) {
     const record=records.get(taskId),state=manager.inspect(taskId)??record?.restoredTask;if(!state||!record)return null;
     const narrative=record.narrativeRetired?null:record.narrative;
-    return {...state,...(state.status==='succeeded'&&narrative?.status==='running'?{status:'narrative-running'}:state.status==='succeeded'&&narrative?.status==='failed'?{status:'narrative-failed'}:{}),narrative:narrative?{...narrative}:null,origin:record.origin,stage:record.stage,outcome:record.outcome,reviewResolution:record.reviewResolution,rebindRequired:record.rebindRequired,receipt:record.receipt?structuredClone(record.receipt):null,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly};
+    return {...state,...(state.status==='succeeded'&&narrative?.status==='running'?{status:'narrative-running'}:state.status==='succeeded'&&narrative?.status==='failed'?{status:'narrative-failed'}:{}),narrative:narrative?{...narrative}:null,origin:record.origin,stage:record.stage,outcome:record.outcome,reviewResolution:record.reviewResolution,rebindRequired:record.rebindRequired,receipt:record.receipt?structuredClone(record.receipt):null,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,diagnostics:structuredClone(record.diagnostics??[]),trackingRejected:structuredClone(record.trackingRejected??record.trackingParts?.rejected??null)};
   }
   function notify(taskId){const state=inspect(taskId);if(state)for(const listener of [...listeners])try{listener(state);}catch{/* observation only */}}
   const busyStatuses=['starting','running','awaiting-user','committing','narrative-running','narrative-failed'];
@@ -72,14 +82,24 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     const range=savedSource?.requestedRange??{start:options.startFloor??pref.startFloor,end:options.endFloor??(origin==='auto'?null:pref.endFloor)};
     if(range.end===null)range.end=raw.messages.length?Math.max(...raw.messages.map(item=>item.floor)):-1;
     if(savedSource&&!matchesStoredCumulativeSource(savedSource,raw))throw new Error('保留版本的原始来源已变化');
-    const prepared=prepareCumulativeSource(raw,{startFloor:range.start,endFloor:range.end,includeUser:savedSource?.includeUser??params.includeUser,excludedFloors:savedSource?.excludedFloors??domain.excludedFloors,rules:config.summaryCleaning.rules});
+    const tracked=config.generation.trackingItemsEnabled===true||config.generation.trackingNpcsEnabled===true;
+    const prepared=(tracked?prepareSummarySource:prepareCumulativeSource)(raw,{startFloor:range.start,endFloor:range.end,includeUser:savedSource?.includeUser??params.includeUser,excludedFloors:savedSource?.excludedFloors??domain.excludedFloors,rules:config.summaryCleaning.rules});
     // Rebuild request text from the current host; saved sources contain locators only.
     const source=prepared;
     params.includeUser=source.includeUser;
     const publicConfig=evidence(config,params);
-    if(pending&&!equalData(pending.version.settingsEvidence,publicConfig))throw new Error('保留草稿的生成配置已变化');
+    const comparableEvidence=value=>({trackingItemsEnabled:false,trackingNpcsEnabled:false,trackingIdentityReferencesEnabled:true,...value});
+    if(pending&&!equalData(comparableEvidence(pending.version.settingsEvidence),comparableEvidence(publicConfig)))throw new Error('保留草稿的生成配置已变化');
     const baseSnapshot=pending?.version.baseSnapshot??(stored?stored.baseSnapshot:baseSnapshotOf(previous));
-    const snapshot={target,selection,settings:config,source,origin,operationId:uuid(),params,baseSnapshot,coverageRanges:pending?.version.coverageRanges??stored?.coverageRanges??cumulativeCoverage([...(previous?.coverageRanges??[]),source.requestedRange]),versionId:pending?.version.id??stored?.id??uuid(),settingsEvidence:publicConfig,startTime:options.startTime??pending?.version.startTime??previous?.startTime??'',endTime:options.endTime??pending?.version.endTime??previous?.endTime??''};
+    const snapshot={target,selection,settings:config,source,origin,operationId:uuid(),params,baseSnapshot,coverageRanges:pending?.version.coverageRanges??cumulativeCoverage([...(stored?domain.versions.at(-2)?.coverageRanges??[]:previous?.coverageRanges??[]),source.requestedRange]),versionId:pending?.version.id??stored?.id??uuid(),settingsEvidence:publicConfig,startTime:options.startTime??pending?.version.startTime??previous?.startTime??'',endTime:options.endTime??pending?.version.endTime??previous?.endTime??''};
+    const trackingPreferences={itemsEnabled:config.generation.trackingItemsEnabled===true,npcsEnabled:config.generation.trackingNpcsEnabled===true};
+    if(trackingPreferences.itemsEnabled||trackingPreferences.npcsEnabled){
+      const context=readTrackingContext();
+      for(const list of ['items','npcs'])if(trackingPreferences[`${list}Enabled`]&&context.allowed?.[`${list}Enabled`]===false)throw new Error(list==='items'?'物品追踪功能已关闭，请先开启或取消同步追踪':'角色追踪功能已关闭，请先开启或取消同步追踪');
+      const selected=await repository.captureTracking(target),ticket=prepareBatchTracking(selected.tracking,raw,{...source,actualRange:source.requestedRange},trackingPreferences,{batchId:`cumulative:${snapshot.versionId}`});
+      snapshot.tracking={ticket,context};
+      if(pending&&(!pending.tracking||!equalData(publicSummaryTrackingTicket(pending.tracking.ticket),publicSummaryTrackingTicket(ticket))||!equalData(durableTrackingContext(pending.tracking.context),durableTrackingContext(context))))throw new Error('保留草稿的追踪资料已变化，请重新总结');
+    }else if(pending?.tracking)throw new Error('保留草稿的追踪设置已变化，请重新总结');
     if(typeof snapshot.startTime!=='string'||typeof snapshot.endTime!=='string'||!current(snapshot,target))throw new Error('古法目标、基版或配置已变化');
     return snapshot;
   }
@@ -104,6 +124,11 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
       try{
         await repository.read(ctx.target);
         const options={isCurrent:ctx.isCurrent,...(record.pendingId?{pendingId:record.pendingId}:{})};
+        if(ctx.snapshot.tracking){
+          const selected=await repository.captureTracking(ctx.target),applied=applyBatchTracking(selected.tracking,ctx.snapshot.tracking.ticket,ctx.candidate.trackingParts,captureSource(ctx.target),{makeId:uuid,batchId:ctx.snapshot.tracking.ticket.batchId});
+          options.trackingUpdate={expectedRevision:ctx.snapshot.tracking.ticket.revision,value:applied.tracking};
+          record.trackingRejected=applied.rejected??null;record.diagnostics=Object.entries(applied.errors).flatMap(([category,message])=>message?[{kind:'tracking',category,message}]:[]);
+        }
         const receipt=ctx.snapshot.origin==='regeneration'?await repository.replaceCumulative(ctx.target,record.selection,version,options):await repository.appendCumulative(ctx.target,record.selection,version,options);
         record.receipt=receipt;record.selection=receipt.selection;record.stage='completed';record.reviewResolution='committed';if(receipt?.status==='committed'&&afterSummaryCommit)record.narrative={status:'running',error:''};return receipt;
       }catch(error){writeError(record,error);throw error;}finally{record.writeInFlight=false;}
@@ -127,26 +152,28 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
       if(!sameTarget(initialTarget,snapshot.target))throw new Error('古法聊天目标已变化');
       if(snapshot.selection.cumulative.pending&&!pending)throw new Error('请先处理保留的古法草稿');
       if(pending&&!equalData(snapshot.selection.cumulative.pending,pending))throw new Error('古法草稿已变化');
-      const record={origin,operationId:snapshot.operationId,selection:snapshot.selection,reviewRequired:!!pending||snapshot.params.checkBeforeSave,restoreOnly:!!pending,pendingId:pending?.id??null,stage:'starting',outcome:null,reviewResolution:null,discardAttempted:false,writeInFlight:false,rebindRequired:false,receipt:null,errorMessage:'',autoConfirmScheduled:false};
+      const record={origin,operationId:snapshot.operationId,selection:snapshot.selection,reviewRequired:!!pending||snapshot.params.checkBeforeSave,restoreOnly:!!pending,pendingId:pending?.id??null,stage:'starting',outcome:null,reviewResolution:null,discardAttempted:false,writeInFlight:false,rebindRequired:false,receipt:null,errorMessage:'',autoConfirmScheduled:false,trackingParts:structuredClone(pending?.tracking?.parts??null),diagnostics:Object.entries(pending?.tracking?.parts?.errors??{}).flatMap(([category,message])=>message?[{kind:'tracking',category,message}]:[])};
       const taskId=manager.start({key:`cumulative-summary:${key}`,target:snapshot.target,snapshot,validateCurrent:target=>targetCurrent(snapshot,target),validateSnapshot:sourceCurrent,worker:async ctx=>{
-        if(pending){record.stage='final-review';return {kind:'cumulative-summary',version:structuredClone(pending.version)};}
+        if(pending){record.stage='final-review';return {kind:'cumulative-summary',version:structuredClone(pending.version),trackingParts:record.trackingParts};}
         await repository.read(ctx.target);
         const isCurrent=()=>!ctx.signal.aborted&&current(ctx.snapshot,ctx.target);
         if(!isCurrent())throw new Error('古法来源已变化');record.stage='summary';notify(ctx.taskId);
         let output;
-        try{output=await provider.generateJson({...buildCumulativeRequest({source:ctx.snapshot.source,previousSummary:ctx.snapshot.baseSnapshot?.body??null,settings:ctx.snapshot.settings.generation}),signal:ctx.signal,isCurrent,validate:validCumulativeSummary});}catch(error){writeError(record,error);throw error;}
-        if(!isCurrent()||!validCumulativeSummary(output?.data))throw new Error('古法结果或来源无效');
+        try{output=await provider.generateJson({...request(ctx.snapshot),signal:ctx.signal,isCurrent,validate:data=>validCumulativeSummary(ctx.snapshot.tracking&&data&&typeof data==='object'?Object.fromEntries(Object.entries(data).filter(([key])=>key!=='tracking')):data)});}catch(error){writeError(record,error);throw error;}
+        if(!isCurrent()||!validCumulativeSummary(ctx.snapshot.tracking&&output?.data?Object.fromEntries(Object.entries(output.data).filter(([key])=>key!=='tracking')):output?.data))throw new Error('古法结果或来源无效');
+        if(snapshot.tracking){record.trackingParts=parseBatchTrackingResponseParts(output.data.tracking,{ticket:snapshot.tracking.ticket});record.diagnostics=Object.entries(record.trackingParts.errors).flatMap(([category,message])=>message?[{kind:'tracking',category,message}]:[]);}
         const timestamp=now(),version={id:snapshot.versionId,taskId:snapshot.operationId,body:output.data.summary,startTime:snapshot.startTime,endTime:snapshot.endTime,baseSnapshot:snapshot.baseSnapshot,sourceSnapshot:storedCumulativeSource(snapshot.source),coverageRanges:snapshot.coverageRanges,settingsEvidence:snapshot.settingsEvidence,createdAt:timestamp,updatedAt:timestamp};
-        if(record.reviewRequired){const draft={schema:1,id:version.taskId,operation:origin==='regeneration'?'replace':'append',version,createdAt:timestamp,updatedAt:timestamp};record.pendingId=draft.id;
+        if(record.reviewRequired){const draft={schema:1,id:version.taskId,operation:origin==='regeneration'?'replace':'append',version,createdAt:timestamp,updatedAt:timestamp,...(snapshot.tracking?{tracking:{ticket:publicSummaryTrackingTicket(snapshot.tracking.ticket),context:durableTrackingContext(snapshot.tracking.context),parts:record.trackingParts}}:{})};record.pendingId=draft.id;
           record.writeInFlight=true;try{const receipt=await repository.saveCumulativePending(ctx.target,record.selection,draft,{isCurrent});record.selection=receipt.selection;}catch(error){if(error.code!=='COMMIT_UNCONFIRMED')record.pendingId=null;writeError(record,error);throw error;}finally{record.writeInFlight=false;}
         }
-        record.stage='final-review';return {kind:'cumulative-summary',version};
+        record.stage='final-review';return {kind:'cumulative-summary',version,trackingParts:record.trackingParts};
       }});
       records.set(taskId,record);notify(taskId);return taskId;
     }finally{reservations.delete(key);}
   }
   const service={
-    async preview(origin='manual',options={}){const snapshot=await capture(origin,options);return {...buildCumulativeRequest({source:snapshot.source,previousSummary:snapshot.baseSnapshot?.body??null,settings:snapshot.settings.generation}),snapshot};},
+    automaticPlan(domain,raw){const generation=settings().generation;return automaticCumulativePlan(domain,raw,{trackingEnabled:generation.trackingItemsEnabled===true||generation.trackingNpcsEnabled===true});},
+    async preview(origin='manual',options={}){const snapshot=await capture(origin,options);return {...request(snapshot),snapshot};},
     resumeAutoConfirm(){for(const [id,record]of records)if(record.autoConfirmPaused&&control?.allowed()){record.autoConfirmPaused=false;queueMicrotask(()=>void confirm(id));}},
     start:(origin='manual',options={})=>launch(origin,options),confirm,inspect,isBusy,settled:taskId=>manager.settled(taskId),
     completed(taskId){return new Promise(resolve=>{let off;const check=()=>{const state=inspect(taskId),record=records.get(taskId);if(!state||['succeeded','failed','stale','cancelled','narrative-failed'].includes(state.status)||state.status==='awaiting-user'&&record.reviewRequired){off?.();resolve(state);}};off=service.subscribe(state=>{if(state.taskId===taskId)check();});check();});},
