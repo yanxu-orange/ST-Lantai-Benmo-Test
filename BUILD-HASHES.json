@@ -3,7 +3,7 @@
   "sourceBase": "7ea08ad44abfac57c7136e75bb10211a91a85aa4",
   "sha256": {
     ".gitattributes": "1f3869e42067e514796bdc045140e8e0beb5bba573f26aba00e2bfbca283daed",
-    "README.md": "42c3febd51d301cf80b1de93ad3f401b57c09d664ef37e235da7f886e7aac1e8",
+    "README.md": "4975dc4c060ffa28a84fc3f09915b4e377dd42c8209629ed6ab7faf14ecc7195",
     "dist/app/api-settings-session.js": "701eaff7ac6004ff4ce0c08c2cb7aa382378b59bd369d1f415aa2719db8b09c9",
     "dist/app/api-settings-view.js": "80794bb2c2de0908e81cea6a1f8953679fae2b3278a5c807358dae5cc6cb6447",
     "dist/app/api-settings.css": "a78711f99bffa0d1c248cd3d2f70c8485d22e55b8da99176dcabb5a73fedd3e3",
@@ -291,6 +291,6 @@
     "dist/vendor/plugin-ui-system/manifest.json": "d24889b152ce6928069460bc3118a54c2e13008bed6539e9f8905d4bc11eb41e",
     "dist/vendor/plugin-ui-system/web.css": "c278b7c112e8508ce3edc2c0f1412214af32ca9e4ffba4c3b4ede87900e80fae",
     "manifest.json": "dcaf981a302daa7ace202cc584fb8617c22b36e984e40f9eff7a1c5bd3a07fd6",
-    "安装与回退.txt": "0386c6ff11215cac6e1deea071328aa6d07130e3609a3a84c970cc5545f75b32"
+    "安装与回退.txt": "3d942b0b12c0fc048568910399c741fb52f83637d2ff75b32348a4bb185ba88a"
   }
 }

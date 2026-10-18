@@ -41,5 +41,12 @@
 这是安装树，已包含 dist，无须自行构建。不要使用私有源码仓库安装。
 
 尚未安装兰台：在酒馆“安装扩展”中填写上述仓库地址，并在单独的分支栏填写上述完整分支名。分支栏留空会安装 main 正式版，不会安装本试用版；不要把 /tree/ 页面地址填进仓库栏。
-已有兰台：普通“更新”仍跟随当前分支，不能假定已经切到试用版。先完成备份，停止宿主，在原插件目录检查 git remote -v 与 git status，确认 origin 是上述安装仓库且没有未保存修改，再执行 git fetch origin 和 git switch --track origin/trial/bm25-supplement-20261018。如果本地已经有同名分支，使用 git switch trial/bm25-supplement-20261018。不要强制切换、丢弃本地修改或另外安装一份。无 Git 的 ZIP 安装按上方替换方式操作。
+已有兰台（优先用界面）：先备份插件、全局设置与聊天，停止生成／总结；打开扩展管理／详情，在兰台右侧点击“切换分支”（分叉图标），选择 origin/trial/bm25-supplement-20261018（已存在本地分支时可能不带 origin/），确认 Switch 后刷新，核对版本 0.1.0-trial.bm25.20261018.1。当前官方版本中该按钮仅管理员可见；若找不到按钮或分支，不要拼接 #branch，不要删数据或重复安装，可先确认酒馆版本／权限。
+
+备用原目录 Git 路径：普通“更新”仍跟随当前分支，不能假定已经切到试用版。先完成备份，停止宿主，在原插件目录检查 git remote -v 与 git status，确认 origin 是上述安装仓库且没有未保存修改，再执行 git fetch origin refs/heads/trial/bm25-supplement-20261018:refs/remotes/origin/trial/bm25-supplement-20261018 和 git switch --track origin/trial/bm25-supplement-20261018。显式抓取避免旧安装只追踪 main 时看不到试用分支。如果本地已经有同名分支，使用 git switch trial/bm25-supplement-20261018。不要强制切换、丢弃本地修改或另外安装一份。无 Git 的 ZIP 安装按上方替换方式操作。
 回退 main 前仍须恢复试用前全局设置；仅切回 main 不能让旧版识别新增字段。
+
+官方行为依据
+https://docs.sillytavern.app/extensions/
+https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/extensions.js （分支按钮、onBranchClick 与单独安装分支字段）
+https://github.com/SillyTavern/SillyTavern/blob/release/src/endpoints/extensions.js （/branches 抓取分支，/switch 切换）
