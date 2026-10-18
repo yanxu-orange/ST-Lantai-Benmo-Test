@@ -112,11 +112,12 @@ export function settingsFingerprint(value) {
   return JSON.stringify(ordered(value));
 }
 export const equalSettings = (a, b) => settingsFingerprint(a) === settingsFingerprint(b);
-export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:5,maxTokens:null,memoryDepth:9999,anniversaryPoolLimit:2,automaticSameDayEnabled:true,excludedTerms:[],recallCleaning:{rules:[]} }; }
+export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:5,maxTokens:null,memoryDepth:9999,anniversaryPoolLimit:2,automaticSameDayEnabled:true,bodySupplementEnabled:false,bodySupplementMaxTokens:500,bodySupplementReminderEnabled:false,excludedTerms:[],recallCleaning:{rules:[]} }; }
 export function assertRecallSettings(value) {
   try {
-    value={anniversaryPoolLimit:2,automaticSameDayEnabled:true,...value};
-    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled']);
+    value={anniversaryPoolLimit:2,automaticSameDayEnabled:true,bodySupplementEnabled:false,bodySupplementMaxTokens:500,bodySupplementReminderEnabled:false,...value};
+    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled','bodySupplementEnabled','bodySupplementMaxTokens','bodySupplementReminderEnabled']);
+    if(typeof value.bodySupplementEnabled!=='boolean'||typeof value.bodySupplementReminderEnabled!=='boolean'||!Number.isSafeInteger(value.bodySupplementMaxTokens)||value.bodySupplementMaxTokens<0)invalid();
     if(typeof value.automaticSameDayEnabled!=='boolean'||!(value.anniversaryPoolLimit===null||Number.isSafeInteger(value.anniversaryPoolLimit)&&value.anniversaryPoolLimit>=0))invalid();
     if(!Number.isSafeInteger(value.recentFloorCount)||value.recentFloorCount<0||!Number.isSafeInteger(value.maxCount)||value.maxCount<1
       ||!(value.maxTokens===null||Number.isSafeInteger(value.maxTokens)&&value.maxTokens>0)||!Number.isSafeInteger(value.memoryDepth)||value.memoryDepth<0||value.memoryDepth>10000)invalid();

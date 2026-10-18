@@ -18,6 +18,7 @@ function contributions(facts,reasons=[]){
 }
 export function recallRankingReason(item){
   const facts=item.ranking;if(!facts)return '';
+  if(facts.pool==='supplement')return `正文 BM25 补充：本轮额外补入最多一条完整记忆，不替换既有入选记忆。（BM25 分值 ${score(facts.score)}，仅用于检索排序，不代表置信度。）`;
   if(facts.pool==='special'){const hit=item.dateEvidence?.special??[],words=[...new Set((item.reasons??[]).filter(x=>['keyword-match','alias-match'].includes(x.code)).map(x=>x.alias??x.term).filter(Boolean))].slice(0,3),dates=[...new Set(hit.map(x=>x.matchedLabel??(x.matchedDate?`${x.matchedDate.year}年${x.matchedDate.month}月${x.matchedDate.day}日`:'')).filter(Boolean))];return `时间记忆匹配：${hit.some(x=>x.kind==='named-origin')?'纪念日发生年份':hit.some(x=>x.kind==='named-same-day')?'纪念日对应的过去经历':'历史同日'}${dates.length?`（${dates.join('、')}）`:''}${words.length?`；同时命中关键词或简称：${words.join('、')}`:''}。本轮入选，不占普通名额。`;}
   if(facts.pool==='resident'){const hits=[...new Set((item.reasons??[]).filter(x=>['keyword-match','alias-match'].includes(x.code)).map(x=>x.alias??x.term).filter(Boolean))],dates=(item.dateEvidence?.ordinary??[]).filter(x=>x.relation==='support').map(x=>x.target.raw);return `常驻发送，不占触发记忆名额。${hits.length?`同时命中：${hits.slice(0,3).join('、')}。`:''}${dates.length?`日期匹配：${[...new Set(dates)].join('、')}。`:''}`;}
   const dates=item.dateEvidence?.ordinary??[],supports=dates.filter(x=>x.relation==='support');
