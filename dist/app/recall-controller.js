@@ -4,7 +4,7 @@ import {sameTarget} from '../domain/memory/repository.js';
 import {normalizeCleaningRule,BUILTIN_SUMMARY_CLEANING_SHORTCUTS} from '../domain/summary/cleaning.js';
 
 const copy=value=>structuredClone(value);
-const numericFields=['recentFloorCount','maxCount','maxTokens','memoryDepth','anniversaryPoolLimit'];
+const numericFields=['recentFloorCount','maxCount','maxTokens','memoryDepth','anniversaryPoolLimit','candidateCounts'];
 const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
 export function createRecallController({repository,settings,runtime,onBack=()=>{},onClose=()=>{}}={}) {
   let disposed=false,ticket=0,previewTicket=0,indexTicket=0,baseline=null,visible=true,sessionTarget=null,reading=false,checking=false,externalPending=false,writer=null;
@@ -56,12 +56,12 @@ export function createRecallController({repository,settings,runtime,onBack=()=>{
     cancelPreview();state.preview=null;state.testStatus='stale';state.indexBusy=true;state.indexError='';const target=repository.captureTarget(),serial=ticket;notify();
     const mode=state.index?.maintenanceStatus==='paused'?'resume':state.index?.maintenanceStatus==='failed'?'retry':'all';
     try{await runtime.prepareVectorIndex({mode});if(current(target,serial)&&visible){state.indexError='';return true;}return false;}
-    catch(error){if(current(target,serial)&&visible)state.indexError=error?.code==='cancelled'?'':error?.code==='stale'?'资料或配置已变化，未完成部分保留。':error?.code==='timeout'?'处理超时，已完成部分保留。':error?.code==='storage'?'向量缓存未能读取或保存，请稍后重试。':'记忆尚未处理完成，请检查向量连接。';return false;}
+    catch(error){if(current(target,serial)&&visible)state.indexError=error?.code==='cancelled'?'':error?.code==='stale'?'资料或配置已变化，未完成部分保留。':error?.code==='timeout'?'处理超时，已完成部分保留。':error?.code==='storage'?'向量缓存未能读取或保存，请稍后重试。':error?.code==='authentication'?'接口认证未通过，请检查密钥和权限。':error?.code==='endpoint'?'接口或模型未找到，请检查地址和模型。':error?.code==='rate_limit'?'接口请求过于频繁，请稍后重试。':'记忆尚未处理完成，请检查向量连接。';return false;}
     finally{if(current(target,serial)){state.indexBusy=false;notify();void refreshIndex();}}
   }
   async function read() {
     syncSession();
-    const retained=baseline&&['failed','unconfirmed'].includes(state.status)?Object.fromEntries(numericFields.filter(key=>!Object.is(state.draft?.[key],baseline.recall[key])).map(key=>[key,state.draft[key]])):{};
+    const retained=baseline&&['failed','unconfirmed'].includes(state.status)?Object.fromEntries(numericFields.filter(key=>key==='candidateCounts'?JSON.stringify(state.draft?.[key])!==JSON.stringify(baseline.recall[key]):!Object.is(state.draft?.[key],baseline.recall[key])).map(key=>[key,state.draft[key]])):{};
     if(state.autoSaving)return false;
     writer?.dispose();writer=null;
     const target=repository.captureTarget(),serial=++ticket;cancelPreview();reading=true;state.status='loading';state.error='';state.actual=actualView();notify();
@@ -97,7 +97,7 @@ export function createRecallController({repository,settings,runtime,onBack=()=>{
           baseline=settings.captureRecall();return baseline.recall;
         },
         onChange(snapshot){
-          const typed=Object.fromEntries(numericFields.map(key=>[key,state.draft[key]]));
+          const typed=Object.fromEntries(numericFields.filter(key=>Object.hasOwn(state.draft,key)).map(key=>[key,state.draft[key]]));
           state.draft={...copy(snapshot.value),...typed};state.autoSaving=snapshot.saving;
           cancelPreview();state.preview=null;state.testStatus='stale';state.error='';
           if(!current(target,serial)){state.status='failed';state.error='聊天已变化，请重新读取。';}

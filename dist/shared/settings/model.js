@@ -7,7 +7,7 @@ import { createDefaultEventWords } from './default-event-words.js';
 import { CUMULATIVE_PROMPT_KEYS } from './cumulative-prompts.js';
 import { SUMMARY_PROMPT_KEYS, migrateSummaryPromptOverrides } from './summary-prompts.js';
 import { createDefaultCleaningRules, normalizeCleaningRule } from '../../domain/summary/cleaning.js';
-import { embeddingProtocol } from '../ai/recall-provider.js';
+import { embeddingProtocol,RECALL_REQUEST_LIMITS } from '../ai/recall-provider.js';
 
 export const SETTINGS_KEY = 'lantai_benmo';
 export const PROMPT_KEYS = SUMMARY_PROMPT_KEYS;
@@ -39,7 +39,8 @@ export const presetCapability = preset => preset?.capability ?? 'text';
 export function assertTaskRouting(value) {
   exact(value, TASK_ROUTING_GROUPS);
   for (const [group, route] of Object.entries(value)) {
-    exact(route, ['source', 'presetId', 'model']);
+    exact(route, ['source', 'presetId', 'model',...(Object.hasOwn(route??{},'modelSource')?['modelSource']:[])]);
+    if(Object.hasOwn(route,'modelSource')&&(route.modelSource!=='task'||route.source!=='plugin'))invalid();
     if (!['none', 'plugin', ...(['embedding', 'rerank'].includes(group) ? [] : ['sillytavern'])].includes(route.source)
       || !(route.presetId === null || text(route.presetId)) || !text(route.model, true)
       || (route.source === 'plugin') !== (route.presetId !== null)
@@ -78,10 +79,6 @@ function ai(value) {
     }
   }
   if (value.activePresetId !== null && !ids.has(value.activePresetId)) invalid();
-  for (const [group, route] of Object.entries(value.taskRouting ?? {})) {
-    const preset = value.presets.find(item => item.id === route.presetId);
-    if (preset && presetCapability(preset) !== (['embedding', 'rerank'].includes(group) ? group : 'text')) throw new SettingsError('TASK_CAPABILITY_MISMATCH');
-  }
   return value;
 }
 function generation(value) {
@@ -138,10 +135,12 @@ export function settingsFingerprint(value) {
 export const equalSettings = (a, b) => settingsFingerprint(a) === settingsFingerprint(b);
 export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:5,maxTokens:null,memoryDepth:9999,anniversaryPoolLimit:2,automaticSameDayEnabled:true,excludedTerms:[],recallCleaning:{rules:[]} }; }
 export function recallChannels(value) { return value.channels??{keyword:true,bm25:false,vector:false,rerank:false}; }
+export function recallCandidateCounts(value) { return value.candidateCounts??{keyword:5,bm25:5,vector:5,date:5}; }
 export function assertRecallSettings(value) {
   try {
     value={anniversaryPoolLimit:2,automaticSameDayEnabled:true,...value};
-    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled',...(Object.hasOwn(value,'channels')?['channels']:[])]);
+    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled',...(Object.hasOwn(value,'channels')?['channels']:[]),...(Object.hasOwn(value,'candidateCounts')?['candidateCounts']:[])]);
+    if(Object.hasOwn(value,'candidateCounts')){exact(value.candidateCounts,['keyword','bm25','vector','date']);if(Object.values(value.candidateCounts).some(count=>!Number.isSafeInteger(count)||count<1||count>RECALL_REQUEST_LIMITS.candidatePerRoute))invalid();}
     if(Object.hasOwn(value,'channels')){exact(value.channels,['keyword','bm25','vector','rerank']);if(Object.values(value.channels).some(item=>typeof item!=='boolean'))invalid();}
     if(typeof value.automaticSameDayEnabled!=='boolean'||!(value.anniversaryPoolLimit===null||Number.isSafeInteger(value.anniversaryPoolLimit)&&value.anniversaryPoolLimit>=0))invalid();
     if(!Number.isSafeInteger(value.recentFloorCount)||value.recentFloorCount<0||!Number.isSafeInteger(value.maxCount)||value.maxCount<1
@@ -281,8 +280,8 @@ export function aiConfig(root, epoch, taskGroup) {
   const preset = root.ai.presets.find(item => item.id === presetId);
   if (source === 'plugin' && explicit && !preset) throw new SettingsError('TASK_PRESET_MISSING');
   const capability = ['embedding', 'rerank'].includes(canonicalGroup) ? canonicalGroup : 'text';
-  if (source === 'plugin' && preset && presetCapability(preset) !== capability) throw new SettingsError('TASK_CAPABILITY_MISMATCH');
-  const model = explicit && route.model ? route.model : preset?.model;
+  if(taskGroup===undefined&&source==='plugin'&&preset&&presetCapability(preset)!=='text')throw new SettingsError('TASK_CAPABILITY_MISMATCH');
+  const model = explicit&&route.modelSource==='task'?route.model:explicit&&route.model?route.model:preset?.model;
   if (source !== 'plugin' || !preset?.endpoint || !model || !root.credentials.some(item => item.presetId === preset.id)) return Object.freeze({ source: null });
-  return Object.freeze({ source: 'plugin', endpoint: preset.endpoint, model, credentialId: preset.id, credentialEpoch: epoch, ...(capability === 'text' ? {} : { capability }),...(capability==='embedding'?{protocol:embeddingProtocol(model,preset.protocol)}:{}) });
+  return Object.freeze({ source: 'plugin', endpoint: preset.endpoint, model, credentialId: preset.id, credentialEpoch: epoch, ...(capability === 'text' ? {} : { capability }),...(capability==='embedding'?{protocol:embeddingProtocol(model,route?.modelSource==='task'?undefined:preset.protocol)}:{}) });
 }

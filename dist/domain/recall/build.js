@@ -36,7 +36,7 @@ function evidenceMemories(events,settings,batches){
     terms:event.detailWords.filter(term=>!excluded.has(term.word)).map(term=>({...term,aliases:term.aliases.filter(alias=>!excluded.has(alias))}))}));
 }
 export function bindings(memories){return memories.flatMap(memory=>memory.terms.map((term,detailIndex)=>({memoryId:memory.id,termId:term.id,detailIndex,parentDetail:term.word,aliases:term.aliases})));}
-function reasonsOf(evaluation,aliases,id){
+export function reasonsOf(evaluation,aliases,id){
   const reasons=[];
   for(const parent of evaluation?.structuredEvidence?.evidence?.parentFacts??[])for(const witness of parent.witnesses??[])reasons.push({code:'keyword-match',field:witness.field,term:witness.storedValue,sourceKind:witness.sourceKind,distanceFromCurrent:witness.distanceFromCurrent,fragmentId:witness.fragmentId,
     ...(witness.matchedAlias===undefined?{}:{matchedAlias:witness.matchedAlias,usedComponents:witness.usedComponents})});
@@ -44,7 +44,7 @@ function reasonsOf(evaluation,aliases,id){
   for(const path of evaluation?.qualificationPaths??[])reasons.push({code:path.reason?.code??path.channel,sourceKind:path.sourceKind,distanceFromCurrent:path.distanceFromCurrent});
   return [...new Map(reasons.map(reason=>[JSON.stringify(reason),reason])).values()];
 }
-function rankingFacts(entry,rank){
+export function rankingFacts(entry,rank){
   const evidence=entry.structuredEvidence;
   return {rank,score:entry.structuredRelevance??0,
     contributions:(evidence?.parentContributions??[]).map(parent=>({term:parent.selectedWitness?.storedValue,

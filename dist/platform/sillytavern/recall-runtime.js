@@ -6,7 +6,8 @@ import {createRecallPreviewBuilder} from './recall-preview.js';
 import {recallChannels} from '../../shared/settings/model.js';
 import {AiProviderError} from '../../shared/ai/provider.js';
 import {createVectorMaintenance} from './vector-maintenance.js';
-import {createMultichannelBuilder,usesMultichannel} from '../../domain/recall/multichannel-build.js';
+import {usesMultichannel} from '../../domain/recall/multichannel-build.js';
+import {createMultichannelWorkerBuilder} from './recall-multichannel.js';
 
 export const RECALL_PROMPT_KEY='lantai_benmo_memory_context';
 const supported=new Set(['normal','regenerate','swipe','continue']);
@@ -24,11 +25,11 @@ export function recallInputs(messages,recentFloorCount,original=null) {
   for(let i=index-1;i>=0&&recentHistory.length<recentFloorCount;i--)if(eligible(usable[i])&&text(usable[i]).trim())recentHistory.push({floor:mapping?.[i]??i,text:text(usable[i]),distanceFromCurrent:mapping?mapping[index]-mapping[i]:index-i});
   return {input:index<0?'':text(usable[index]),recentHistory};
 }
-export function createRecallRuntime({repository,settings,getContext,captureSource,dateRuntime=null,build=buildRecall,previewBuild,getControls,recallProvider=null,vectorStore}={}) {
+export function createRecallRuntime({repository,settings,getContext,captureSource,dateRuntime=null,build=buildRecall,previewBuild,getControls,recallProvider=null,vectorStore,Worker:WorkerClass=globalThis.Worker}={}) {
   const gate=featureGate(getControls,'event'),timeGate=featureGate(getControls,'time');
   let disposed=false,ticket=0,proof=null,flight=null,previewAbort=null,previewGuard=null,recordSequence=0;
   const buildPreview=previewBuild??(build===buildRecall?createRecallPreviewBuilder():build);
-  const maintenance=createVectorMaintenance({repository,settings,provider:recallProvider,getControls,store:vectorStore}),buildMulti=createMultichannelBuilder({vectorIndex:maintenance.index,provider:recallProvider});
+  const maintenance=createVectorMaintenance({repository,settings,provider:recallProvider,getControls,store:vectorStore}),buildMulti=createMultichannelWorkerBuilder({Worker:WorkerClass,vectorIndex:maintenance.index,provider:recallProvider});
   function cancelIndexPreparation(){maintenance.pause();}
   const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;previewGuard=null;};
   const records=new Map(),listeners=new Set(),releases=[];

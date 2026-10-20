@@ -1,7 +1,7 @@
 import { assertAiSettings, assertCredential } from '../shared/settings/model.js';
 
 const messages = {
-  INVALID_SETTINGS: '请检查方案名称、API 地址、模型和密钥。',
+  INVALID_SETTINGS: '请检查方案名称、API 地址和密钥。',
   SETTINGS_CONFLICT: '配置或密钥已变化，请重新读取后保存。',
   SETTINGS_COMMIT_UNCONFIRMED: '保存结果待确认，可能已经保存。请重新读取，不要重复提交。',
   SETTINGS_UNAVAILABLE: '当前无法安全读取或确认配置。',
@@ -79,7 +79,7 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
       if (closed || pending !== controller || draftEpoch !== version) return false;
       const safe = { configuration: '请检查地址、模型和密钥。', unavailable: '当前宿主接口不可用。', authentication: '密钥认证失败，请检查密钥和访问权限。',
         endpoint: '接口或模型未找到，请检查地址和模型。', rate_limit: '请求过于频繁，请稍后再试。', invalid_result: '接口返回内容未通过校验。',
-        cors_network:'专用接口连接失败；服务须支持浏览器 CORS，请检查地址与跨域配置。',timeout:'专用接口等待超时，请稍后重试。' };
+        cors_network:'网络连接失败，请检查地址、网络或浏览器跨域限制。',timeout:'专用接口等待超时，请稍后重试。' };
       operation = { status: 'error', message: Object.hasOwn(safe, error?.code) ? safe[error.code] : (['stale', 'cancelled', 'SETTINGS_CONFLICT'].includes(error?.code) ? '配置已变化，请重新发起。' : '请求失败，请检查连接后重试。'), error: true };
       return false;
     } finally { if (pending === controller) { pending = null; if (!closed) notify(); } }
@@ -90,6 +90,16 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
     try { changed = repository.captureAi().epoch !== baseline.epoch; } catch { changed = true; }
     if (changed && (pending || models.length || operation.status === 'success')) { invalidate(); notify(); }
   });
+  function cloneCurrent(){
+    if(!editable())return false;const preset=copy(state.draft.presets.find(item=>item.id===editingPresetId)??null);if(!preset)return false;
+    let key=null;try{if((passwords.get(preset.id)??'').trim()||copies.has(preset.id)||baseline.credentialPresetIds.includes(preset.id))key=currentCredential(preset.id);}catch(error){failure(error);notify();return false;}
+    return edit(draft=>{
+      const saved=baseline.ai.presets.find(item=>item.id===preset.id);if(saved){draft.presets=draft.presets.map(item=>item.id===preset.id?copy(saved):item);passwords.delete(preset.id);copies.delete(preset.id);}
+      const id=uuid();let name=preset.name+' 副本',number=2;while(draft.presets.some(item=>item.name===name))name=preset.name+' 副本 '+number++;
+      draft.presets.push({...preset,id,name});editingPresetId=id;if(!connectionsOnly&&(preset.capability??'text')==='text')draft.activePresetId=id;
+      if(key)copies.set(id,key);keyVisible=false;
+    });
+  }
   return Object.freeze({
     inspect: snapshot,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
@@ -103,22 +113,10 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
     toggleKey() { if (!editable()) return false; keyVisible = !keyVisible; notify(); return true; },
     requestDelete() { if (!editable() || !editingPresetId) return false; invalidate(); deleteConfirm = true; notify(); return true; },
     cancelDelete() { deleteConfirm = false; if (!closed) notify(); },
-    saveAs() {
-      if (!editable()) return false;
-      const preset = state.draft.presets.find(item => item.id === editingPresetId); if (!preset) return false;
-      let key = null;
-      try { if ((passwords.get(preset.id) ?? '').trim() || copies.has(preset.id) || baseline.credentialPresetIds.includes(preset.id)) key = currentCredential(preset.id); }
-      catch (error) { failure(error); notify(); return false; }
-      return edit(draft => {
-        const id = uuid(); let name = `${preset.name} 副本`, index = 2;
-        while (draft.presets.some(item => item.name === name)) name = `${preset.name} 副本 ${index++}`;
-        draft.presets.push({ ...preset, id, name }); editingPresetId=id;if(!connectionsOnly&&(preset.capability??'text')==='text')draft.activePresetId = id;
-        if (key) copies.set(id, key); keyVisible = false;
-      });
-    },
+    saveAs:cloneCurrent,
     setSource(source) { return [null, 'sillytavern', 'plugin'].includes(source) && edit(draft => { draft.source = source; keyVisible = false; }); },
     selectPreset(id) { return edit(draft => { const preset=draft.presets.find(item=>item.id===id);if(id===null||preset){editingPresetId=id;if(!connectionsOnly&&(!preset||(preset.capability??'text')==='text'))draft.activePresetId=id;}keyVisible = false; }); },
-    addPreset(capability='text') { if(!['text','embedding','rerank'].includes(capability))return false; return edit(draft => {
+    addPreset(capability) { if(capability===undefined&&editingPresetId)return cloneCurrent();capability??='text';if(!['text','embedding','rerank'].includes(capability))return false; return edit(draft => {
       const id = uuid(); let name = '新方案', number = 2;
       while (draft.presets.some(item => item.name === name)) name = `新方案 ${number++}`;
       draft.presets.push({ id, name, endpoint: '', model: '', secretId: '', ...(capability==='text'?{}:{capability}) });editingPresetId=id;if(!connectionsOnly&&capability==='text')draft.activePresetId = id; keyVisible = false;

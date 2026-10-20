@@ -1,4 +1,5 @@
 import {tokenizerV2} from './body-tokenizer.js';
+import {RECALL_REQUEST_LIMITS} from '../../shared/ai/recall-provider.js';
 
 export const CHANNEL_CANDIDATE_LIMIT=5;
 export const RRF_K=60;
@@ -38,15 +39,17 @@ export function dateEligibility(timeResult){
  }));
 }
 export function rankBodyIndex(index,fragments,dateById=new Map()){
+ const queryTerms=new Map();
  return index.docs.map(doc=>{
   const date=dateById.get(doc.id);if(date?.blocked)return null;
   let score=0;const contributions=[];
   for(const fragment of fragments){
    const query=date?date.textFor(fragment):fragment.cleanedText;
-   const terms=[...new Set(index.tokenize(query))],matched=terms.filter(term=>doc.tf.has(term));let raw=0;
-   for(const term of matched){const tf=doc.tf.get(term),idf=Math.log(1+(index.docs.length-index.df.get(term)+0.5)/(index.df.get(term)+0.5));raw+=idf*tf*2.2/(tf+1.2*(0.25+0.75*doc.length/(index.average||1)));}
+   if(!queryTerms.has(query))queryTerms.set(query,[...new Set(index.tokenize(query))]);
+   const terms=queryTerms.get(query),matched=terms.filter(term=>doc.tf.has(term)),termContributions=[];let raw=0;
+   for(const term of matched){const tf=doc.tf.get(term),idf=Math.log(1+(index.docs.length-index.df.get(term)+0.5)/(index.df.get(term)+0.5)),value=idf*tf*2.2/(tf+1.2*(0.25+0.75*doc.length/(index.average||1)));raw+=value;termContributions.push({term,score:value});}
    const weight=fragment.sourceKind==='current'?1:1/(1+0.2*fragment.distanceFromCurrent);
-   if(raw>0)contributions.push({fragmentId:fragment.id,matchedTerms:matched,score:raw,weight});score+=raw*weight;
+   if(raw>0)contributions.push({fragmentId:fragment.id,sourceKind:fragment.sourceKind,distanceFromCurrent:fragment.distanceFromCurrent,matchedTerms:matched,termContributions,score:raw,weight});score+=raw*weight;
   }
   return{id:doc.id,score,libraryIndex:doc.libraryIndex,contributions};
  }).filter(row=>row&&Number.isFinite(row.score)&&row.score>0).sort((a,b)=>b.score-a.score||a.libraryIndex-b.libraryIndex).map((row,i)=>({...row,rank:i+1}));
@@ -63,12 +66,13 @@ export function rankDateCandidates(timeResult,dateById=dateEligibility(timeResul
  }).sort((a,b)=>a.nearestDistance-b.nearestDistance||a.libraryIndex-b.libraryIndex).map((row,index)=>({...row,rank:index+1}));
 }
 export function collectRouteCandidates(rankings,libraryOrder,limit=CHANNEL_CANDIDATE_LIMIT){
- if(!Number.isSafeInteger(limit)||limit<0||limit>CHANNEL_CANDIDATE_LIMIT)throw Error('candidate-limit');
+ const counts=typeof limit==='number'?Object.fromEntries(['keyword','bm25','vector','date'].map(route=>[route,limit])):limit;
+ if(!counts||Object.keys(counts).length!==4||['keyword','bm25','vector','date'].some(route=>!Number.isSafeInteger(counts[route])||counts[route]<0||counts[route]>RECALL_REQUEST_LIMITS.candidatePerRoute))throw Error('candidate-limit');
  const routes=['keyword','bm25','vector','date'].filter(route=>rankings[route]);
  const state=Object.fromEntries(routes.map(route=>[route,{pointer:0,claimed:0,scanned:[]}])) ,candidates=new Map();
  for(const route of routes){const rows=rankings[route];if(!Array.isArray(rows)||rows.some(row=>!libraryOrder.has(row.id))||new Set(rows.map(row=>row.id)).size!==rows.length)throw Error('invalid-route-id');}
- while(routes.some(route=>state[route].pointer<rankings[route].length&&state[route].claimed<limit)){
-  for(const route of routes){const lane=state[route];if(lane.claimed>=limit||lane.pointer>=rankings[route].length)continue;
+ while(routes.some(route=>state[route].pointer<rankings[route].length&&state[route].claimed<counts[route])){
+  for(const route of routes){const lane=state[route];if(lane.claimed>=counts[route]||lane.pointer>=rankings[route].length)continue;
    const item=rankings[route][lane.pointer++],rank=lane.pointer;lane.scanned.push({id:item.id,rank});
    let card=candidates.get(item.id);if(!card){card={id:item.id,claimedBy:route,sources:[],hits:[]};candidates.set(item.id,card);lane.claimed++;}
    card.sources.push(route);card.hits.push({route,rank});

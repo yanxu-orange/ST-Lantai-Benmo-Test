@@ -4,7 +4,7 @@ import {cosine} from './multichannel.js';
 import {vectorIdentity as identity,vectorDocuments as documents,validStoredVector} from './vector-records.js';
 
 const key=target=>JSON.stringify([target.chatId,target.rootId]);
-const safeCode=error=>['cancelled','stale','storage','configuration','capability','mapping','timeout','http','cors_network','request','task_preset_missing'].includes(error?.code)?error.code:'transport';
+const safeCode=error=>['cancelled','stale','storage','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing'].includes(error?.code)?error.code:'transport';
 function batchesFor(docs){
  const batches=[];let batch=[],bytes=0;
  for(const doc of docs){const size=new TextEncoder().encode(doc.text).length;if(size>RECALL_REQUEST_LIMITS.inputBytes)throw new AiProviderError('request');

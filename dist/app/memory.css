@@ -16,6 +16,7 @@
 .lt-stack, .lt-editor, .lt-section { display:grid; gap:var(--ui-space-row); min-width:0; }
 .lt-editor { gap:var(--ui-space-group); }
 .lt-section { padding-bottom:var(--ui-space-row); border-bottom:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle); }
+.lt-group-start { padding-block-start:var(--ui-space-row); border-top:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle); }
 .lt-section summary { cursor:pointer; min-block-size:var(--ui-interaction-target-min); display:list-item; align-content:center; font-family:var(--ui-type-ui-family); font-size:var(--ui-type-ui-section-title-size); font-weight:var(--ui-type-ui-section-title-weight); line-height:var(--ui-type-ui-section-title-line); }
 .lt-controls { display:flex; flex-wrap:wrap; justify-content:space-between; gap:var(--ui-space-inline); }
 .lt-row { display:grid; gap:var(--ui-space-control); width:100%; text-align:start; border:0; border-bottom:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle); background:transparent; cursor:pointer; }

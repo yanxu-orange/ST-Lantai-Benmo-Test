@@ -4,17 +4,14 @@ import { THEMES, surfaceTheme } from './styles/theme.js';
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const icon = (name, label, action) => `<button type="button" class="ui-icon-button ui-button--tertiary" data-api-action="${action}" aria-label="${label}"><img class="lt-icon" src="${new URL(`./icons/${name}.svg`, import.meta.url)}" alt=""></button>`;
 const field = (label, key, value, placeholder = '') => `<label class="ui-field lt-stack"><span class="ui-field__label">${label}</span><input class="ui-input" data-api-field="${key}" aria-label="${label}" value="${escape(value)}" placeholder="${placeholder}" autocomplete="off"></label>`;
-const capabilities={text:'文本',embedding:'向量',rerank:'重排'};
-function connectionFields(draft,preset,state,hasCredential){
- return `<section class="lt-stack"><div class="lt-api-presets"><label class="ui-field lt-stack"><span class="ui-field__label">方案</span><select class="ui-input" data-api-preset aria-label="方案"><option value="">请选择方案</option>${draft.presets.map(item=>`<option value="${escape(item.id)}" ${item.id===draft.activePresetId?'selected':''}>${escape(item.name||'未命名方案')} · ${capabilities[item.capability??'text']}</option>`).join('')}</select></label><button type="button" class="ui-button ui-button--tertiary" data-api-action="add">添加方案</button>${preset?'<button type="button" class="ui-button ui-button--tertiary" data-api-action="save-as">另存为</button><button type="button" class="ui-button ui-button--tertiary" data-api-action="delete">删除方案</button>':''}</div>${preset?`
- <label class="ui-field lt-stack"><span class="ui-field__label">接口能力</span><select class="ui-input" data-api-field="capability" aria-label="接口能力">${Object.entries(capabilities).map(([value,label])=>`<option value="${value}" ${(preset.capability??'text')===value?'selected':''}>${label}</option>`).join('')}</select></label>
- ${field('方案名称','name',preset.name)}${field('API 地址','endpoint',preset.endpoint,'https://example.com/v1')}${field('模型','model',preset.model)}${preset.capability==='embedding'?'<p class="lt-status">更换向量模型后，需要重新处理记忆。</p>':''}
- ${preset.capability==='embedding'?`<label class="ui-field lt-stack"><span class="ui-field__label">向量协议</span><select class="ui-input" data-api-field="protocol" aria-label="向量协议"><option value="openai" ${(preset.protocol??(['voyageai/voyage-4-large','voyage-4-large'].includes(preset.model)?'voyage':'openai'))==='openai'?'selected':''}>通用 embeddings</option><option value="voyage" ${(preset.protocol??(['voyageai/voyage-4-large','voyage-4-large'].includes(preset.model)?'voyage':'openai'))==='voyage'?'selected':''}>Voyage query/document</option></select></label>`:''}
- <label class="ui-field lt-stack"><span class="ui-field__label">密钥</span><input type="${state.keyVisible?'text':'password'}" class="ui-input" data-api-field="key" aria-label="密钥" value="" autocomplete="new-password" placeholder="${hasCredential?'已保存，留空保持原密钥':'输入 API 密钥'}"></label><button type="button" class="ui-button ui-button--tertiary" data-api-action="toggle-key" aria-label="${state.keyVisible?'隐藏密钥':'显示密钥'}">${state.keyVisible?'隐藏密钥':'显示密钥'}</button><div class="lt-entry"><button type="button" class="ui-button ui-button--secondary" data-api-action="fetch-models">获取模型</button><button type="button" class="ui-button ui-button--secondary" data-api-action="test">测试当前配置</button></div><div data-api-models></div>${preset.capability&&preset.capability!=='text'?'<p class="lt-status">使用专用接口；服务须支持浏览器 CORS。测试会发送一次小型能力请求。</p>':''}<div data-api-delete ${state.deleteConfirm?'':'hidden'} class="lt-delete-confirmation"><p>删除当前方案？保存后生效。</p><div class="lt-entry"><button type="button" class="ui-button ui-button--tertiary" data-api-action="cancel-delete">取消</button><button type="button" class="ui-button ui-button--secondary" data-api-action="confirm-delete">确认删除</button></div></div>`:''}<p class="lt-status" data-api-incomplete ${preset&&(!preset.endpoint||!preset.model||!hasCredential)?'':'hidden'}>方案尚未配置完整，暂不能请求。</p></section>`;
+function connectionFields(draft,preset,state,hasCredential,nameEditing){
+ return `<section class="lt-stack"><div class="lt-api-presets"><label class="ui-field lt-stack"><span class="ui-field__label">方案</span><select class="ui-input" data-api-preset aria-label="方案" ${nameEditing?'hidden':''}><option value="">请选择方案</option>${draft.presets.map(item=>`<option value="${escape(item.id)}" ${item.id===draft.activePresetId?'selected':''}>${escape(item.name||'未命名方案')}</option>`).join('')}</select>${preset?`<input class="ui-input" data-api-field="name" aria-label="方案名称" value="${escape(preset.name)}" autocomplete="off" ${nameEditing?'':'hidden'}>`:''}</label>${preset?icon('edit','编辑方案名称','rename'):''}${icon('file-add','新建方案','add')}${preset?icon('trash','删除方案','delete'):''}</div>${preset?`
+ ${field('API 地址','endpoint',preset.endpoint,'https://example.com/v1')}
+ <label class="ui-field lt-stack"><span class="ui-field__label">密钥</span><input type="${state.keyVisible?'text':'password'}" class="ui-input" data-api-field="key" aria-label="密钥" value="" autocomplete="new-password" placeholder="${hasCredential?'留空保留现有密钥':'输入 API 密钥'}"></label><button type="button" class="ui-button ui-button--tertiary" data-api-action="toggle-key" aria-label="${state.keyVisible?'隐藏密钥':'显示密钥'}">${state.keyVisible?'隐藏密钥':'显示密钥'}</button><div data-api-delete ${state.deleteConfirm?'':'hidden'} class="lt-delete-confirmation"><p>删除当前方案？保存后生效。</p><div class="lt-entry"><button type="button" class="ui-button ui-button--tertiary" data-api-action="cancel-delete">取消</button><button type="button" class="ui-button ui-button--secondary" data-api-action="confirm-delete">确认删除</button></div></div>`:''}</section>`;
 }
 
 export function mountApiSettingsView(container, session, { appearance } = {}) {
-  let disposed = false, composing = false, textEditing = false, rendering = false;
+  let disposed = false, composing = false, textEditing = false, rendering = false, nameEditing = false;
   function render() {
     if (disposed) return;
     rendering = true;
@@ -37,7 +34,7 @@ export function mountApiSettingsView(container, session, { appearance } = {}) {
     const state = session.inspect(), draft = state.draft, locked = ['loading', 'saving', 'unconfirmed'].includes(state.status);
     const preset = draft?.presets.find(item => item.id === draft.activePresetId);
     const hasCredential = preset && state.credentialPresetIds.includes(preset.id);
-    container.innerHTML = `<section class="lantai lt-api-settings ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(container)}"><header class="lt-header ui-header ${appearance?'lt-header--root':'ui-header--centered'}">${appearance?`<div class="lt-root-top">${rootTitle('settings')}${icon('close','关闭兰台','close')}</div>`:icon('back','返回原页面','back')+'<h1 class="ui-page-title">连接方案</h1>'+icon('close','关闭连接方案','close')}</header><main class="lt-main ui-main" tabindex="-1">${appearance ? appearanceGroup() + '<h2 class="lt-settings-section-title">连接方案</h2>' : ''}<p class="lt-status" data-api-loading role="status" ${state.status === 'loading' ? '' : 'hidden'}>正在读取连接方案…</p><form class="lt-editor" novalidate>${draft?connectionFields(draft,preset,state,hasCredential):''}${appearance?`<button type="button" class="ui-button ui-button--primary" data-api-action="save" ${locked || !draft ? 'disabled' : ''}>${state.status === 'saving' ? '保存中…' : '保存连接方案'}</button>`:''}</form><p data-api-operation role="status" class="lt-status"></p><p data-api-message class="${state.error ? 'lt-error' : 'lt-status'}" role="${state.error ? 'alert' : 'status'}" ${state.message ? '' : 'hidden'}>${escape(state.message)}</p><button type="button" class="ui-button ui-button--secondary" data-api-action="read" ${state.error || state.status === 'unconfirmed' ? '' : 'hidden'}>重新读取已保存配置</button></main>${appearance?`<footer class="lt-footer"><nav class="ui-bottom-nav" aria-label="一级分区">${[['记忆','memory',''],['时间','time',''],['工坊','workshop',''],['设置','current','aria-current="page"']].map(([label,action,attrs])=>`<button type="button" class="ui-button ui-nav-item" data-api-action="${action}" ${attrs}>${label}</button>`).join('')}</nav></footer>`:`<footer class="lt-footer ui-action-footer"><div class="lt-editor-actions"><button type="button" class="ui-button ui-button--tertiary" data-api-action="back">取消</button><button type="button" class="ui-button ui-button--primary" data-api-action="save" ${locked || !draft ? 'disabled' : ''}>${state.status === 'saving' ? '保存中…' : '保存'}</button></div></footer>`}</section>`;
+    container.innerHTML = `<section class="lantai lt-api-settings ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(container)}"><header class="lt-header ui-header ${appearance?'lt-header--root':'ui-header--centered'}">${appearance?`<div class="lt-root-top">${rootTitle('settings')}${icon('close','关闭兰台','close')}</div>`:icon('back','返回原页面','back')+'<h1 class="ui-page-title">连接方案</h1>'+icon('close','关闭连接方案','close')}</header><main class="lt-main ui-main" tabindex="-1">${appearance ? appearanceGroup() + '<h2 class="lt-settings-section-title">连接方案</h2>' : ''}<p class="lt-status" data-api-loading role="status" ${state.status === 'loading' ? '' : 'hidden'}>正在读取连接方案…</p><form class="lt-editor" novalidate>${draft?connectionFields(draft,preset,state,hasCredential,nameEditing):''}${appearance?`<button type="button" class="ui-button ui-button--primary" data-api-action="save" ${locked || !draft ? 'disabled' : ''}>${state.status === 'saving' ? '保存中…' : '保存连接方案'}</button>`:''}</form><p data-api-operation role="status" class="lt-status"></p><p data-api-message class="${state.error ? 'lt-error' : 'lt-status'}" role="${state.error ? 'alert' : 'status'}" ${state.message ? '' : 'hidden'}>${escape(state.message)}</p><button type="button" class="ui-button ui-button--secondary" data-api-action="read" ${state.error || state.status === 'unconfirmed' ? '' : 'hidden'}>重新读取已保存配置</button></main>${appearance?`<footer class="lt-footer"><nav class="ui-bottom-nav" aria-label="一级分区">${[['记忆','memory',''],['时间','time',''],['工坊','workshop',''],['设置','current','aria-current="page"']].map(([label,action,attrs])=>`<button type="button" class="ui-button ui-nav-item" data-api-action="${action}" ${attrs}>${label}</button>`).join('')}</nav></footer>`:`<footer class="lt-footer ui-action-footer"><div class="lt-editor-actions"><button type="button" class="ui-button ui-button--tertiary" data-api-action="back">取消</button><button type="button" class="ui-button ui-button--primary" data-api-action="save" ${locked || !draft ? 'disabled' : ''}>${state.status === 'saving' ? '保存中…' : '保存'}</button></div></footer>`}</section>`;
     const password = container.querySelector('[data-api-field=key]');
     if (password) password.value = session.passwordDraft(preset.id);
     patchOperations(state);
@@ -125,7 +122,7 @@ export function mountApiSettingsView(container, session, { appearance } = {}) {
     if (target.tagName === 'INPUT' && target.dataset.apiField) { writeText(target); return; }
     if (target.hasAttribute('data-api-model-choice')) { session.setField('model', target.value); return; }
     if (target.name === 'api-source') session.setSource(target.value);
-    else if (target.hasAttribute('data-api-preset')) session.selectPreset(target.value || null);
+    else if (target.hasAttribute('data-api-preset')) { nameEditing=false;session.selectPreset(target.value || null); }
     else if (target.dataset.apiField) session.setField(target.dataset.apiField, target.value);
   }
   function input(event) { if (!event.isComposing && event.target.tagName === 'INPUT') writeText(event.target); }
@@ -136,27 +133,32 @@ export function mountApiSettingsView(container, session, { appearance } = {}) {
     const action = event.target.closest('[data-api-action]')?.dataset.apiAction;
     if (action === 'save') { if (!appearanceBlocksApiSave()) void session.save(); }
     else if (action === 'read') void session.read();
-    else if (action === 'add') session.addPreset();
+    else if (action === 'rename') { nameEditing=true;patchName();container.querySelector('[data-api-field=name]')?.focus(); }
+    else if (action === 'add') { nameEditing=true;session.addPreset();container.querySelector('[data-api-field=name]')?.focus(); }
     else if (action === 'delete') session.requestDelete();
     else if (action === 'cancel-delete') session.cancelDelete();
     else if (action === 'confirm-delete') session.deletePreset();
-    else if (action === 'save-as') session.saveAs();
     else if (action === 'fetch-models') void session.fetchModels();
     else if (action === 'test') void session.test();
     else if (action === 'toggle-key') session.toggleKey();
     else if (['back', 'close', 'memory', 'time', 'workshop'].includes(action)) session.exit(action);
   }
+  function patchName(){
+    const select=container.querySelector('[data-api-preset]'),name=container.querySelector('[data-api-field=name]');
+    if(select)select.hidden=nameEditing;if(name)name.hidden=!nameEditing;
+  }
+  function blur(event){if(event.target.dataset.apiField==='name'&&!composing){writeText(event.target);nameEditing=false;patchName();}}
   function submit(event) { event.preventDefault(); }
   function key(event) { if (event.key === 'Escape' && !composing && !event.isComposing) { event.preventDefault(); event.stopPropagation(); if (session.inspect().deleteConfirm) session.cancelDelete(); else session.exit('back'); } }
   container.addEventListener('input', input); container.addEventListener('change', change); container.addEventListener('click', click);
-  container.addEventListener('submit', submit); container.addEventListener('keydown', key);
+  container.addEventListener('focusout', blur);container.addEventListener('submit', submit); container.addEventListener('keydown', key);
   container.addEventListener('compositionstart', startComposition); container.addEventListener('compositionend', endComposition);
   const unsubscribe = session.subscribe(state => { if (textEditing || composing) patchTextState(state); else render(); });
   const unsubscribeAppearance = appearance?.subscribe(patchAppearance); render();
   return Object.freeze({ refresh: render, dispose() {
     disposed = true; unsubscribe(); unsubscribeAppearance?.();
     container.removeEventListener('input', input); container.removeEventListener('change', change); container.removeEventListener('click', click);
-    container.removeEventListener('submit', submit); container.removeEventListener('keydown', key);
+    container.removeEventListener('focusout', blur);container.removeEventListener('submit', submit); container.removeEventListener('keydown', key);
     container.removeEventListener('compositionstart', startComposition); container.removeEventListener('compositionend', endComposition);
   } });
 }

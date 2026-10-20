@@ -1,6 +1,6 @@
 import {AiProviderError, assertAiCurrent} from './provider.js';
 
-export const RECALL_REQUEST_LIMITS = Object.freeze({embeddingBatch:64,rerankBatch:20,inputBytes:512000,dimensions:8192,timeoutMs:30000});
+export const RECALL_REQUEST_LIMITS = Object.freeze({embeddingBatch:64,rerankBatch:200,candidatePerRoute:50,inputBytes:512000,dimensions:8192,timeoutMs:30000});
 const bad = code => { throw new AiProviderError(code); };
 export function embeddingProtocol(model, requested) {
   if(requested!==undefined&&!['openai','voyage'].includes(requested))bad('configuration');

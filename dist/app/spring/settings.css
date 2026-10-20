@@ -26,7 +26,7 @@
 /* Real root groups and all eleven feature switches share the reference cards.
    Feature identity comes from existing controls, never a theme-specific route. */
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-main { gap: 16px; }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group {
+.lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group {
   --lt-settings-heading-bg: var(--lt-format-settings-group-default-background);
   --lt-settings-heading-ink: var(--lt-format-settings-group-default-ink);
   --lt-settings-heading-line: var(--lt-format-settings-group-default-border);
@@ -42,7 +42,8 @@
 }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="enabled"]) { --lt-settings-heading-shape: url("./assets/settings-seed.svg"); }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-settings-theme]),
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="event"]) {
+.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="event"]),
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="narrative"] {
   --lt-settings-heading-bg: var(--lt-format-settings-group-memory-background);
   --lt-settings-heading-ink: var(--lt-format-settings-group-memory-ink);
   --lt-settings-heading-line: var(--lt-format-settings-group-memory-border);
@@ -50,21 +51,32 @@
   --lt-settings-heading-shape: url("./assets/settings-flower.svg");
 }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="event"]) { --lt-settings-heading-shape: url("./assets/settings-book.svg"); }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="time"]) {
+.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="time"]),
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="rerank"] {
   --lt-settings-heading-bg: var(--lt-format-settings-group-time-background);
   --lt-settings-heading-ink: var(--lt-format-settings-group-time-ink);
   --lt-settings-heading-line: var(--lt-format-settings-group-time-border);
   --lt-settings-heading-icon: #c9aa73;
   --lt-settings-heading-shape: url("./assets/settings-clock.svg");
 }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="prompt"]) {
+.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="prompt"]),
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="embedding"] {
   --lt-settings-heading-bg: var(--lt-format-settings-group-prompt-background);
   --lt-settings-heading-ink: var(--lt-format-settings-group-prompt-ink);
   --lt-settings-heading-line: var(--lt-format-settings-group-prompt-border);
   --lt-settings-heading-icon: #a69ac0;
   --lt-settings-heading-shape: url("./assets/settings-spark.svg");
 }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > h2 {
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="summary"] { --lt-settings-heading-shape: url("./assets/settings-book.svg"); }
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="latest"] {
+  --lt-settings-heading-bg: var(--lt-format-settings-group-info-background);
+  --lt-settings-heading-ink: var(--lt-format-settings-group-info-ink);
+  --lt-settings-heading-line: var(--lt-format-settings-group-info-border);
+  --lt-settings-heading-icon: var(--lt-format-settings-group-info-ink);
+  --lt-settings-heading-shape: url("./assets/settings-clock.svg");
+}
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="rerank"] { --lt-settings-heading-shape: url("../icons/filter.svg"); }
+.lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group > h2 {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -81,7 +93,7 @@
   line-height: 1.4;
   letter-spacing: .02em;
 }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > h2::before {
+.lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group > h2::before {
   content: "";
   flex: none;
   width: 17px;
@@ -89,6 +101,7 @@
   background: var(--lt-settings-heading-icon);
   mask: var(--lt-settings-heading-shape) center / contain no-repeat;
 }
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group > h2 { font-family:var(--ui-type-reading-family); }
 .lantai[data-ui-theme="spring"].lt-settings :is(.lt-settings-row,.lt-settings-entry) {
   min-width: 0;
   min-height: 58px;
@@ -112,10 +125,10 @@
 }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-entry:hover:enabled { color: var(--lt-format-settings-entry-hover-ink); }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-entry:focus-visible { outline-offset: -2px; border-radius: 6px; }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > .ui-field { gap: 9px; padding-block: 12px; }
+.lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group > .ui-field { gap: 9px; padding-block: 12px; }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > .ui-field > .ui-field__label { color: var(--lt-format-settings-field-label-ink); font-size: 13px; font-weight: 650; }
 .lantai[data-ui-theme="spring"].lt-settings [data-settings-theme] { width: 100%; border-radius: 8px; --ui-color-field-border: var(--lt-format-settings-field-border); --ui-color-text-primary: var(--lt-format-settings-field-ink); }
-.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > :is(.lt-status,.ui-button) { margin-block: 0 12px; }
+.lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group > :is(.lt-status,.ui-button) { margin-block: 0 12px; }
 
 /* Keep a 44px native switch owner around the reference's small round track. */
 .lantai[data-ui-theme="spring"].lt-settings .ui-switch {
@@ -216,10 +229,6 @@
   input:is([type="checkbox"],[type="radio"],[type="range"],[type="color"],[type="file"],[type="button"],[type="submit"],[type="reset"],[type="image"],[type="hidden"])
 ) { font-size: 14px; }
 .lantai[data-ui-theme="spring"].lt-api-settings .ui-input::placeholder { color: var(--lt-format-settings-api-placeholder-ink); }
-.lantai[data-ui-theme="spring"].lt-api-settings .lt-api-presets { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 9px; }
-.lantai[data-ui-theme="spring"].lt-api-settings .lt-api-presets > label { grid-column: 1; }
-.lantai[data-ui-theme="spring"].lt-api-settings .lt-api-presets > [data-api-action="add"] { grid-column: 2; }
-.lantai[data-ui-theme="spring"].lt-api-settings .lt-api-presets > :is([data-api-action="save-as"],[data-api-action="delete"]) { justify-self: start; }
 .lantai[data-ui-theme="spring"].lt-api-settings .lt-entry { flex-wrap: wrap; gap: 8px; align-items: center; }
 .lantai[data-ui-theme="spring"].lt-api-settings .ui-button { min-height: 44px; padding: 7px 11px; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
 .lantai[data-ui-theme="spring"].lt-api-settings .ui-button:is([data-api-action="add"],[data-api-action="save-as"],[data-api-action="toggle-key"],[data-api-action="fetch-models"],[data-api-action="test"],[data-api-action="read"],[data-api-action="cancel-delete"],[data-appearance-action="read"]):enabled {
@@ -260,8 +269,8 @@
 
 @media (max-width: 370px) {
   .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) .lt-main { padding: 12px 11px 23px; }
-  .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group { padding-inline: 11px; }
-  .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > h2 { margin-inline: -11px; padding: 9px 12px; }
+  .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group { padding-inline: 11px; }
+  .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group > h2 { margin-inline: -11px; padding: 9px 12px; }
   .lantai[data-ui-theme="spring"].lt-settings :is(.lt-settings-row,.lt-settings-entry) { min-height: 52px; font-size: 13px; }
   .lantai[data-ui-theme="spring"].lt-api-settings :is(.lt-editor,.lt-appearance-settings) { padding: 12px; }
   .lantai[data-ui-theme="spring"].lt-api-settings [data-api-action="toggle-key"] { padding-inline: 7px; }
@@ -271,7 +280,7 @@
   .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) { --lt-spring-settings-page: Canvas; --lt-spring-settings-shadow: none; }
   .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) :is(.lt-root-top,.lt-header:not(.lt-header--root)) { background: Canvas; }
   .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) :is(.lt-root-top,.lt-header:not(.lt-header--root)) .ui-page-title { color: CanvasText; }
-  .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group {
+  .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group {
     --lt-settings-heading-bg: Canvas;
     --lt-settings-heading-ink: CanvasText;
     --lt-settings-heading-line: ButtonText;
@@ -279,8 +288,8 @@
     background: Canvas;
     border-color: ButtonText;
   }
-  .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > h2 { background: Canvas; color: CanvasText; border-color: ButtonText; }
-  .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > h2::before { background: CanvasText; }
+  .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group > h2 { background: Canvas; color: CanvasText; border-color: ButtonText; }
+  .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group > h2::before { background: CanvasText; }
   .lantai[data-ui-theme="spring"].lt-settings .lt-settings-entry > span:last-child { background: ButtonText; }
   .lantai[data-ui-theme="spring"].lt-settings :is(.lt-settings-row,.lt-settings-entry,.lt-settings-brand > div,.lt-settings-brand > p) { color: CanvasText; }
   .lantai[data-ui-theme="spring"].lt-settings .ui-switch[aria-checked="true"]:enabled .ui-switch__track { background: Highlight; border-color: Highlight; }

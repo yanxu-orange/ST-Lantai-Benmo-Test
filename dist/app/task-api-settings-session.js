@@ -1,4 +1,4 @@
-import {taskRoutingView,presetCapability} from '../shared/settings/model.js';
+import {taskRoutingView} from '../shared/settings/model.js';
 const copy = value => structuredClone(value);
 export const TASK_API_GROUPS = Object.freeze([
   ['summary', '总结'], ['narrative', '自述与大纲'], ['latest', '最新摘要／追踪／工坊'], ['embedding', '向量'], ['rerank', '重排'],
@@ -53,15 +53,16 @@ export function createTaskApiSettingsSession({repository, operations, onExit = (
     selectSource(group,value) {
       if (!editable() || !Object.hasOwn(state.draft,group)) return false;
       const preset = value.startsWith('preset:') ? value.slice(7) : null;
-      if (!['none',...(['embedding','rerank'].includes(group)?[]:['sillytavern'])].includes(value) && !state.presets.some(item => item.id === preset&&presetCapability(item)===capability(group))) return false;
+      if (!['none',...(['embedding','rerank'].includes(group)?[]:['sillytavern'])].includes(value) && !state.presets.some(item => item.id === preset)) return false;
+      if(state.draft[group]?.source===(preset?'plugin':value)&&state.draft[group]?.presetId===preset)return true;
       invalidate(group);
-      state.draft[group] = {source:preset ? 'plugin' : value, presetId:preset, model:''};
+      state.draft[group] = {source:preset ? 'plugin' : value, presetId:preset, model:'',...(preset?{modelSource:'task'}:{})};
       if(group==='summary')state.unresolvedSummary=false;
       state.status = 'ready'; state.error = null; state.message = ''; notify(); return true;
     },
     selectModel(group,model) {
       if (!editable() || state.draft[group]?.source !== 'plugin' || typeof model !== 'string') return false;
-      state.draft[group].model = model; state.status = 'ready'; state.error = null; state.message = ''; notify(); return true;
+      state.draft[group].model = model;state.draft[group].modelSource='task'; state.status = 'ready'; state.error = null; state.message = ''; notify(); return true;
     },
     async fetchModels(group) {
       if (!editable() || pending.has(group) || !operations?.fetchModels) return false;
@@ -71,20 +72,20 @@ export function createTaskApiSettingsSession({repository, operations, onExit = (
       const current = () => { try { return !closed && !controller.signal.aborted && pending.get(group) === controller && repository.captureAi().epoch === baseline.epoch; } catch { return false; } };
       state.operations[group] = {status:'loading', message:'正在获取模型…'}; notify();
       try {
-        const models = await operations.fetchModels({source:'plugin',endpoint:preset.endpoint,model:preset.model,credentialId:preset.id,
+        const models = await operations.fetchModels({source:'plugin',endpoint:preset.endpoint,credentialId:preset.id,
           resolveCredential:() => repository.resolvePresetCredential({presetId:preset.id,expectedEpoch:baseline.epoch}),signal:controller.signal,isCurrent:current,capability:capability(group),...(preset.protocol?{protocol:preset.protocol}:{})});
         if (!current()) return false;
         state.models[group] = models; state.operations[group] = {status:'success',message:models.length ? '已获取可用模型。' : '接口未返回可用模型。'}; return true;
       } catch (error) {
         if (pending.get(group) !== controller || closed) return false;
-        const safe={cors_network:'专用接口连接失败；服务须支持浏览器 CORS，请检查地址与跨域配置。',timeout:'专用接口等待超时，请稍后重试。'};
+        const safe={authentication:'接口认证未通过，请检查密钥和访问权限。',endpoint:'接口或模型未找到，请检查地址和模型。',rate_limit:'请求过于频繁，请稍后重试。',invalid_result:'模型目录返回内容未通过校验。',cors_network:'网络连接失败，请检查地址、网络或浏览器跨域限制。',timeout:'专用接口等待超时，请稍后重试。'};
         state.operations[group] = {status:'error',message:safe[error?.code]??(['SETTINGS_CONFLICT','stale'].includes(error?.code) ? '配置已变化，请重新读取。' : '获取模型失败，请检查该方案的地址和密钥。')}; return false;
       } finally { if (pending.get(group) === controller) { pending.delete(group); if (!closed) notify(); } }
     },
     async save() {
       if (!editable()) return false;
       if(!state.draft.summary){failure({code:'TASK_ROUTE_UNRESOLVED'});notify();return false;}
-      if (Object.entries(state.draft).some(([group,route]) => route.source === 'plugin' && !state.presets.some(preset => preset.id === route.presetId&&presetCapability(preset)===capability(group)))) {
+      if (Object.values(state.draft).some(route => route.source === 'plugin' && !state.presets.some(preset => preset.id === route.presetId))) {
         state.status = 'error'; state.error = 'INVALID_SETTINGS'; state.message = '所选方案已不存在，请重新选择后保存。'; notify(); return false;
       }
       busy = true; invalidate(); state.status = 'saving'; state.error = null; state.message = ''; notify();

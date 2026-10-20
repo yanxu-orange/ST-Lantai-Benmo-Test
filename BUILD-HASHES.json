@@ -5,19 +5,19 @@
   },
   {
     "path": "README.md",
-    "sha256": "b04840ce3a073139a85713b032c2079f6709fb03583346216c0dd91adb3f8887"
+    "sha256": "131e06af98b839fbcf95baf932a5e90ffb815a34914bdb02c63fc8b9e5a92104"
   },
   {
     "path": "dist/app/api-settings-session.js",
-    "sha256": "43e01f8fb242a0925c392896c73ed4b5ea341b3c58acb4c8f7fdbab262faefba"
+    "sha256": "ac4178cac637a2e4007169ad51e8eed1a2efc9c6913e8998f2e2fab0db407764"
   },
   {
     "path": "dist/app/api-settings-view.js",
-    "sha256": "159a40fc342491faca730cbf6057edb128c16d5b8455ca38daccd0afb69dd1da"
+    "sha256": "c471099d0c79463651d6156b75ada84cd5830ee8abaec8f80a995a7bc3dffa1e"
   },
   {
     "path": "dist/app/api-settings.css",
-    "sha256": "a78711f99bffa0d1c248cd3d2f70c8485d22e55b8da99176dcabb5a73fedd3e3"
+    "sha256": "6817f4373f4058843edcc43a50d37194438eb8bce6aab867cc5ae9566b2b3251"
   },
   {
     "path": "dist/app/appearance-session.js",
@@ -120,6 +120,10 @@
     "sha256": "7502556ed6d214c71b6a7c4de2c7be5b8a6f0547db6b4b646bfb780092cd1e27"
   },
   {
+    "path": "dist/app/icons/file-add.svg",
+    "sha256": "b0e7332f83c6272376b2c03387b110474e9fe94d651c7fed4d081ff7c1674ce6"
+  },
+  {
     "path": "dist/app/icons/filter.svg",
     "sha256": "78aac09f4d4b92f8760b78bec8ecab5e9a4958cf89f5ef53486e2093a2a9d205"
   },
@@ -134,6 +138,10 @@
   {
     "path": "dist/app/icons/search.svg",
     "sha256": "b6d9af70a8f7b8d17e2871c0b7be856556964714c59a31684d9ce9d1ad3fb013"
+  },
+  {
+    "path": "dist/app/icons/trash.svg",
+    "sha256": "218f3fbbdf3e642e0788bc3685f9ca0dcc4914386835581997eed1815d5cea42"
   },
   {
     "path": "dist/app/lantai-theme.css",
@@ -177,7 +185,7 @@
   },
   {
     "path": "dist/app/memory.css",
-    "sha256": "a0c5258df03f6dbfcfb25574bd8f4c99476cf27870c473212a9b9115e3741fbc"
+    "sha256": "d125357070c02c77c031a9192694cc5b8a71c6a1e0e52802ce8f4162361e6609"
   },
   {
     "path": "dist/app/navigation.js",
@@ -213,11 +221,11 @@
   },
   {
     "path": "dist/app/recall-controller.js",
-    "sha256": "814e7fb68d4395150733422ba9849adf12d97051bb1f0bf360c9b88003853c6b"
+    "sha256": "08c17d1eaf33f91b5a1c6d36d5a0fd6c19505affd85a9153d539434975b538e9"
   },
   {
     "path": "dist/app/recall-ranking-reasons.js",
-    "sha256": "c5bd4761060da66627b7066a969d2c905f9947c54b5cbc7f563feaeab8eda629"
+    "sha256": "d442654c9205b2afa4ee5e36f2db38aa373d3849194033052901a6e3f1b9fc47"
   },
   {
     "path": "dist/app/recall-view.css",
@@ -225,7 +233,7 @@
   },
   {
     "path": "dist/app/recall-view.js",
-    "sha256": "47d9dfc82ae38fbe1a43ecbc301e946287d3e3852f3e5b87edfbc9be952a0e37"
+    "sha256": "b18cee20bf329a86cabfe36b377dc061e4ae8bc4ae2e98870b1075c1ae3cacf8"
   },
   {
     "path": "dist/app/schedule-settings-view.js",
@@ -233,7 +241,7 @@
   },
   {
     "path": "dist/app/settings-root-view.css",
-    "sha256": "a8afa466fbdde33dd9a9f9ea0cf91725a1122b4a574a9b2b9ca7e9f8d525dd03"
+    "sha256": "da090a8b79cccb714a174d48c5bad01b6f39681c2001cb9f7c27b1f7b1d9aee6"
   },
   {
     "path": "dist/app/settings-root-view.js",
@@ -401,7 +409,7 @@
   },
   {
     "path": "dist/app/spring/page-tokens.css",
-    "sha256": "0842a3843e7a2804a17393bedc07bab0cab2dcf3a7db56fd05264fcfd928505f"
+    "sha256": "f898a1b61d299ab415bae334fa6bbc9d87084b7e1fb06a3d1585de92a3720a8a"
   },
   {
     "path": "dist/app/spring/segment-tokens.css",
@@ -409,7 +417,7 @@
   },
   {
     "path": "dist/app/spring/settings.css",
-    "sha256": "9141f7840089093e4a127414461243b899117fc7f4d595110dbeca4da2d50df6"
+    "sha256": "c54b36a338b012bc645213f8ce7b9995162583407ded5f4fa57f933f926769b7"
   },
   {
     "path": "dist/app/spring/switch-tokens.css",
@@ -481,11 +489,11 @@
   },
   {
     "path": "dist/app/task-api-settings-session.js",
-    "sha256": "fb152f003590b7849bed18323b5b1b01da01bb64bb19d626220217c761fe529c"
+    "sha256": "fa19e516d2dad60f82a69647ca90ee76cb37d48e1235610fb402b493aedd4786"
   },
   {
     "path": "dist/app/task-api-settings-view.js",
-    "sha256": "e458a291e60c96028e94ce8aa60ce28808549c715af750d762188986d1dcc720"
+    "sha256": "53c87dfda2e349cba9a785395e1dec45770b080f88738519d7d66d052afb6dfe"
   },
   {
     "path": "dist/app/time-controller.js",
@@ -509,7 +517,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "3a2b2d94a0d5bce6e1e00c862446a5fa60a89dc90d72ee998c368f4e642cda62"
+    "sha256": "42c7b5c18b4b2d8dc25e5ced3923958817a90404d44fd776322b84fbed39054b"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -669,7 +677,7 @@
   },
   {
     "path": "dist/domain/recall/build.js",
-    "sha256": "7ff3969a886b65b56883bcabb68461c1fdd0879cbbf613a9036bed6cc74f3c34"
+    "sha256": "53f1ed3ea9161a2e1f40657e600dc00a153ad6df87dbb79d8e21690fd8e2ee53"
   },
   {
     "path": "dist/domain/recall/date-facts.js",
@@ -693,11 +701,11 @@
   },
   {
     "path": "dist/domain/recall/multichannel-build.js",
-    "sha256": "6a8645344889d7146059154717d2e2840658c8fc9e9f60dea689575a4ebfa6e6"
+    "sha256": "f3563b1b4db8755d9ddf14ff58bc2ab260ec4f6f651b250580ea440acbebd9e0"
   },
   {
     "path": "dist/domain/recall/multichannel.js",
-    "sha256": "9799f9704666f4f8768044f52b9572f20f60baab7100a0fb98ed9590bad73921"
+    "sha256": "cd88763b0a653e05edb0736522592a2f16d2b199fd71f129759e79dc150a3f38"
   },
   {
     "path": "dist/domain/recall/narrative-ordering.js",
@@ -733,7 +741,7 @@
   },
   {
     "path": "dist/domain/recall/vector-index.js",
-    "sha256": "9baac66386633a1975ee74724cd55ce5f538802390c01378c760a115343f1501"
+    "sha256": "0254c227b43d0709542d1248a99f354707115aa999afa5c358b624024e97cb8f"
   },
   {
     "path": "dist/domain/recall/vector-records.js",
@@ -945,7 +953,7 @@
   },
   {
     "path": "dist/platform/sillytavern/api-settings-operations.js",
-    "sha256": "303703291c4b5e4208b878897cd51a776cb63b0ecffcf5717077b106d06eb6dc"
+    "sha256": "83a1d05e0dcbfb966e9fce31e58514b6310149529d50e9092ee8e06e0a6aa496"
   },
   {
     "path": "dist/platform/sillytavern/appearance-adapter.js",
@@ -1033,7 +1041,15 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-ai-transport.js",
-    "sha256": "e330e70aef2580fd88e271993409f271c9faf9d04c7f5f1bece89e27189f0689"
+    "sha256": "0d0b340428a06037360bc42d8baa69b9d79d548c7c4cca7dc99f613d171baf1a"
+  },
+  {
+    "path": "dist/platform/sillytavern/recall-multichannel-worker.js",
+    "sha256": "b28cbd880d012efafac3bbbbfba491fad06b0a40b0d9637cc823b4caf3239a0e"
+  },
+  {
+    "path": "dist/platform/sillytavern/recall-multichannel.js",
+    "sha256": "d6b254f4bd1486be69e2320fe9297e7d88daf9e72cde7ca2a9640395f05c6fd0"
   },
   {
     "path": "dist/platform/sillytavern/recall-preview-worker.js",
@@ -1045,7 +1061,7 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-runtime.js",
-    "sha256": "387bd2097ed9d9d292e9196effa4a35135f1db50e2e0aca5dbb444da7821a7f4"
+    "sha256": "177845e847b8c9f9539fe3bd3ab55d3d25f07d30227f43e71e7f12fd018dbf20"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
@@ -1125,11 +1141,11 @@
   },
   {
     "path": "dist/shared/ai/provider.js",
-    "sha256": "7fbe9f8bbcca225d3acf7fd9f2ca4933b95e40f527f0ec5763c6a4100867adfb"
+    "sha256": "fb0c59bb6981bffee1f516d732bac6e31a04267f37328c10945fd20018a27ceb"
   },
   {
     "path": "dist/shared/ai/recall-provider.js",
-    "sha256": "cfdb3d3032fe24ae2d92b3561b85db967b1337b2526d2e5f6e7f7263ee24ea75"
+    "sha256": "e5916c275a98245f6f0c0d555d7b9fae81b4ac2cc75dbd9f4225d6c944a8ac1f"
   },
   {
     "path": "dist/shared/runtime/background-tasks.js",
@@ -1153,7 +1169,7 @@
   },
   {
     "path": "dist/shared/settings/model.js",
-    "sha256": "a6c4268689c39aa559d65dde67c4947fc0ec2d85bd06d1142ad27017be6a37ad"
+    "sha256": "99e0af3e02df4ec794412ef916a1c8b92b70b2de71ad5c27a4a7a2c84f958396"
   },
   {
     "path": "dist/shared/settings/repository.js",
@@ -1181,10 +1197,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "6e06d47130791369b378c0106e1baff39e54c4a21abd3826b1a99ab9a9d8eef0"
+    "sha256": "ae7dc7eaa2a7df54679d6f9978deacadfb4404a65bef1f984d633d78cd7f8665"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "891d33a64ddcab84f6e6f981868566682ebf8846ae7e312ed95ecff74c95bae4"
+    "sha256": "869f87c1beb636ceb2f0a484d9d9ad97f716c6c8052654fbf7c39c66af14654b"
   }
 ]

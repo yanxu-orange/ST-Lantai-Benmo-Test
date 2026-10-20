@@ -1,6 +1,6 @@
-import {frozenSettingsCopy,recallChannels} from '../../shared/settings/model.js';
+import {frozenSettingsCopy,recallChannels,recallCandidateCounts} from '../../shared/settings/model.js';
 import {assertAiCurrent} from '../../shared/ai/provider.js';
-import {buildRecall,prepareRecallData,bindings,memoryPrompt} from './build.js';
+import {buildRecall,prepareRecallData,bindings,memoryPrompt,reasonsOf,rankingFacts} from './build.js';
 import {evaluateOrdinaryRecallWithAliases} from './detail-alias-relevance.js';
 import {collectStoryTimeRecallEvidence} from './story-time-evidence.js';
 import {collectSpecialDateRecallEvidence} from './special-date-evidence.js';
@@ -8,9 +8,9 @@ import {selectSpecialDateCandidates} from './special-date-selection.js';
 import {orderMemoriesForNarrative} from './narrative-ordering.js';
 import {createBodyIndex,rankBodyIndex,rankDateCandidates,dateEligibility,collectRouteCandidates,recallQueryText,eventCardText,RRF_K} from './multichannel.js';
 
-const safeCode=error=>['cancelled','stale','configuration','capability','mapping','timeout','http','cors_network','request','task_preset_missing'].includes(error?.code)?error.code:'channel-failed';
+const safeCode=error=>['cancelled','stale','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing'].includes(error?.code)?error.code:'channel-failed';
 const now=()=>globalThis.performance?.now?.()??Date.now();
-export function usesMultichannel(settings){const value=recallChannels(settings);return!value.keyword||value.bm25||value.vector||value.rerank;}
+export function usesMultichannel(settings){const value=recallChannels(settings);return Object.values(recallCandidateCounts(settings)).some(count=>count!==5)||!value.keyword||value.bm25||value.vector||value.rerank;}
 
 // Owns only a local BM25 corpus cache. API credentials and host objects never
 // enter the pure evidence/selection helpers or the existing preview worker.
@@ -47,7 +47,7 @@ export function createMultichannelBuilder({vectorIndex,provider}={}){
    }catch(error){assertAiCurrent(signal,isCurrent);rankings.vector=[];channels.vector.status='failed';channels.vector.error=safeCode(error);}
    channels.vector.elapsedMs=now()-started;
   }
-  const collected=collectRouteCandidates(rankings,order),candidateById=new Map(collected.cards.map(row=>[row.id,row]));
+  const collected=collectRouteCandidates(rankings,order,recallCandidateCounts(settings)),candidateById=new Map(collected.cards.map(row=>[row.id,row]));
   let ranked=[...collected.cards],orderingMethod='rrf';
   if(enabled.rerank&&ranked.length){
    const started=now();
@@ -67,13 +67,15 @@ export function createMultichannelBuilder({vectorIndex,provider}={}){
   // ordinary candidates. Compute it only when time candidates actually exist.
   const timeRelevance=base??(special.candidates.length?evaluateOrdinaryRecallWithAliases({memories:dated,currentInput:current.cleaned,recentHistory:recent,bindings:bindings(memories),currentStoryTime:context.current,fictionalCalendar:context}):null);
   const specialRank=selectSpecialDateCandidates({specialResult:special,ordinaryResult:timeRelevance?.base??timeRelevance,limit:settings.anniversaryPoolLimit,fictionalCalendar:context});
-  const specialById=new Map(special.evaluated.map(row=>[row.memoryId,row]));
+  const specialById=new Map(special.evaluated.map(row=>[row.memoryId,row])),keywordById=new Map((base?.evaluated??[]).map(row=>[row.memoryId,row]));
+  const routeById=Object.fromEntries(Object.entries(rankings).map(([route,rows])=>[route,new Map(rows.map(row=>[row.id,row]))]));
   const make=(id,pool,rank=null)=>{
-   const card=candidateById.get(id),date=specialById.get(id)?.evidence??[];
+   const card=candidateById.get(id),date=specialById.get(id)?.evidence??[],entry=keywordById.get(id);
    return{id,event:structuredClone(memoryById.get(id)),pool,qualified:true,rank,tokens:null,estimated:false,
     sources:pool==='resident'?['resident']:pool==='special'?[...(card?.sources??[]),'time']:[...(card?.sources??[])],
-    reasons:pool==='resident'?[{code:'resident'}]:[...(card?.sources??[]).map(source=>({code:source+'-match'})),...date.map(row=>({code:row.kind,yearsAgo:row.yearsAgo,targetDate:row.targetDate,matchedDate:row.matchedDate}))],
-    dateEvidence:{ordinary:timeById.get(id)?.evaluations??[],suppressed:base?.evaluated.find(row=>row.memoryId===id)?.suppressedPaths??[],special:date},
+    reasons:[...(pool==='resident'?[{code:'resident'}]:[]),...reasonsOf(entry,keyword?.aliasResult,id),...date.map(row=>({code:row.kind,yearsAgo:row.yearsAgo,targetDate:row.targetDate,matchedDate:row.matchedDate}))],
+    routeEvidence:{...(entry&&routeById.keyword?.has(id)?{keyword:rankingFacts(entry,routeById.keyword.get(id).rank)}:{}),...(routeById.bm25?.has(id)?{bm25:routeById.bm25.get(id)}:{}),...(routeById.vector?.has(id)?{vector:routeById.vector.get(id)}:{}),...(routeById.date?.has(id)?{date:routeById.date.get(id)}:{}),...(orderingMethod==='rerank'&&ranked.some(row=>row.id===id)?{rerank:{rank:ranked.find(row=>row.id===id).rank,score:ranked.find(row=>row.id===id).rerankScore}}:{})},
+    dateEvidence:{ordinary:timeById.get(id)?.evaluations??[],suppressed:entry?.suppressedPaths??[],special:date},
     ranking:{pool,rank,maxCount:pool==='trigger'?settings.maxCount:pool==='special'?settings.anniversaryPoolLimit:null,...(pool==='trigger'?{score:card?.score??0,method:orderingMethod}:{} )}};
   };
   const ordinary=[],excluded=new Map();let totalTokens=0,estimated=false,tokenStopped=false;

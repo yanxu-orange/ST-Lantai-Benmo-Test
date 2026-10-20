@@ -13,7 +13,7 @@ const messages = {
   rate_limit: '请求过于频繁，请稍后再试。',
   network: '请求失败，请检查连接后重试。',
   invalid_result: '接口返回内容未通过测试校验。',
-  cors_network: '专用接口连接失败；服务须支持浏览器 CORS，请检查地址与跨域配置。',
+  cors_network: '网络连接失败，请检查地址、网络或浏览器跨域限制。',
   timeout: '专用接口等待超时，请稍后重试。',
 };
 export class ApiSettingsOperationError extends Error {
@@ -46,7 +46,7 @@ export function createApiSettingsOperations({ getContext, fetchImpl = globalThis
         return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
       } catch (error) {
         assertAiCurrent(signal, isCurrent);
-        throw new ApiSettingsOperationError(error instanceof ApiSettingsOperationError ? error.code : ['configuration', 'INVALID_SETTINGS', 'SETTINGS_CONFLICT'].includes(error?.code) ? 'configuration' : ['cors_network','timeout'].includes(error?.code)?error.code:error?.code==='mapping'?'invalid_result':'network');
+        throw new ApiSettingsOperationError(error instanceof ApiSettingsOperationError ? error.code : ['configuration', 'INVALID_SETTINGS', 'SETTINGS_CONFLICT'].includes(error?.code) ? 'configuration' : ['cors_network','timeout','authentication','endpoint','rate_limit'].includes(error?.code)?error.code:error?.code==='mapping'?'invalid_result':'network');
       }
     },
     async test({ source, endpoint, model, credentialId, resolveCredential, signal, isCurrent, capability = 'text',protocol }) {
@@ -77,7 +77,7 @@ export function createApiSettingsOperations({ getContext, fetchImpl = globalThis
         return true;
       } catch (error) {
         assertAiCurrent(signal, () => isCurrent() === true && (mainEpoch === undefined || captureMain() === mainEpoch));
-        throw new ApiSettingsOperationError(error instanceof ApiSettingsOperationError ? error.code : error instanceof AiProviderError && ['configuration', 'unavailable','cors_network','timeout'].includes(error.code) ? error.code : error?.code==='mapping'?'invalid_result':'network');
+        throw new ApiSettingsOperationError(error instanceof ApiSettingsOperationError ? error.code : error instanceof AiProviderError && ['configuration', 'unavailable','cors_network','timeout','authentication','endpoint','rate_limit'].includes(error.code) ? error.code : error?.code==='mapping'?'invalid_result':'network');
       }
     },
   });
