@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "131e06af98b839fbcf95baf932a5e90ffb815a34914bdb02c63fc8b9e5a92104"
+    "sha256": "f5707815f6a5660bed3ccd3a29d2c08ec4e84c73da4f399d38f08fcb85c125d3"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -417,7 +417,7 @@
   },
   {
     "path": "dist/app/spring/settings.css",
-    "sha256": "c54b36a338b012bc645213f8ce7b9995162583407ded5f4fa57f933f926769b7"
+    "sha256": "dbe982d43dcd27845552ab5bc549d8e0452f0461e403c17336cf30a6d18e5cb6"
   },
   {
     "path": "dist/app/spring/switch-tokens.css",
@@ -493,7 +493,7 @@
   },
   {
     "path": "dist/app/task-api-settings-view.js",
-    "sha256": "53c87dfda2e349cba9a785395e1dec45770b080f88738519d7d66d052afb6dfe"
+    "sha256": "8941c3af3a2758d188a175e5d85f46e448e0b4ce8d81fbe3978e80891b650922"
   },
   {
     "path": "dist/app/time-controller.js",
@@ -1201,6 +1201,6 @@
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "869f87c1beb636ceb2f0a484d9d9ad97f716c6c8052654fbf7c39c66af14654b"
+    "sha256": "b98d8e22df6485759275f04a6aa525b817a2ef2196ca86fdd8f28bd490d4ddb9"
   }
 ]

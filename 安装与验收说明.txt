@@ -2,7 +2,7 @@
 
 开发源码：https://github.com/yanxu-orange/Lantai-Benmo-dev
 测试安装：https://github.com/yanxu-orange/ST-Lantai-Benmo-Test
-源码提交：f7accf9116ece23a606d7ca7a680865b3a9232be
+源码提交：cae3c483f50ceb4c105b66b6260c44a3e78c2ab2
 
 本轮变化
 
@@ -19,3 +19,5 @@
 安装范围
 
 只包含正式构建、固定UI与主题资产、既有许可证、manifest和安装说明。排除开发预览、fake adapter、研究、日志、私人资料与验证fixture。雪山主题沿既定规则移除reference.libraryFileId／libraryVersion，其余运行文件与源码构建字节一致。BUILD-HASHES.json覆盖除自身外所有安装文件。
+
+规范换行回读：源码功能回归4230项通过；发布回读时修正两处现行源码哈希的CRLF/LF差异，并重跑8项来源校验及check/build。安装树由规范源码重新构建，历史证据与功能逻辑未改变。
