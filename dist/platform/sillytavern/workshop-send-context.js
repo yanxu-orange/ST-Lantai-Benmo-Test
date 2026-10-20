@@ -8,8 +8,8 @@ const matches=(saved,message)=>saved.message===message&&saved.text===message?.me
 export function createWorkshopSendContext({getContext,captureTarget}){
  let generation=0,foreground=null,pending=null,bound=null;
  const clear=()=>{generation++;foreground=null;pending=null;bound=null;};
- function begin(type){clear();if(supported.has(type))foreground={type,generation};}
- function seal(type,injection){
+ function begin(type,{worldInfoAmbiguous=false}={}){clear();if(supported.has(type))foreground={type,generation,worldInfoBlocked:worldInfoAmbiguous};}
+ function seal(type,injection,history=null){
   pending=null;bound=null;
   if(!foreground||foreground.type!==type||!supported.has(type))return false;
   const send=foreground;foreground=null;
@@ -17,7 +17,7 @@ export function createWorkshopSendContext({getContext,captureTarget}){
   const tail=chat.at(-1),hasAssistant=tail?.is_user===false;
   if(type==='normal'&&hasAssistant&&tail.mes?.trim())return false;
   const floor=chat.length-(hasAssistant?1:0);
-  pending={...send,target:structuredClone(captureTarget()),floor,prefix:chat.slice(0,floor).map(row),tail:hasAssistant?tail:null,injection};return true;
+  pending={...send,target:structuredClone(captureTarget()),floor,prefix:chat.slice(0,floor).map(row),tail:hasAssistant?tail:null,injection,history};return true;
  }
  function receive({floor,message,type,target}){
   const p=pending;
@@ -27,12 +27,34 @@ export function createWorkshopSendContext({getContext,captureTarget}){
    pending=null;bound={...p,message,reply:row(message)};return true;
   }catch{return false;}
  }
+ function boundFor(source){
+  const b=bound,chat=getContext().chat,message=chat?.[source.assistantFloor];
+  if(!b||b.generation!==generation||!sameTarget(b.target,captureTarget())||b.floor!==source.assistantFloor||!matches(b.reply,message)||message?.extra?.[WORKSHOP_REPLY_KEY]!==source.replyId||b.prefix.some((r,i)=>!matches(r,chat[i])))return null;
+  return b;
+ }
  function capture(source){
   try{
-   const b=bound,chat=getContext().chat,message=chat?.[source.assistantFloor];
-   if(!b||b.generation!==generation||!sameTarget(b.target,captureTarget())||b.floor!==source.assistantFloor||!matches(b.reply,message)||message?.extra?.[WORKSHOP_REPLY_KEY]!==source.replyId||b.prefix.some((r,i)=>!matches(r,chat[i]))||!b.injection?.isCurrent())return {status:'unavailable',memories:[]};
+   const b=boundFor(source);if(!b?.injection?.isCurrent())return {status:'unavailable',memories:[]};
    const memories=structuredClone(b.injection.memories);return {status:memories.length?'matched':'matched-empty',memories};
   }catch{return {status:'unavailable',memories:[]};}
  }
- return Object.freeze({begin,seal,receive,capture,clear,replace(){pending=null;bound=null;}});
+ function observeWorldInfo(entries){
+  try{
+   const p=pending,chat=getContext().chat;
+   if(!p||p.worldInfoBlocked||p.worldInfoClosed||p.generation!==generation||!sameTarget(p.target,captureTarget())||p.prefix.some((r,i)=>!matches(r,chat[i]))||!Array.isArray(entries))return false;
+   // A second activation cannot be assigned confidently to this sealed send.
+   if(p.worldInfo!==undefined){p.worldInfo={status:'unavailable',entries:[]};return false;}
+   const content=entries.flatMap(entry=>typeof entry?.content==='string'&&entry.content.trim()?[{content:entry.content}]:[]);
+   p.worldInfo={status:content.length?'available':'unavailable',entries:content};return true;
+  }catch{return false;}
+ }
+ function closeWorldInfoWindow(){for(const owner of [foreground,pending])if(owner)owner.worldInfoClosed=true;}
+ function blockWorldInfo(){for(const owner of [foreground,pending,bound])if(owner){owner.worldInfoBlocked=true;owner.worldInfo={status:'unavailable',entries:[]};}}
+ function captureWorldInfo(source){
+  try{return structuredClone(boundFor(source)?.worldInfo??{status:'unavailable',entries:[]});}catch{return {status:'unavailable',entries:[]};}
+ }
+ function captureHistory(source){
+  try{const b=boundFor(source);return b?.history?.isCurrent()?b.history:null;}catch{return null;}
+ }
+ return Object.freeze({begin,seal,receive,capture,captureWorldInfo,observeWorldInfo,blockWorldInfo,closeWorldInfoWindow,captureHistory,clear,replace(){pending=null;bound=null;}});
 }

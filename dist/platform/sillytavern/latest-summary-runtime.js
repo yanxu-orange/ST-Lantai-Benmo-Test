@@ -1,5 +1,5 @@
 import {createWorkshopSendContext} from './workshop-send-context.js';
-import {captureSingleCharacterCard} from './character-card.js';
+import {captureSingleCharacterCard,captureCurrentUserPersona} from './character-card.js';
 import {hasWorkshopMaterials,prepareWorkshopMaterials,workshopMaterials} from '../../domain/workshop/materials.js';
 import {AiProviderError} from '../../shared/ai/provider.js';
 import {SettingsError} from '../../shared/settings/model.js';
@@ -11,6 +11,7 @@ import {prepareLatestSource,prepareManualLatestSource,matchesLatestSource,matche
 import {buildLatestRequest,promptIdentities} from '../../domain/latest/requests.js';
 import {planLatestBackfill,buildLatestBackfillRequest,parseLatestBackfillResponse} from '../../domain/latest/backfill.js';
 import {buildBackgroundRoundRequest,parseBackgroundRoundResponse} from '../../domain/background/round.js';
+import {buildWorkshopRoundRequest} from '../../domain/workshop/requests.js';
 import {resultText} from '../../domain/workshop/results.js';
 import {transformLatestMessages} from '../../domain/latest/transform.js';
 import {prepareWorkshopIdentities,WORKSHOP_REPLY_KEY} from './workshop-identities.js';
@@ -32,9 +33,9 @@ export function captureLatestPromptIdentities(context={}){
   return promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name});
 }
 // Latest owns neither provider configuration nor event/ancient summary progress.
-export function createLatestSummaryRuntime({repository,adapter,settings,provider,getGenerationSettings,getContext,getControls,workshopRuntime,trackingRuntime,scheduleRuntime,isSourceDeletionPending=()=>false,autoInitialize=true}={}) {
+export function createLatestSummaryRuntime({repository,adapter,settings,provider,getGenerationSettings,getPreparationSettings,getContext,getControls,workshopRuntime,trackingRuntime,scheduleRuntime,isSourceDeletionPending=()=>false,autoInitialize=true}={}) {
   const workshopSends=createWorkshopSendContext({getContext,captureTarget:()=>repository.captureTarget()});
-  let sendDiagnostics=[];
+  let sendDiagnostics=[],activeHostGenerations=0;
   let latestEpoch=0,disposed=false,serial=0,readSerial=0,target=null,selection=null,pending=null,receipt=null,enabled=true,generationQueue=Promise.resolve(),foregroundStopped=false,foregroundType=null,foregroundEnded=false;
   let workshopState=null,workshopFloorStates={},trackingState=null,trackingFloorStates={},scheduleState=null,scheduleFloorStates={};
   let libraryCache=null,displayEpoch=0,lastReadView=null,displayReadDirty=false,initialized=autoInitialize;
@@ -216,13 +217,20 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       await refresh();if(!allowed()||ticket!==serial||!current(t))return false;
       const captured=await repository.captureLatest(t),preferences=captured.latest.preferences,summaryEpoch=latestEpoch,summaryProof=automatic?automaticSummaryProof:getControls?.()?.capture('summary'),masterProof=automatic?automaticMasterProof:getControls?.()?.capture('enabled');
       const rawSource=raw(t);key=rawSource.messages.find(row=>row.floor===floor)?.replyId??key;
-      stage='config';const generation=getGenerationSettings();stage='preparation';
+      stage='config';const preparation=()=>settings?.captureEventGeneration?.()??(getPreparationSettings??getGenerationSettings)(),preparationProof=preparation(),generation=preparationProof.generation??preparationProof;stage='preparation';
       latestTask=!workshopOnly&&summaryMatches(summaryProof);
       const source=prepareLatestSource(rawSource,{floor,rules:generation.summaryCleaning.rules}),names=identities();
       const valid=()=>{
-        try{return allowed()&&getControls?.()?.matches(masterProof)===true&&!controller.signal.aborted&&ticket===serial&&current(t)&&getGenerationSettings().epoch===generation.epoch&&equal(names,identities())&&matchesLatestSource(source,raw(t));}catch{return false;}
+        try{return allowed()&&getControls?.()?.matches(masterProof)===true&&!controller.signal.aborted&&ticket===serial&&current(t)&&equal(preparationProof,preparation())&&equal(names,identities())&&matchesLatestSource(source,raw(t));}catch{return false;}
       };
       generationCurrent=valid;
+      // Each API category owns its configuration proof. A missing or changed
+      // route cannot invalidate otherwise authorized sibling-category work.
+      const groupProof=group=>{
+        const epoch=getGenerationSettings(group).epoch;
+        return ()=>{try{return valid()&&getGenerationSettings(group).epoch===epoch;}catch{return false;}};
+      };
+      let latestCurrent=valid;
       const summaryEligible=()=>captured.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId)||!archivedFloor(t,floor);
       if(queuedSummary&&(queuedSummary.replyId!==source.replyId||!equal(queuedSummary.record,captured.latest.records.find(record=>record.sourceSnapshot.replyId===source.replyId)??null)))return false;
       const receiptKey=JSON.stringify([t,source.replyId,source.fingerprint]);
@@ -273,20 +281,21 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         catch(error){if(!valid())return false;preparationFailed=true;markSchedule('failed',failure(error));schedulePlan=null;}
       }
       if(!valid()||!latestTask&&!tasks.length&&!trackingPlan&&!schedulePlan)return false;
-      const separate=tasks.filter(task=>hasWorkshopMaterials(task.module)),sharedTasks=tasks.filter(task=>!hasWorkshopMaterials(task.module));
-      const descriptors=[...(latestTask?[{id:'latest',name:'最新摘要',instructions:preferences.prompt}]:[]),...sharedTasks,...(trackingPlan?[trackingPlan.task]:[]),...(schedulePlan?[schedulePlan.task]:[])];
-      requestedTaskIds=[...descriptors,...separate].map(task=>task.id);
-      const sharedRound=sharedTasks.length||trackingPlan||schedulePlan;
+      const commonWorkshop=tasks.filter(task=>!hasWorkshopMaterials(task.module));
+      const descriptors=[...(latestTask?[{id:'latest',name:'最新摘要',instructions:preferences.prompt}]:[]),...(trackingPlan?[trackingPlan.task]:[]),...(schedulePlan?[schedulePlan.task]:[])];
+      requestedTaskIds=[...descriptors,...tasks].map(task=>task.id);
+      const sharedRound=trackingPlan||schedulePlan;
       stage='request';const request=descriptors.length?(sharedRound?buildBackgroundRoundRequest({source,tasks:descriptors,identities:names}):buildLatestRequest({source,prompt:preferences.prompt,identities:names})):null;
       report('running','正在进行本轮自动生成');
       let segments=new Map();
       if(request){
         try{
-          const output=await provider.generateText({...request,signal:controller.signal,isCurrent:valid});
-          if(!valid())return false;
+          latestCurrent=groupProof('latest');
+          const output=await provider.generateText({...request,signal:controller.signal,isCurrent:latestCurrent});
+          if(!latestCurrent())throw new AiProviderError('cancelled');
           rawResponse=output.text;stage='parse';segments=sharedRound?parseBackgroundRoundResponse(output.text,descriptors):new Map([['latest',{text:output.text}]]);
         }catch(error){
-          if(!separate.length)throw error;
+          if(!tasks.length)throw error;
           if(!valid())return false;
           const message=failure(error,'request');segments=new Map(descriptors.map(task=>[task.id,{error:message}]));
         }
@@ -296,46 +305,59 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         try{
           stage='parse';const segment=segments.get('latest');if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
           const latest=await repository.captureLatest(t);
-          if(!valid())return false;
+          if(!valid())return false;if(!latestCurrent())throw new AiProviderError('cancelled');
           if(!summaryEligible())throw new Error('来源已归档，未新建摘要');
           if(!summaryMatches(summaryProof)||summaryEpoch!==latestEpoch||!equal(summarySettings(latest.latest.preferences),summarySettings(preferences)))throw new Error('最新摘要设置已变化，请重试');
           const previous=latest.latest.records.find(record=>record.sourceSnapshot.replyId===key),original=captured.latest.records.find(record=>record.sourceSnapshot.replyId===key),now=new Date().toISOString();
           if(!equal(previous??null,original??null))throw new Error('最新摘要已修改，请重新读取');
-          await repository.upsertLatestRecord(t,latest,{id:previous?.id??crypto.randomUUID(),body:segment.text,sourceSnapshot:source,cleaningRules:normalizedRules(generation.summaryCleaning.rules),createdAt:previous?.createdAt??now,updatedAt:now},{isCurrent:()=>valid()&&summaryMatches(summaryProof)&&summaryEpoch===latestEpoch&&summaryEligible()});
-          if(!valid())return false;
+          await repository.upsertLatestRecord(t,latest,{id:previous?.id??crypto.randomUUID(),body:segment.text,sourceSnapshot:source,cleaningRules:normalizedRules(generation.summaryCleaning.rules),createdAt:previous?.createdAt??now,updatedAt:now},{isCurrent:()=>latestCurrent()&&summaryMatches(summaryProof)&&summaryEpoch===latestEpoch&&summaryEligible()});
+          if(!valid())return false;if(!latestCurrent())throw new AiProviderError('cancelled');
           state.floorStates[key]={status:'ready',error:''};successes++;
         }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:failure(error,'save')});if(!valid())return false;if(!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}else{state.floorStates[key]={status:'failed',error:failure(error)};state.error=failure(error);}}
         publish();
       }else if(latestTask&&!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}
+      let workshopSegments=new Map(),commonCurrent=valid,commonRawResponse=null;
+      if(commonWorkshop.length){
+        try{
+          stage='config';commonCurrent=groupProof('workshop');
+          const ownRequest=buildWorkshopRoundRequest({source,tasks:commonWorkshop,identities:names});
+          stage='request';const output=await provider.generateText({...ownRequest,signal:controller.signal,isCurrent:commonCurrent});
+          if(!commonCurrent())throw new AiProviderError('cancelled');
+          commonRawResponse=output.text;workshopSegments=parseBackgroundRoundResponse(output.text,commonWorkshop);
+          for(const [id,segment] of workshopSegments)if(segment.error)retainFailure({requestId:requestId+':workshop',target:t,replyIds:[source.replyId],taskIds:[id],rawResponse:output.text,error:segment.error});
+        }catch(error){if(!valid())return false;const message=failure(error);workshopSegments=new Map(commonWorkshop.map(task=>[task.id,{error:message}]));}
+      }
       for(const task of tasks){
         if(!valid())return false;
+        let taskRawResponse=commonRawResponse;
         try{
-          let segment=segments.get(task.id),taskCurrent=valid;
+          let segment=workshopSegments.get(task.id),taskCurrent=commonCurrent;
           if(hasWorkshopMaterials(task.module)){
-            const options=workshopMaterials(task.module),capture=()=>prepareWorkshopMaterials({module:task.module,source,raw:options.recentDialogue?raw(t):null,character:options.character?captureSingleCharacterCard(getContext()):null,recall:options.recalledMemory?workshopSends.capture(source):undefined}),prepared=capture();
+            const options=workshopMaterials(task.module),capture=()=>prepareWorkshopMaterials({module:task.module,source,raw:null,character:options.character?captureSingleCharacterCard(getContext()):null,userPersona:options.userPersona?captureCurrentUserPersona(getContext()):null,worldInfo:options.worldInfo?workshopSends.captureWorldInfo(source):undefined,history:options.history?(workshopSends.captureHistory(source)?.prepare(source)??{status:'unavailable',messages:[]}):undefined,recall:options.recalledMemory?workshopSends.capture(source):undefined}),prepared=capture();
             task.materials=prepared.materials;task.materialAvailability=prepared.availability;
             task.materialsCurrent=()=>{try{return equal(prepared,capture());}catch{return false;}};
             const refreshed=await workshopRuntime.filterBackgroundPlan({...plan,tasks:[task]});
-            taskCurrent=()=>valid()&&workshopRuntime.moduleAllowed(task.module)&&task.materialsCurrent();
+            stage='config';const configured=groupProof('workshop');
+            taskCurrent=()=>configured()&&workshopRuntime.moduleAllowed(task.module)&&task.materialsCurrent();
             if(!refreshed.tasks.length||!taskCurrent())throw new Error('工坊条目或生成资料已变化');
-            const ownRequest=buildBackgroundRoundRequest({source,tasks:[task],identities:names});
+            const ownRequest=buildWorkshopRoundRequest({source,tasks:[task],identities:names,materials:{char:task.materials['角色资料'],user:task.materials['用户人设'],worldInfo:task.materials['世界书'],custom:task.materials['自定义补充资料'],recall:task.materials['本轮召回记忆'],history:task.materials['前情提要']}});
             stage='request';const ownOutput=await provider.generateText({...ownRequest,signal:controller.signal,isCurrent:taskCurrent});
             if(!taskCurrent())throw new Error('工坊条目或生成资料已变化');
-            segment=parseBackgroundRoundResponse(ownOutput.text,[task]).get(task.id);
+            taskRawResponse=ownOutput.text;segment=parseBackgroundRoundResponse(ownOutput.text,[task]).get(task.id);
             if(segment.error)retainFailure({requestId:requestId+':'+task.id,target:t,replyIds:[source.replyId],taskIds:[task.id],rawResponse:ownOutput.text,error:segment.error});
           }
-          stage='parse';if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
+          stage='parse';if(!taskCurrent())throw new AiProviderError('cancelled');if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
           await workshopRuntime.saveBackgroundResult(plan,task,segment.text,{isCurrent:taskCurrent});
           if(!valid())return false;
           markWorkshop(task,'ready');successes++;
           workshopState=await workshopRuntime.backgroundState(t);
-        }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:failure(error,'save')});if(!valid())return false;markWorkshop(task,'failed',failure(error));}
+        }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId:requestId+':'+task.id,target:t,replyIds:[source.replyId],taskIds:[task.id],rawResponse:taskRawResponse,error:failure(error,'save')});if(!valid())return false;markWorkshop(task,'failed',failure(error));}
         publish();
       }
       if(trackingPlan&&valid()){
         try{
           stage='parse';const segment=segments.get(trackingPlan.task.id);if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
-          const result=await trackingRuntime.saveBackgroundResult(trackingPlan,segment.text,{isCurrent:valid});
+          const result=await trackingRuntime.saveBackgroundResult(trackingPlan,segment.text,{isCurrent:latestCurrent});
           if(!valid())return false;
           const errors=Object.entries(result.errors).filter(([,error])=>error).map(([kind,error])=>`${kind==='items'?'物品':'NPC'}：${error}`);
           if(result.skipped){markTracking('idle');skippedTasks++;}
@@ -347,7 +369,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       if(schedulePlan&&valid()){
         try{
           stage='parse';const segment=segments.get(schedulePlan.task.id);if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
-          const result=await scheduleRuntime.saveBackgroundResult(schedulePlan,segment.text,{isCurrent:valid});
+          const result=await scheduleRuntime.saveBackgroundResult(schedulePlan,segment.text,{isCurrent:latestCurrent});
           if(!valid())return false;
           if(result.skipped){markSchedule('idle');skippedTasks++;}
           else{const errors=Object.values(result.errors??{}).filter(Boolean);markSchedule(errors.length?'failed':'ready',errors.join('；'));successes++;if(errors.length){partialResults=true;firstFailure||=errors.join('；');}}
@@ -359,8 +381,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         const latest=await repository.captureLatest(t);if(!valid())return false;
         selection=latest;state={...latest.latest,status:state.floorStates[key]?.status==='failed'?'failed':'ready',error:state.floorStates[key]?.error??'',floorStates:state.floorStates};publish();
       }
-      const complete=successes===descriptors.length+separate.length&&!preparationFailed&&!partialResults;
-      if(!complete&&(!skippedTasks||firstFailure||partialResults))retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:firstFailure||'本轮部分任务结果未能保存'});
+      const complete=successes===descriptors.length+tasks.length&&!preparationFailed&&!partialResults;
+      if(!complete&&(!skippedTasks||firstFailure||partialResults)&&(state.floorStates[key]?.status==='failed'||trackingFloorStates[key]?.status==='failed'||scheduleFloorStates[key]?.status==='failed'))retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:descriptors.map(task=>task.id),rawResponse,error:firstFailure||'本轮部分任务结果未能保存'});
       report(complete?'succeeded':successes?'partial':skippedTasks&&!preparationFailed?'skipped':'failed',complete?'本轮自动生成已保存':successes?'本轮部分结果已保存，其余任务已取消或失败':skippedTasks&&!preparationFailed?'任务授权已变化，本轮结果未写入':`本轮自动生成失败：${firstFailure||'未收到可保存结果，请重试。'}`);
       return successes>0;
     }catch(error){
@@ -631,8 +653,16 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     if(!completedStream(complete.floor,complete.processor)){automaticStatus('waiting','等待正文成功完成；中断或失败的正文不会自动生成',complete.floor);return;}
     workshopSends.receive({...complete,type:foregroundType});receipt=null;foregroundType=null;if(current(complete.target)){if(automaticState.floor!==complete.floor||!['running','succeeded','partial','failed','skipped','cancelled'].includes(automaticState.status))automaticStatus('queued','正文已完成，正在准备本轮自动生成',complete.floor);void enqueueGeneration(complete.floor,{automatic:true,expectedMessage:complete.message,automaticSummaryProof:complete.summaryProof,automaticMasterProof:complete.masterProof,automaticScheduleProof:complete.scheduleProof});}
   }
-  on('GENERATION_STARTED',(type,_options,dryRun)=>{const normalized=type===undefined?'normal':type;if(supported.has(normalized)&&!dryRun){cancel();workshopSends.begin(normalized);foregroundStopped=false;foregroundType=normalized;automaticStatus('waiting','等待本轮正文完成',null);}});
-  on('GENERATION_STOPPED',()=>{foregroundStopped=true;cancel();});
+  on('GENERATION_STARTED',(type,_options,dryRun)=>{
+    if(dryRun)return;const normalized=type===undefined?'normal':type;
+    if(!supported.has(normalized)&&normalized!=='quiet'){activeHostGenerations++;workshopSends.blockWorldInfo();return;}
+    const overlap=activeHostGenerations>0;activeHostGenerations++;
+    if(overlap||normalized==='quiet')workshopSends.blockWorldInfo();
+    if(supported.has(normalized)){cancel();workshopSends.begin(normalized,{worldInfoAmbiguous:overlap});foregroundStopped=false;foregroundType=normalized;automaticStatus('waiting','等待本轮正文完成',null);}
+  });
+  on('WORLD_INFO_ACTIVATED',entries=>workshopSends.observeWorldInfo(entries));
+  on('GENERATION_ENDED',()=>{workshopSends.closeWorldInfoWindow();activeHostGenerations=Math.max(0,activeHostGenerations-1);});
+  on('GENERATION_STOPPED',()=>{activeHostGenerations=0;foregroundStopped=true;cancel();});
   on('MESSAGE_RECEIVED',(floor,type)=>{
     const normalized=type==='appendFinal'&&foregroundType==='continue'?'continue':type===undefined&&foregroundType==='normal'?'normal':type;
     if(foregroundStopped||!supported.has(normalized)||!Number.isSafeInteger(floor))return;
@@ -642,7 +672,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   // this order. Both receipts are required, with successful-stream evidence.
   on('GENERATION_ENDED',()=>{foregroundEnded=true;if(!receipt&&automaticState.status==='waiting')automaticStatus('waiting','已收到结束信号，等待宿主正文回执');flushReceipt();});
   for(const name of ['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,payload=>{const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;if(name==='MESSAGE_EDITED'){for(const [index,message] of (getContext().chat??[]).entries())if(!Number.isSafeInteger(floor)||index===floor||index===floor+1){const id=message?.extra?.[WORKSHOP_REPLY_KEY];if(id){delete state.floorStates[id];delete workshopFloorStates[id];delete trackingFloorStates[id];delete scheduleFloorStates[id];}}}cancel();publish();void refresh().catch(()=>{});});
-  for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{cancel();resetBackfill();readSerial++;invalidatedFloors.clear();target=null;selection=null;state={...emptyLatest(),status:'idle',error:'',floorStates:{}};workshopState=null;workshopFloorStates={};trackingState=null;trackingFloorStates={};scheduleState=null;scheduleFloorStates={};scheduleRuntime?.reset?.();automaticReceipts.clear();automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};publish();void refresh().catch(()=>{});});
+  for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{activeHostGenerations=0;cancel();resetBackfill();readSerial++;invalidatedFloors.clear();target=null;selection=null;state={...emptyLatest(),status:'idle',error:'',floorStates:{}};workshopState=null;workshopFloorStates={};trackingState=null;trackingFloorStates={};scheduleState=null;scheduleFloorStates={};scheduleRuntime?.reset?.();automaticReceipts.clear();automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};publish();void refresh().catch(()=>{});});
   let displayReadQueued=false;
   const updateWorkshopDisplay=()=>{if(disposed||!initialized)return;if(pending){displayReadDirty=true;return;}if(displayReadQueued)return;displayReadQueued=true;queueMicrotask(()=>{displayReadQueued=false;if(!disposed){if(pending)displayReadDirty=true;else void read().catch(()=>{});}});};
   if(workshopRuntime?.subscribe)releases.push(workshopRuntime.subscribe(updateWorkshopDisplay));
@@ -675,7 +705,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       if(!readView||!sameTarget(owner,target)||!current(target)||!repository.matchesPanelData(target,readView)||source&&!matchesRaw(target,source))return null;
       return library(readView,source);
     },editRecord,manualRecord,estimateBackfill,startBackfill,stopBackfill,generate:(floor,options={})=>enqueueGeneration(floor,{workshopOnly:options.workshopOnly===true,...(typeof options.taskId==='string'?{taskId:options.taskId}:{})}),intercept,floorInfo,floorInfos,workshopFloorInfo,workshopFloorInfos,refresh,ensureData,panelReadView:()=>lastReadView,matchesSource:(t,proof)=>matchesRaw(t,proof),captureSource:(t=target)=>raw(t),
-    replaceWorkshopSend:()=>workshopSends.replace(),sealWorkshopSend:(type,injection)=>workshopSends.seal(type,injection),invalidateWorkshopSend:()=>workshopSends.clear(),
+    replaceWorkshopSend:()=>workshopSends.replace(),sealWorkshopSend:(type,injection,history)=>workshopSends.seal(type,injection,history),invalidateWorkshopSend:()=>workshopSends.clear(),
     setEnabled(value){enabled=!!value;if(!enabled)cancel();publish();},
     dispose(){if(disposed)return;for(const stop of [...visibilityReleases])stop();cancel();disposed=true;readSerial++;for(const release of releases)release();listeners.clear();}};
 }

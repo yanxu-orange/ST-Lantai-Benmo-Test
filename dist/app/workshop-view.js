@@ -28,7 +28,7 @@ function root(){return `${initial.warning?`<p class="wk-intro" role="status">${e
 function generationMaterialsEditor(d){
  if(d.kind==='prompt'||(d.generationSource??'story')!=='background')return '';
  const value=workshopMaterials(d),check=(key,label)=>`<label class="ui-choice"><input type="checkbox" name="material-${key}" ${value[key]?'checked':''}><span>${label}</span></label>`;
- return `<section class="wk-form-section"><h2 class="lt-settings-section-title">生成资料</h2>${check('recentDialogue','最近对话')}${field('最近楼数','material-recentFloorCount',value.recentFloorCount,'number',{min:2,max:200,disabled:!value.recentDialogue})}${check('recalledMemory','本轮召回记忆')}${check('character','角色资料')}</section>`;
+ return `<section class="wk-form-section"><h2 class="lt-settings-section-title">生成资料</h2>${check('character','角色人设')}${check('userPersona','用户人设')}${check('worldInfo','世界书')}${check('custom','自定义补充资料')}${value.custom?`<label class="ui-field"><span class="ui-field__label">补充资料</span><textarea class="lt-textarea" name="material-customText">${esc(value.customText)}</textarea></label>`:''}${check('recalledMemory','本轮召回记忆')}${check('history','前情提要')}</section>`;
 }
 function editor(){const d=state.draft;return `<form id="rule-form" class="wk-form"><section class="wk-form-section">${field('名称','name',d.name)}${select('作用范围','scope',d.scope,initial.canUseCharacter?scopes:{global:scopes.global,chat:scopes.chat})}${d.kind!=='prompt'?select('生成方式','generationSource',d.generationSource??'story',generationSources):''}<div class="wk-pair">${select('发送角色','role',d.role,{system:'system',user:'user',assistant:'assistant'})}${field('注入深度','depth',d.depth,'number')}</div></section>${generationMaterialsEditor(d)}<section class="wk-form-section wk-form-content"><label class="ui-field"><span class="ui-field__label">${{prompt:'提示词内容',collect:'收集内容与要求',sync:'追踪内容与更新要求'}[d.kind]}</span><textarea class="lt-textarea lt-prompt-editor" name="content" required>${esc(d.content)}</textarea></label></section></form>`;}
 function resultView(){const m=modules.find(m=>m.id===state.moduleId),rows=results[m.id]??[];if(!rows.length)return `<h2 class="wk-result-title">${esc(m.name)}</h2><div class="wk-empty">尚无结果</div>`;state.index=Math.min(state.index,rows.length-1);const r=rows[state.index];return `<section class="wk-results"><div class="wk-result-heading"><h2 class="wk-result-title">${esc(m.name)}</h2></div><article class="wk-result-panel"><div class="wk-result-meta"><span class="lt-meta">${m.kind==='sync'?'当前 · ':''}第 ${r.floor} 楼${r.edited?' · 已修改':''}</span><div>${btn('编辑','edit-result',`data-result="${esc(r.id)}"`)}${btn('删除','delete-result',`data-result="${esc(r.id)}"`)}</div></div><p class="wk-result">${esc(r.text)}</p></article>${m.kind==='sync'?`<div class="wk-history-list">${rows.slice(1).map((old,i)=>`<details class="wk-history"><summary>${i===0?'上一次':'前两次'} <span class="lt-meta">· 第 ${old.floor} 楼</span></summary><p class="wk-result">${esc(old.text)}</p></details>`).join('')}</div>`:''}</section>`;}
@@ -44,8 +44,8 @@ function formDraft(){
  for(const [k,v] of data)if(!k.startsWith('material-'))current[k]=k==='depth'?Number(v):v;
  if(state.route==='editor'&&state.draft.kind!=='prompt'&&(state.draft.generationSource??'story')==='background'){
   const value=workshopMaterials(state.draft),next={...value};
-  for(const key of ['recentDialogue','recalledMemory','character'])next[key]=data.has('material-'+key);
-  if(data.has('material-recentFloorCount'))next.recentFloorCount=Number(data.get('material-recentFloorCount'));
+  for(const key of ['character','userPersona','worldInfo','custom','recalledMemory','history'])next[key]=data.has('material-'+key);
+  if(data.has('material-customText'))next.customText=String(data.get('material-customText'));
   if(state.draft.generationMaterials!==undefined||JSON.stringify(next)!==JSON.stringify(value))current.generationMaterials=next;
  }
  return current;
@@ -56,7 +56,7 @@ function confirm(text,fn,labels={}){readDraft();state.dialog={text,fn,...labels}
 function leave(fn){if(dirty())confirm('放弃未保存的修改？',fn,{cancelLabel:'继续编辑',confirmLabel:'放弃修改'});else fn();}
 app.addEventListener('toggle',e=>{const group=e.target;if(group.matches?.('.wk-group')&&app.contains(group))collapsed[group.dataset.groupKey]=!group.open;},{capture:true,signal:lifetime.signal});
 app.addEventListener('submit',e=>e.preventDefault(),{signal:lifetime.signal});
-app.addEventListener('change',e=>{if(e.target.matches?.('[name="generationSource"],[name^="material-"]')){readDraft();render();}},{signal:lifetime.signal});
+app.addEventListener('change',e=>{if(e.target.matches?.('[name="generationSource"],input[type="checkbox"][name^="material-"]')){readDraft();render();}},{signal:lifetime.signal});
 app.addEventListener('input',e=>{if(!e.target.matches?.('[data-directory-search]'))return;state.query=e.target.value;state.directoryLimit=20;app.querySelector('#wk-directory-body').innerHTML=directoryRows();},{signal:lifetime.signal});
 function syncToggles(extra){
  const buttons=[...app.querySelectorAll('[data-action="toggle"]'),...(extra?[extra]:[])];

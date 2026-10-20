@@ -52,7 +52,7 @@
 }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="event"]) { --lt-settings-heading-shape: url("./assets/settings-book.svg"); }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="time"]),
-.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="rerank"] {
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="embedding"] {
   --lt-settings-heading-bg: var(--lt-format-settings-group-time-background);
   --lt-settings-heading-ink: var(--lt-format-settings-group-time-ink);
   --lt-settings-heading-line: var(--lt-format-settings-group-time-border);
@@ -60,7 +60,7 @@
   --lt-settings-heading-shape: url("./assets/settings-clock.svg");
 }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="prompt"]),
-.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="embedding"] {
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="workshop"] {
   --lt-settings-heading-bg: var(--lt-format-settings-group-prompt-background);
   --lt-settings-heading-ink: var(--lt-format-settings-group-prompt-ink);
   --lt-settings-heading-line: var(--lt-format-settings-group-prompt-border);
@@ -75,6 +75,8 @@
   --lt-settings-heading-icon: var(--lt-format-settings-group-info-ink);
   --lt-settings-heading-shape: url("./assets/settings-clock.svg");
 }
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="workshop"] { --lt-settings-heading-shape: url("../icons/edit.svg"); }
+.lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="embedding"] { --lt-settings-heading-shape: url("./assets/settings-spark.svg"); }
 .lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="rerank"] { --lt-settings-heading-shape: url("../icons/filter.svg"); }
 .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group > h2 {
   display: flex;

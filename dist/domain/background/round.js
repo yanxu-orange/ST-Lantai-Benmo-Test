@@ -2,7 +2,7 @@ import {latestStoryMaterial,bindPromptNames,promptIdentities} from '../latest/re
 
 export const BACKGROUND_IDENTITY = '你是一名协助作者整理连载故事的编辑。你的工作包括梳理已经发生的剧情、维护人物与物品的记录，以及按要求创作补充内容。整理和更新记录时，以提供的剧情资料和已有记录为依据；创作补充内容时，按对应任务规定的内容与范围展开。';
 const taskId=/^[a-z][a-z0-9_.:-]{0,79}$/;
-function validateTasks(tasks){
+export function validateTasks(tasks){
   if(!Array.isArray(tasks)||!tasks.length||tasks.length>128)throw new Error('后台任务数量无效');
   const seen=new Set();
   for(const task of tasks){

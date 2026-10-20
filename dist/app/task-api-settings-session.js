@@ -1,7 +1,7 @@
 import {taskRoutingView} from '../shared/settings/model.js';
 const copy = value => structuredClone(value);
 export const TASK_API_GROUPS = Object.freeze([
-  ['summary', '总结'], ['narrative', '自述与大纲'], ['latest', '最新摘要／追踪／工坊'], ['embedding', '向量'], ['rerank', '重排'],
+  ['summary', '总结'], ['narrative', '自述与大纲'], ['latest', '摘要与追踪'], ['workshop', '工坊'], ['embedding', '向量'], ['rerank', '重排'],
 ]);
 const messages = {
   INVALID_SETTINGS: '请检查任务 API 选择。',

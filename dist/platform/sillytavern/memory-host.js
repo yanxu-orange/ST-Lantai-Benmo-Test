@@ -1,3 +1,4 @@
+import {createWorkshopHistoryTicket} from './workshop-history.js';
 import {createSummaryNarrativeActions} from '../../app/summary-controller.js';
 import { ensureBookThemeFont } from '../../app/styles/book-font.js';
 import { MEMORY_SHELL_CSS } from './memory-shell-style.js';
@@ -297,7 +298,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(runtime.settings?.captureWorkshop)workshopRuntime=createWorkshopRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,captureSource:t=>adapter.captureChatSource(t),matchesSource:(t,s)=>adapter.matchesChatSource(t,s),isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true});
         trackingRuntime=createTrackingRuntime({repository,adapter,settings:runtime.settings,getContext,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t),onChange:()=>{void latestRuntime.refresh().catch(()=>{});}});
         scheduleRuntime=createScheduleRuntime({repository,settings:runtime.settings,dateRuntime:timeRuntime,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t)});
-        latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:()=>runtime.getGenerationSettings('latest'),getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true,autoInitialize:false});
+        latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:(group='latest')=>runtime.getGenerationSettings(group),getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true,autoInitialize:false});
         narrativeRuntime=createNarrativeRuntime({repository,adapter,manager:runtime.manager,getSummaryActive:()=>runtime.summaryService.isBusy()||runtime.cumulativeService?.isBusy(),settings:runtime.settings,provider:runtime.provider,getGenerationSettings:()=>runtime.getGenerationSettings('narrative'),getContext,getControls:()=>controls,captureSource:t=>(adapter.captureNarrativeSource??adapter.captureSummarySource).call(adapter,t)});
         const summaryNarrativeActions={event:createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.summaryService,runner:runtime.summaryController.runner}),cumulative:createSummaryNarrativeActions({runtime:narrativeRuntime,service:runtime.cumulativeService,runner:runtime.cumulativeRunner})};
         const narrativeActions=Object.fromEntries(['retry','resume','skip','pause'].map(action=>[action,()=>summaryNarrativeActions[narrativeRuntime.snapshot().run?.summarySource==='cumulative'?'cumulative':'event'][action]()]));
@@ -978,10 +979,13 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         await workshopRuntime?.intercept(...args);if(!current())return;
         await trackingRuntime?.intercept(...args);if(!current())return;
         await narrativeRuntime?.intercept(...args);if(!current())return;
+        const historyBefore=Array.isArray(args[0])?args[0].map(message=>({...message})):null;
         await summaryHistory.intercept(...args);if(!current())return;
+        const historyAfterSummary=Array.isArray(args[0])?args[0].map(message=>({...message})):null;
         await cumulativeHistory?.intercept(...args);if(!current())return;
+        const history=createWorkshopHistoryTicket({before:historyBefore,afterSummary:historyAfterSummary,afterCumulative:args[0],type:args[3]??'normal',cumulativeProof:cumulativeRuntime?.getReplacementProof(),getCurrent:()=>({target:repository.captureTarget(),original:getContext().chat,raw:adapter.captureSummarySource(target),root:adapter.peekConfirmed(target),eventEnabled:controls.allowed('event'),summaryEnabled:controls.allowed('summary'),cumulativeCurrent:proof=>controls.allowed('cumulative')&&runtime.settings.matchesCumulativeGeneration(proof.config)})});
         await latestRuntime?.intercept(...args);if(!current())return;
-        latestRuntime?.sealWorkshopSend(args[3]??'normal',recallRuntime?.captureWorkshopInjection()??null);
+        latestRuntime?.sealWorkshopSend(args[3]??'normal',recallRuntime?.captureWorkshopInjection()??null,history);
       }catch{if(!disposed&&request===recallEntryRequest){latestRuntime?.invalidateWorkshopSend();timePrompts?.clear();workshopRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();recallRuntime?.preparationFailed(entryTarget,args[0],args[3]);cumulativeRuntime?.preparationFailed(entryTarget);}/* Keep the host prompt copy on unavailable authority. */}
     },
     latestStatus:()=>latestRuntime?.inspect()??{status:'idle'},

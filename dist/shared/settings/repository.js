@@ -93,7 +93,7 @@ export function createSettingsRepository(adapter) {
     saveTaskRouting(routes, options = {}) {
       const {root,epochs}=adapter.snapshot();
       if (routes?.summary === null) throw new SettingsError('TASK_ROUTE_UNRESOLVED');
-      return update('ai',{...root.ai,taskRouting:assertTaskRouting(routes)},{...options,expectedEpoch:options.expectedEpoch??epochs.ai,credentials:[]});
+      return update('ai',{...root.ai,taskRouting:assertTaskRouting({...routes,workshop:routes.workshop??taskRoutingView(root.ai).routes.workshop})},{...options,expectedEpoch:options.expectedEpoch??epochs.ai,credentials:[]});
     },
     saveEventGeneration: (value, options) => update('eventGeneration', value, options),
     saveRecall: (value,options)=>update('recall',value,options),

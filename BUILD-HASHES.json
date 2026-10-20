@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "78a526590d606c8da7019a5aa329644e649a848f2387e3bde8c00fbf35e762e8"
+    "sha256": "9632597bebc6af99d768ffd23b5b83085a717afa057579b9c7aeae3e5bb81b4c"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -417,7 +417,7 @@
   },
   {
     "path": "dist/app/spring/settings.css",
-    "sha256": "dbe982d43dcd27845552ab5bc549d8e0452f0461e403c17336cf30a6d18e5cb6"
+    "sha256": "6372b60f3f6a683a201def4ac173fb06a6adcde844cb328e19c0f9a71d146988"
   },
   {
     "path": "dist/app/spring/switch-tokens.css",
@@ -489,7 +489,7 @@
   },
   {
     "path": "dist/app/task-api-settings-session.js",
-    "sha256": "fa19e516d2dad60f82a69647ca90ee76cb37d48e1235610fb402b493aedd4786"
+    "sha256": "348dc34d11732d90b44e20ae6e83771561b1364ddf9676e2217c92783fe548eb"
   },
   {
     "path": "dist/app/task-api-settings-view.js",
@@ -517,7 +517,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "b67b23c9965c2a9caf7ddc03085d42a9754d00ce638add9376e7807141017328"
+    "sha256": "a889d39610f7b8c9897602e65f2b8412f80d141c74b9d5bc8951cefb5a2cf129"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -533,11 +533,11 @@
   },
   {
     "path": "dist/app/workshop-view.js",
-    "sha256": "dd1ff25ea8f352b37c148c69eed712df31fc40df2fec6845f70be369fa5afaa9"
+    "sha256": "f119bd07de5a21987bcaee15416111c97e4820246de8a8c9b925177540972242"
   },
   {
     "path": "dist/domain/background/round.js",
-    "sha256": "7bcb83b28e77f921f8efbf97c3056beaa009c1cbd42b590b151a6fdb762ad8c0"
+    "sha256": "1740714aec24d7a02c8b63c80cc167dfc3e5e50f51d1e329b97cb3a07c03dd06"
   },
   {
     "path": "dist/domain/controls/gate.js",
@@ -929,7 +929,7 @@
   },
   {
     "path": "dist/domain/workshop/materials.js",
-    "sha256": "4cd978961f4db63d355f2e39dde8f6a803ee0e97eb5e8d0fec221cc5e411528e"
+    "sha256": "ded7c9e23db3c2c05f0909ea701c84d8dc658c1197ffb44ab7c0846b0f0096bd"
   },
   {
     "path": "dist/domain/workshop/model.js",
@@ -942,6 +942,10 @@
   {
     "path": "dist/domain/workshop/regex-rule.js",
     "sha256": "8006daeb4cbdf6aed97d388fca7a43edb85da65f7bd1c47569046a8aef326973"
+  },
+  {
+    "path": "dist/domain/workshop/requests.js",
+    "sha256": "19b180993bac03baa5bcc71c6e939ff67e386ff12ad468873acd1f9601d744f8"
   },
   {
     "path": "dist/domain/workshop/results.js",
@@ -965,7 +969,7 @@
   },
   {
     "path": "dist/platform/sillytavern/character-card.js",
-    "sha256": "913bea9ce0d56c298033473be8996664e76f072bc2170df24c17ad20f5d604a4"
+    "sha256": "57e27579636033a73719a70205c548c232fa42e6480e2da920a8328d50a8a66d"
   },
   {
     "path": "dist/platform/sillytavern/context.js",
@@ -1001,7 +1005,7 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "sha256": "590cd075ebe43dffd5671a11841c93407fa250dca596598a3097de3322a835e5"
+    "sha256": "656facb57894573319d374af8903f7075f008d6425373b0777009ff02649d6de"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -1025,7 +1029,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "39e8dd6fd8f7b72edc64ec8921a6d87009ee25ef31ed07f4fb31c3dd6ba95a96"
+    "sha256": "ce3b82b889f863f09c022b0ab2e791e87f3b1ab740c26ab6fb5327f0a30960fa"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1132,6 +1136,10 @@
     "sha256": "4c8b44e1f7af5994ecd724c3aef5ea200e8e2a29efa521f7692d81b59beb43c0"
   },
   {
+    "path": "dist/platform/sillytavern/workshop-history.js",
+    "sha256": "ed80959e93f6c0420cbada754920efaa90f1db46a16545744e131c2cc8c28004"
+  },
+  {
     "path": "dist/platform/sillytavern/workshop-identities.js",
     "sha256": "b9712b308ca6de1f7ad0115fd64d592e5d0f897512d9f7bcc0aaae10d60a51ac"
   },
@@ -1145,7 +1153,7 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-send-context.js",
-    "sha256": "221788a3c555e899757a78ea7878d90ade3ae398223f83e6ee57ad71f307ab5f"
+    "sha256": "488ae37de72b12d2a36a8fcfd6790c461d43d185ffef97979a24bb29b1eafac3"
   },
   {
     "path": "dist/probe/runtime-probe.js",
@@ -1153,7 +1161,7 @@
   },
   {
     "path": "dist/shared/ai/provider.js",
-    "sha256": "fb0c59bb6981bffee1f516d732bac6e31a04267f37328c10945fd20018a27ceb"
+    "sha256": "b0ee809e24abe9135dfba82b7aba6ea9191d1264c103d23d93f0b606100fb30e"
   },
   {
     "path": "dist/shared/ai/recall-provider.js",
@@ -1181,11 +1189,11 @@
   },
   {
     "path": "dist/shared/settings/model.js",
-    "sha256": "99e0af3e02df4ec794412ef916a1c8b92b70b2de71ad5c27a4a7a2c84f958396"
+    "sha256": "e5edb453800cd44673fc0235a108352bf4dce28729a5afc283a757539fd8b912"
   },
   {
     "path": "dist/shared/settings/repository.js",
-    "sha256": "3cdb9c6de8419b9c02f14398a4659e0ca6db17177b34f4a1b28cf19f5b0fb5fe"
+    "sha256": "6bfa772274f587ce615babdc6c92413cd8fb90afcb53b2b36764aa3b2767385f"
   },
   {
     "path": "dist/shared/settings/summary-prompts.js",
@@ -1209,10 +1217,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "2811625103b08d733884aa51c5742b34cf84b1afe6667cd4d97f8d00fe4391d7"
+    "sha256": "2ef61f93c3cb53c69732b657eb1acf7d131d379a976a766cc8061c2d581d99ec"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "7025d5231c4280a0b7269fdfa01097148149cd2da9e880475770131b98f0ad91"
+    "sha256": "6d6770120407efb75e04d44316e6db9203d403b359729910904d72920767db72"
   }
 ]
