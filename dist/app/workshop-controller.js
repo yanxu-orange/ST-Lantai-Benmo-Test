@@ -151,6 +151,7 @@ export function createWorkshopController({repository,settings,target,runtime,ens
     let captureTag=old?.captureTag??null;
     if(lifecycle!=='prompt'&&(!captureTag||old?.scope!==draft.scope)){const allocation=allocateCaptureTag(store,draft.scope);captureTag=allocation.tag;store=allocation.workshop;}
     const module=validateModule({id:old?.id??draft.id??crypto.randomUUID(),name:draft.name,content:draft.content,scope:draft.scope,role:draft.role,depth:Number(draft.depth),enabled:draft.enabled,lifecycle,generationSource:lifecycle==='prompt'?'story':draft.generationSource??'story',captureTag:lifecycle==='prompt'?null:captureTag,
+      ...(lifecycle!=='prompt'&&draft.generationMaterials!==undefined?{generationMaterials:structuredClone(draft.generationMaterials)}:{}),
       ...(lifecycle==='sync'&&draft.syncContentVersion!==undefined?{syncContentVersion:draft.syncContentVersion}:{}),
       ...(old?.example?{example:true}:{}),
       moveVersion:(old?.moveVersion??0)+(old&&((old.scope==='chat')!==(draft.scope==='chat'))?1:0),

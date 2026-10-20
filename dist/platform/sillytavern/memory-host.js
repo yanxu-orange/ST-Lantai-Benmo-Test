@@ -290,7 +290,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         timePrompts=createTimePromptRuntime({repository,settings:runtime.settings,getControls:()=>controls,dateRuntime:timeRuntime,getContext,captureSource:target=>adapter.captureTimeSource?.(target)??adapter.captureChatSource?.(target)??adapter.captureSummarySource(target),matchesSource:typeof (adapter.matchesTimeSource??adapter.matchesChatSource)==='function'?(target,source)=>(adapter.matchesTimeSource??adapter.matchesChatSource)(target,source):null});
         // Recall uses visible-source proof, so hide/unhide invalidates an in-flight
         // result even though event summaries may read hidden original story rows.
-        recallRuntime=createRecallRuntime({repository,settings:runtime.settings,recallProvider:runtime.recallProvider,getControls:()=>controls,getContext,dateRuntime:timeRuntime,captureSource:target=>adapter.captureChatSource(target)});
+        recallRuntime=createRecallRuntime({repository,settings:runtime.settings,recallProvider:runtime.recallProvider,getControls:()=>controls,getContext,dateRuntime:timeRuntime,captureEvents:target=>adapter.peekConfirmed(target).events,captureSource:target=>adapter.captureChatSource(target)});
         if(runtime.settings?.captureWorkshop)workshopRegex=createWorkshopRegexInstaller({settings:runtime.settings,getContext,fetchImpl:request,...runtimeOptions.workshopRegexOptions,isCurrent:()=>!disposed&&!lifetime.signal.aborted&&allowed('workshop')});
         if(workshopRegex&&allowed('workshop')){try{await workshopRegex.ensure({settingsReady:true});}catch(error){workshopRegexError=error;}}
         if(disposed){value.dispose();return null;}
@@ -971,6 +971,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(disposed||request!==recallEntryRequest||!sameTarget(target,repository.captureTarget()))return;
         await controls.ensure();if(!current())return;
         if(sourceDeletionRuntime?.hasPendingRollback()){recallRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();return;}
+        latestRuntime?.replaceWorkshopSend();
         await timePrompts?.intercept(...args);if(!current())return;
         await recallRuntime?.intercept(...args);if(!current())return;
         await cumulativeRuntime?.intercept(...args);if(!current())return;
@@ -979,8 +980,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         await narrativeRuntime?.intercept(...args);if(!current())return;
         await summaryHistory.intercept(...args);if(!current())return;
         await cumulativeHistory?.intercept(...args);if(!current())return;
-        await latestRuntime?.intercept(...args);
-      }catch{if(!disposed&&request===recallEntryRequest){timePrompts?.clear();workshopRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();recallRuntime?.preparationFailed(entryTarget,args[0],args[3]);cumulativeRuntime?.preparationFailed(entryTarget);}/* Keep the host prompt copy on unavailable authority. */}
+        await latestRuntime?.intercept(...args);if(!current())return;
+        latestRuntime?.sealWorkshopSend(args[3]??'normal',recallRuntime?.captureWorkshopInjection()??null);
+      }catch{if(!disposed&&request===recallEntryRequest){latestRuntime?.invalidateWorkshopSend();timePrompts?.clear();workshopRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();recallRuntime?.preparationFailed(entryTarget,args[0],args[3]);cumulativeRuntime?.preparationFailed(entryTarget);}/* Keep the host prompt copy on unavailable authority. */}
     },
     latestStatus:()=>latestRuntime?.inspect()??{status:'idle'},
     timeStatus:()=>timeRuntime?.inspect()??{status:'idle',date:null},

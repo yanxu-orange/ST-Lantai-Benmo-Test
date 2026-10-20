@@ -1,3 +1,4 @@
+import {workshopMaterials} from './materials.js';
 import {assertLatestSource,storedLatestSource} from '../latest/source.js';
 const clone = structuredClone;
 const text = value => typeof value === 'string' && value.trim().length > 0;
@@ -27,6 +28,7 @@ export function validateModule(value) {
     || (value.lifecycle === 'prompt' ? value.captureTag !== null : !/^[gch][1-9]\d*$/.test(value.captureTag))) {
     throw new Error('工坊模块字段无效');
   }
+  if(value.generationMaterials!==undefined){if(value.lifecycle==='prompt')throw new Error('提示词条目没有生成资料');workshopMaterials(value);}
   if(value.generationSource!==undefined&&(!WORKSHOP_GENERATION_SOURCES.includes(value.generationSource)||value.lifecycle==='prompt'&&value.generationSource!=='story'))throw new Error('工坊生成来源无效');
   if(value.syncContentVersion!==undefined&&(value.lifecycle!=='sync'||value.syncContentVersion!==1))throw new Error('工坊追踪要求版本无效');
   if(value.moveVersion!==undefined&&(!Number.isSafeInteger(value.moveVersion)||value.moveVersion<0))throw new Error('模块移动版本无效');

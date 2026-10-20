@@ -1,3 +1,4 @@
+import {captureSingleCharacterCard} from './character-card.js';
 import {recordNarrativeManual} from '../../domain/narrative/rollback.js';
 import {compactNarrativePool, resolveNarrativeSource, importNarrativeSource, importNarrativeProgress, semanticProgress, semanticLatest} from '../../domain/narrative/source-pool.js';
 import {createBackgroundTaskManager} from '../../shared/runtime/background-tasks.js';
@@ -137,12 +138,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       return recordNarrativeManual({...domain,[kind]:kind==='self'?value.map(row=>({...row,entries:update(row.entries)})):update(value)},domain,kind);
     },options);
   }
-  function cardSnapshot(){
-    const context=getContext();
-    if(context.groupId!==null&&context.groupId!==undefined&&context.groupId!=='')return null;
-    const character=context.characters?.[context.characterId];if(!character)return null;
-    return Object.fromEntries(['name','description','personality','scenario'].map(key=>[key,String(character.data?.[key]??character[key]??'')]));
-  }
+  const cardSnapshot=()=>captureSingleCharacterCard(getContext());
   function completeFloor(row){
     const message=getContext().chat?.[row.floor];
     return row.role==='assistant'&&!row.system&&row.text.trim()&&!(message?.gen_started&&!message?.gen_finished)&&completedStream(row.floor);

@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "f5707815f6a5660bed3ccd3a29d2c08ec4e84c73da4f399d38f08fcb85c125d3"
+    "sha256": "78a526590d606c8da7019a5aa329644e649a848f2387e3bde8c00fbf35e762e8"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -517,11 +517,11 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "42c7b5c18b4b2d8dc25e5ced3923958817a90404d44fd776322b84fbed39054b"
+    "sha256": "b67b23c9965c2a9caf7ddc03085d42a9754d00ce638add9376e7807141017328"
   },
   {
     "path": "dist/app/workshop-controller.js",
-    "sha256": "683bb0a28df240414b218d4aaf0345c6a3b5990bc13bfcace61490ae584cc709"
+    "sha256": "d60e4c7eea32015a4e13d817ce30103cbf13684194ed6f2c181d9817809fbf5e"
   },
   {
     "path": "dist/app/workshop-loading-view.js",
@@ -533,7 +533,7 @@
   },
   {
     "path": "dist/app/workshop-view.js",
-    "sha256": "bf79f711af388d0f1e289ee0c6219ab4e64be37c1155b16b54ed1a156632c16f"
+    "sha256": "dd1ff25ea8f352b37c148c69eed712df31fc40df2fec6845f70be369fa5afaa9"
   },
   {
     "path": "dist/domain/background/round.js",
@@ -928,8 +928,12 @@
     "sha256": "daa5cbb19e280af3e5ffb1511feae182cb91e87cffebd50e92278b01a8efad23"
   },
   {
+    "path": "dist/domain/workshop/materials.js",
+    "sha256": "4cd978961f4db63d355f2e39dde8f6a803ee0e97eb5e8d0fec221cc5e411528e"
+  },
+  {
     "path": "dist/domain/workshop/model.js",
-    "sha256": "354f9ad4a084db47e0293421435543609e8c70945eec142071df25ce480b7389"
+    "sha256": "41a1fcff94d873117bf3ea5949d4330d8123f48f0780ca78abe15850ffcdc89c"
   },
   {
     "path": "dist/domain/workshop/prompts.js",
@@ -958,6 +962,10 @@
   {
     "path": "dist/platform/sillytavern/appearance-adapter.js",
     "sha256": "615aab03d8446ef3961e84f854229abc854c459491d55b3b555182c98b1c044b"
+  },
+  {
+    "path": "dist/platform/sillytavern/character-card.js",
+    "sha256": "913bea9ce0d56c298033473be8996664e76f072bc2170df24c17ad20f5d604a4"
   },
   {
     "path": "dist/platform/sillytavern/context.js",
@@ -993,7 +1001,7 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "sha256": "d2c020df966a03c8099a888ae52f70fa707fd1b19b3dc704f5238348df0f1976"
+    "sha256": "590cd075ebe43dffd5671a11841c93407fa250dca596598a3097de3322a835e5"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -1017,7 +1025,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "800f1d30861c6f4c5254b971748e3e53f60f2165953ba9a8e9aa2de164f30686"
+    "sha256": "39e8dd6fd8f7b72edc64ec8921a6d87009ee25ef31ed07f4fb31c3dd6ba95a96"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1029,7 +1037,7 @@
   },
   {
     "path": "dist/platform/sillytavern/narrative-runtime.js",
-    "sha256": "a68c6850c968cbbaab96c4c62178c7311eb11353831c1de1206c0d41d69e522e"
+    "sha256": "56aafac5a6f96f8b2ae469e03c6b50590dc1e08b8ea961b933ae1ac97267cf5c"
   },
   {
     "path": "dist/platform/sillytavern/pending-settings-saves.js",
@@ -1061,7 +1069,7 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-runtime.js",
-    "sha256": "177845e847b8c9f9539fe3bd3ab55d3d25f07d30227f43e71e7f12fd018dbf20"
+    "sha256": "87360f5f154fcfd372c7f5321d1a7fb2a1b93c17b17eeae414e47ef1122bc93d"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
@@ -1136,6 +1144,10 @@
     "sha256": "6bad4bf117749f500ab732883dfdbfac487674f4a296e9efc8b11fa9296ee0f7"
   },
   {
+    "path": "dist/platform/sillytavern/workshop-send-context.js",
+    "sha256": "221788a3c555e899757a78ea7878d90ade3ae398223f83e6ee57ad71f307ab5f"
+  },
+  {
     "path": "dist/probe/runtime-probe.js",
     "sha256": "8fee52e9a7326f411e05276e61b8b6871c2b7f5069cee9c3bd1ec6df4e4f6488"
   },
@@ -1197,10 +1209,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "ae7dc7eaa2a7df54679d6f9978deacadfb4404a65bef1f984d633d78cd7f8665"
+    "sha256": "2811625103b08d733884aa51c5742b34cf84b1afe6667cd4d97f8d00fe4391d7"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "b98d8e22df6485759275f04a6aa525b817a2ef2196ca86fdd8f28bd490d4ddb9"
+    "sha256": "7025d5231c4280a0b7269fdfa01097148149cd2da9e880475770131b98f0ad91"
   }
 ]

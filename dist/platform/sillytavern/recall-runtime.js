@@ -25,9 +25,9 @@ export function recallInputs(messages,recentFloorCount,original=null) {
   for(let i=index-1;i>=0&&recentHistory.length<recentFloorCount;i--)if(eligible(usable[i])&&text(usable[i]).trim())recentHistory.push({floor:mapping?.[i]??i,text:text(usable[i]),distanceFromCurrent:mapping?mapping[index]-mapping[i]:index-i});
   return {input:index<0?'':text(usable[index]),recentHistory};
 }
-export function createRecallRuntime({repository,settings,getContext,captureSource,dateRuntime=null,build=buildRecall,previewBuild,getControls,recallProvider=null,vectorStore,Worker:WorkerClass=globalThis.Worker}={}) {
+export function createRecallRuntime({repository,settings,getContext,captureSource,captureEvents=null,dateRuntime=null,build=buildRecall,previewBuild,getControls,recallProvider=null,vectorStore,Worker:WorkerClass=globalThis.Worker}={}) {
   const gate=featureGate(getControls,'event'),timeGate=featureGate(getControls,'time');
-  let disposed=false,ticket=0,proof=null,flight=null,previewAbort=null,previewGuard=null,recordSequence=0;
+  let disposed=false,ticket=0,proof=null,injectedMaterials=null,injectedSelections=null,materialAuthority=null,flight=null,previewAbort=null,previewGuard=null,recordSequence=0;
   const buildPreview=previewBuild??(build===buildRecall?createRecallPreviewBuilder():build);
   const maintenance=createVectorMaintenance({repository,settings,provider:recallProvider,getControls,store:vectorStore}),buildMulti=createMultichannelWorkerBuilder({Worker:WorkerClass,vectorIndex:maintenance.index,provider:recallProvider});
   function cancelIndexPreparation(){maintenance.pause();}
@@ -38,7 +38,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   const current=(target,serial,config,source)=>gate.matches(config.controlProof)&&!disposed&&serial===ticket&&sameTarget(target,repository.captureTarget())
     &&settings.captureRecall().epoch===config.epoch&&(config.aiEpoch===undefined||settings.captureAi().epoch===config.aiEpoch)&&(!config.timeReminders||settings.matchesTimeReminders(config.timeReminders))&&(!captureSource||JSON.stringify(captureSource(target))===source);
   function clear(reason='cancelled',expectedTarget=null) {
-    const previous=flight,oldProof=proof;ticket++;proof=null;flight=null;
+    const previous=flight,oldProof=proof;ticket++;proof=null;injectedMaterials=null;injectedSelections=null;flight=null;
     cancelPreview();
     maintenance.checkLifecycle();
     previous?.abort?.abort();
@@ -119,6 +119,8 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
       context.setExtensionPrompt(RECALL_PROMPT_KEY,value.result.prompt,1,value.config.recall.memoryDepth,false,0);
       // Host callbacks may synchronously switch chat or settings during writing.
       if(!current(target,serial,value.config,value.source)){clear();return;}
+      injectedSelections=(value.result.selected??[]).map(({id,event})=>({id,event:copy(event)}));
+      injectedMaterials=(value.result.selected??[]).map(({event})=>({startTime:event.startTime,endTime:event.endTime,title:event.title,body:event.body}));
       proof={target:copy(target),eventIds:new Set(value.result.selectedIds),revision:value.revision,serial,config:value.config,source:value.source};
       record(target,{status:'injected',type,depth:value.config.recall.memoryDepth,prompt:value.result.prompt,result:value.result});
       flight=null;
@@ -127,6 +129,10 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     }
   }
   const context=getContext();
+  const selectedUnchanged=(authority,events)=>authority.selected.every(saved=>JSON.stringify(events.find(row=>row.id===saved.id))===JSON.stringify(saved.event));
+  if(repository.subscribeEventCommits)releases.push(repository.subscribeEventCommits(notice=>{
+    if(materialAuthority&&sameTarget(materialAuthority.target,notice.target)&&!selectedUnchanged(materialAuthority,notice.events))materialAuthority.revoked=true;
+  }));
   const unsubscribeSettings=settings.subscribe?.(()=>{
     try{if(previewGuard&&!previewGuard())cancelPreview();}catch{cancelPreview();}
     try{if(flight?.guard&&!flight.guard())flight.abort.abort();}catch{flight?.abort.abort();}
@@ -147,6 +153,13 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   }
   const vectorIndexState=()=>maintenance.state();
   return Object.freeze({preview,intercept,clear,preparationFailed,cancelPreview,prepareVectorIndex,vectorIndexState,cancelIndexPreparation,
+    captureWorkshopInjection(){
+      try{
+        if(!proof||!current(proof.target,proof.serial,proof.config,proof.source)||!injectedMaterials)return null;
+        const owner=copy(proof.target),config=proof.config,memories=copy(injectedMaterials),authority={target:owner,selected:copy(injectedSelections),revoked:false};materialAuthority=authority;
+        return {memories,isCurrent:()=>!disposed&&!authority.revoked&&(!captureEvents||selectedUnchanged(authority,captureEvents(owner)))&&sameTarget(owner,repository.captureTarget())&&gate.matches(config.controlProof)&&settings.captureRecall().epoch===config.epoch&&(config.aiEpoch===undefined||settings.captureAi().epoch===config.aiEpoch)&&(!config.timeReminders||settings.matchesTimeReminders(config.timeReminders))};
+      }catch{return null;}
+    },
     getReplacementProof(){try{return proof&&current(proof.target,proof.serial,proof.config,proof.source)?proof:null;}catch{return null;}},
     inspect,inspectView:({more=false}={})=>inspect(more?null:2),
     subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn);},

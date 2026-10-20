@@ -6,8 +6,8 @@
   "js": "dist/index.js",
   "generate_interceptor": "lantaiBenmoGenerationInterceptor",
   "author": "Lantai Benmo",
-  "version": "0.1.0-test.20261020.3",
-  "homePage": "https://github.com/yanxu-orange/Lantai-Benmo-dev",
+  "version": "1.0.0-test.20261020.1",
+  "homePage": "https://github.com/yanxu-orange/ST-Orange-Lantai-Benmo",
   "hooks": {
     "disable": "onDisable",
     "delete": "onDelete",
