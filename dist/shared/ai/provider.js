@@ -1,14 +1,19 @@
 // Task names are business semantics, not provider or prompt configuration.
 export function aiTaskGroup(task) {
   if (typeof task !== 'string') return undefined;
-  if (task.startsWith('event.summary.') || ['memory.indexes', 'memory.merge'].includes(task)) return 'event';
-  if (task.startsWith('cumulative.')) return 'cumulative';
+  if (task.startsWith('event.summary.') || ['memory.indexes', 'memory.merge'].includes(task) || task.startsWith('cumulative.')) return 'summary';
   if (task.startsWith('narrative.')) return 'narrative';
   if (task.startsWith('latest.') || task === 'background.round' || task === 'tracking.update') return 'latest';
   return undefined;
 }
 const MESSAGES = Object.freeze({
   task_preset_missing: '此任务选择的 API 方案不存在，请在任务 API 设置中重新选择。',
+  task_route_unresolved: '旧总结来源不同，请先在任务 API 中明确统一选择。',
+  capability: '所选方案的接口能力与任务不匹配。',
+  timeout: '接口等待超时，请稍后重试。',
+  mapping: '接口返回的映射或数值不完整，已放弃本次结果。',
+  storage: '向量缓存未能读取或保存，请稍后重试。',
+  cors_network: '专用接口连接失败；该服务须支持浏览器跨域访问，请检查地址及 CORS 配置。',
   configuration: '请先在 API 设置中选择来源并完成配置。',
   unavailable: '当前 AI 生成接口不可用，请检查 API 设置。',
   cancelled: 'AI 任务已取消。',
@@ -39,6 +44,7 @@ export function assertAiCurrent(signal, isCurrent = () => true) {
 }
 
 export function freezeAiConfig(value) {
+  if (value?.capability && value.capability !== 'text') throw new AiProviderError('capability');
   if (!value || !['sillytavern', 'plugin'].includes(value.source)) {
     throw new AiProviderError('configuration');
   }
@@ -193,7 +199,7 @@ export function createAiProvider({ getConfig, transport } = {}) {
   }
   function readConfig(taskGroup) {
     try { return freezeAiConfig(getConfig(taskGroup)); }
-    catch (error) { throw new AiProviderError(error?.code === 'TASK_PRESET_MISSING' || error?.code === 'task_preset_missing' ? 'task_preset_missing' : 'configuration'); }
+    catch (error) { throw new AiProviderError(error?.code === 'TASK_PRESET_MISSING' || error?.code === 'task_preset_missing' ? 'task_preset_missing' : error?.code === 'TASK_ROUTE_UNRESOLVED' ? 'task_route_unresolved' : error?.code === 'TASK_CAPABILITY_MISMATCH' ? 'capability' : 'configuration'); }
   }
   return Object.freeze({
     async generateText({ task, messages, signal, isCurrent, maxOutputTokens } = {}) {

@@ -5,6 +5,8 @@ import { createSillyTavernAiTransport, mainSnapshot } from './ai-provider.js';
 import { createSettingsRepository } from '../../shared/settings/repository.js';
 import { createBackgroundTaskManager } from '../../shared/runtime/background-tasks.js';
 import { createAiProvider, AiProviderError } from '../../shared/ai/provider.js';
+import { createRecallAiProvider } from '../../shared/ai/recall-provider.js';
+import { createRecallAiTransport } from './recall-ai-transport.js';
 import { createMemoryManagementService } from '../../domain/memory/management-service.js';
 import { createManagementController } from '../../app/management-controller.js';
 import { sameTarget } from '../../domain/memory/repository.js';
@@ -23,10 +25,12 @@ export async function createManagementRuntime({ repository, getContext, document
   fetchImpl = globalThis.fetch, settingsOptions = {}, mainIdentityOptions = {}, jquery = globalThis.jQuery, signal, captureSummarySource,getControls,afterSummaryCommit,retrySummaryCommit,skipSummaryCommit,getPendingNarrative } = {}) {
   const allowed=key=>!getControls||!!getControls()?.allowed(key);
   const manager = createBackgroundTaskManager(), releases = [];
+  const recallAbort = new AbortController();
   let settings = null, controller = null, summaryService=null, summaryController=null, disposed = false, mainEpoch = 0, lastMain = null, jqueryCapable = false;
   const reported = new Map();
   let cumulativeService=null,cumulativeRunner=null,cumulativeController=null,cumulativeAiEpoch=0,lastCumulativeAi=null;
   const abort = () => {
+    recallAbort.abort();
     disposed = true; settings?.dispose();
     for (const release of releases.splice(0)) release();
     for (const task of manager.list()) manager.cancel(task.taskId);
@@ -172,6 +176,8 @@ export async function createManagementRuntime({ repository, getContext, document
   };
   const provider = createAiProvider({ getConfig, transport: createSillyTavernAiTransport({ getContext: transportContext, fetchImpl,
     resolveCredential: (config, context) => settings.resolveCredential(config, context) }) });
+  const recallProvider = createRecallAiProvider({getConfig,signal:recallAbort.signal,transport:createRecallAiTransport({fetchImpl,
+    resolveCredential:(config,context)=>settings.resolveCredential(config,context)})});
   const apiOperations = createApiSettingsOperations({ getContext: transportContext, fetchImpl,
     captureMain() { if (disposed) throw new AiProviderError('unavailable'); mainIdentity(); observeMain(); return mainEpoch; } });
   const eventGeneration=()=>{if(!allowed('event'))throw new Error('事件记忆已关闭');return getGenerationSettings('event');};
@@ -247,6 +253,6 @@ export async function createManagementRuntime({ repository, getContext, document
     // history is a completed reply and may wake a runner.
     for(const name of ['CHAT_CHANGED','CHAT_CREATED','MESSAGE_DELETED'])on(name,()=>{replyRun=null;quietDepth=0;lastReplyFloor=(getContext()?.chat?.length??0)-1;});
   }
-  return Object.freeze({ settings, manager, provider, apiOperations, service, controller, summaryService, summaryController, cumulativeService,cumulativeRunner,cumulativeController,getCumulativeGenerationSettings,getGenerationSettings, getOriginalSnapshot, originalAvailable,
+  return Object.freeze({ settings, manager, provider, recallProvider, apiOperations, service, controller, summaryService, summaryController, cumulativeService,cumulativeRunner,cumulativeController,getCumulativeGenerationSettings,getGenerationSettings, getOriginalSnapshot, originalAvailable,
     dispose() { if (disposed) return; abort(); signal?.removeEventListener('abort', abort); } });
 }

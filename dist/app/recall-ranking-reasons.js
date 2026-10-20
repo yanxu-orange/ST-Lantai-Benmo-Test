@@ -18,6 +18,11 @@ function contributions(facts,reasons=[]){
 }
 export function recallRankingReason(item){
   const facts=item.ranking;if(!facts)return '';
+  if(facts.method){
+    const labels={keyword:'关键词',bm25:'BM25',vector:'向量',date:'日期检索',time:'时间'},sources=(item.sources??[]).map(key=>labels[key]??key).join('、');
+    const why={'count-limit':'普通记忆名额已用完。','token-limit':'前面的完整正文已达到 Token 软上限。','candidate-limit':'未进入各路去重补位后的候选名额。','date-conflict':'当前整段明确日期查询与记忆日期相斥。','channel-disabled':'关键词、BM25和向量通道已关闭；本轮没有日期支持。','channel-unavailable':'向量通道未就绪或请求失败，其他可用通道证据不足。','insufficient-evidence':'已启用通道未产生足够的候选依据。','special-limit':'时间名额已用完或关闭，未由普通池选入。'}[item.excludedReason];
+    return [sources?`命中来源：${sources}。`:'',why??'本轮入选。',facts.rank===null?'':`${facts.method==='rerank'?'专用重排':'等权名次融合'}第 ${facts.rank} 名。`].filter(Boolean).join(' ');
+  }
   if(facts.pool==='special'){const hit=item.dateEvidence?.special??[],words=[...new Set((item.reasons??[]).filter(x=>['keyword-match','alias-match'].includes(x.code)).map(x=>x.alias??x.term).filter(Boolean))].slice(0,3),dates=[...new Set(hit.map(x=>x.matchedLabel??(x.matchedDate?`${x.matchedDate.year}年${x.matchedDate.month}月${x.matchedDate.day}日`:'')).filter(Boolean))];return `时间记忆匹配：${hit.some(x=>x.kind==='named-origin')?'纪念日发生年份':hit.some(x=>x.kind==='named-same-day')?'纪念日对应的过去经历':'历史同日'}${dates.length?`（${dates.join('、')}）`:''}${words.length?`；同时命中关键词或简称：${words.join('、')}`:''}。本轮入选，不占普通名额。`;}
   if(facts.pool==='resident'){const hits=[...new Set((item.reasons??[]).filter(x=>['keyword-match','alias-match'].includes(x.code)).map(x=>x.alias??x.term).filter(Boolean))],dates=(item.dateEvidence?.ordinary??[]).filter(x=>x.relation==='support').map(x=>x.target.raw);return `常驻发送，不占触发记忆名额。${hits.length?`同时命中：${hits.slice(0,3).join('、')}。`:''}${dates.length?`日期匹配：${[...new Set(dates)].join('、')}。`:''}`;}
   const dates=item.dateEvidence?.ordinary??[],supports=dates.filter(x=>x.relation==='support');

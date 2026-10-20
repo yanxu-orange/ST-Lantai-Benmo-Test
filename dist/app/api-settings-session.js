@@ -8,13 +8,16 @@ const messages = {
 };
 const copy = value => structuredClone(value);
 
-export function createApiSettingsSession({ repository, operations, uuid = () => crypto.randomUUID(), onExit = () => {} }) {
+export function createApiSettingsSession({ repository, operations, uuid = () => crypto.randomUUID(), onExit = () => {},connectionsOnly=false }) {
   let state = { status: 'loading', draft: null, message: '', error: null }, baseline = null, busy = false, closed = false;
+  // The connection editor may focus a dedicated plan without assigning it as
+  // the retained legacy text default. Existing text selection remains compatible.
+  let editingPresetId = null;
   const listeners = new Set();
   const passwords = new Map();
   const copies = new Map();
   let draftEpoch = 0, pending = null, models = [], operation = { status: 'idle', message: '', error: false }, keyVisible = false, deleteConfirm = false;
-  const snapshot = () => copy({ ...state, models, operation, keyVisible, deleteConfirm, credentialPresetIds: [...new Set([...(baseline?.credentialPresetIds ?? []), ...copies.keys(), ...[...passwords].filter(([, value]) => value.trim()).map(([id]) => id)])] });
+  const snapshot = () => copy({ ...state, draft:state.draft?{...state.draft,activePresetId:editingPresetId}:null,editingPresetId, models, operation, keyVisible, deleteConfirm, credentialPresetIds: [...new Set([...(baseline?.credentialPresetIds ?? []), ...copies.keys(), ...[...passwords].filter(([, value]) => value.trim()).map(([id]) => id)])] });
   const notify = () => { for (const listener of [...listeners]) { try { listener(snapshot()); } catch { /* View isolation. */ } } };
   function failure(error) {
     const code = Object.hasOwn(messages, error?.code) ? error.code : 'SETTINGS_UNAVAILABLE';
@@ -49,14 +52,15 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
       else await repository.read();
       const current = repository.captureAi();
       if (closed) return false;
-      passwords.clear(); baseline = current; state = { status: 'ready', draft: copy(current.ai), error: null, message: '' };
+      passwords.clear(); baseline = current; editingPresetId=current.ai.activePresetId; state = { status: 'ready', draft: copy(current.ai), error: null, message: '' };
       return true;
     } catch (error) { if (!closed) failure(error); return false; }
     finally { busy = false; if (!closed) notify(); }
   }
   async function run(kind) {
     if (!editable() || pending || typeof operations?.[kind] !== 'function') return false;
-    const source = state.draft.source, preset = copy(state.draft.presets.find(item => item.id === state.draft.activePresetId) ?? null);
+    const preset = copy(state.draft.presets.find(item => item.id === editingPresetId) ?? null);
+    const source = connectionsOnly?(preset?'plugin':null):(preset?.capability??'text')==='text'?state.draft.source:'plugin';
     if (!source || kind === 'fetchModels' && (source !== 'plugin' || !preset)) return false;
     invalidate({ preserveModels: kind === 'test' }); const version = draftEpoch, controller = new AbortController(); pending = controller;
     const current = () => !closed && pending === controller && draftEpoch === version && !controller.signal.aborted
@@ -64,7 +68,7 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
     operation = { status: kind === 'fetchModels' ? 'fetching' : 'testing', message: kind === 'fetchModels' ? '正在获取模型…' : '正在测试当前配置…', error: false }; notify();
     try {
       const result = await operations[kind]({ source, endpoint: preset?.endpoint.trim(), model: preset?.model.trim(), credentialId: preset?.id,
-        resolveCredential: () => currentCredential(preset.id), signal: controller.signal, isCurrent: current });
+        resolveCredential: () => currentCredential(preset.id), signal: controller.signal, isCurrent: current, capability:preset?.capability??'text',...(preset?.protocol?{protocol:preset.protocol}:{}) });
       if (!current()) return false;
       if (kind === 'fetchModels') {
         models = result;
@@ -74,7 +78,8 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
     } catch (error) {
       if (closed || pending !== controller || draftEpoch !== version) return false;
       const safe = { configuration: '请检查地址、模型和密钥。', unavailable: '当前宿主接口不可用。', authentication: '密钥认证失败，请检查密钥和访问权限。',
-        endpoint: '接口或模型未找到，请检查地址和模型。', rate_limit: '请求过于频繁，请稍后再试。', invalid_result: '接口返回内容未通过校验。' };
+        endpoint: '接口或模型未找到，请检查地址和模型。', rate_limit: '请求过于频繁，请稍后再试。', invalid_result: '接口返回内容未通过校验。',
+        cors_network:'专用接口连接失败；服务须支持浏览器 CORS，请检查地址与跨域配置。',timeout:'专用接口等待超时，请稍后重试。' };
       operation = { status: 'error', message: Object.hasOwn(safe, error?.code) ? safe[error.code] : (['stale', 'cancelled', 'SETTINGS_CONFLICT'].includes(error?.code) ? '配置已变化，请重新发起。' : '请求失败，请检查连接后重试。'), error: true };
       return false;
     } finally { if (pending === controller) { pending = null; if (!closed) notify(); } }
@@ -96,43 +101,46 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
     fetchModels: () => run('fetchModels'),
     test: () => run('test'),
     toggleKey() { if (!editable()) return false; keyVisible = !keyVisible; notify(); return true; },
-    requestDelete() { if (!editable() || !state.draft.activePresetId) return false; invalidate(); deleteConfirm = true; notify(); return true; },
+    requestDelete() { if (!editable() || !editingPresetId) return false; invalidate(); deleteConfirm = true; notify(); return true; },
     cancelDelete() { deleteConfirm = false; if (!closed) notify(); },
     saveAs() {
       if (!editable()) return false;
-      const preset = state.draft.presets.find(item => item.id === state.draft.activePresetId); if (!preset) return false;
+      const preset = state.draft.presets.find(item => item.id === editingPresetId); if (!preset) return false;
       let key = null;
       try { if ((passwords.get(preset.id) ?? '').trim() || copies.has(preset.id) || baseline.credentialPresetIds.includes(preset.id)) key = currentCredential(preset.id); }
       catch (error) { failure(error); notify(); return false; }
       return edit(draft => {
         const id = uuid(); let name = `${preset.name} 副本`, index = 2;
         while (draft.presets.some(item => item.name === name)) name = `${preset.name} 副本 ${index++}`;
-        draft.presets.push({ ...preset, id, name }); draft.activePresetId = id;
+        draft.presets.push({ ...preset, id, name }); editingPresetId=id;if(!connectionsOnly&&(preset.capability??'text')==='text')draft.activePresetId = id;
         if (key) copies.set(id, key); keyVisible = false;
       });
     },
     setSource(source) { return [null, 'sillytavern', 'plugin'].includes(source) && edit(draft => { draft.source = source; keyVisible = false; }); },
-    selectPreset(id) { return edit(draft => { if (id === null || draft.presets.some(item => item.id === id)) draft.activePresetId = id; keyVisible = false; }); },
-    addPreset() { return edit(draft => {
+    selectPreset(id) { return edit(draft => { const preset=draft.presets.find(item=>item.id===id);if(id===null||preset){editingPresetId=id;if(!connectionsOnly&&(!preset||(preset.capability??'text')==='text'))draft.activePresetId=id;}keyVisible = false; }); },
+    addPreset(capability='text') { if(!['text','embedding','rerank'].includes(capability))return false; return edit(draft => {
       const id = uuid(); let name = '新方案', number = 2;
       while (draft.presets.some(item => item.name === name)) name = `新方案 ${number++}`;
-      draft.presets.push({ id, name, endpoint: '', model: '', secretId: '' }); draft.activePresetId = id; keyVisible = false;
+      draft.presets.push({ id, name, endpoint: '', model: '', secretId: '', ...(capability==='text'?{}:{capability}) });editingPresetId=id;if(!connectionsOnly&&capability==='text')draft.activePresetId = id; keyVisible = false;
     }); },
-    deletePreset() { return edit(draft => { passwords.delete(draft.activePresetId); copies.delete(draft.activePresetId); draft.presets = draft.presets.filter(item => item.id !== draft.activePresetId); draft.activePresetId = null; keyVisible = false; }); },
+    deletePreset() { return edit(draft => { passwords.delete(editingPresetId); copies.delete(editingPresetId); draft.presets = draft.presets.filter(item => item.id !== editingPresetId);if(draft.activePresetId===editingPresetId)draft.activePresetId = null;editingPresetId=null; keyVisible = false; }); },
     setField(field, value) {
       if (!editable()) return false;
       if (field === 'key' && typeof value === 'string') {
-        return edit(draft => { if (draft.activePresetId) passwords.set(draft.activePresetId, value); });
+        return edit(() => { if (editingPresetId) passwords.set(editingPresetId, value); });
       }
-      if (!['name', 'endpoint', 'model'].includes(field) || typeof value !== 'string') return false;
-      return edit(draft => { const preset = draft.presets.find(item => item.id === draft.activePresetId); if (preset) preset[field] = value; }, { preserveModels: ['name', 'model'].includes(field) });
+      if (!['name', 'endpoint', 'model','capability','protocol'].includes(field) || typeof value !== 'string'||field==='capability'&&!['text','embedding','rerank'].includes(value)||field==='protocol'&&!['openai','voyage'].includes(value)) return false;
+      return edit(draft => { const preset = draft.presets.find(item => item.id === editingPresetId); if (preset){preset[field] = value;if(field==='capability'&&value!=='embedding')delete preset.protocol;} }, { preserveModels: ['name', 'model'].includes(field) });
     },
     async save() {
       if (!editable()) return false;
       busy = true; invalidate(); state.status = 'saving'; state.error = null; state.message = ''; notify();
       try {
-        const draft = assertAiSettings({ ...state.draft, presets: state.draft.presets.map(item => ({
+        const draft = assertAiSettings({ ...state.draft,
+          presets: state.draft.presets.map(item => ({
           id: item.id, name: item.name.trim(), endpoint: item.endpoint.trim(), model: item.model.trim(), secretId: item.secretId,
+          ...(Object.hasOwn(item,'capability')?{capability:item.capability}:{}),
+          ...(Object.hasOwn(item,'protocol')?{protocol:item.protocol}:{}),
         })) });
         const credentials = [...new Set([...passwords.keys(), ...copies.keys()])].flatMap(presetId => {
           const value = passwords.get(presetId) ?? '';
@@ -160,7 +168,7 @@ export function createApiSettingsSession({ repository, operations, uuid = () => 
     },
     exit(reason = 'back') {
       if (closed) return;
-      closed = true; invalidate({ mask: true }); passwords.clear(); copies.clear(); baseline = null; state.draft = null; state.status = 'closed'; unsubscribeRepository(); listeners.clear(); onExit(reason);
+      closed = true; invalidate({ mask: true }); passwords.clear(); copies.clear(); baseline = null; editingPresetId=null;state.draft = null; state.status = 'closed'; unsubscribeRepository(); listeners.clear(); onExit(reason);
     },
   });
 }

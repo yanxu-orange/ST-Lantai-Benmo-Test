@@ -62,6 +62,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
   let queue = Promise.resolve();
   const panelReads=new WeakMap();
   const sourceDeletionReceipts=new Map();
+  const eventCommitListeners=new Set();
   const requireTarget = target => { if (!sameTarget(target, adapter.captureTarget())) throw new Error('聊天目标已变化，请返回列表重新进入'); };
   const enqueue = action => { const work = queue.then(action); queue = work.catch(() => {}); return work; };
   const read = async target => { requireTarget(target); const root = assertRoot(await adapter.read(target), target); requireTarget(target); return root; };
@@ -95,7 +96,12 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     const candidate=assertRoot(next, target); check(root);
     const committed = await adapter.commit(target, candidate, root.revision, { ...options, guard: check });
     requireTarget(target);
-    return assertRoot(committed, target);
+    const saved=assertRoot(committed,target);
+    if(eventCommitListeners.size&&!equal(root.events,saved.events)){
+      const notice=freeze({target:copy(target),before:copy(root.events),events:copy(saved.events)});
+      queueMicrotask(()=>{for(const listener of [...eventCommitListeners])try{Promise.resolve(listener(notice)).catch(()=>{});}catch{/* Derived maintenance cannot turn confirmed memory saves into failures. */}});
+    }
+    return saved;
   };
   const sourceGuard = (target, snapshot, options, hidden = false) => current => {
     if ((options.isCurrent ?? (() => true))() !== true) throw new Error('任务已取消或来源已失效');
@@ -164,6 +170,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     });
   };
   return {
+    subscribeEventCommits(listener){if(typeof listener!=='function')throw new TypeError('成果监听无效');eventCommitListeners.add(listener);return()=>eventCommitListeners.delete(listener);},
     capturePanelData,readPanelRoot,matchesPanelData,
     async captureNarrative(target,readView){const frozen=copy(target);return freeze({target:frozen,narrative:narrativeOf(await panelRead(frozen,readView))});},
     matchesNarrative(target,selection){try{requireTarget(target);const root=assertRoot(adapter.peekConfirmed(target),target);return !!selection&&sameTarget(target,selection.target)&&equal(narrativeOf(root),selection.narrative);}catch{return false;}},

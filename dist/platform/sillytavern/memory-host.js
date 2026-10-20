@@ -290,7 +290,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         timePrompts=createTimePromptRuntime({repository,settings:runtime.settings,getControls:()=>controls,dateRuntime:timeRuntime,getContext,captureSource:target=>adapter.captureTimeSource?.(target)??adapter.captureChatSource?.(target)??adapter.captureSummarySource(target),matchesSource:typeof (adapter.matchesTimeSource??adapter.matchesChatSource)==='function'?(target,source)=>(adapter.matchesTimeSource??adapter.matchesChatSource)(target,source):null});
         // Recall uses visible-source proof, so hide/unhide invalidates an in-flight
         // result even though event summaries may read hidden original story rows.
-        recallRuntime=createRecallRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,dateRuntime:timeRuntime,captureSource:target=>adapter.captureChatSource(target)});
+        recallRuntime=createRecallRuntime({repository,settings:runtime.settings,recallProvider:runtime.recallProvider,getControls:()=>controls,getContext,dateRuntime:timeRuntime,captureSource:target=>adapter.captureChatSource(target)});
         if(runtime.settings?.captureWorkshop)workshopRegex=createWorkshopRegexInstaller({settings:runtime.settings,getContext,fetchImpl:request,...runtimeOptions.workshopRegexOptions,isCurrent:()=>!disposed&&!lifetime.signal.aborted&&allowed('workshop')});
         if(workshopRegex&&allowed('workshop')){try{await workshopRegex.ensure({settingsReady:true});}catch(error){workshopRegexError=error;}}
         if(disposed){value.dispose();return null;}
@@ -642,7 +642,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function openApiSettings(){
     if(!settingsOpen||apiSession||!panel)return;
     settingsRootView?.dispose();settingsRootView=null;
-    apiSession=createApiSettingsSession({repository:runtime.settings,operations:runtime.apiOperations,onExit:reason=>{
+    apiSession=createApiSettingsSession({repository:runtime.settings,operations:runtime.apiOperations,connectionsOnly:true,onExit:reason=>{
       apiView?.dispose();apiView=null;apiSession=null;
       if(closing||replacingPage)return;
       if(reason==='close')close();else mountSettingsRoot('api');

@@ -7,11 +7,14 @@ import { createDefaultEventWords } from './default-event-words.js';
 import { CUMULATIVE_PROMPT_KEYS } from './cumulative-prompts.js';
 import { SUMMARY_PROMPT_KEYS, migrateSummaryPromptOverrides } from './summary-prompts.js';
 import { createDefaultCleaningRules, normalizeCleaningRule } from '../../domain/summary/cleaning.js';
+import { embeddingProtocol } from '../ai/recall-provider.js';
 
 export const SETTINGS_KEY = 'lantai_benmo';
 export const PROMPT_KEYS = SUMMARY_PROMPT_KEYS;
 const messages = Object.freeze({
   TASK_PRESET_MISSING: '此任务选择的 API 方案不存在，请在任务 API 设置中重新选择。',
+  TASK_ROUTE_UNRESOLVED: '旧事件总结与古法总结使用不同配置，请在任务 API 中明确统一选择。',
+  TASK_CAPABILITY_MISMATCH: '此方案的接口能力与任务不匹配，请重新选择。',
   INVALID_SETTINGS: '兰台设置格式无效，请检查设置内容。',
   SETTINGS_CONFLICT: '设置已发生变化，请重新读取后保存。',
   SETTINGS_COMMIT_UNCONFIRMED: '设置保存结果尚未确认，可能已经保存；请恢复连接后重新读取，不要重复提交。',
@@ -30,6 +33,20 @@ function exact(value, keys) {
 }
 const text = (value, empty = false) => typeof value === 'string' && value.trim() === value && (empty || !!value);
 export const AI_TASK_GROUPS = Object.freeze(['event', 'cumulative', 'narrative', 'latest']);
+export const API_CAPABILITIES = Object.freeze(['text', 'embedding', 'rerank']);
+export const TASK_ROUTING_GROUPS = Object.freeze(['summary', 'narrative', 'latest', 'embedding', 'rerank']);
+export const presetCapability = preset => preset?.capability ?? 'text';
+export function assertTaskRouting(value) {
+  exact(value, TASK_ROUTING_GROUPS);
+  for (const [group, route] of Object.entries(value)) {
+    exact(route, ['source', 'presetId', 'model']);
+    if (!['none', 'plugin', ...(['embedding', 'rerank'].includes(group) ? [] : ['sillytavern'])].includes(route.source)
+      || !(route.presetId === null || text(route.presetId)) || !text(route.model, true)
+      || (route.source === 'plugin') !== (route.presetId !== null)
+      || route.source !== 'plugin' && route.model !== '') invalid();
+  }
+  return value;
+}
 export function defaultTaskRoutes() { return Object.fromEntries(AI_TASK_GROUPS.map(group => [group, { source: 'inherit', presetId: null, model: '' }])); }
 export function assertTaskRoutes(value) {
   exact(value, AI_TASK_GROUPS);
@@ -40,13 +57,16 @@ export function assertTaskRoutes(value) {
   return value;
 }
 function ai(value) {
-  exact(value, ['source', 'activePresetId', 'presets', ...(Object.hasOwn(value ?? {}, 'taskRoutes') ? ['taskRoutes'] : [])]);
+  exact(value, ['source', 'activePresetId', 'presets', ...(Object.hasOwn(value ?? {}, 'taskRoutes') ? ['taskRoutes'] : []), ...(Object.hasOwn(value ?? {}, 'taskRouting') ? ['taskRouting'] : [])]);
   if (Object.hasOwn(value, 'taskRoutes')) assertTaskRoutes(value.taskRoutes);
+  if (Object.hasOwn(value, 'taskRouting')) assertTaskRouting(value.taskRouting);
   if (![null, 'sillytavern', 'plugin'].includes(value.source) || !Array.isArray(value.presets)
     || !(value.activePresetId === null || text(value.activePresetId))) invalid();
   const ids = new Set(), names = new Set();
   for (const preset of value.presets) {
-    exact(preset, ['id', 'name', 'endpoint', 'model', 'secretId']);
+    exact(preset, ['id', 'name', 'endpoint', 'model', 'secretId', ...(Object.hasOwn(preset, 'capability') ? ['capability'] : []), ...(Object.hasOwn(preset,'protocol')?['protocol']:[])]);
+    if (!API_CAPABILITIES.includes(presetCapability(preset))) invalid();
+    if (Object.hasOwn(preset,'protocol')&&(presetCapability(preset)!=='embedding'||!['openai','voyage'].includes(preset.protocol))) invalid();
     if (!text(preset.id) || !text(preset.name) || ids.has(preset.id) || names.has(preset.name)
       || !text(preset.endpoint, true) || !text(preset.model, true) || !text(preset.secretId, true)) invalid();
     ids.add(preset.id); names.add(preset.name);
@@ -58,6 +78,10 @@ function ai(value) {
     }
   }
   if (value.activePresetId !== null && !ids.has(value.activePresetId)) invalid();
+  for (const [group, route] of Object.entries(value.taskRouting ?? {})) {
+    const preset = value.presets.find(item => item.id === route.presetId);
+    if (preset && presetCapability(preset) !== (['embedding', 'rerank'].includes(group) ? group : 'text')) throw new SettingsError('TASK_CAPABILITY_MISMATCH');
+  }
   return value;
 }
 function generation(value) {
@@ -113,10 +137,12 @@ export function settingsFingerprint(value) {
 }
 export const equalSettings = (a, b) => settingsFingerprint(a) === settingsFingerprint(b);
 export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:5,maxTokens:null,memoryDepth:9999,anniversaryPoolLimit:2,automaticSameDayEnabled:true,excludedTerms:[],recallCleaning:{rules:[]} }; }
+export function recallChannels(value) { return value.channels??{keyword:true,bm25:false,vector:false,rerank:false}; }
 export function assertRecallSettings(value) {
   try {
     value={anniversaryPoolLimit:2,automaticSameDayEnabled:true,...value};
-    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled']);
+    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled',...(Object.hasOwn(value,'channels')?['channels']:[])]);
+    if(Object.hasOwn(value,'channels')){exact(value.channels,['keyword','bm25','vector','rerank']);if(Object.values(value.channels).some(item=>typeof item!=='boolean'))invalid();}
     if(typeof value.automaticSameDayEnabled!=='boolean'||!(value.anniversaryPoolLimit===null||Number.isSafeInteger(value.anniversaryPoolLimit)&&value.anniversaryPoolLimit>=0))invalid();
     if(!Number.isSafeInteger(value.recentFloorCount)||value.recentFloorCount<0||!Number.isSafeInteger(value.maxCount)||value.maxCount<1
       ||!(value.maxTokens===null||Number.isSafeInteger(value.maxTokens)&&value.maxTokens>0)||!Number.isSafeInteger(value.memoryDepth)||value.memoryDepth<0||value.memoryDepth>10000)invalid();
@@ -222,16 +248,41 @@ export function assertCredential(value) {
 export function publicSettings(root) {
   return frozenSettingsCopy({ ...root, credentials: root.credentials.map(({ presetId }) => ({ presetId })) });
 }
+function legacyTaskRoute(ai, group) {
+  const route = ai.taskRoutes?.[group], explicit = route && route.source !== 'inherit';
+  const source = explicit ? route.source : ai.source;
+  if (source !== 'plugin') return { source: source === 'sillytavern' ? source : 'none', presetId: null, model: '' };
+  const presetId = explicit ? route.presetId : ai.activePresetId;
+  if (presetId === null) return { source: 'none', presetId: null, model: '' };
+  return { source, presetId, model: explicit ? route.model : '' };
+}
+// Read projection only. Legacy selections remain stored until an explicit save.
+export function taskRoutingView(ai) {
+  if (ai.taskRouting) return frozenSettingsCopy({ routes: ai.taskRouting, unresolvedSummary: false, legacySummaryRoutes: null });
+  const event = legacyTaskRoute(ai, 'event'), cumulative = legacyTaskRoute(ai, 'cumulative');
+  const effective = route => ({...route,model:route.source==='plugin'?(route.model||(ai.presets.find(item=>item.id===route.presetId)?.model??'')):'',followsPreset:route.source==='plugin'&&route.model===''});
+  const unresolvedSummary = !equalSettings(effective(event), effective(cumulative));
+  const summary = unresolvedSummary ? null : event;
+  const unassigned = () => ({ source: 'none', presetId: null, model: '' });
+  return frozenSettingsCopy({ routes: { summary, narrative: legacyTaskRoute(ai, 'narrative'), latest: legacyTaskRoute(ai, 'latest'), embedding: unassigned(), rerank: unassigned() },
+    unresolvedSummary, legacySummaryRoutes: { event, cumulative } });
+}
 export function aiConfig(root, epoch, taskGroup) {
-  if (taskGroup !== undefined && !AI_TASK_GROUPS.includes(taskGroup)) throw new SettingsError();
-  const route = taskGroup ? root.ai.taskRoutes?.[taskGroup] : null;
+  if (taskGroup !== undefined && ![...AI_TASK_GROUPS, ...TASK_ROUTING_GROUPS].includes(taskGroup)) throw new SettingsError();
+  const canonicalGroup = ['event', 'cumulative'].includes(taskGroup) ? 'summary' : taskGroup;
+  const usesCanonical = taskGroup !== undefined;
+  const view = usesCanonical ? taskRoutingView(root.ai) : null;
+  if (canonicalGroup === 'summary' && view.unresolvedSummary) throw new SettingsError('TASK_ROUTE_UNRESOLVED');
+  const route = usesCanonical ? view.routes[canonicalGroup] : null;
   const explicit = route && route.source !== 'inherit';
   const source = explicit ? route.source : root.ai.source;
   if (source === 'sillytavern') return Object.freeze({ source });
   const presetId = explicit ? route.presetId : root.ai.activePresetId;
   const preset = root.ai.presets.find(item => item.id === presetId);
   if (source === 'plugin' && explicit && !preset) throw new SettingsError('TASK_PRESET_MISSING');
+  const capability = ['embedding', 'rerank'].includes(canonicalGroup) ? canonicalGroup : 'text';
+  if (source === 'plugin' && preset && presetCapability(preset) !== capability) throw new SettingsError('TASK_CAPABILITY_MISMATCH');
   const model = explicit && route.model ? route.model : preset?.model;
   if (source !== 'plugin' || !preset?.endpoint || !model || !root.credentials.some(item => item.presetId === preset.id)) return Object.freeze({ source: null });
-  return Object.freeze({ source: 'plugin', endpoint: preset.endpoint, model, credentialId: preset.id, credentialEpoch: epoch });
+  return Object.freeze({ source: 'plugin', endpoint: preset.endpoint, model, credentialId: preset.id, credentialEpoch: epoch, ...(capability === 'text' ? {} : { capability }),...(capability==='embedding'?{protocol:embeddingProtocol(model,preset.protocol)}:{}) });
 }

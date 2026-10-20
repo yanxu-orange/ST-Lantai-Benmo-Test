@@ -35,7 +35,7 @@ function evidenceMemories(events,settings,batches){
     time:{start:parseStoryTimePoint(event.startTime),end:parseStoryTimePoint(event.endTime)},source:ordinals.get(event.id)??{},
     terms:event.detailWords.filter(term=>!excluded.has(term.word)).map(term=>({...term,aliases:term.aliases.filter(alias=>!excluded.has(alias))}))}));
 }
-function bindings(memories){return memories.flatMap(memory=>memory.terms.map((term,detailIndex)=>({memoryId:memory.id,termId:term.id,detailIndex,parentDetail:term.word,aliases:term.aliases})));}
+export function bindings(memories){return memories.flatMap(memory=>memory.terms.map((term,detailIndex)=>({memoryId:memory.id,termId:term.id,detailIndex,parentDetail:term.word,aliases:term.aliases})));}
 function reasonsOf(evaluation,aliases,id){
   const reasons=[];
   for(const parent of evaluation?.structuredEvidence?.evidence?.parentFacts??[])for(const witness of parent.witnesses??[])reasons.push({code:'keyword-match',field:witness.field,term:witness.storedValue,sourceKind:witness.sourceKind,distanceFromCurrent:witness.distanceFromCurrent,fragmentId:witness.fragmentId,
@@ -57,7 +57,7 @@ function rankingFacts(entry,rank){
 }
 export function memoryPrompt(events){if(!events.length)return '';return ['<lantai_event_memory>','以下内容是过去已经发生的记忆，可能与最近的讨论有关。请将其作为事实与经历参考，自然保持连续性；不要机械复述，也不要声称看见了记忆条目。',...events.map(event=>`【${event.startTime&&event.endTime?`${event.startTime} — ${event.endTime}`:event.startTime||event.endTime}｜${event.title}】\n${event.body}`),'</lantai_event_memory>'].join('\n\n');}
 
-export async function buildRecall({events,batches=[],input='',recentHistory=[],settings=defaultRecallSettings(),countTokens=null,time=null,timeAvailable=true,timeReminders=null}={}){
+export function prepareRecallData({events,batches=[],input='',recentHistory=[],settings=defaultRecallSettings(),countTokens=null,time=null,timeAvailable=true}={}){
   settings=assertRecallSettings(settings);
   if(!Array.isArray(events)||!Array.isArray(batches)||typeof input!=='string'||!Array.isArray(recentHistory)||countTokens!==null&&typeof countTokens!=='function')throw new TypeError('召回快照无效');
   const ids=new Set();for(const event of events){validateEvent(event);if(ids.has(event.id))throw new TypeError('召回身份重复');ids.add(event.id);}
@@ -67,6 +67,11 @@ export async function buildRecall({events,batches=[],input='',recentHistory=[],s
   const history=recentHistory.slice(0,settings.recentFloorCount).map(item=>{if(!item||!Number.isSafeInteger(item.floor)||item.floor<0||!Number.isSafeInteger(item.distanceFromCurrent)||item.distanceFromCurrent<1||distances.has(item.distanceFromCurrent)||typeof item.text!=='string')throw new TypeError('召回语境无效');distances.add(item.distanceFromCurrent);return {floor:item.floor,distanceFromCurrent:item.distanceFromCurrent,...cleaning(item.text)};});
   const memories=evidenceMemories(active,settings,batches),recent=history.map(item=>({rawPosition:item.floor,distanceFromCurrent:item.distanceFromCurrent,originalText:item.raw,cleanedText:item.cleaned}));
   const context=dateContext(time,{available:timeAvailable}),dated=memories.map(memory=>({...memory,time:{start:memoryDatePoint(memoryById.get(memory.id).startTime,context),end:memoryDatePoint(memoryById.get(memory.id).endTime,context)}}));
+  return{settings,active,memoryById,current,history,memories,recent,context,dated};
+}
+export async function buildRecall({events,batches=[],input='',recentHistory=[],settings=defaultRecallSettings(),countTokens=null,time=null,timeAvailable=true,timeReminders=null}={}){
+  const prepared=prepareRecallData({events,batches,input,recentHistory,settings,countTokens,time,timeAvailable});settings=prepared.settings;
+  const{active,memoryById,current,history,memories,recent,context,dated}=prepared;
   const evaluation=evaluateOrdinaryRecallWithAliases({memories:dated,currentInput:current.cleaned,recentHistory:recent,bindings:bindings(memories),currentStoryTime:context.current,fictionalCalendar:context}),base=evaluation.base??evaluation,aliases=evaluation.aliasResult;
   const residents=dated.filter(memory=>memory.mode==='resident'),residentEvidence=residents.length?evaluateOrdinaryRecallWithAliases({memories:residents.map(memory=>({...memory,mode:'trigger'})),currentInput:current.cleaned,recentHistory:recent,bindings:bindings(residents),currentStoryTime:context.current,fictionalCalendar:context}):null;
   const residentBase=residentEvidence?.base??residentEvidence;

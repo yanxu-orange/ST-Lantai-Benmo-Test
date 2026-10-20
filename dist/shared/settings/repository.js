@@ -1,4 +1,4 @@
-import { assertTaskRoutes, defaultTaskRoutes, SETTINGS_DOMAINS, settingsDomainValue, assertCredential, aiConfig, equalSettings, frozenSettingsCopy, publicSettings, SettingsError } from './model.js';
+import { assertTaskRoutes, defaultTaskRoutes, assertTaskRouting, taskRoutingView, SETTINGS_DOMAINS, settingsDomainValue, assertCredential, aiConfig, equalSettings, frozenSettingsCopy, publicSettings, SettingsError } from './model.js';
 
 export function createSettingsRepository(adapter) {
   let queue = Promise.resolve();
@@ -85,8 +85,15 @@ export function createSettingsRepository(adapter) {
       // Capture only confirmed authority; the existing queue and AI epoch guard
       // reject interleaved preset edits rather than overwriting them.
       const { root, epochs } = adapter.snapshot();
+      if (root.ai.taskRouting) throw new SettingsError('SETTINGS_CONFLICT');
       const unchangedLegacy = !Object.hasOwn(root.ai, 'taskRoutes') && equalSettings(assertTaskRoutes(routes), defaultTaskRoutes());
       return update('ai', unchangedLegacy ? root.ai : { ...root.ai, taskRoutes: routes }, { ...options, expectedEpoch: options.expectedEpoch ?? epochs.ai, credentials: [] });
+    },
+    captureTaskRouting() { const {root,epochs}=adapter.snapshot(); return frozenSettingsCopy({...taskRoutingView(root.ai),epoch:epochs.ai}); },
+    saveTaskRouting(routes, options = {}) {
+      const {root,epochs}=adapter.snapshot();
+      if (routes?.summary === null) throw new SettingsError('TASK_ROUTE_UNRESOLVED');
+      return update('ai',{...root.ai,taskRouting:assertTaskRouting(routes)},{...options,expectedEpoch:options.expectedEpoch??epochs.ai,credentials:[]});
     },
     saveEventGeneration: (value, options) => update('eventGeneration', value, options),
     saveRecall: (value,options)=>update('recall',value,options),
@@ -136,6 +143,8 @@ export function createSettingsRepository(adapter) {
       try {
         const root = adapter.peek(), current = aiConfig(root, adapter.epochs().ai, taskGroup);
         if (current.source !== 'plugin' || config?.source !== 'plugin' || config?.credentialId !== current.credentialId
+          || config.capability !== current.capability
+          || config.protocol !== current.protocol
           || config?.credentialEpoch !== current.credentialEpoch || config.model !== current.model
           || new URL(config.endpoint).toString().replace(/\/$/, '') !== new URL(current.endpoint).toString().replace(/\/$/, '')) throw new SettingsError('SETTINGS_CONFLICT');
         if (adapter.peek() !== root || adapter.epochs().ai !== current.credentialEpoch) throw new SettingsError('SETTINGS_CONFLICT');

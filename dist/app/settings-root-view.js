@@ -13,7 +13,7 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
  function rootContent(){
   const book=['paper-letter','purple-glow'].includes(surfaceTheme(container));
   const toggles=row('启用兰台','enabled')+row('在当前聊天中使用','chat');
-  const services=entry('功能管理','features')+entry('API 设置','api')+entry('任务 API','task-api');
+  const services=entry('功能管理','features')+entry('连接方案','api')+entry('任务 API','task-api');
   const appearanceFields=`<label class="ui-field"><span class="ui-field__label">界面皮肤</span><select class="ui-input" data-settings-theme>${THEMES.map(theme=>`<option value="${theme.id}">${theme.label}</option>`).join('')}</select></label><p class="lt-status" data-appearance-status hidden></p><button type="button" class="ui-button ui-button--secondary" data-settings-action="appearance-read" hidden>重新读取外观</button>`;
   const identity=`<div class="lt-settings-brand"><div>${brand}<span>兰台本末</span><span class="lt-meta">v${esc(APP_VERSION)}</span></div><p class="lt-meta">剧情记忆与故事时间</p></div>`;
   if(!book)return `<section class="lt-settings-group"><h2>插件</h2>${toggles}${services}</section><section class="lt-settings-group"><h2>外观</h2>${appearanceFields}</section>${identity}`;

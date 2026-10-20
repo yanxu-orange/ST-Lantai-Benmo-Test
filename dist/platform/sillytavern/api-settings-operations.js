@@ -1,6 +1,8 @@
 import { AiProviderError, assertAiCurrent, freezeAiConfig, parseStrictJson } from '../../shared/ai/provider.js';
 import { assertCredential } from '../../shared/settings/model.js';
 import { createSillyTavernAiTransport } from './ai-provider.js';
+import { createRecallAiTransport } from './recall-ai-transport.js';
+import { prepareRecallRequest, validateRecallResponse } from '../../shared/ai/recall-provider.js';
 
 export const API_PROBE_MARKER = 'LANTAI_API_CONNECTION_OK';
 const messages = {
@@ -11,15 +13,22 @@ const messages = {
   rate_limit: '请求过于频繁，请稍后再试。',
   network: '请求失败，请检查连接后重试。',
   invalid_result: '接口返回内容未通过测试校验。',
+  cors_network: '专用接口连接失败；服务须支持浏览器 CORS，请检查地址与跨域配置。',
+  timeout: '专用接口等待超时，请稍后重试。',
 };
 export class ApiSettingsOperationError extends Error {
   constructor(code) { const safe = Object.hasOwn(messages, code) ? code : 'network'; super(messages[safe]); this.name = 'ApiSettingsOperationError'; this.code = safe; }
 }
 export function createApiSettingsOperations({ getContext, fetchImpl = globalThis.fetch, captureMain } = {}) {
   return Object.freeze({
-    async fetchModels({ endpoint, credentialId, resolveCredential, signal, isCurrent }) {
+    async fetchModels({ endpoint, credentialId, resolveCredential, signal, isCurrent, capability = 'text',protocol }) {
       try {
         assertAiCurrent(signal, isCurrent);
+        if (capability !== 'text') {
+          if (!['embedding','rerank'].includes(capability)) throw new ApiSettingsOperationError('configuration');
+          const transport=createRecallAiTransport({fetchImpl,resolveCredential:()=>resolveCredential()});
+          return await transport.fetchModels({config:{source:'plugin',capability,endpoint,model:'models-only',credentialId,credentialEpoch:0,protocol},signal,isCurrent});
+        }
         const config = freezeAiConfig({ source: 'plugin', endpoint, model: 'models-only', credentialId, credentialEpoch: 0 });
         const key = assertCredential(resolveCredential());
         const body = JSON.stringify({ chat_completion_source: 'custom', custom_url: config.endpoint,
@@ -37,14 +46,22 @@ export function createApiSettingsOperations({ getContext, fetchImpl = globalThis
         return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
       } catch (error) {
         assertAiCurrent(signal, isCurrent);
-        throw new ApiSettingsOperationError(error instanceof ApiSettingsOperationError ? error.code : ['configuration', 'INVALID_SETTINGS', 'SETTINGS_CONFLICT'].includes(error?.code) ? 'configuration' : 'network');
+        throw new ApiSettingsOperationError(error instanceof ApiSettingsOperationError ? error.code : ['configuration', 'INVALID_SETTINGS', 'SETTINGS_CONFLICT'].includes(error?.code) ? 'configuration' : ['cors_network','timeout'].includes(error?.code)?error.code:error?.code==='mapping'?'invalid_result':'network');
       }
     },
-    async test({ source, endpoint, model, credentialId, resolveCredential, signal, isCurrent }) {
+    async test({ source, endpoint, model, credentialId, resolveCredential, signal, isCurrent, capability = 'text',protocol }) {
       let mainEpoch;
       try {
         assertAiCurrent(signal, isCurrent);
         if (!['plugin', 'sillytavern'].includes(source)) throw new ApiSettingsOperationError('configuration');
+        if (capability !== 'text') {
+          if (source !== 'plugin'||!['embedding','rerank'].includes(capability)) throw new ApiSettingsOperationError('configuration');
+          const args=capability==='embedding'?{inputs:[{id:'probe',text:'虚构邮渡站连接测试'}],inputType:'query'}:{query:'虚构邮渡站',documents:[{id:'probe-a',text:'虚构邮渡站收信'},{id:'probe-b',text:'虚构山地染坊'}]};
+          const request=prepareRecallRequest(capability,args);
+          const transport=createRecallAiTransport({fetchImpl,resolveCredential:()=>resolveCredential()});
+          const response=await transport.request({config:{source,capability,endpoint,model,credentialId,credentialEpoch:0,protocol},request,signal,isCurrent});
+          validateRecallResponse(capability,response,request,model.trim());assertAiCurrent(signal,isCurrent);return true;
+        }
         if (source === 'sillytavern') {
           if (typeof captureMain !== 'function') throw new ApiSettingsOperationError('unavailable');
           mainEpoch = captureMain();
@@ -60,7 +77,7 @@ export function createApiSettingsOperations({ getContext, fetchImpl = globalThis
         return true;
       } catch (error) {
         assertAiCurrent(signal, () => isCurrent() === true && (mainEpoch === undefined || captureMain() === mainEpoch));
-        throw new ApiSettingsOperationError(error instanceof ApiSettingsOperationError ? error.code : error instanceof AiProviderError && ['configuration', 'unavailable'].includes(error.code) ? error.code : 'network');
+        throw new ApiSettingsOperationError(error instanceof ApiSettingsOperationError ? error.code : error instanceof AiProviderError && ['configuration', 'unavailable','cors_network','timeout'].includes(error.code) ? error.code : error?.code==='mapping'?'invalid_result':'network');
       }
     },
   });

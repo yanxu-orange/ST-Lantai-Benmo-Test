@@ -3,6 +3,10 @@ import {sameTarget} from '../../domain/memory/repository.js';
 import {buildRecall,extractRecallInputs} from '../../domain/recall/build.js';
 import {mapSummaryPromptFloors} from './summary-history.js';
 import {createRecallPreviewBuilder} from './recall-preview.js';
+import {recallChannels} from '../../shared/settings/model.js';
+import {AiProviderError} from '../../shared/ai/provider.js';
+import {createVectorMaintenance} from './vector-maintenance.js';
+import {createMultichannelBuilder,usesMultichannel} from '../../domain/recall/multichannel-build.js';
 
 export const RECALL_PROMPT_KEY='lantai_benmo_memory_context';
 const supported=new Set(['normal','regenerate','swipe','continue']);
@@ -20,19 +24,23 @@ export function recallInputs(messages,recentFloorCount,original=null) {
   for(let i=index-1;i>=0&&recentHistory.length<recentFloorCount;i--)if(eligible(usable[i])&&text(usable[i]).trim())recentHistory.push({floor:mapping?.[i]??i,text:text(usable[i]),distanceFromCurrent:mapping?mapping[index]-mapping[i]:index-i});
   return {input:index<0?'':text(usable[index]),recentHistory};
 }
-export function createRecallRuntime({repository,settings,getContext,captureSource,dateRuntime=null,build=buildRecall,previewBuild,getControls}={}) {
+export function createRecallRuntime({repository,settings,getContext,captureSource,dateRuntime=null,build=buildRecall,previewBuild,getControls,recallProvider=null,vectorStore}={}) {
   const gate=featureGate(getControls,'event'),timeGate=featureGate(getControls,'time');
-  let disposed=false,ticket=0,proof=null,flight=null,previewAbort=null,recordSequence=0;
+  let disposed=false,ticket=0,proof=null,flight=null,previewAbort=null,previewGuard=null,recordSequence=0;
   const buildPreview=previewBuild??(build===buildRecall?createRecallPreviewBuilder():build);
-  const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;};
+  const maintenance=createVectorMaintenance({repository,settings,provider:recallProvider,getControls,store:vectorStore}),buildMulti=createMultichannelBuilder({vectorIndex:maintenance.index,provider:recallProvider});
+  function cancelIndexPreparation(){maintenance.pause();}
+  const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;previewGuard=null;};
   const records=new Map(),listeners=new Set(),releases=[];
   const key=target=>JSON.stringify([target.chatId,target.rootId]);
   const notify=()=>{for(const fn of [...listeners])try{fn();}catch{/* observers cannot break host generation */}};
   const current=(target,serial,config,source)=>gate.matches(config.controlProof)&&!disposed&&serial===ticket&&sameTarget(target,repository.captureTarget())
-    &&settings.captureRecall().epoch===config.epoch&&(!config.timeReminders||settings.matchesTimeReminders(config.timeReminders))&&(!captureSource||JSON.stringify(captureSource(target))===source);
+    &&settings.captureRecall().epoch===config.epoch&&(config.aiEpoch===undefined||settings.captureAi().epoch===config.aiEpoch)&&(!config.timeReminders||settings.matchesTimeReminders(config.timeReminders))&&(!captureSource||JSON.stringify(captureSource(target))===source);
   function clear(reason='cancelled',expectedTarget=null) {
-    cancelPreview();
     const previous=flight,oldProof=proof;ticket++;proof=null;flight=null;
+    cancelPreview();
+    maintenance.checkLifecycle();
+    previous?.abort?.abort();
     if(previous)record(previous.target,{status:'failed',type:previous.type,message:'本轮召回已取消，未注入记忆。'});
     else if(reason==='stopped'&&oldProof)record(oldProof.target,{status:'failed',type:'cancelled',message:'本轮生成已取消，未继续注入记忆。'});
     try {
@@ -54,18 +62,26 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     try{if(sameTarget(target,repository.captureTarget()))record(target,{status:'failed',type,message:'本轮召回准备失败，未注入记忆；原上下文已保留。'});}catch{/* Unavailable target cannot receive a guessed record. */}
   }
   async function compute(messages,target,serial,previewInput=null,signal=null) {
+    if(signal?.aborted)throw new AiProviderError('cancelled');
     if(!gate.allowed())throw new Error('事件记忆已关闭');
     const controlProof=gate.capture();
     const observed=dateRuntime&&timeGate.allowed()?await dateRuntime.request():null;
     if(disposed||serial!==ticket||!sameTarget(target,repository.captureTarget()))throw new Error('stale');
     const config={controlProof,...settings.captureRecall(),timeReminders:settings.captureTimeReminders?.()??null},source=captureSource?JSON.stringify(captureSource(target)):null;
+    const channels=recallChannels(config.recall);
+    if(channels.vector||channels.rerank)config.aiEpoch=settings.captureAi().epoch;
+    const guard=()=>current(target,serial,config,source);
+    if(previewInput===null&&flight?.abort.signal===signal)flight.guard=guard;
+    else if(previewAbort?.signal===signal)previewGuard=guard;
     const root=await repository.read(target);
-    if(!current(target,serial,config,source))throw new Error('stale');
+    if(signal?.aborted||!guard())throw new Error('stale');
     const context=getContext(),inputs=previewInput===null?recallInputs(messages,config.recall.recentFloorCount,context?.chat)
       :extractRecallInputs(messages,{recentFloorCount:config.recall.recentFloorCount,input:previewInput,currentIndex:messages.length});
-    const result=await (previewInput===null?build:buildPreview)({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,time:root.time??null,timeAvailable:timeGate.allowed()&&(!dateRuntime||!['failed','needs-calibration','cancelled','no-calendar','unavailable'].includes(observed?.status)),timeReminders:config.timeReminders?.reminders??null,
+    const multi=build===buildRecall&&usesMultichannel(config.recall);let vectorConfig=null;
+    if(multi&&channels.vector)try{vectorConfig=settings.getAiConfig('embedding');}catch{/* This lane will visibly degrade without changing another route. */}
+    const result=await (multi?buildMulti:previewInput===null?build:buildPreview)({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,time:root.time??null,timeAvailable:timeGate.allowed()&&(!dateRuntime||!['failed','needs-calibration','cancelled','no-calendar','unavailable'].includes(observed?.status)),timeReminders:config.timeReminders?.reminders??null,
       countTokens:typeof context?.getTokenCountAsync==='function'?body=>context.getTokenCountAsync(body):null},
-      {signal,isCurrent:()=>current(target,serial,config,source)});
+      {signal,isCurrent:()=>current(target,serial,config,source),target,vectorConfig});
     if(!current(target,serial,config,source))throw new Error('stale');
     const authority=await repository.read(target);
     if(!current(target,serial,config,source)||JSON.stringify(authority)!==JSON.stringify(root))throw new Error('stale');
@@ -81,19 +97,21 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
       // compute owns this isolated result; preview never installs it in the
       // runtime's actual/proof cache. A second full clone has no shared owner.
       return value.result;
-    }finally{if(previewAbort===abort)previewAbort=null;}
+    }finally{if(previewAbort===abort){previewAbort=null;previewGuard=null;}}
   }
   async function intercept(messages,_size,_abort,type='normal') {
     if(disposed)return;
+    const invocation=ticket+1;
     if(!clear())return;
+    if(ticket!==invocation)return;
     if(!gate.allowed()||!supported.has(type)||messages?.some(message=>text(message).includes('[LANTAI_BACKGROUND_TASK:')))return;
     let target;
     const serial=ticket;
     try {
       target=repository.captureTarget();
-      flight={target,type};
+      const abort=new AbortController();flight={target,type,abort};
       record(target,{status:'preparing',type,message:'正在构造本轮召回，尚未注入记忆。'});
-      const value=await compute(messages,target,serial);
+      const value=await compute(messages,target,serial,null,abort.signal);
       if(!current(target,serial,value.config,value.source))return;
       const context=getContext();
       if(typeof context?.setExtensionPrompt!=='function')throw new Error('injection-unavailable');
@@ -108,6 +126,12 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     }
   }
   const context=getContext();
+  const unsubscribeSettings=settings.subscribe?.(()=>{
+    try{if(previewGuard&&!previewGuard())cancelPreview();}catch{cancelPreview();}
+    try{if(flight?.guard&&!flight.guard())flight.abort.abort();}catch{flight?.abort.abort();}
+  });
+  if(typeof unsubscribeSettings==='function')releases.push(unsubscribeSettings);
+  releases.push(maintenance.subscribe(notify));
   for(const name of ['CHAT_CHANGED','GENERATION_ENDED','GENERATION_STOPPED','MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED']) {
     const event=context?.eventTypes?.[name],source=context?.eventSource;
     if(!event||typeof source?.on!=='function')continue;
@@ -117,10 +141,14 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   function inspect(limit=null){try{const value=records.get(key(repository.captureTarget()))??{status:'empty'};
     return copy(limit===null||!value.result?value:{...value,result:{...value.result,unselected:value.result.unselected.slice(0,limit),unselectedCount:value.result.unselected.length}});
   }catch{return {status:'empty'};}}
-  return Object.freeze({preview,intercept,clear,preparationFailed,cancelPreview,
+  async function prepareVectorIndex({rebuild=false,mode='all'}={}){
+    if(rebuild)throw new AiProviderError('request');return maintenance.process({mode});
+  }
+  const vectorIndexState=()=>maintenance.state();
+  return Object.freeze({preview,intercept,clear,preparationFailed,cancelPreview,prepareVectorIndex,vectorIndexState,cancelIndexPreparation,
     getReplacementProof(){try{return proof&&current(proof.target,proof.serial,proof.config,proof.source)?proof:null;}catch{return null;}},
     inspect,inspectView:({more=false}={})=>inspect(more?null:2),
     subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn);},
-    dispose(){if(disposed)return;clear();disposed=true;releases.forEach(fn=>fn());listeners.clear();records.clear();}
+    dispose(){if(disposed)return;clear();disposed=true;maintenance.dispose();releases.forEach(fn=>fn());listeners.clear();records.clear();}
   });
 }
