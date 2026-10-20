@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "9632597bebc6af99d768ffd23b5b83085a717afa057579b9c7aeae3e5bb81b4c"
+    "sha256": "70667493cce6c9eac9ed1a80c449182f21de815c252737e9b14590155273bd93"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -53,7 +53,7 @@
   },
   {
     "path": "dist/app/book-themes/components.css",
-    "sha256": "c7cd84f81811fa6c2784f4afd69ddba599cb352453b0c608873afabadc10aa94"
+    "sha256": "866e516414ebd1afef7dbe04653b1377941edcb40bce481a7974bdb53da174df"
   },
   {
     "path": "dist/app/book-themes/memory.css",
@@ -61,7 +61,7 @@
   },
   {
     "path": "dist/app/book-themes/pages.css",
-    "sha256": "46036533a51acb91bedf7e7aa063fa180a9eb77b136f9da2be5fbb13f991d738"
+    "sha256": "c9ddff7882807dcfae3200cc23fd1f727f2147b649c9d7446fc5bce37f236ef6"
   },
   {
     "path": "dist/app/book-themes/time-details.css",
@@ -517,7 +517,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "a889d39610f7b8c9897602e65f2b8412f80d141c74b9d5bc8951cefb5a2cf129"
+    "sha256": "cd56ccae3cd566dbd0c50d0d56ae909b57f7f8fedc3ff1c258743613f31e9a2d"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -529,11 +529,11 @@
   },
   {
     "path": "dist/app/workshop-view.css",
-    "sha256": "12d37af3e220da5a412b32b8c2d39f212dd2b99c961bf5d1bdf84796ed916e66"
+    "sha256": "65337b4751df5e7395c42df360ddd6a1381c0a3c3468253566b642a87dd9142b"
   },
   {
     "path": "dist/app/workshop-view.js",
-    "sha256": "f119bd07de5a21987bcaee15416111c97e4820246de8a8c9b925177540972242"
+    "sha256": "30ce588816aff588172f7a6aaf18be9fb2b1ebeed2078f1d0bbfeeb264830912"
   },
   {
     "path": "dist/domain/background/round.js",
@@ -1217,10 +1217,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "2ef61f93c3cb53c69732b657eb1acf7d131d379a976a766cc8061c2d581d99ec"
+    "sha256": "f9d0d58209af2c37cc9faa39263ef0a317fc164458aac9f5e2dcb0dd568a4de4"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "6d6770120407efb75e04d44316e6db9203d403b359729910904d72920767db72"
+    "sha256": "50cca614b7a44d01b1e543528ccb026e6c6041a6f6d377c777af61b3daa3698a"
   }
 ]

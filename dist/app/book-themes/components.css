@@ -99,8 +99,8 @@
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.wk-result-meta,.wk-directory-preview,.lt-settings-brand) { color: var(--lt-book-muted); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .wk-directory-item { background: var(--lt-book-surface); border-color: var(--lt-book-edge); border-left: 2px solid var(--lt-book-strong); border-radius: 0; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .wk-directory-item[aria-current="true"] { background: var(--lt-book-glaze),var(--lt-book-selected); color: var(--lt-book-selectedInk); border-color: var(--lt-book-strong); }
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-settings-row + .lt-settings-row,
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-settings-entry + .lt-settings-entry { border-top: 1px solid var(--lt-book-edge); padding-block: 10px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group > .lt-settings-row + .lt-settings-row,
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group > .lt-settings-entry + .lt-settings-entry { border-top: 1px solid var(--lt-book-edge); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .subtabs { background: var(--lt-book-canvas); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.wk-dialog,.lt-overlay) { background: var(--lt-book-scrim); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) :is(.wk-dialog-box,.time-confirm,.lt-source-deletion) { background: var(--lt-book-surface); color: var(--lt-book-ink); border-color: var(--lt-book-strong); border-radius: 0; }

@@ -93,7 +93,7 @@
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-group[data-scope="character"] > .wk-group-title::before { content: '02'; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-group[data-scope="chat"] > .wk-group-title::before { content: '03'; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-row { padding: 13px 14px 13px 16px; }
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-link { grid-column: 1 / -1; width: 100%; color: var(--lt-book-accentInk); border-top: 1px solid var(--lt-book-edge); margin-top: 10px; padding-top: 8px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-link { grid-column: 1 / -1; width: 100%; color: var(--lt-book-accentInk); border-top: 0; margin-top: 10px; padding-top: 8px; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-panel { background: var(--lt-book-surface); border-block: 1px solid var(--lt-book-edge); padding: 12px 14px 20px; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-panel > .wk-result { background: transparent; border: 0; padding: 0; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-meta { border-bottom: 1px solid var(--lt-book-edge); padding-bottom: 13px; }
@@ -104,22 +104,16 @@
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-directory-title { font: 700 14px/1.5 var(--ui-type-reading-family); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-directory-preview { font: 13px/1.6 var(--ui-type-reading-family); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-directory-shortcuts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
-/* Settings root switches retain a chapter edge. Service links and feature
-   indexes instead use top/bottom rules, matching their distinct reference role. */
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group { background: var(--lt-book-surface); border: 0; border-left: 2px solid var(--lt-book-strong); border-bottom: 1px solid var(--lt-book-edge); padding: 14px 16px; }
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group:has(> .lt-settings-entry):not(:has(> .lt-settings-row)),
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings:not(:has(> .lt-header--root)) .lt-settings-group { border-inline: 0; border-block: 1px solid var(--lt-book-edge); }
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-api-settings .lt-editor > .lt-stack { background: var(--lt-book-surface); border-block: 1px solid var(--lt-book-edge); padding: 16px 14px; }
+/* All settings chapters share one side rule and natural content spacing.
+   Headings own the chapter underline; containers do not repeat it. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group { background: var(--lt-book-surface); border: 0; border-left: 2px solid var(--lt-book-strong); padding: 14px 16px; }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-api-settings .lt-editor > .lt-stack { background: var(--lt-book-surface); border: 0; padding: 16px 14px; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-api-settings .lt-delete-confirmation { background: var(--lt-book-danger); color: var(--lt-book-dangerInk); padding: 12px; font-size: 13px; }
 /* Four semantic root groups reuse the same live controls and entry renderers. */
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-section { min-width: 0; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-section > h2 { position: relative; margin: 0 0 12px; padding: 10px 0; border-bottom: 1px solid var(--lt-book-edge); font-family: var(--lt-book-section-family); font-size: var(--lt-book-section-size); font-weight: var(--lt-book-section-weight); line-height: var(--lt-book-section-line); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-section > h2::before { content: attr(data-section-number); display: inline-block; width: 27px; margin-inline-end: 0; color: var(--lt-book-accentInk); font: 13px Georgia,serif; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-section > h2::after { content: ''; position: absolute; bottom: -1px; left: 0; width: 30px; height: 1px; background: var(--lt-book-strong); }
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material]:not([data-settings-material="plugin"]) { border-inline: 0; border-block: 1px solid var(--lt-book-edge); }
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material="services"] { padding: 0 12px; gap: 0; }
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material="services"] > .lt-settings-entry { border: 0; padding: 14px 0; min-height: 56px; }
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material="services"] > .lt-settings-entry + .lt-settings-entry { border-top: 1px solid var(--lt-book-edge); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-section :is(.lt-settings-row > span,.lt-settings-entry > span:first-child,.ui-field__label) { font-family: var(--lt-book-field-family); font-size: var(--lt-book-field-size); font-weight: var(--lt-book-field-weight); line-height: var(--lt-book-field-line); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material="about"] { background: var(--lt-book-about-background); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings [data-settings-material="about"] .lt-settings-brand { padding: 0; }
@@ -170,7 +164,7 @@
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group { counter-increment: book-section; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group > h2 { font-size: 15px; border-bottom: 1px solid var(--lt-book-edge); padding-bottom: 12px; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group > h2::before { content: counter(book-section,decimal-leading-zero); display: inline-block; width: 27px; margin-inline-end: 8px; color: var(--lt-book-accentInk); font: 13px Georgia,serif; }
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-entry { border-block: 1px solid var(--lt-book-edge); padding: 13px 12px; min-height: 70px; background: var(--lt-book-surface); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-entry { border: 0; padding: 0; min-height: var(--ui-interaction-target-min); background: var(--lt-book-surface); }
 
 /* Final owner-specific states, including the native generated-result editor. */
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-tag:has(>[data-summary-remove-word="eventWords"]) { background: var(--lt-book-editor-event-bg); color: var(--lt-book-editor-event-ink); border-color: var(--lt-book-editor-edge); }

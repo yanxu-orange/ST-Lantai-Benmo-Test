@@ -29,6 +29,7 @@
 .wk-form-content>.ui-field,#result-form>.ui-field{flex:1;grid-template-rows:auto minmax(240px,1fr)}
 .wk-form .ui-field{display:grid;gap:var(--ui-space-control)}
 .workshop .wk-form .ui-field__label{font-weight:500}
+.wk-form-section>h2.ui-field__label{margin:0}
 .wk-form input,.wk-form select{width:100%;min-width:0}
 .wk-form textarea{resize:vertical;line-height:1.8;white-space:pre-wrap}
 .wk-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--ui-space-row)}
