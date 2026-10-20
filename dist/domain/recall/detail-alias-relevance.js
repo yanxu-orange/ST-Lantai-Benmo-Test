@@ -1,6 +1,6 @@
 // Pure compatibility evidence: old fixed 01e50d63, adapted to TASK-016 boundaries.
 import { collectDetailAliasCandidates, normalizeDetailAliasBindings } from './detail-alias-candidates.js';
-import { combineStructuredAndTimeEvidence, evaluateOrdinaryRecallV2 } from './joint-qualification.js';
+import { combineStructuredAndTimeEvidence, evaluateOrdinaryRecallV2, witnessHasTimeConflict } from './joint-qualification.js';
 import { evaluateStructuredRecallCandidates } from './structured-relevance.js';
 
 export const DETAIL_ALIAS_RELEVANCE_VERSION = 'detail-alias-relevance-v1';
@@ -204,7 +204,8 @@ export function evaluateOrdinaryRecallWithAliases({
         const suppressionReasons = [];
         if (ordinary.provenance.explicitCurrentTimeConflict) {
             suppressionReasons.push('explicit-current-time-conflict');
-        } else if (fragmentTime?.relation === 'conflict') {
+        } else if (witnessHasTimeConflict(candidate, fragmentTime,
+            base.structuredResult.fragments.find(fragment => fragment.id === candidate.fragmentId))) {
             suppressionReasons.push('same-fragment-time-conflict');
         }
         if (!selectedSet.has(candidate)) suppressionReasons.push('better-alias-support-already-consumed');

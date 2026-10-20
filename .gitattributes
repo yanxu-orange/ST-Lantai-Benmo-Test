@@ -1,7 +1,2 @@
-# Fixed supplier files must retain exact upstream bytes on every checkout.
-vendor/plugin-ui-system/** -text
-src/app/shared-ui/candidate.web.css -text
-src/app/shared-ui/compact-group-candidate.js -text
-
-# Hash-verified consumer SVG must retain its committed bytes on Windows too.
-src/app/snow-ermine/assets/close-snow.svg -text
+# Preserve the exact bytes recorded in BUILD-HASHES.json on every checkout.
+* -text

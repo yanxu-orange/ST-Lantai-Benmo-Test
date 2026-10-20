@@ -40,7 +40,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
       context.setExtensionPrompt(RECALL_PROMPT_KEY,'',1,0,false,0);return true;
     }catch {
       let target;try{target=repository.captureTarget();}catch{target=previous?.target??oldProof?.target;}
-      if(target&&(!expectedTarget||sameTarget(target,expectedTarget)))record(target,{status:'unconfirmed',type:'cleanup',message:'记忆槽清理尚未确认，可能仍保留旧内容；本轮不隐藏原文。'});
+      if(target&&(!expectedTarget||sameTarget(target,expectedTarget)))record(target,{status:'unconfirmed',type:'cleanup',message:'记忆槽清理尚未确认，可能仍保留旧内容；本轮未完成召回注入。'});
       return false;
     }
   }

@@ -12,10 +12,29 @@ function timeSummaries(evaluations, fragments) {
         const local = evaluations.filter(e => e.target.fragmentId === fragment.id);
         const supports = local.filter(e => e.relation === 'support' && e.target.status === 'resolved' && e.domain.comparable);
         const conflicts = local.filter(e => e.relation === 'conflict' && e.target.status === 'resolved' && e.domain.comparable);
+        const scopes = [...new Set(local.map(e => JSON.stringify(e.target.scopeRange ?? null)))].map(key => {
+            const range = JSON.parse(key); const entries = local.filter(e => JSON.stringify(e.target.scopeRange ?? null) === key);
+            return { range, relation: entries.some(e => e.relation === 'support') ? 'support'
+                : entries.some(e => e.relation === 'conflict') ? 'conflict' : 'neutral' };
+        });
         return { fragmentId: fragment.id, sourceKind: fragment.sourceKind, rawPosition: fragment.rawPosition,
             distanceFromCurrent: fragment.distanceFromCurrent, evaluations: local,
-            relation: supports.length ? 'support' : conflicts.length ? 'conflict' : 'neutral',
+            relation: supports.length ? 'support' : conflicts.some(e => e.target.canVetoFragment !== false) ? 'conflict' : 'neutral', scopes,
             supports, conflicts, diagnostics: supports.length && conflicts.length ? ['mixed-time-targets'] : [] };
+    });
+}
+
+// A mixed fragment can contain a constrained lookup and a separate current action.
+// Only witnesses whose actual components fall inside a conflicting lookup scope
+// are masked. Failed coordinate projection never authorizes a broader exclusion.
+export function witnessHasTimeConflict(witness, summary, fragment) {
+    if (summary?.relation === 'conflict') return true;
+    if (!fragment || !Array.isArray(witness?.usedComponents) || !witness.usedComponents.length) return false;
+    return (summary?.scopes ?? []).some(scope => {
+        if (scope.relation !== 'conflict' || !Array.isArray(scope.range)) return false;
+        const range = targetInWitnessCoordinates({ range: scope.range,
+            matchedText: fragment.cleanedText.slice(...scope.range), coordinateSystem: 'cleaned-fragment-utf16' }, fragment, witness);
+        return range && witness.usedComponents.every(component => component.range[0] >= range[0] && component.range[1] <= range[1]);
     });
 }
 
@@ -109,12 +128,19 @@ export function combineStructuredAndTimeEvidence({ memories, structuredResult, t
         if (!time || time.libraryIndex !== libraryIndex || (keyword && keyword.libraryIndex !== libraryIndex)) throw new TypeError('Channel library snapshot differs');
         const timeByFragment = timeSummaries(time.evaluations, timeResult.fragments);
         const byFragment = new Map(timeByFragment.map(t => [t.fragmentId, t]));
+        const fragmentMap = new Map(structuredResult.fragments.map(fragment => [fragment.id, fragment]));
+        const witnesses = new Map(keyword?.evidence.parentFacts.flatMap(parent => parent.witnesses).map(w => [w.id, w]) ?? []);
+        const bundles = new Map(keyword?.localBundles.map(bundle => [bundle.id, bundle]) ?? []);
+        const witnessAllowed = witness => !witnessHasTimeConflict(witness, byFragment.get(witness.fragmentId), fragmentMap.get(witness.fragmentId));
+        const pathAllowed = path => path.channel !== 'structured' || (path.reason.witnessId
+            ? witnessAllowed(witnesses.get(path.reason.witnessId))
+            : (bundles.get(path.reason.bundleId)?.witnessIds ?? []).every(id => witnessAllowed(witnesses.get(id))));
         const veto = byFragment.get('current:0')?.relation === 'conflict';
         const qualificationPaths = [];
         const suppressedPaths = [];
         const addPath = path => {
             const reason = veto ? 'explicit-current-time-conflict'
-                : byFragment.get(path.fragmentId)?.relation === 'conflict' ? 'same-fragment-time-conflict' : null;
+                : byFragment.get(path.fragmentId)?.relation === 'conflict' || !pathAllowed(path) ? 'same-fragment-time-conflict' : null;
             if (reason) suppressedPaths.push({ ...path, suppressionReason: reason });
             else qualificationPaths.push(path);
         };
@@ -125,10 +151,9 @@ export function combineStructuredAndTimeEvidence({ memories, structuredResult, t
         // with the SAME statistics/config. No new threshold or scoring semantics;
         // original relevance/evidence are retained, not replaced by this view.
         if (!veto && keyword && suppressedPaths.length) {
-            const allowed = id => byFragment.get(id)?.relation !== 'conflict';
             const filtered = { ...keyword, evidence: { ...keyword.evidence,
-                parentFacts: keyword.evidence.parentFacts.map(p => ({ ...p, witnesses: p.witnesses.filter(w => allowed(w.fragmentId)) })).filter(p => p.witnesses.length) },
-                localBundles: keyword.localBundles.filter(b => allowed(b.fragmentId)) };
+                parentFacts: keyword.evidence.parentFacts.map(p => ({ ...p, witnesses: p.witnesses.filter(witnessAllowed) })).filter(p => p.witnesses.length) },
+                localBundles: keyword.localBundles.filter(b => b.witnessIds.every(id => witnessAllowed(witnesses.get(id)))) };
             const alternatives = evaluateStructuredCandidate(filtered, structuredResult.statistics, structuredResult.config);
             for (const path of structuredPaths(alternatives)) {
                 if (!qualificationPaths.some(p => p.id === path.id)) addPath({ ...path, recoveredFromRetainedWitnesses: true });

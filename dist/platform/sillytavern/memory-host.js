@@ -209,9 +209,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       sourceDeletionRuntime=createSourceDeletionRuntime({adapter,repository,dialog,onPending:()=>{recallEntryRequest++;recallRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();},onNotice:(message,retry=false)=>{for(const fn of listeners)fn({id:'lantai-source-deletion-notice',phase:retry?'failed':'complete',action:retry,message});},onCommitted:()=>{recallRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();void latestRuntime?.refresh().catch(()=>{});void narrativeRuntime?.load().catch(()=>{});if(app&&app.session.state.route!=='editor')void app.refresh();}});
     }
     timeRuntime=createTimeRuntime({adapter,repository,getContext,getControls:()=>controls});
-    // The proof is this round's guarded IN_CHAT system-slot write receipt.
+    // Confirmed batch policy controls source hiding independently of recall.
     // ST remains responsible for its subsequent preset/budget assembly.
-    summaryHistory=createSummaryHistoryHook({repository,captureSource:target=>adapter.captureSummarySource(target),getContext,getReplacementProof:()=>recallRuntime?.getReplacementProof()});
+    summaryHistory=createSummaryHistoryHook({repository,captureSource:target=>adapter.captureSummarySource(target),peekConfirmed:target=>adapter.peekConfirmed(target),getContext,getControls:()=>controls});
     unsubscribe = adapter.subscribe(kind => {
       const sequence=++hostReloadSequence;
       if(controls){controls.invalidate();void controls.ensure().then(()=>{if(disposed||sequence!==hostReloadSequence)return;if(panel)syncControls();requestBenmoWarmup();});}

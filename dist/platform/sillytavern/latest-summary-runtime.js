@@ -30,6 +30,7 @@ export function captureLatestPromptIdentities(context={}){
 }
 // Latest owns neither provider configuration nor event/ancient summary progress.
 export function createLatestSummaryRuntime({repository,adapter,settings,provider,getGenerationSettings,getContext,getControls,workshopRuntime,trackingRuntime,scheduleRuntime,isSourceDeletionPending=()=>false,autoInitialize=true}={}) {
+  let sendDiagnostics=[];
   let latestEpoch=0,disposed=false,serial=0,readSerial=0,target=null,selection=null,pending=null,receipt=null,enabled=true,generationQueue=Promise.resolve(),foregroundStopped=false,foregroundType=null,foregroundEnded=false;
   let workshopState=null,workshopFloorStates={},trackingState=null,trackingFloorStates={},scheduleState=null,scheduleFloorStates={};
   let libraryCache=null,displayEpoch=0,lastReadView=null,displayReadDirty=false,initialized=autoInitialize;
@@ -52,7 +53,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     if(existing){if(error&&!existing.errors.includes(error))existing.errors.push(error);return;}
     failureReports.push({requestId,target:copy(owner),replyIds:copy(replyIds),taskIds:copy(taskIds),rawResponse,errors:error?[error]:[],createdAt:new Date().toISOString()});
   }
-  function inspect(){return copy({...state,target,automatic:automaticState,backfill:backfillState,failureReports:currentFailures()});}
+  function inspect(){return copy({...state,target,sendDiagnostics,automatic:automaticState,backfill:backfillState,failureReports:currentFailures()});}
   function automaticStatus(status,message,floor=automaticState.floor){automaticState={status,message,floor};publish();}
   function cancel(){stopBackfill();for(const [key,value] of automaticReceipts)if(['queued','running'].includes(value.status))automaticReceipts.set(key,{...value,status:'cancelled',message:'本轮自动生成已取消，未自动重试'});if(['waiting','queued','running'].includes(automaticState.status))automaticState={...automaticState,status:'cancelled',message:'本轮自动生成已取消，未自动重试'};serial++;foregroundType=null;for(const [key,value] of Object.entries(scheduleFloorStates))if(value.status==='running')scheduleFloorStates[key]={status:'idle',error:''};scheduleRuntime?.cancel?.();for(const [key,value] of Object.entries(trackingFloorStates))if(value.status==='running')trackingFloorStates[key]={status:'idle',error:''};for(const tasks of Object.values(workshopFloorStates))for(const [key,value] of Object.entries(tasks))if(value.status==='running')tasks[key]={status:'idle',error:''};receipt=null;foregroundEnded=false;generationQueue=Promise.resolve();queuedFloors.clear();displayBatches.clear();for(const job of jobs)job.abort();jobs.clear();for(const [key,value] of Object.entries(state.floorStates))if(value.status==='running')state.floorStates[key]={status:'idle',error:''};if(state.status==='running')state.status='ready';publish();}
   function raw(t,retention=false){
@@ -65,7 +66,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const chat=getContext().chat;
     return source.messages.every(item=>{
       const metadata=latestSourceMetadata(chat[item.floor]);
-      return item.replyId===metadata.replyId&&item.specialPayload===metadata.specialPayload;
+      return item.replyId===metadata.replyId&&item.specialPayload===metadata.specialPayload&&item.latestTextOnly===metadata.latestTextOnly;
     });
   }
   const archivedFloor=(t,floor)=>latestArchivedFloors(adapter.peekConfirmed(t),raw(t,true)).has(floor);
@@ -374,11 +375,12 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     generationQueue=work;work.finally(()=>queuedFloors.delete(scope)).catch(()=>{});return work;
   }
   async function intercept(messages,_size,_abort,type='normal'){
+    sendDiagnostics=[];
     if(!summaryAllowed()||!supported.has(type)||messages?.some(message=>String(message?.mes??message?.content??'').includes('[LANTAI_BACKGROUND_TASK:')))return;
     const t=repository.captureTarget(),ticket=serial,proof=getControls?.()?.capture('summary'),captured=await repository.captureLatest(t);
     if(!summaryMatches(proof)||ticket!==serial||!current(t))return;
-    const source=raw(t),mapping=mapSummaryPromptFloors(messages,getContext().chat);if(!mapping)return;
-    const transformed=transformLatestMessages({messages,sourceMap:mapping,raw:source,latest:{...captured.latest,preferences:{...captured.latest.preferences,enabled:true},records:captured.latest.records.filter(record=>!invalidatedFloors.has(record.sourceSnapshot.assistantFloor)&&!invalidatedFloors.has(record.sourceSnapshot.userFloor))}});
+    const source=raw(t),mapping=mapSummaryPromptFloors(messages,getContext().chat);if(!mapping){sendDiagnostics=[{reason:'source-mapping-unavailable'}];return;}
+    const transformed=transformLatestMessages({messages,sourceMap:mapping,raw:source,diagnostics:sendDiagnostics,latest:{...captured.latest,preferences:{...captured.latest.preferences,enabled:true},records:captured.latest.records.filter(record=>!invalidatedFloors.has(record.sourceSnapshot.assistantFloor)&&!invalidatedFloors.has(record.sourceSnapshot.userFloor))}});
     if(!summaryMatches(proof)||ticket!==serial||!current(t)||!adapter.matchesChatSource(t,source))return;
     messages.splice(0,messages.length,...transformed);
   }

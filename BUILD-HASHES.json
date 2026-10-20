@@ -1,11 +1,11 @@
 [
   {
     "path": ".gitattributes",
-    "sha256": "1f3869e42067e514796bdc045140e8e0beb5bba573f26aba00e2bfbca283daed"
+    "sha256": "d4ca0c4dea378db4659edfdd9988b396900a64c9dc843a192f4cec9924585a13"
   },
   {
     "path": "README.md",
-    "sha256": "3d50ffe3df8ae3ffd1f1d84b5b8a08cb9e1a1d475633192ee1687e56d7041ef5"
+    "sha256": "7d92cf3b1a47aff1558846a2b22ad6b809c266ad7edd99715743ab34c7f47af5"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -509,7 +509,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "0b2cf28da6f0e987f90bf4dc4d10dfda474f010c506df3717525571b1b8bc11f"
+    "sha256": "843399553eea7c870ea0fb953eafe1718967d56903002db0c9734c1b5a08e72b"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -581,7 +581,7 @@
   },
   {
     "path": "dist/domain/latest/transform.js",
-    "sha256": "6e760adb0a3768f4d218f5d47ee944f80f2081b7be59030a9ee0e5e712a6aa86"
+    "sha256": "c05e49682e10f695554d41ca1b6675cd44b04ff37e72441035b530be4b1e0e58"
   },
   {
     "path": "dist/domain/memory/event-model.js",
@@ -677,7 +677,7 @@
   },
   {
     "path": "dist/domain/recall/detail-alias-relevance.js",
-    "sha256": "68d58339191500f6931927ab97f5cc7370750ff50c77e6cbadfa91cd5228109b"
+    "sha256": "baf6acfaae66e6c3222fedd055ae994b59289333bf9e089e337d6b5e0f62f3bd"
   },
   {
     "path": "dist/domain/recall/detail-query-surface.js",
@@ -685,7 +685,7 @@
   },
   {
     "path": "dist/domain/recall/joint-qualification.js",
-    "sha256": "3a123c3caf801744194df5f9b5c982c1869ab2c46eb91ff1174c7b57ed6243d9"
+    "sha256": "b856e7900ea0ede632a26248415a745506ef56f5e0c2419d2b2f146aacbc9a2e"
   },
   {
     "path": "dist/domain/recall/narrative-ordering.js",
@@ -705,7 +705,7 @@
   },
   {
     "path": "dist/domain/recall/story-time-evidence.js",
-    "sha256": "e715c7214941abf9b2a663a38055033e7efc74c82c32c30fa8d1181765d7fae8"
+    "sha256": "0c6c37a989d55afb258fcd69ea977ef0593c78cecc83f6cdc25bde90e31aab3f"
   },
   {
     "path": "dist/domain/recall/structured-candidates.js",
@@ -957,7 +957,7 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-source-metadata.js",
-    "sha256": "d8d4792d80772b79e82cae665451a0f3a7de3deb6e7a333e525c8ff6431e3a1b"
+    "sha256": "3b188492ec0508d31cc6478e43e30ab2178126fe16b247b910887172d1b36922"
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-display.js",
@@ -965,7 +965,7 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "sha256": "bac12b6b0dd4b56bc414175109a31370222c00bbd24121e4a42a08d42fb2489c"
+    "sha256": "d2c020df966a03c8099a888ae52f70fa707fd1b19b3dc704f5238348df0f1976"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -989,7 +989,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "bcd185a46c40a1762240b6b6e8125cbe89d4b1ad6a007594ba6e31ed86916196"
+    "sha256": "cb99801887eae104ad846419e43d008f7ac69fa5bdaee6ded70f239df5a41a41"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1021,7 +1021,7 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-runtime.js",
-    "sha256": "5a27367cb03bfe9fa5c65ef3f79620ecfaae8753122486d02e67bf0f4d1a9cab"
+    "sha256": "a7aa5fa3d45b3acc49748ce16223a8edc03080dc7895a1e17c123747295f58e5"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
@@ -1049,7 +1049,7 @@
   },
   {
     "path": "dist/platform/sillytavern/summary-history.js",
-    "sha256": "2b6d7bb5b3bff116f3e9e4e4c471aea8912c5e88f8c99334713971d364aa7efc"
+    "sha256": "077933f0c9636b173881a5179c41d1abe977040872de8b03a4f193ae3e66f9f1"
   },
   {
     "path": "dist/platform/sillytavern/summary-notifications.js",
@@ -1145,10 +1145,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "4303e55ac59ae8ee13d4fc1bcbc4c7afdec35b471dba8b133f50e655fcfabe1c"
+    "sha256": "19a092f5abe6ed2ade2cb513e8599f8e57094b857682c2e6e4ddb8e4313afe4d"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "d6338ae1760f93f51685c7bc618350c9d516e03762a0e3015d44cb1676f01408"
+    "sha256": "a9191d9998906f91af3dc6b7180a5a16d7252d467fa6d8011c09b28d169dca7b"
   }
 ]
