@@ -85,9 +85,12 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     const guard=()=>current(target,serial,config,source);
     if(previewInput===null&&flight?.abort.signal===signal)flight.guard=guard;
     else if(previewAbort?.signal===signal)previewGuard=guard;
-    onStage('read-root');
+    onStage('read-before');
     const root=await repository.read(target);
-    if(signal?.aborted||!guard())throw new Error('stale');
+    onStage('read-returned');
+    if(signal?.aborted){onStage('post-read-aborted');throw new Error('stale');}
+    onStage('guard-after-read');
+    if(!guard())throw new Error('stale');
     onStage('inputs');
     const context=getContext(),inputs=previewInput===null?recallInputs(messages,config.recall.recentFloorCount,context?.chat)
       :extractRecallInputs(messages,{recentFloorCount:config.recall.recentFloorCount,input:previewInput,currentIndex:messages.length});
@@ -150,13 +153,17 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
       flight=null;
     }catch(error) {
       // Diagnostic-only allowlists: never expose error.message, stack, story text or credentials.
-      const names=new Set(['Error','TypeError','RangeError','SyntaxError','DataCloneError','AbortError','AiProviderError']);
-      const codes=new Set(['cancelled','stale','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing','unavailable','storage']);
+      const names=new Set(['Error','TypeError','RangeError','SyntaxError','DataCloneError','AbortError','AiProviderError','SettingsError']);
+      const codes=new Set(['COMMIT_UNCONFIRMED','SETTINGS_COMMIT_UNCONFIRMED','SETTINGS_CONFLICT','SETTINGS_UNAVAILABLE','SETTINGS_INVALID','read-target-changed','read-not-ready','read-binding-changed','read-root-invalid','read-duplicate-id','read-unavailable','cancelled','stale','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing','unavailable','storage']);
+      const readErrors={'聊天目标已变化，请返回列表重新进入':'read-target-changed','请等待当前聊天读取完成':'read-not-ready','记忆聊天归属已变化，请重新读取':'read-binding-changed','数据版本或归属无法确认，已停止读取和写入':'read-root-invalid','重复记忆身份':'read-duplicate-id','无法确认聊天已保存，请检查连接后重试':'read-unavailable','无法读回聊天文件，请检查连接后重试':'read-unavailable'};
+      const code=codes.has(error?.code)?error.code:Object.hasOwn(readErrors,error?.message)?readErrors[error.message]:null;
+      const abort=flight?.abortDiagnostic;
+      const abortDiagnostic=abort?{reason:abort.reason==='settings-guard'?'settings-guard':'settings-error',...(names.has(abort.name)?{name:abort.name}:{}),...(codes.has(abort.code)?{code:abort.code}:{}),...(abort.guard?{guard:abort.guard}:{})}:null;
       const worker=error?.workerDiagnostic;
       const workerCodes=new Set(['invalid-context','invalid-snapshot','duplicate-id','token-count',...codes]);
       const workerDiagnostic=worker?{name:names.has(worker.name)?worker.name:'Error',...(workerCodes.has(worker.code)?{code:worker.code}:{})}:null;
-      const diagnostic={stage,...(workerDiagnostic?{worker:workerDiagnostic}:{}),...(guardFailure?{guard:guardFailure}:{}),name:names.has(error?.name)?error.name:'Error',...(codes.has(error?.code)?{code:error.code}:{})};
-      if(!disposed&&serial===ticket){const cleared=clear();if(cleared&&target&&sameTarget(target,repository.captureTarget()))record(target,{status:'failed',type,diagnostic,message:`本轮召回失败，未注入记忆。诊断：${diagnostic.stage}${diagnostic.guard?' / '+diagnostic.guard:''} / ${diagnostic.name}${diagnostic.code?' / '+diagnostic.code:''}${diagnostic.worker?' / worker:'+diagnostic.worker.name+(diagnostic.worker.code?'/'+diagnostic.worker.code:''):''}`});}
+      const diagnostic={stage,...(abortDiagnostic?{abort:abortDiagnostic}:{}),...(workerDiagnostic?{worker:workerDiagnostic}:{}),...(guardFailure?{guard:guardFailure}:{}),name:names.has(error?.name)?error.name:'Error',...(code?{code}:{})};
+      if(!disposed&&serial===ticket){const cleared=clear();if(cleared&&target&&sameTarget(target,repository.captureTarget()))record(target,{status:'failed',type,diagnostic,message:`本轮召回失败，未注入记忆。诊断：${diagnostic.stage}${diagnostic.guard?' / '+diagnostic.guard:''} / ${diagnostic.name}${diagnostic.code?' / '+diagnostic.code:''}${diagnostic.abort?' / abort:'+diagnostic.abort.reason+(diagnostic.abort.guard?'/'+diagnostic.abort.guard:'')+(diagnostic.abort.code?'/'+diagnostic.abort.code:''):''}${diagnostic.worker?' / worker:'+diagnostic.worker.name+(diagnostic.worker.code?'/'+diagnostic.worker.code:''):''}`});}
     }
   }
   const context=getContext();
@@ -166,7 +173,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   }));
   const unsubscribeSettings=settings.subscribe?.(()=>{
     try{if(previewGuard&&!previewGuard())cancelPreview();}catch{cancelPreview();}
-    try{if(flight?.guard&&!flight.guard())flight.abort.abort();}catch{flight?.abort.abort();}
+    try{if(flight?.guard&&!flight.guard()){flight.abortDiagnostic={reason:'settings-guard',guard:guardFailure};flight.abort.abort();}}catch(error){if(flight)flight.abortDiagnostic={reason:'settings-error',name:['Error','TypeError','SettingsError'].includes(error?.name)?error.name:'Error',...(['SETTINGS_COMMIT_UNCONFIRMED','SETTINGS_CONFLICT','SETTINGS_UNAVAILABLE','SETTINGS_INVALID','COMMIT_UNCONFIRMED'].includes(error?.code)?{code:error.code}:{})};flight?.abort.abort();}
   });
   if(typeof unsubscribeSettings==='function')releases.push(unsubscribeSettings);
   releases.push(maintenance.subscribe(notify));
@@ -197,3 +204,4 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     dispose(){if(disposed)return;clear();disposed=true;maintenance.dispose();releases.forEach(fn=>fn());listeners.clear();records.clear();}
   });
 }
+

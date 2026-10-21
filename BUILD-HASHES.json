@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "b9c4ff70f0b2b362cad9f8e1b5bc86a8355ae97e47a44d6532c67600260aefab"
+    "sha256": "7fd158ccfbff2c4e67fba73c44a62a6f1d2fe3f34bfde62b974adb56187170c0"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -517,7 +517,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "111e75fc33843c3f9412d382419a62c95c268b2746bf5037d49fdd5953b963cd"
+    "sha256": "80200e2bac88c302998bfbf824206202ffeba380fbe90d21d96997adb0aec263"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1073,7 +1073,7 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-runtime.js",
-    "sha256": "3c2dcc35b0dbf88038991be1f1ef76b67a39e13934e68cc3953b7ba93ca43a71"
+    "sha256": "c85a4129302a639f585508bb3f966e99535b69883e361187d9ea79181d7a913c"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
@@ -1217,10 +1217,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "ed3aadf113223b76ba90124c6b9ad07e3b5711f38f1f744d1a78b9912c4796f6"
+    "sha256": "55b435e0b9fadaa5a2f9f795907bf700a82ab565ba417bb82304d2c395fa7118"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "2f674e5399320b6c992405f62a877f2380b932b198b641cab1a08cc5bcce4d2a"
+    "sha256": "8bcbf8509d70ee2cd08d3a2ebecdc28b2a868104545d6e8044819f2ced1a3b13"
   }
 ]
