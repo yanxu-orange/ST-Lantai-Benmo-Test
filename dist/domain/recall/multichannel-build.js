@@ -6,7 +6,7 @@ import {collectStoryTimeRecallEvidence} from './story-time-evidence.js';
 import {collectSpecialDateRecallEvidence} from './special-date-evidence.js';
 import {selectSpecialDateCandidates} from './special-date-selection.js';
 import {orderMemoriesForNarrative} from './narrative-ordering.js';
-import {createBodyIndex,rankBodyIndex,rankDateCandidates,dateEligibility,collectRouteCandidates,recallQueryText,eventCardText,RRF_K} from './multichannel.js';
+import {createBodyIndex,rankBodyIndex,rankDateCandidates,dateEligibility,collectRouteCandidates,scoreScannedRouteCandidates,scoreRankSensitiveRouteCandidates,recallQueryText,eventCardText,RRF_K} from './multichannel.js';
 
 const safeCode=error=>['cancelled','stale','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing'].includes(error?.code)?error.code:'channel-failed';
 const now=()=>globalThis.performance?.now?.()??Date.now();
@@ -47,8 +47,8 @@ export function createMultichannelBuilder({vectorIndex,provider}={}){
    }catch(error){assertAiCurrent(signal,isCurrent);rankings.vector=[];channels.vector.status='failed';channels.vector.error=safeCode(error);}
    channels.vector.elapsedMs=now()-started;
   }
-  const collected=collectRouteCandidates(rankings,order,recallCandidateCounts(settings)),candidateById=new Map(collected.cards.map(row=>[row.id,row]));
-  let ranked=[...collected.cards],orderingMethod='rrf';
+  let collected=collectRouteCandidates(rankings,order,recallCandidateCounts(settings)),candidateById=new Map(collected.cards.map(row=>[row.id,row]));
+  let ranked=[...collected.cards],orderingMethod='rrf',rrfK=RRF_K;
   if(enabled.rerank&&ranked.length){
    const started=now();
    try{
@@ -60,6 +60,14 @@ export function createMultichannelBuilder({vectorIndex,provider}={}){
     channels.rerank.status='ready';channels.rerank.modelIdentity=response.modelIdentity;
    }catch(error){assertAiCurrent(signal,isCurrent);channels.rerank.status='fallback';channels.rerank.error=safeCode(error);}
    channels.rerank.elapsedMs=now()-started;
+  }
+  // Keep successful rerank requests/results on the full-RRF candidate order.
+  // Offline K+B uses actual scanned hits. Healthy K/B/V uses full hits with
+  // reciprocal original ranks; unavailable/partial V keeps full RRF60.
+  if(orderingMethod==='rrf'&&enabled.keyword&&enabled.bm25&&!enabled.vector){
+   collected=scoreScannedRouteCandidates(collected,order);candidateById=new Map(collected.cards.map(row=>[row.id,row]));ranked=[...collected.cards];
+  }else if(orderingMethod==='rrf'&&enabled.keyword&&enabled.bm25&&enabled.vector&&channels.vector.status==='ready'&&channels.bm25.status==='ready'){
+   collected=scoreRankSensitiveRouteCandidates(collected,order);candidateById=new Map(collected.cards.map(row=>[row.id,row]));ranked=[...collected.cards];rrfK=0;
   }
   const timeById=new Map(timeResult.evaluated.map(row=>[row.memoryId,row]));
   const special=collectSpecialDateRecallEvidence({memories:dated,currentStoryTime:context.current,fictionalCalendar:context,items:input.time?.items??[],advanceDays:input.timeReminders?.anniversary?.advanceDays??3,automaticSameDayEnabled:settings.automaticSameDayEnabled});
@@ -104,6 +112,6 @@ export function createMultichannelBuilder({vectorIndex,provider}={}){
   return frozenSettingsCopy({version:'event-recall-multichannel-v1',time:{status:context.status,current:context.current,targets:timeResult.targets,specialTargets:special.targetResult.targets,diagnostics:special.targetResult.diagnostics},
    specialBudget:{limit:settings.anniversaryPoolLimit,selectedCount:specialSelected.length},matching:{input:current,history},selected:ordered,unselected,prompt:memoryPrompt(ordered.map(row=>row.event)),selectedIds:narrative.orderedIds,
    budget:{maxCount:settings.maxCount,maxTokens:settings.maxTokens,totalTokens:settings.maxTokens===null?null:totalTokens,estimated,scope:'ordinary-body',soft:true},ordering:{...narrative},diagnostics:keyword?.aliasResult?.diagnostics??[],
-   multichannel:{channels,candidates:collected.cards,routeClaims:collected.routes,orderingMethod,rrfK:RRF_K,candidateCount:collected.cards.length,totalMs:now()-started,selectionNetworkMs:(channels.vector.elapsedMs??0)+(channels.rerank.elapsedMs??0)}});
+   multichannel:{channels,candidates:collected.cards,routeClaims:collected.routes,orderingMethod,rrfK,candidateCount:collected.cards.length,totalMs:now()-started,selectionNetworkMs:(channels.vector.elapsedMs??0)+(channels.rerank.elapsedMs??0)}});
  };
 }

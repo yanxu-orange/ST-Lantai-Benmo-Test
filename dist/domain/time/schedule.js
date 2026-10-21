@@ -1,7 +1,7 @@
 import {assertTime} from './data.js';
 import {createCalendar} from './calendar.js';
 import {storedSourceMessages} from '../summary/source.js';
-import {storedLatestSource,latestSourceKey,matchesLatestSource,createStoredLatestSourceMatcher} from '../latest/source.js';
+import {storedLatestSource,latestSourceKey,matchesLatestSource,matchesBackgroundLatestSource,createStoredLatestSourceMatcher} from '../latest/source.js';
 import {calendarCandidateKey,hasScheduleDateClue,emptyScheduleLedger,reconcileScheduleLedger,sameScheduleValue as equal} from './schedule-model.js';
 export {calendarCandidateKey} from './schedule-model.js';
 const clone=structuredClone,text=value=>typeof value==='string'&&!!value.trim();
@@ -61,8 +61,8 @@ export function parseScheduleResult(value,plan){
  return clone(value);
 }
 function calendarMatches(time,plan,id){return equal(time.calendars.find(row=>row.id===id),plan.calendars.find(row=>row.id===id));}
-function assertPlan(time,plan,result,raw){
- if(!plan||!matchesLatestSource(plan.source,raw)||time.activeCalendarId!==plan.activeCalendarId||!calendarMatches(time,plan,plan.activeCalendarId))throw new Error('日程来源或历法已变化');
+function assertPlan(time,plan,result,raw,background=false){
+ if(!plan||!(background?matchesBackgroundLatestSource:matchesLatestSource)(plan.source,raw)||time.activeCalendarId!==plan.activeCalendarId||!calendarMatches(time,plan,plan.activeCalendarId))throw new Error('日程来源或历法已变化');
  for(const row of result.changes){
   if(!plan.source.sentFloors.some(message=>message.text.includes(row.evidence)))throw new Error('日程依据不是本轮已发送正文');
   if(row.startDate&&!calendarMatches(time,plan,row.startDate.calendarId))throw new Error('日程使用的历法已变化');
@@ -77,9 +77,9 @@ function candidateMatch(time,record){
  const normalize=value=>String(value??'').normalize('NFKC').trim().replace(/\s+/gu,' ');
  return (time.candidates??[]).find(row=>(row.targetItem?.id??null)===(record.targetItem?.id??null)&&(calendarCandidateKey(row)===calendarCandidateKey(record)||row.kind===record.kind&&normalize(row.title)===normalize(record.title)&&normalize(row.dateText)===normalize(record.dateText)&&(row.calendarId===null||record.calendarId===null)&&(!row.startDate||!record.startDate||equal(row.startDate,record.startDate))));
 }
-export function applyScheduleResult(value,{plan,result,source,messages,replyVersions,makeId=generatedId}={}){
+export function applyScheduleResult(value,{plan,result,source,messages,replyVersions,makeId=generatedId,background=false}={}){
  const raw=source?.messages?source:{epoch:plan?.source?.epoch,messages:messages??source};
- const time=pruneScheduleSources(value,raw,{replyVersions});result=parseScheduleResult(result,plan);assertPlan(time,plan,result,raw);
+ const time=pruneScheduleSources(value,raw,{replyVersions});result=parseScheduleResult(result,plan);assertPlan(time,plan,result,raw,background);
  time.scheduleTracking??=emptyScheduleLedger();time.candidates??=[];
  const sourceSnapshot=storedLatestSource(plan.source),proof={kind:'round',sourceSnapshot},allIds=new Set([...time.items,...time.candidates,...time.scheduleTracking.receipts].map(row=>row.id));
  const fresh=()=>{const id=makeId();if(!text(id)||allIds.has(id))throw new Error('日程身份重复');allIds.add(id);return id;};
@@ -137,7 +137,7 @@ export function applyScheduleResult(value,{plan,result,source,messages,replyVers
   }else change('candidates',candidate.id,candidate,'candidates');
  }
  time.scheduleTracking.receipts.push(receipt);
- return {time:assertTime(time),receipt:clone(receipt),validate:latest=>{assertPlan(pruneScheduleSources(latest,raw,{replyVersions}),plan,result,raw);return true;}};
+ return {time:assertTime(time),receipt:clone(receipt),validate:latest=>{assertPlan(pruneScheduleSources(latest,raw,{replyVersions}),plan,result,raw,background);return true;}};
 }
 export function markScheduleManual(value,id){
  const time=assertTime(value);if(!text(id))throw new Error('日程身份无效');

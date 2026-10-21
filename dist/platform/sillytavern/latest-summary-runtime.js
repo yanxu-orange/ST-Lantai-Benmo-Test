@@ -7,7 +7,7 @@ import {latestArchivedFloors} from '../../domain/latest/coverage.js';
 import {cleanSummaryFloors,createDefaultCleaningRules,normalizeCleaningRule} from '../../domain/summary/cleaning.js';
 import {sameTarget} from '../../domain/memory/repository.js';
 import {DEFAULT_LATEST_PROMPT,emptyLatest,pruneLatestRecords} from '../../domain/latest/data.js';
-import {prepareLatestSource,prepareManualLatestSource,matchesLatestSource,matchesStoredLatestSource,createStoredLatestSourceMatcher} from '../../domain/latest/source.js';
+import {prepareLatestSource,prepareManualLatestSource,matchesLatestSource,matchesBackgroundLatestSource,matchesStoredLatestSource,createStoredLatestSourceMatcher} from '../../domain/latest/source.js';
 import {buildLatestRequest,promptIdentities} from '../../domain/latest/requests.js';
 import {planLatestBackfill,buildLatestBackfillRequest,parseLatestBackfillResponse} from '../../domain/latest/backfill.js';
 import {buildBackgroundRoundRequest,parseBackgroundRoundResponse} from '../../domain/background/round.js';
@@ -45,8 +45,6 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   let backfillState={status:'idle',id:null,total:0,completed:0,skipped:0,failed:0,error:''},backfillController=null;
   let automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};
   const listeners=new Set(),visibilityReleases=new Set(),releases=[],jobs=new Set(),queuedFloors=new Set(),invalidatedFloors=new Set();
-  const latestEditedFloors=new Set(),latestEditedReplies=new Set();
-  const clearInvalidatedSources=()=>{invalidatedFloors.clear();latestEditedFloors.clear();latestEditedReplies.clear();};
   const allowed=()=>!disposed&&enabled&&getControls?.()?.allowed('enabled')===true;
   const summaryAllowed=()=>allowed()&&getControls?.()?.allowed('summary')===true;
   const summaryMatches=proof=>summaryAllowed()&&getControls?.()?.matches(proof)===true;
@@ -62,7 +60,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   }
   function inspect(){return copy({...state,target,sendDiagnostics,automatic:automaticState,backfill:backfillState,failureReports:currentFailures()});}
   function automaticStatus(status,message,floor=automaticState.floor){automaticState={status,message,floor};publish();}
-  function cancel(){workshopSends.clear();stopBackfill();for(const [key,value] of automaticReceipts)if(['queued','running'].includes(value.status))automaticReceipts.set(key,{...value,status:'cancelled',message:'本轮自动生成已取消，未自动重试'});if(['waiting','queued','running'].includes(automaticState.status))automaticState={...automaticState,status:'cancelled',message:'本轮自动生成已取消，未自动重试'};serial++;foregroundType=null;for(const [key,value] of Object.entries(scheduleFloorStates))if(value.status==='running')scheduleFloorStates[key]={status:'idle',error:''};scheduleRuntime?.cancel?.();for(const [key,value] of Object.entries(trackingFloorStates))if(value.status==='running')trackingFloorStates[key]={status:'idle',error:''};for(const tasks of Object.values(workshopFloorStates))for(const [key,value] of Object.entries(tasks))if(value.status==='running')tasks[key]={status:'idle',error:''};receipt=null;foregroundEnded=false;generationQueue=Promise.resolve();queuedFloors.clear();displayBatches.clear();for(const job of jobs)job.abort();jobs.clear();for(const [key,value] of Object.entries(state.floorStates))if(value.status==='running')state.floorStates[key]={status:'idle',error:''};if(state.status==='running')state.status='ready';publish();}
+  function cancel(){workshopSends.clear();stopBackfill();for(const [key,value] of automaticReceipts)if(['queued','running'].includes(value.status))automaticReceipts.set(key,{...value,status:'cancelled',message:'本轮自动生成已取消，未自动重试'});if(['waiting','queued','running'].includes(automaticState.status))automaticState={...automaticState,status:'cancelled',message:'本轮自动生成已取消，未自动重试'};serial++;foregroundType=null;for(const [key,value] of Object.entries(scheduleFloorStates))if(value.status==='running')scheduleFloorStates[key]={status:'cancelled',error:'任务已取消，未自动重试'};scheduleRuntime?.cancel?.();for(const [key,value] of Object.entries(trackingFloorStates))if(value.status==='running')trackingFloorStates[key]={status:'cancelled',error:'任务已取消，未自动重试'};for(const tasks of Object.values(workshopFloorStates))for(const [key,value] of Object.entries(tasks))if(value.status==='running')tasks[key]={status:'cancelled',error:'任务已取消，未自动重试'};receipt=null;foregroundEnded=false;generationQueue=Promise.resolve();queuedFloors.clear();displayBatches.clear();for(const job of jobs)job.abort();jobs.clear();for(const [key,value] of Object.entries(state.floorStates))if(value.status==='running')state.floorStates[key]={status:'cancelled',error:'任务已取消，未自动重试'};if(state.status==='running')state.status='ready';publish();}
   function raw(t,retention=false){
     const snapshot=retention&&adapter.captureLatestRetentionSource?adapter.captureLatestRetentionSource(t):adapter.captureChatSource(t),chat=getContext().chat;
     snapshot.messages=snapshot.messages.map(item=>({...item,...latestSourceMetadata(chat[item.floor])}));
@@ -128,7 +126,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const captured=await repository.captureLatest(t,readView),workshop=await workshopRuntime?.backgroundState(t,{readView}),tracking=await trackingRuntime?.backgroundState(t,{readView,raw:source}),schedule=await scheduleRuntime?.backgroundState(t,{readView,raw:source});
     if(disposed||token!==readSerial||!current(t))return inspect();
     if(readView&&!repository.matchesPanelData(t,readView))return read({target:t});
-    if(target&&!sameTarget(target,t)){cancel();resetBackfill();state.floorStates={};clearInvalidatedSources();}
+    if(target&&!sameTarget(target,t)){cancel();resetBackfill();state.floorStates={};invalidatedFloors.clear();}
     displayRecoveryEpoch=null;
     lastReadView=readView;target=t;selection=captured;workshopState=workshop??null;trackingState=tracking??null;scheduleState=schedule??null;state={...captured.latest,status:state.status==='running'?'running':'ready',error:'',floorStates:state.floorStates};publish();return inspect();
     }catch(error){if(!disposed&&token===readSerial&&(!t||current(t)))failedDisplayRead(error,startedEpoch);throw error;}
@@ -150,10 +148,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const prepared=summaryAllowed()||captured.latest.records.length||workshop?.modules.length||workshop?.selection.workshop.results.some(row=>row.generationSource==='background')||getControls?.()?.allowed('item')||getControls?.()?.allowed('npc')||tracking?.tracking.snapshots.length||getControls?.()?.allowed('schedule')||schedule?.receipts.length?prepareWorkshopIdentities(identityChat,{allowPendingLast:true}):{changed:false,selected:[]},source=raw(t);
     let maintainedProof=null;
     if(config&&readView&&(!workshopRuntime||workshopPass?.displaySource||!config.gates.some(row=>['prompt','collect','sync'].includes(row.key)&&row.allowed))){const root=repository.readPanelRoot(t,readView);maintainedProof={target:copy(t),serial:ticket,source,versions:versions(),config,binding:[root.binding?.kind,root.binding?.owner],modules:copy(root.workshop?.modules??[]),workshopSource:workshopPass?.displaySource??null};}
-    const retained=pruneLatestRecords(captured.latest,raw(t,true),{replyVersions:versions(),retainStale:true});
-    // Persist edit invalidation before releasing the synchronous send block.
-    // Existing stale records stay available for review, but never compress.
-    const next={...retained,records:retained.records.map(record=>(latestEditedReplies.has(record.sourceSnapshot.replyId)||record.sourceSnapshot.rawMessages.some(row=>latestEditedFloors.has(row.floor)))?{...record,stale:true}:record)};
+    const next=pruneLatestRecords(captured.latest,raw(t,true),{replyVersions:versions(),retainStale:true});
     const valid=()=>{try{return !disposed&&!isSourceDeletionPending()&&ticket===serial&&current(t)&&matchesRaw(t,source);}catch{return false;}};
     if(prepared.changed||!equal(next,captured.latest)){
       const saved=await repository.updateLatest(t,captured,next,{isCurrent:valid,forceSave:prepared.changed,workshopProof:prepared.selected.map(({floor,swipeId,replyId})=>({floor,swipeId,replyId}))});
@@ -164,8 +159,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const trackingSelection=valid()?await trackingRuntime?.reconcile(t,options):null;
     const scheduleSelection=valid()?await scheduleRuntime?.reconcile(t,options):null;
     const tracked=valid()?await trackingRuntime?.backgroundState(t,{readView,raw:source,captured:trackingSelection??undefined}):null,scheduled=valid()?await scheduleRuntime?.backgroundState(t,{readView,raw:source,captured:scheduleSelection??undefined}):null;
-    if(valid()&&readView&&!repository.matchesPanelData(t,readView)){clearInvalidatedSources();await read({target:t});if(lastReadView&&maintenanceMatches(maintainedProof,lastReadView))maintenanceProof=maintainedProof;return;}
-    if(valid()){displayRecoveryEpoch=null;clearInvalidatedSources();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};if(maintenanceMatches(maintainedProof,readView))maintenanceProof=maintainedProof;publish();}
+    if(valid()&&readView&&!repository.matchesPanelData(t,readView)){invalidatedFloors.clear();await read({target:t});if(lastReadView&&maintenanceMatches(maintainedProof,lastReadView))maintenanceProof=maintainedProof;return;}
+    if(valid()){displayRecoveryEpoch=null;invalidatedFloors.clear();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};if(maintenanceMatches(maintainedProof,readView))maintenanceProof=maintainedProof;publish();}
   }
   function queueRefresh(allowProjection=false){
     initialized=true;
@@ -225,8 +220,9 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       stage='config';const preparation=()=>settings?.captureEventGeneration?.()??(getPreparationSettings??getGenerationSettings)(),preparationProof=preparation(),generation=preparationProof.generation??preparationProof;stage='preparation';
       latestTask=!workshopOnly&&summaryMatches(summaryProof);
       const source=prepareLatestSource(rawSource,{floor,rules:generation.summaryCleaning.rules}),names=identities();
+      displayBatches.set(controller,{floor,ticket,source});
       const valid=()=>{
-        try{return allowed()&&getControls?.()?.matches(masterProof)===true&&!controller.signal.aborted&&ticket===serial&&current(t)&&equal(preparationProof,preparation())&&equal(names,identities())&&matchesLatestSource(source,raw(t));}catch{return false;}
+        try{return allowed()&&getControls?.()?.matches(masterProof)===true&&!controller.signal.aborted&&ticket===serial&&current(t)&&equal(preparationProof,preparation())&&equal(names,identities())&&matchesBackgroundLatestSource(source,raw(t));}catch{return false;}
       };
       generationCurrent=valid;
       // Each API category owns its configuration proof. A missing or changed
@@ -321,6 +317,29 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:failure(error,'save')});if(!valid())return false;if(!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}else{state.floorStates[key]={status:'failed',error:failure(error)};state.error=failure(error);}}
         publish();
       }else if(latestTask&&!summaryEligible()){state.floorStates[key]={status:'idle',error:''};skippedTasks++;}
+      if(trackingPlan&&valid()){
+        try{
+          stage='parse';const segment=segments.get(trackingPlan.task.id);if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
+          const result=await trackingRuntime.saveBackgroundResult(trackingPlan,segment.text,{isCurrent:latestCurrent});
+          if(!valid())return false;
+          const errors=Object.entries(result.errors).filter(([,error])=>error).map(([kind,error])=>`${kind==='items'?'物品':'NPC'}：${error}`);
+          if(result.skipped){markTracking('idle');skippedTasks++;}
+          else{markTracking(errors.length?'failed':'ready',errors.join('；'));successes++;if(errors.length){partialResults=true;firstFailure||=errors.join('；');}}
+          trackingState=await trackingRuntime.backgroundState(t);
+        }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:failure(error,'save')});if(!valid())return false;markTracking('failed',failure(error));}
+        publish();
+      }
+      if(schedulePlan&&valid()){
+        try{
+          stage='parse';const segment=segments.get(schedulePlan.task.id);if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
+          const result=await scheduleRuntime.saveBackgroundResult(schedulePlan,segment.text,{isCurrent:latestCurrent});
+          if(!valid())return false;
+          if(result.skipped){markSchedule('idle');skippedTasks++;}
+          else{const errors=Object.values(result.errors??{}).filter(Boolean);markSchedule(errors.length?'failed':'ready',errors.join('；'));successes++;if(errors.length){partialResults=true;firstFailure||=errors.join('；');}}
+          scheduleState=await scheduleRuntime.backgroundState(t);
+        }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:failure(error,'save')});if(!valid())return false;markSchedule('failed',failure(error));}
+        publish();
+      }
       let workshopSegments=new Map(),commonCurrent=valid,commonRawResponse=null;
       if(commonWorkshop.length){
         try{
@@ -332,7 +351,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           for(const [id,segment] of workshopSegments)if(segment.error)retainFailure({requestId:requestId+':workshop',target:t,replyIds:[source.replyId],taskIds:[id],rawResponse:output.text,error:segment.error});
         }catch(error){if(!valid())return false;const message=failure(error);workshopSegments=new Map(commonWorkshop.map(task=>[task.id,{error:message}]));}
       }
-      for(const task of tasks){
+      for(const task of [...commonWorkshop,...tasks.filter(task=>hasWorkshopMaterials(task.module))]){
         if(!valid())return false;
         let taskRawResponse=commonRawResponse;
         try{
@@ -357,29 +376,6 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           markWorkshop(task,'ready');successes++;
           workshopState=await workshopRuntime.backgroundState(t);
         }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId:requestId+':'+task.id,target:t,replyIds:[source.replyId],taskIds:[task.id],rawResponse:taskRawResponse,error:failure(error,'save')});if(!valid())return false;markWorkshop(task,'failed',failure(error));}
-        publish();
-      }
-      if(trackingPlan&&valid()){
-        try{
-          stage='parse';const segment=segments.get(trackingPlan.task.id);if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
-          const result=await trackingRuntime.saveBackgroundResult(trackingPlan,segment.text,{isCurrent:latestCurrent});
-          if(!valid())return false;
-          const errors=Object.entries(result.errors).filter(([,error])=>error).map(([kind,error])=>`${kind==='items'?'物品':'NPC'}：${error}`);
-          if(result.skipped){markTracking('idle');skippedTasks++;}
-          else{markTracking(errors.length?'failed':'ready',errors.join('；'));successes++;if(errors.length){partialResults=true;firstFailure||=errors.join('；');}}
-          trackingState=await trackingRuntime.backgroundState(t);
-        }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:failure(error,'save')});if(!valid())return false;markTracking('failed',failure(error));}
-        publish();
-      }
-      if(schedulePlan&&valid()){
-        try{
-          stage='parse';const segment=segments.get(schedulePlan.task.id);if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';
-          const result=await scheduleRuntime.saveBackgroundResult(schedulePlan,segment.text,{isCurrent:latestCurrent});
-          if(!valid())return false;
-          if(result.skipped){markSchedule('idle');skippedTasks++;}
-          else{const errors=Object.values(result.errors??{}).filter(Boolean);markSchedule(errors.length?'failed':'ready',errors.join('；'));successes++;if(errors.length){partialResults=true;firstFailure||=errors.join('；');}}
-          scheduleState=await scheduleRuntime.backgroundState(t);
-        }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId,target:t,replyIds:[source.replyId],taskIds:requestedTaskIds,rawResponse,error:failure(error,'save')});if(!valid())return false;markSchedule('failed',failure(error));}
         publish();
       }
       if(valid()){
@@ -415,8 +411,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       jobs.delete(controller);displayBatches.delete(controller);
       if(automatic&&['queued','running'].includes(automaticState.status))report('cancelled','来源或配置已变化，本轮结果未写入');
       if(!disposed&&ticket===serial){
-        if(state.floorStates[key]?.status==='running'){state.floorStates[key]={status:'idle',error:''};if(state.status==='running')state.status='ready';}
-        for(const [id,value] of Object.entries(workshopFloorStates[key]??{}))if(value.status==='running')workshopFloorStates[key][id]={status:'idle',error:''};if(trackingFloorStates[key]?.status==='running')markTracking('idle');if(scheduleFloorStates[key]?.status==='running')markSchedule('idle');publish();
+        if(state.floorStates[key]?.status==='running'){state.floorStates[key]={status:'cancelled',error:'来源或配置已变化，结果未保存'};if(state.status==='running')state.status='ready';}
+        for(const [id,value] of Object.entries(workshopFloorStates[key]??{}))if(value.status==='running')workshopFloorStates[key][id]={status:'cancelled',error:'来源或配置已变化，结果未保存'};if(trackingFloorStates[key]?.status==='running')markTracking('cancelled','来源或配置已变化，结果未保存');if(scheduleFloorStates[key]?.status==='running')markSchedule('cancelled','来源或配置已变化，结果未保存');publish();
       }
     }
   }
@@ -558,27 +554,28 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     if(['queued','running'].includes(backfillState.status))throw new Error('摘要补缺正在进行');
     const plan=backfillPlan(range),t=copy(target),ticket=serial,proof=getControls?.()?.capture('summary'),epoch=latestEpoch;
     const generation=getGenerationSettings(),frozenRaw=raw(t),prompt=state.preferences.prompt,names=identities(),id=crypto.randomUUID(),controller=new AbortController();
-    backfillController=controller;jobs.add(controller);
+    backfillController=controller;jobs.add(controller);displayBatches.set(controller,{ticket,sources:plan.batches.flat()});
     backfillState={status:'queued',id,total:plan.count,completed:0,skipped:0,failed:0,error:plan.oversized.length?`以下楼层超过字符保护预算，未加入请求：${plan.oversized.join('、')}`:''};publish();
-    const valid=()=>{try{return !controller.signal.aborted&&backfillState.id===id&&ticket===serial&&current(t)&&summaryMatches(proof)&&epoch===latestEpoch&&getGenerationSettings().epoch===generation.epoch&&equal(names,identities())&&adapter.matchesChatSource(t,frozenRaw);}catch{return false;}};
+    const sameStructure=()=>{const live=raw(t),byFloor=new Map(live.messages.map(row=>[row.floor,row]));return live.messages.length===frozenRaw.messages.length&&frozenRaw.messages.every(saved=>{const message=byFloor.get(saved.floor);return message&&['floor','identity','role','system','date','replyId','objectTicket','specialPayload','swipeId'].every(key=>message[key]===saved[key]);});};
+    const valid=()=>{try{return !controller.signal.aborted&&backfillState.id===id&&ticket===serial&&current(t)&&summaryMatches(proof)&&epoch===latestEpoch&&getGenerationSettings().epoch===generation.epoch&&equal(names,identities())&&sameStructure();}catch{return false;}};
     const archivedNow=source=>archivedFloor(t,source.assistantFloor);
     const skipArchived=source=>{state.floorStates[source.replyId]={status:'idle',error:''};backfillState={...backfillState,skipped:backfillState.skipped+1};};
     const execute=async()=>{
-      if(!valid()){jobs.delete(controller);if(backfillController===controller)backfillController=null;if(backfillState.id===id&&backfillState.status==='queued'){backfillState={...backfillState,status:'cancelled',error:'来源或配置已变化，补缺未开始'};publish();}return library();}
+      if(!valid()){jobs.delete(controller);displayBatches.delete(controller);if(backfillController===controller)backfillController=null;if(backfillState.id===id&&backfillState.status==='queued'){backfillState={...backfillState,status:'cancelled',error:'来源或配置已变化，补缺未开始'};publish();}return library();}
       backfillState={...backfillState,status:'running'};publish();
       try{
         for(const planned of plan.batches){
           if(!valid())break;
           const captured=await repository.captureLatest(t);if(!valid())break;
           const currentMissing=new Set(library().missing.map(row=>row.replyId));
-          const sources=planned.filter(source=>currentMissing.has(source.replyId)&&!captured.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId)&&matchesLatestSource(source,raw(t)));
+          const sources=planned.filter(source=>currentMissing.has(source.replyId)&&!captured.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId)&&matchesBackgroundLatestSource(source,raw(t)));
           backfillState={...backfillState,skipped:backfillState.skipped+planned.length-sources.length};
           if(!sources.length){publish();continue;}
           for(const source of sources)state.floorStates[source.replyId]={status:'running',error:''};publish();
           let parsed,batchResponse=null;const batchRequestId=crypto.randomUUID();
           try{
             const request=buildLatestBackfillRequest({sources,prompt,identities:names});
-            const output=await provider.generateText({...request,signal:controller.signal,isCurrent:()=>valid()&&sources.every(source=>matchesLatestSource(source,raw(t)))});
+            const output=await provider.generateText({...request,signal:controller.signal,isCurrent:()=>valid()&&sources.every(source=>matchesBackgroundLatestSource(source,raw(t)))});
             if(!valid())break;
             batchResponse=output.text;
             parsed=parseLatestBackfillResponse(output.text,sources);
@@ -591,13 +588,13 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
             try{
               if(archivedNow(source)){skipArchived(source);continue;}
               const segment=parsed.get(source.replyId);if(!segment||segment.error)throw new Error(segment?.error??'未收到该楼层的摘要');
-              if(!matchesLatestSource(source,raw(t)))throw new Error('回复来源已变化，结果未保存');
+              if(!matchesBackgroundLatestSource(source,raw(t)))throw new Error('回复来源已变化，结果未保存');
               const latest=await repository.captureLatest(t);if(!valid())break;
               // A manual save or another authorized producer always wins over
               // this missing-only operation, including stale saved records.
               if(latest.latest.records.some(record=>record.sourceSnapshot.replyId===source.replyId)){state.floorStates[source.replyId]={status:'ready',error:''};backfillState={...backfillState,skipped:backfillState.skipped+1};publish();continue;}
               const now=new Date().toISOString();
-              const saved=await repository.upsertLatestRecord(t,latest,{id:crypto.randomUUID(),body:segment.text,sourceSnapshot:source,cleaningRules:plan.rules,createdAt:now,updatedAt:now},{isCurrent:()=>valid()&&matchesLatestSource(source,raw(t))&&!archivedNow(source)});
+              const saved=await repository.upsertLatestRecord(t,latest,{id:crypto.randomUUID(),body:segment.text,sourceSnapshot:source,cleaningRules:plan.rules,createdAt:now,updatedAt:now},{isCurrent:()=>valid()&&matchesBackgroundLatestSource(source,raw(t))&&!archivedNow(source)});
               if(!valid())break;
               selection=saved.selection;state={...selection.latest,status:'ready',error:'',floorStates:state.floorStates};
               state.floorStates[source.replyId]={status:'ready',error:''};backfillState={...backfillState,completed:backfillState.completed+1};
@@ -622,10 +619,10 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         if(valid())backfillState={...backfillState,status:'failed',error:error.message};
       }
       finally{
-        jobs.delete(controller);if(backfillController===controller)backfillController=null;
+        jobs.delete(controller);displayBatches.delete(controller);if(backfillController===controller)backfillController=null;
         if(backfillState.id===id){
           if(['queued','running'].includes(backfillState.status))backfillState={...backfillState,status:'cancelled',error:'来源或配置已变化，补缺已停止'};
-          for(const source of plan.batches.flat())if(state.floorStates[source.replyId]?.status==='running')state.floorStates[source.replyId]={status:'idle',error:''};
+          for(const source of plan.batches.flat())if(state.floorStates[source.replyId]?.status==='running')state.floorStates[source.replyId]={status:'cancelled',error:'补缺已停止，已保存的摘要保留'};
           publish();
         }
       }
@@ -644,30 +641,6 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   }
 
 
-  // Compare actual text, not native visibility flags. MESSAGE_UPDATED also
-  // covers host presentation updates and swipe projection, neither of which
-  // authorizes invalidating an unchanged or different reply version.
-  const editState=()=> (getContext().chat??[]).map(message=>({text:message?.mes,isUser:message?.is_user,swipeId:message?.swipe_id??0,replyId:message?.extra?.[WORKSHOP_REPLY_KEY]??null}));
-  let editBaseline=editState();
-  function invalidateEditedSource(name,floor){
-    const next=editState();
-    if(name==='MESSAGE_EDITED'||name==='MESSAGE_UPDATED'){
-      next.forEach((row,index)=>{
-        if(Number.isSafeInteger(floor)&&floor!==index)return;
-        const previous=editBaseline[index];
-        if(previous?.text===row.text)return;
-        const sameReply=previous&&previous.swipeId===row.swipeId&&(!previous.replyId||!row.replyId||previous.replyId===row.replyId);
-        if(name==='MESSAGE_EDITED'||sameReply){
-          invalidatedFloors.add(index);
-          // A known AI UUID owns one swipe. User edits affect every paired
-          // reply; unidentified speakers fail closed at the original floor.
-          if(row.isUser===false&&typeof row.replyId==='string'&&row.replyId)latestEditedReplies.add(row.replyId);
-          else latestEditedFloors.add(index);
-        }
-      });
-    }
-    editBaseline=next;
-  }
   const context=getContext(),events=context?.eventSource;
   const on=(name,listener)=>{const type=context?.eventTypes?.[name];if(!type||!events?.on)return;events.on(type,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,type,listener));};
   function completedStream(floor,processor=getContext()?.streamingProcessor){
@@ -700,8 +673,11 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   // ST streaming ends its UI before MESSAGE_RECEIVED; non-streaming reverses
   // this order. Both receipts are required, with successful-stream evidence.
   on('GENERATION_ENDED',()=>{foregroundEnded=true;if(!receipt&&automaticState.status==='waiting')automaticStatus('waiting','已收到结束信号，等待宿主正文回执');flushReceipt();});
-  for(const name of ['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,payload=>{const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;invalidateEditedSource(name,floor);if(name==='MESSAGE_EDITED'){for(const [index,message] of (getContext().chat??[]).entries())if(!Number.isSafeInteger(floor)||index===floor||index===floor+1){const id=message?.extra?.[WORKSHOP_REPLY_KEY];if(id){delete state.floorStates[id];delete workshopFloorStates[id];delete trackingFloorStates[id];delete scheduleFloorStates[id];}}}cancel();publish();void refresh().catch(()=>{});});
-  for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{editBaseline=editState();activeHostGenerations=0;cancel();resetBackfill();readSerial++;clearInvalidatedSources();target=null;selection=null;state={...emptyLatest(),status:'idle',error:'',floorStates:{}};workshopState=null;workshopFloorStates={};trackingState=null;trackingFloorStates={};scheduleState=null;scheduleFloorStates={};scheduleRuntime?.reset?.();automaticReceipts.clear();automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};publish();void refresh().catch(()=>{});});
+  for(const name of ['MESSAGE_EDITED','MESSAGE_UPDATED'])on(name,()=>{
+    publish();if(pending){displayReadDirty=true;return;}void refresh().catch(()=>{});
+  });
+  for(const name of ['MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,payload=>{const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;if(!jobs.size||[...displayBatches.values()].some(batch=>{const sources=batch.sources??(batch.source?[batch.source]:[]);return !sources.length||sources.some(source=>name==='MESSAGE_SWIPED'&&(!Number.isSafeInteger(floor)||floor===source.assistantFloor)||!matchesBackgroundLatestSource(source,raw(target)));}))cancel();publish();void refresh().catch(()=>{});});
+  for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{activeHostGenerations=0;cancel();resetBackfill();readSerial++;invalidatedFloors.clear();target=null;selection=null;state={...emptyLatest(),status:'idle',error:'',floorStates:{}};workshopState=null;workshopFloorStates={};trackingState=null;trackingFloorStates={};scheduleState=null;scheduleFloorStates={};scheduleRuntime?.reset?.();automaticReceipts.clear();automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};publish();void refresh().catch(()=>{});});
   let displayReadQueued=false;
   const updateWorkshopDisplay=()=>{if(disposed||!initialized)return;if(pending){displayReadDirty=true;return;}if(displayReadQueued)return;displayReadQueued=true;queueMicrotask(()=>{displayReadQueued=false;if(!disposed){if(pending)displayReadDirty=true;else void read().catch(()=>{});}});};
   if(workshopRuntime?.subscribe)releases.push(workshopRuntime.subscribe(updateWorkshopDisplay));

@@ -105,7 +105,8 @@ export function createRecallAiProvider({getConfig,transport,signal:lifecycleSign
     let disposed=false;
     const dispose=()=>{if(disposed)return;disposed=true;for(const value of lanes.values())value.transport?.dispose?.();lanes.clear();};
     const lane=capability=>{if(disposed)bad('cancelled');const value=lanes.get(capability);if(!value)bad('capability');if(value.error)bad(value.error.code);return value;};
-    return Object.freeze({dispose,getConfig:capability=>lane(capability).config,
+    const isCurrent=()=>{try{return !disposed&&[...lanes.values()].every(value=>!value.transport||value.transport.isCurrent?.()!==false);}catch{return false;}};
+    return Object.freeze({dispose,isCurrent,getConfig:capability=>lane(capability).config,
       embed:async args=>perform('embedding',args,lane('embedding')),
       rerank:async args=>perform('rerank',args,lane('rerank'))});
   }

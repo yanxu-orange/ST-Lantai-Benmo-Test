@@ -1,6 +1,6 @@
 import { trackingExclusionsOf, assertTrackingExclusions, effectiveTrackingExclusions, filterTrackingChanges, normalizeTrackingName } from './exclusions.js';
 import { assertRawSummarySource, storedSourceMessages, assertStoredSourceMessages, matchesSourceMetadata, sourceFingerprint, matchesStoredSummarySource } from '../summary/source.js';
-import { prepareLatestSource, storedLatestSource, assertLatestSource, matchesLatestSource, matchesStoredLatestSource } from '../latest/source.js';
+import { prepareLatestSource, storedLatestSource, assertLatestSource, matchesLatestSource, matchesBackgroundLatestSource, matchesStoredLatestSource } from '../latest/source.js';
 import { assertTrackingRecord, blankTrackingRecord, assertTrackingPatch, assertTrackingChanges, applyTrackingCustomFieldValues, trackingExact, trackingText, trackingInteger, npcAbsenceTurns, TRACKING_FIELDS } from './model.js';
 import { trackingResultIds } from './identity.js';
 const clone = structuredClone;
@@ -159,10 +159,10 @@ export function prepareTrackingUpdate(value, raw, { floor, rules } = {}) {
   return freeze({ source, aiTurn: countTrackingAiTurns(raw, { beforeFloor: floor + 1 }), baseKey: prior.baseKey,
     revision: domain.revision, current: current.records, preferences: domain.preferences, exclusions: effectiveTrackingExclusions(domain, current.records) });
 }
-export function applyTrackingResponse(value, ticket, response, raw, { makeId = generatedId, errors = {} } = {}) {
+export function applyTrackingResponse(value, ticket, response, raw, { makeId = generatedId, errors = {}, background = false } = {}) {
   const domain = assertTracking(value); let changes = assertTrackingChanges(response);
   if (domain.snapshots.some(row => row.sourceSnapshot.kind === 'batch' && ticket?.source?.assistantFloor >= row.sourceSnapshot.actualRange.start && ticket.source.assistantFloor <= row.sourceSnapshot.actualRange.end && matchesBatchTrackingSource(row.sourceSnapshot, raw))) throw new Error('该楼层已属于批追踪，请重跑整批以保留完整来源');
-  if (!ticket || ticket.revision !== domain.revision || (ticket.exclusions?.epoch ?? 0) !== trackingExclusionsOf(domain).epoch || !matchesLatestSource(ticket.source, raw)
+  if (!ticket || ticket.revision !== domain.revision || (ticket.exclusions?.epoch ?? 0) !== trackingExclusionsOf(domain).epoch || !(background ? matchesBackgroundLatestSource : matchesLatestSource)(ticket.source, raw)
     || ticket.aiTurn !== countTrackingAiTurns(raw, { beforeFloor: ticket.source.assistantFloor + 1 })
     || currentTracking(domain, raw, { beforeFloor: ticket.source.assistantFloor }).baseKey !== ticket.baseKey) throw new Error('追踪来源或资料已变化，请重新运行');
   if (!domain.preferences.itemsEnabled && changes.items.length || !domain.preferences.npcsEnabled && changes.npcs.length) throw new Error('追踪类别未开启');

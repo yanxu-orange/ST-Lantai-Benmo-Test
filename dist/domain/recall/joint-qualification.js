@@ -1,7 +1,7 @@
 // Pure compatibility evidence: old fixed 01e50d63, adapted to TASK-016 boundaries.
 import {collectStoryTimeRecallEvidence} from './story-time-evidence.js';
 import { collectStructuredRecallCandidates } from './structured-candidates.js';
-import { evaluateStructuredCandidate, evaluateStructuredRecallCandidates } from './structured-relevance.js';
+import { evaluateStructuredRecallCandidates } from './structured-relevance.js';
 
 import { normalizeQuerySurfaceDisplay } from './detail-query-surface.js';
 
@@ -11,30 +11,10 @@ function timeSummaries(evaluations, fragments) {
     return fragments.map(fragment => {
         const local = evaluations.filter(e => e.target.fragmentId === fragment.id);
         const supports = local.filter(e => e.relation === 'support' && e.target.status === 'resolved' && e.domain.comparable);
-        const conflicts = local.filter(e => e.relation === 'conflict' && e.target.status === 'resolved' && e.domain.comparable);
-        const scopes = [...new Set(local.map(e => JSON.stringify(e.target.scopeRange ?? null)))].map(key => {
-            const range = JSON.parse(key); const entries = local.filter(e => JSON.stringify(e.target.scopeRange ?? null) === key);
-            return { range, relation: entries.some(e => e.relation === 'support') ? 'support'
-                : entries.some(e => e.relation === 'conflict') ? 'conflict' : 'neutral' };
-        });
         return { fragmentId: fragment.id, sourceKind: fragment.sourceKind, rawPosition: fragment.rawPosition,
             distanceFromCurrent: fragment.distanceFromCurrent, evaluations: local,
-            relation: supports.length ? 'support' : conflicts.some(e => e.target.canVetoFragment !== false) ? 'conflict' : 'neutral', scopes,
-            supports, conflicts, diagnostics: supports.length && conflicts.length ? ['mixed-time-targets'] : [] };
-    });
-}
-
-// A mixed fragment can contain a constrained lookup and a separate current action.
-// Only witnesses whose actual components fall inside a conflicting lookup scope
-// are masked. Failed coordinate projection never authorizes a broader exclusion.
-export function witnessHasTimeConflict(witness, summary, fragment) {
-    if (summary?.relation === 'conflict') return true;
-    if (!fragment || !Array.isArray(witness?.usedComponents) || !witness.usedComponents.length) return false;
-    return (summary?.scopes ?? []).some(scope => {
-        if (scope.relation !== 'conflict' || !Array.isArray(scope.range)) return false;
-        const range = targetInWitnessCoordinates({ range: scope.range,
-            matchedText: fragment.cleanedText.slice(...scope.range), coordinateSystem: 'cleaned-fragment-utf16' }, fragment, witness);
-        return range && witness.usedComponents.every(component => component.range[0] >= range[0] && component.range[1] <= range[1]);
+            relation: supports.length ? 'support' : 'neutral', scopes: [],
+            supports, conflicts: [], diagnostics: [] };
     });
 }
 
@@ -68,7 +48,7 @@ function targetInWitnessCoordinates(target, fragment, witness) {
     return range;
 }
 
-function sharedFacts(candidate, evaluations, fragments, veto) {
+function sharedFacts(candidate, evaluations, fragments) {
     if (!candidate) return [];
     const fragmentMap = new Map(fragments.map(f => [f.id, f]));
     const links = [];
@@ -107,7 +87,7 @@ function sharedFacts(candidate, evaluations, fragments, veto) {
         id: JSON.stringify([candidate.memoryId, 'shared-fact', index]), channels: ['structured', 'time'],
         parentFactIds: [...new Set(evidence.map(e => e.parentFactId))], witnessIds: [...new Set(evidence.map(e => e.witnessId))],
         targetIds: [...new Set(evidence.map(e => e.targetId))], fragmentIds: [...new Set(evidence.map(e => e.fragmentId))],
-        evidence, consumedBenefits: veto ? 0 : 1, suppressionReasons: veto ? ['explicit-current-time-conflict'] : [],
+        evidence, consumedBenefits: 1, suppressionReasons: [],
     }));
 }
 
@@ -127,38 +107,8 @@ export function combineStructuredAndTimeEvidence({ memories, structuredResult, t
         const time = times.get(memory.id);
         if (!time || time.libraryIndex !== libraryIndex || (keyword && keyword.libraryIndex !== libraryIndex)) throw new TypeError('Channel library snapshot differs');
         const timeByFragment = timeSummaries(time.evaluations, timeResult.fragments);
-        const byFragment = new Map(timeByFragment.map(t => [t.fragmentId, t]));
-        const fragmentMap = new Map(structuredResult.fragments.map(fragment => [fragment.id, fragment]));
-        const witnesses = new Map(keyword?.evidence.parentFacts.flatMap(parent => parent.witnesses).map(w => [w.id, w]) ?? []);
-        const bundles = new Map(keyword?.localBundles.map(bundle => [bundle.id, bundle]) ?? []);
-        const witnessAllowed = witness => !witnessHasTimeConflict(witness, byFragment.get(witness.fragmentId), fragmentMap.get(witness.fragmentId));
-        const pathAllowed = path => path.channel !== 'structured' || (path.reason.witnessId
-            ? witnessAllowed(witnesses.get(path.reason.witnessId))
-            : (bundles.get(path.reason.bundleId)?.witnessIds ?? []).every(id => witnessAllowed(witnesses.get(id))));
-        const veto = byFragment.get('current:0')?.relation === 'conflict';
-        const qualificationPaths = [];
+        const qualificationPaths = structuredPaths(keyword);
         const suppressedPaths = [];
-        const addPath = path => {
-            const reason = veto ? 'explicit-current-time-conflict'
-                : byFragment.get(path.fragmentId)?.relation === 'conflict' || !pathAllowed(path) ? 'same-fragment-time-conflict' : null;
-            if (reason) suppressedPaths.push({ ...path, suppressionReason: reason });
-            else qualificationPaths.push(path);
-        };
-        structuredPaths(keyword).forEach(addPath);
-
-        // Upstream selects one solo witness per parent. If that witness is
-        // locally conflicted, let the SAME evaluator examine surviving witnesses
-        // with the SAME statistics/config. No new threshold or scoring semantics;
-        // original relevance/evidence are retained, not replaced by this view.
-        if (!veto && keyword && suppressedPaths.length) {
-            const filtered = { ...keyword, evidence: { ...keyword.evidence,
-                parentFacts: keyword.evidence.parentFacts.map(p => ({ ...p, witnesses: p.witnesses.filter(witnessAllowed) })).filter(p => p.witnesses.length) },
-                localBundles: keyword.localBundles.filter(b => b.witnessIds.every(id => witnessAllowed(witnesses.get(id)))) };
-            const alternatives = evaluateStructuredCandidate(filtered, structuredResult.statistics, structuredResult.config);
-            for (const path of structuredPaths(alternatives)) {
-                if (!qualificationPaths.some(p => p.id === path.id)) addPath({ ...path, recoveredFromRetainedWitnesses: true });
-            }
-        }
         for (const summary of timeByFragment) {
             for (const e of summary.supports) {
                 const localWitnessIds = keyword?.evidence.parentFacts.flatMap(p => p.witnesses)
@@ -167,9 +117,7 @@ export function combineStructuredAndTimeEvidence({ memories, structuredResult, t
                     sourceKind: summary.sourceKind, distanceFromCurrent: summary.distanceFromCurrent,
                     reason: { code: 'time-support', targetId: e.targetId, evidenceReason: e.reason, precision: e.target.precision },
                     localStructuredDisambiguation: localWitnessIds.length ? { code: 'local-structured-disambiguation', witnessIds: localWitnessIds } : null };
-                if (hasExplicitCurrentTheme && !currentThemeIds.has(memory.id)) {
-                    suppressedPaths.push({ ...path, suppressionReason: 'time-only-suppressed-by-current-structured-theme' });
-                } else addPath(path);
+                qualificationPaths.push(path);
             }
         }
         const ordinaryQualified = qualificationPaths.length > 0;
@@ -179,12 +127,12 @@ export function combineStructuredAndTimeEvidence({ memories, structuredResult, t
             structuredQualificationReasons: keyword?.qualificationReasons ?? [], structuredSuppressionReasons: keyword?.suppressionReasons ?? [],
             timeEvaluations: time.evaluations, timeByFragment, ordinaryQualified, excluded: !ordinaryQualified,
             qualificationPaths, suppressedPaths,
-            exclusionReasons: ordinaryQualified ? [] : [veto ? 'explicit-current-time-conflict' : 'no-active-qualification-path'],
-            sharedFactGroups: sharedFacts(keyword, time.evaluations, timeResult.fragments, veto),
+            exclusionReasons: ordinaryQualified ? [] : ['no-active-qualification-path'],
+            sharedFactGroups: sharedFacts(keyword, time.evaluations, timeResult.fragments),
             provenance: { structuredCandidate: Boolean(keyword), structuredQualified: keyword?.qualified ?? false,
                 timeEvaluated: timeResult.enabled===true, timeSupport: timeByFragment.some(t => t.supports.length > 0),
                 timeConflict: timeByFragment.some(t => t.conflicts.length > 0), timeNeutral: timeByFragment.some(t => t.relation === 'neutral'),
-                explicitCurrentTimeConflict: veto, explicitCurrentStructuredTheme: hasExplicitCurrentTheme,
+                explicitCurrentTimeConflict: false, explicitCurrentStructuredTheme: hasExplicitCurrentTheme,
                 ordinaryQualified, excluded: !ordinaryQualified } }];
     });
     return { version: JOINT_QUALIFICATION_VERSION, structuredResult, timeResult, evaluated,

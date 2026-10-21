@@ -208,6 +208,7 @@ export function createAiProvider({ getConfig, transport } = {}) {
   }
   return Object.freeze({
     // Runtime-only session: never add credentials or connection data to task snapshots.
+    isCurrent(){try{return transport.isCurrent?.()!==false;}catch{return false;}},
     dispose(){transport.dispose?.();},
     captureSession(taskGroup) {
       const config=readConfig(taskGroup);

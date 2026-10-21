@@ -59,7 +59,7 @@ export function createScheduleRuntime({repository,settings,getControls,captureSo
     const result=parseScheduleResult(text,prepared.plan);
     const valid=()=>!!filterCurrentBackgroundPlan(prepared)&&isCurrent();
     const saved=await repository.updateSchedule(prepared.target,{
-      apply:time=>applyScheduleResult(time,{plan:prepared.plan,result,source:captureSource(prepared.target)}),
+      apply:time=>applyScheduleResult(time,{plan:prepared.plan,result,source:captureSource(prepared.target),background:true}),
       isCurrent:valid,requireConfirmation:true,
     });
     if(valid())notify();
@@ -96,7 +96,7 @@ export function createScheduleRuntime({repository,settings,getControls,captureSo
     const active=allowed();
     const counts=receipts.length?receipts.reduce((counts,row)=>Object.fromEntries(Object.keys(counts).map(key=>[key,counts[key]+row.counts[key]])),{added:0,updated:0,candidates:0}):null;
     const hasChanges=!!counts&&Object.values(counts).some(count=>count>0);
-    if(!hasChanges&&(!active||!['running','failed'].includes(status.status)))return [];
+    if(!hasChanges&&(!active||!['running','failed','cancelled'].includes(status.status)))return [];
     return [{id:TASK_ID,kind:'schedule',name:'日程与纪念日',body:hasChanges?`本轮新增 ${counts.added} 条，更新 ${counts.updated} 条，候选 ${counts.candidates} 条。`:'',status:active?status.status??'ready':'ready',error:active?status.error??'':'',canRetry:active,openSchedule:hasChanges}];
   }
   function cancel(){serial++;}

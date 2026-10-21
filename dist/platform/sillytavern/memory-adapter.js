@@ -531,6 +531,26 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       if (!sameBinding(root.binding, current)) throw new Error('记忆聊天归属已变化，请重新读取');
       return assertRoot(root, target);
     },
+    matchesSummaryTaskProof(target, matcher) {
+      // Boolean validation only. A known local write to another result domain
+      // must not revoke an unchanged task, but its staged root is never a
+      // read/capture/mutation baseline. Both sides of that write must match.
+      try {
+        if(typeof matcher!=='function')return false;
+        const current=check(target),record=uncertaintyFor(current),context=getContext();
+        // With no pending marker keep the caller's ordinary strict guard and
+        // injected source reader; this narrow exception grants no new proof.
+        if(!record)return undefined;
+        if(!record.inFlight||record.key!==identity(current)||record.epoch!==target.epoch||!sameBinding(record.binding,current)
+          ||!equal(prepared,record.previousAuthority)||!equal(context.chatMetadata[MEMORY_KEY],record.next))return false;
+        const roots=[record.previousAuthority,record.previous??record.previousAuthority,record.next];
+        const source={epoch:sourceEpoch,messages:chatSourceMessages(true,context.chat,true).map(message=>({...message,system:message.role==='system'}))};
+        if(!roots.every(root=>sameBinding(root?.binding,current)&&matcher(assertRoot(copy(root),target),copy(source))===true))return false;
+        check(target);
+        return getContext().chat===context.chat&&uncertaintyFor(current)===record&&record.inFlight
+          &&equal(getContext().chatMetadata[MEMORY_KEY],record.next);
+      }catch{return false;}
+    },
     async waitForPendingWrite(target, options) {
       const current=check(target),record=uncertaintyFor(current);
       // Only a known local transaction may be joined. Never reconcile an unknown outcome here.

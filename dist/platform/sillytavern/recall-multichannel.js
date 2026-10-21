@@ -46,4 +46,3 @@ export function createMultichannelWorkerBuilder({Worker:WorkerClass=globalThis.W
   });
  };
 }
-

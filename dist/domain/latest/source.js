@@ -58,6 +58,18 @@ export function matchesLatestSource(snapshot,raw) {
     return current.messages.find(item=>item.floor===snapshot.assistantFloor)?.replyId===snapshot.replyId&&JSON.stringify(ordered(current.messages.filter(item=>floors.has(item.floor))))===JSON.stringify(snapshot.rawMessages);
   } catch {return false;}
 }
+// Background input remains frozen when the user edits the same reply. Keep
+// visibility and reply ownership strict; this does not grant permission
+// to reuse a cancelled task or replace its actual sent text.
+export function matchesBackgroundLatestSource(snapshot,raw) {
+  try {
+    const current=assertRawSummarySource(raw);
+    return matchesStoredLatestSource(storedLatestSource(snapshot),current)&&snapshot.rawMessages.every(saved=>{
+      const message=current.messages.find(row=>row.floor===saved.floor);
+      return message&&message.objectTicket===saved.objectTicket;
+    });
+  } catch {return false;}
+}
 // Capture only for one synchronous calculation. The validated copy and index
 // stay private; callers cannot mark arbitrary input as trusted or mutate it.
 export function createStoredLatestSourceMatcher(raw) {

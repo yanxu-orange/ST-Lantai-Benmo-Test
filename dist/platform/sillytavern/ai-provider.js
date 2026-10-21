@@ -146,7 +146,8 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
       if(!main)execution.credential.resolve();
       // Keep the original route for every stage. Native ST settings are checked
       // at stage boundaries and during requests; only Lantai configuration is frozen.
-      return Object.freeze({generate:args=>{if(!active)throw new AiProviderError('stale');return generate({...args,config,isCurrent:()=>active&&args.isCurrent()},execution);},dispose(){active=false;execution.credential?.dispose?.();}});
+      const isCurrent=()=>{try{return active&&(main?mainSnapshot(getContext())===execution.mainIdentity:typeof execution.credential.resolve()==='string');}catch{return false;}};
+      return Object.freeze({isCurrent,generate:args=>{if(!active)throw new AiProviderError('stale');return generate({...args,config,isCurrent:()=>isCurrent()&&args.isCurrent()},execution);},dispose(){active=false;execution.credential?.dispose?.();}});
     },
   });
 }

@@ -14,7 +14,8 @@ import {timeOf,assertTime} from '../time/data.js';
 import {importSummaryCandidates} from '../time/summary-candidates.js';
 import { assertRoot, validateEvent, validateEventForSave, activeEvents } from './model.js';
 import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence,normalizedSummarySettingsEvidence} from '../summary/data.js';
-import {matchesStoredSummarySource,matchesSourceMetadata} from '../summary/source.js';
+import {matchesStoredSummarySource,matchesSourceMetadata,matchesSummarySource} from '../summary/source.js';
+import {matchesCumulativeSource} from '../cumulative/source.js';
 import {cumulativeOf,assertCumulativePreferences,assertCumulativeExclusions,assertCumulativePending,assertCumulativeVersion,baseSnapshotOf,cumulativeCoverage,matchesCumulativeReplacementSource} from '../cumulative/data.js';
 export function sameTarget(a, b) { return !!a && !!b && !!a.chatId && !!a.rootId && Number.isSafeInteger(a.epoch) && a.chatId === b.chatId && a.rootId === b.rootId && a.epoch === b.epoch; }
 const copy = value => structuredClone(value);
@@ -308,6 +309,10 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     read,
     captureCumulativeTask(target){requireTarget(target);const root=assertRoot(adapter.peekConfirmed(target),target);return captureCumulativeRoot(target,root);},
     matchesCumulativeTask(target,snapshot){try{requireTarget(target);matchCumulative(assertRoot(adapter.peekConfirmed(target),target),target,snapshot,true);requireTarget(target);return true;}catch{return false;}},
+    matchesCumulativeTaskProof(target,snapshot,source,trackingRevision){
+      if(typeof adapter.matchesSummaryTaskProof!=='function')return undefined;
+      try{requireTarget(target);return adapter.matchesSummaryTaskProof(target,(root,raw)=>{matchCumulative(root,target,snapshot,true);return (trackingRevision===undefined||trackingOf(comparisonRoot(root,'tracking')).revision===trackingRevision)&&matchesCumulativeSource(source,raw);});}catch{return false;}
+    },
     async captureCumulative(target){const frozen=copy(target);return captureCumulativeRoot(frozen,await read(frozen));},
     matchesCumulative(target,snapshot){try{requireTarget(target);matchCumulative(assertRoot(adapter.peekConfirmed(target),target),target,snapshot);requireTarget(target);return true;}catch{return false;}},
     updateCumulativePreferences(target,selection,patch,options={}) {
@@ -371,6 +376,10 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     },
     captureSummaryTask(target,batchId){requireTarget(target);const root=assertRoot(adapter.peekConfirmed(target),target),summary=summaryOf(root),base={target:copy(target),revision:root.revision,summary};if(batchId!==undefined){const batch=summary.batches.find(item=>item.id===batchId);if(!batch)throw new Error('没有可确认的独立批记录');Object.assign(base,{batch:copy(batch),events:copy(root.events.filter(event=>batch.eventIds.includes(event.id)))});}return freeze(base);},
     matchesSummaryTask(target,snapshot){try{requireTarget(target);matchSummary(assertRoot(adapter.peekConfirmed(target),target),target,snapshot,true);requireTarget(target);return true;}catch{return false;}},
+    matchesSummaryTaskProof(target,snapshot,source,trackingRevision){
+      if(typeof adapter.matchesSummaryTaskProof!=='function')return undefined;
+      try{requireTarget(target);return adapter.matchesSummaryTaskProof(target,(root,raw)=>{matchSummary(root,target,snapshot,true);return (trackingRevision===undefined||trackingOf(comparisonRoot(root,'tracking')).revision===trackingRevision)&&matchesSummarySource(source,raw);});}catch{return false;}
+    },
     async captureSummaryView(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,revision:root.revision,summary:summaryOf(root),formalIds:root.events.map(event=>event.id)});},
     async captureSummary(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,revision:root.revision,summary:summaryOf(root)});},
     async captureBatch(target,id){const frozen=copy(target),root=await read(frozen),summary=summaryOf(root),batch=summary.batches.find(item=>item.id===id);if(!batch)throw new Error('没有可确认的独立批记录');return freeze({target:frozen,revision:root.revision,summary,batch:copy(batch),events:copy(root.events.filter(event=>batch.eventIds.includes(event.id)))});},

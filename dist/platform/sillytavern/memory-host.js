@@ -1008,4 +1008,3 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     },
   };
 }
-

@@ -65,7 +65,8 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     if(preparedEpoch!==exclusionEpoch||pendingExclusions||!current(t)||!gate.allowed()||!activePreferences.itemsEnabled&&!activePreferences.npcsEnabled)return null;
     const raw=captureSource(t);
     if(automatic&&domain.snapshots.some(row=>row.sourceSnapshot.replyId===source.replyId&&matchesStoredLatestSource(row.sourceSnapshot,raw)))return null;
-    const ticket=prepareTrackingUpdate({...domain,preferences:activePreferences},raw,{floor:source.assistantFloor,rules});
+    const preparedTicket=prepareTrackingUpdate({...domain,preferences:activePreferences},raw,{floor:source.assistantFloor,rules});
+    const ticket=source.sentFloors?{...preparedTicket,source}:preparedTicket;
     const prompts=settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS;
     const task=buildTrackingTask({ticket,prompts,identities});
     return {target:clone(t),selection:captured,ticket,prompts,identities:clone(identities),exclusionEpoch:preparedEpoch,categoryProofs:captureCategories(),gate:gate.capture(),task};
@@ -105,7 +106,7 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     const parsed=parseTrackingResponseParts(text,{preferences});
     for(const key of ['items','npcs'])if(!preferences[`${key}Enabled`])parsed.errors[key]='本类别已关闭或来源设置已变化';
     if(enabled.every(key=>parsed.errors[key]))throw new Error(enabled.map(key=>parsed.errors[key]).join('；'));
-    const applied=applyTrackingResponseParts({...captured.tracking,preferences},ticket,parsed,captureSource(plan.target));
+    const applied=applyTrackingResponseParts({...captured.tracking,preferences},ticket,parsed,captureSource(plan.target),{background:true});
     if(enabled.every(key=>applied.errors[key]))throw new Error(enabled.map(key=>applied.errors[key]).join('；'));
     const next={...applied.tracking,preferences:captured.tracking.preferences};
     const categoriesValid=()=>enabled.every(key=>categoryGates[key].matches(plan.categoryProofs[key])),commitValid=()=>valid()&&categoriesValid();
@@ -147,7 +148,7 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
   function floorTasks(captured,raw,floor,replyId,status={}){
     if(!captured?.enabled||!gate.allowed())return [];
     const domain={...captured.tracking,preferences:effectivePreferences()},version=domain.snapshots.find(row=>row.sourceSnapshot.replyId===replyId&&captured.activeIds?.has(row.id)&&matchesStoredLatestSource(row.sourceSnapshot,{...raw,messages:raw.messages.filter(message=>message.floor===row.sourceSnapshot.assistantFloor||message.floor===row.sourceSnapshot.userFloor)}));
-    if(!version&&!['running','failed'].includes(status.status))return [];
+    if(!version&&!['running','failed','cancelled'].includes(status.status))return [];
     if(!domain.preferences.itemsEnabled&&!domain.preferences.npcsEnabled)return [];
     const counts=version?['items','npcs'].filter(key=>domain.preferences[`${key}Enabled`]).map(key=>`${key==='items'?'物品':'NPC'} ${version.changes[key].length} 条`).join('、'):'';
     return [{id:'tracking',name:'物品与 NPC 追踪',body:version?`本轮更新：${counts}。当前资料可在本末查看。`:'',status:status.status??'ready',error:status.error??''}];

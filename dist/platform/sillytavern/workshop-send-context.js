@@ -29,7 +29,7 @@ export function createWorkshopSendContext({getContext,captureTarget}){
  }
  function boundFor(source){
   const b=bound,chat=getContext().chat,message=chat?.[source.assistantFloor];
-  if(!b||b.generation!==generation||!sameTarget(b.target,captureTarget())||b.floor!==source.assistantFloor||!matches(b.reply,message)||message?.extra?.[WORKSHOP_REPLY_KEY]!==source.replyId||b.prefix.some((r,i)=>!matches(r,chat[i])))return null;
+  if(!b||b.generation!==generation||!sameTarget(b.target,captureTarget())||b.floor!==source.assistantFloor||!(b.reply.message===message&&b.reply.hidden===(message?.is_system===true)&&b.reply.swipe===(message?.swipe_id??0))||message?.extra?.[WORKSHOP_REPLY_KEY]!==source.replyId||b.prefix.some((r,i)=>!matches(r,chat[i])))return null;
   return b;
  }
  function capture(source){

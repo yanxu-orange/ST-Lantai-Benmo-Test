@@ -18,25 +18,11 @@ export function createBodyIndex(events,excludedTerms=[]){
  const df=new Map();for(const doc of docs)for(const term of doc.tf.keys())df.set(term,(df.get(term)??0)+1);
  return{docs,df,tokenize,average:docs.reduce((n,row)=>n+row.length,0)/Math.max(1,docs.length)};
 }
-function maskRange(text,ranges){
- const chars=text.split('');for(const [start,end]of ranges)for(let i=start;i<end;i++)chars[i]=' ';return chars.join('');
-}
-// Time evidence comes from the same domain parser used by K. No keyword
-// qualification is consulted when deciding B/V eligibility.
+// Compatibility map for B/V callers: date evidence never blocks or masks text.
 export function dateEligibility(timeResult){
- const fragments=timeResult.fragments;
- return new Map(timeResult.evaluated.map(row=>{
-  const local=new Map(fragments.map(fragment=>{
-   const evidence=row.evaluations.filter(item=>item.target.fragmentId===fragment.id);
-   const support=evidence.some(item=>item.relation==='support');
-   const veto=!support&&evidence.some(item=>item.relation==='conflict'&&item.target.canVetoFragment!==false);
-   const keys=[...new Set(evidence.filter(item=>Array.isArray(item.target.scopeRange)).map(item=>JSON.stringify(item.target.scopeRange)))];
-   const ranges=keys.flatMap(key=>{const group=evidence.filter(item=>JSON.stringify(item.target.scopeRange)===key);return group.some(item=>item.relation==='support')||!group.some(item=>item.relation==='conflict')?[]:[JSON.parse(key)];});
-   return[fragment.id,{veto,ranges}];
-  }));
-  return[row.memoryId,{blocked:local.get('current:0')?.veto===true,partialScope:!!local.get('current:0')?.ranges.length&&!local.get('current:0')?.veto,
-   textFor:fragment=>{const item=local.get(fragment.id);return item?.veto?'':maskRange(fragment.cleanedText,item?.ranges??[]);}}];
- }));
+ return new Map(timeResult.evaluated.map(row=>[row.memoryId,{
+  blocked:false,partialScope:false,textFor:fragment=>fragment.cleanedText,
+ }]));
 }
 export function rankBodyIndex(index,fragments,dateById=new Map()){
  const queryTerms=new Map();
@@ -57,10 +43,8 @@ export function rankBodyIndex(index,fragments,dateById=new Map()){
 export function rankDateCandidates(timeResult,dateById=dateEligibility(timeResult)){
  return timeResult.evaluated.flatMap(row=>{
   if(dateById.get(row.memoryId)?.blocked)return [];
-  // Matching a scene/background date can remain non-veto evidence for another
-  // route, but never grants independent D membership. D requires a surviving
-  // explicit lookup scope; same-scope query alternatives retain support-wins.
-  const supports=row.evaluations.filter(item=>item.relation==='support'&&item.target.timeRole==='recall-target'&&item.target.canSupport!==false&&item.target.status==='resolved'&&item.domain.comparable);
+  // Every resolved, comparable date support may propose a D candidate.
+  const supports=row.evaluations.filter(item=>item.relation==='support'&&item.target.canSupport!==false&&item.target.status==='resolved'&&item.domain.comparable);
   if(!supports.length)return [];
   return[{id:row.memoryId,libraryIndex:row.libraryIndex,nearestDistance:Math.min(...supports.map(item=>item.target.distanceFromCurrent)),supports}];
  }).sort((a,b)=>a.nearestDistance-b.nearestDistance||a.libraryIndex-b.libraryIndex).map((row,index)=>({...row,rank:index+1}));
@@ -87,6 +71,21 @@ export function collectRouteCandidates(rankings,libraryOrder,limit=CHANNEL_CANDI
  const cards=[...candidates.values()].map(card=>({...card,score:card.hits.reduce((n,hit)=>n+1/(RRF_K+hit.rank),0)}))
   .sort((a,b)=>b.score-a.score||(libraryOrder.get(a.id)??Infinity)-(libraryOrder.get(b.id)??Infinity)).map((row,index)=>({...row,rank:index+1}));
  return{cards,routes:state};
+}
+// Candidate discovery and complete provenance stay intact. Only actual scanned
+// hits vote; duplicate-refill hits retain their original (possibly deep) rank.
+export function scoreScannedRouteCandidates(collected,libraryOrder){
+ const scanned=new Map(Object.entries(collected.routes).map(([route,lane])=>[route,new Map(lane.scanned.map(hit=>[hit.id,hit.rank]))]));
+ const cards=collected.cards.map(card=>({...card,score:card.hits.reduce((sum,hit)=>sum+(scanned.get(hit.route)?.get(card.id)===hit.rank?1/(RRF_K+hit.rank):0),0)}))
+  .sort((a,b)=>b.score-a.score||(libraryOrder.get(a.id)??Infinity)-(libraryOrder.get(b.id)??Infinity)).map((card,index)=>({...card,rank:index+1}));
+ return{...collected,cards};
+}
+// Healthy K/B/V fusion uses the same complete real hits with greater rank
+// discrimination. Membership, ownership and scan/refill provenance stay intact.
+export function scoreRankSensitiveRouteCandidates(collected,libraryOrder){
+ const cards=collected.cards.map(card=>({...card,score:card.hits.reduce((sum,hit)=>sum+1/hit.rank,0)}))
+  .sort((a,b)=>b.score-a.score||(libraryOrder.get(a.id)??Infinity)-(libraryOrder.get(b.id)??Infinity)).map((card,index)=>({...card,rank:index+1}));
+ return{...collected,cards};
 }
 export function cosine(left,right){
  if(left.length!==right.length)throw Error('dimension-mismatch');

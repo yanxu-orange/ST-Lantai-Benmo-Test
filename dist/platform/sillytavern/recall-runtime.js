@@ -31,7 +31,9 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   const buildPreview=previewBuild??(build===buildRecall?createRecallPreviewBuilder():build);
   const maintenance=createVectorMaintenance({repository,settings,provider:recallProvider,getControls,store:vectorStore}),buildMulti=createMultichannelWorkerBuilder({Worker:WorkerClass,vectorIndex:maintenance.index,provider:recallProvider});
   function cancelIndexPreparation(){maintenance.pause();}
-  const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;previewGuard=null;};
+  const providerSessions=new Map();let previewConfig=null;
+  const releaseSession=config=>{const session=providerSessions.get(config);providerSessions.delete(config);try{session?.dispose?.();}catch{/* Cleanup cannot interrupt host generation. */}};
+  const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;previewGuard=null;releaseSession(previewConfig);previewConfig=null;};
   const records=new Map(),listeners=new Set(),releases=[];
   const key=target=>JSON.stringify([target.chatId,target.rootId]);
   const notify=()=>{for(const fn of [...listeners])try{fn();}catch{/* observers cannot break host generation */}};
@@ -41,11 +43,13 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     guardFailure=null;
     return check(gate.matches(config.controlProof),'control-proof')&&check(!disposed,'disposed')&&check(serial===ticket,'ticket')
       &&check(sameTarget(target,repository.captureTarget()),'target')
+      &&check(providerSessions.get(config)?.isCurrent?.()!==false,'credential-proof')
       &&check(!captureSource||JSON.stringify(captureSource(target))===source,'source');
   };
   function clear(reason='cancelled',expectedTarget=null) {
     const previous=flight,oldProof=proof;ticket++;proof=null;injectedMaterials=null;injectedSelections=null;flight=null;
     cancelPreview();
+    for(const config of providerSessions.keys())releaseSession(config);
     maintenance.checkLifecycle();
     previous?.abort?.abort();
     if(previous)record(previous.target,{status:'failed',type:previous.type,message:'本轮召回已取消，未注入记忆。'});
@@ -78,6 +82,8 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     const channels=recallChannels(config.recall),timeEnabled=timeGate.allowed();
     const capabilities=[...(channels.vector?['embedding']:[]),...(channels.rerank?['rerank']:[])];
     const taskProvider=capabilities.length&&recallProvider?.captureSession?recallProvider.captureSession(capabilities):recallProvider;
+    if(taskProvider!==recallProvider)providerSessions.set(config,taskProvider);
+    if(previewInput!==null)previewConfig=config;
     try {
     let vectorConfig=null;
     if(channels.vector)try{vectorConfig=taskProvider?.getConfig?taskProvider.getConfig('embedding'):settings.getAiConfig('embedding');}catch{/* A missing optional route degrades in the builder. */}
@@ -105,7 +111,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
         await repository.waitForPendingWrite(target,{signal,budget});
       }
     }
-    } finally { if(taskProvider!==recallProvider)taskProvider?.dispose?.(); }
+    } catch(error) { releaseSession(config);throw error; }
   }
   async function computeCaptured(messages,target,serial,previewInput,signal,onStage,{config,source,channels,timeEnabled,observed,vectorConfig,taskProvider,budget}) {
     const guard=()=>current(target,serial,config,source);
@@ -145,7 +151,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
       // compute owns this isolated result; preview never installs it in the
       // runtime's actual/proof cache. A second full clone has no shared owner.
       return value.result;
-    }finally{if(previewAbort===abort){previewAbort=null;previewGuard=null;}}
+    }finally{if(previewAbort===abort){previewAbort=null;previewGuard=null;releaseSession(previewConfig);previewConfig=null;}}
   }
   async function intercept(messages,_size,_abort,type='normal') {
     if(disposed)return;
@@ -227,4 +233,3 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     dispose(){if(disposed)return;clear();disposed=true;maintenance.dispose();releases.forEach(fn=>fn());listeners.clear();records.clear();}
   });
 }
-

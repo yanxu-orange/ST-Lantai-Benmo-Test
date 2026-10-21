@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "f42eb160b13cd3daccbeae221675bec40c842d0086d41d76eb0c22f08ce5ff84"
+    "sha256": "60fc0ac72213e754595dc35ac6a035df2c48f1ed2cb7e63f3a339fad6ff1dd47"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -245,7 +245,7 @@
   },
   {
     "path": "dist/app/settings-root-view.js",
-    "sha256": "c29c9ef5f980fc10e578037a677d3ed17c8b3477dfb1b11f6ecdcbe0bb1acb2b"
+    "sha256": "77c73c94e5492c5bc171225555a39d7bc3ac8ac89f59fdcf97e146c496fca17a"
   },
   {
     "path": "dist/app/shared-ui/appearance-format.css",
@@ -517,7 +517,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "a280795004ab5413d1c7875c7e95c62b1f0993a358d5e28d6a6f473a23ed0749"
+    "sha256": "f863c8eb663a1c8e6a7e5296e490cb35caa54ba0679af0f3392373a544ef2480"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -561,7 +561,7 @@
   },
   {
     "path": "dist/domain/cumulative/service.js",
-    "sha256": "9891cddc74ab7630153b5c4c03b429991cb15241e74ed33e7a4e27838441a827"
+    "sha256": "d452d521483ea48f0ed901ea7c1ca10ff7d32238a6be81b7d174fa4b9776fb4a"
   },
   {
     "path": "dist/domain/cumulative/source.js",
@@ -585,7 +585,7 @@
   },
   {
     "path": "dist/domain/latest/source.js",
-    "sha256": "7d7664ba7eeee99108e09c3d7555ea7fb140b93485928eb972e5016ce7ed0b24"
+    "sha256": "fb59eaa2961b5633beef285d5df64406cffe002b6ac46cf2a81634fcff62846f"
   },
   {
     "path": "dist/domain/latest/transform.js",
@@ -625,7 +625,7 @@
   },
   {
     "path": "dist/domain/memory/repository.js",
-    "sha256": "5c16ac73d0316b247022c0366c6daea8655794dbdea249e2177b1ccf60865304"
+    "sha256": "8aa342e31eabe1d204467c96b54843ed3920c6ec81cd9984619bc5081a713a01"
   },
   {
     "path": "dist/domain/memory/results-persistence.js",
@@ -689,7 +689,7 @@
   },
   {
     "path": "dist/domain/recall/detail-alias-relevance.js",
-    "sha256": "baf6acfaae66e6c3222fedd055ae994b59289333bf9e089e337d6b5e0f62f3bd"
+    "sha256": "cd07ae92dd7385695e189688453243e47db2df9b142725ea3330d2bdf4b83264"
   },
   {
     "path": "dist/domain/recall/detail-query-surface.js",
@@ -697,15 +697,15 @@
   },
   {
     "path": "dist/domain/recall/joint-qualification.js",
-    "sha256": "b856e7900ea0ede632a26248415a745506ef56f5e0c2419d2b2f146aacbc9a2e"
+    "sha256": "e2eefcca12fcdcca68bb84ecd64c96ae7c796ab6805cc8dc5e022f1c1326206a"
   },
   {
     "path": "dist/domain/recall/multichannel-build.js",
-    "sha256": "f3563b1b4db8755d9ddf14ff58bc2ab260ec4f6f651b250580ea440acbebd9e0"
+    "sha256": "cdc6fb0e3892439e20e659ff66dd180f73ef989ba1eb4dab691c055f61029de3"
   },
   {
     "path": "dist/domain/recall/multichannel.js",
-    "sha256": "cd88763b0a653e05edb0736522592a2f16d2b199fd71f129759e79dc150a3f38"
+    "sha256": "c3553a06fcbb3325e209fcb168c92d69edd749494db38cfb6f5ab300e83e047a"
   },
   {
     "path": "dist/domain/recall/narrative-ordering.js",
@@ -725,7 +725,7 @@
   },
   {
     "path": "dist/domain/recall/story-time-evidence.js",
-    "sha256": "0c6c37a989d55afb258fcd69ea977ef0593c78cecc83f6cdc25bde90e31aab3f"
+    "sha256": "6b1c455409e4d9b39194097e6618fad0d45d0f628424fbffb8099e4e492e9234"
   },
   {
     "path": "dist/domain/recall/structured-candidates.js",
@@ -769,7 +769,7 @@
   },
   {
     "path": "dist/domain/summary/service.js",
-    "sha256": "add70ab1b2b0ca800b8c72d17f44a6bb9243e44dd0d3e975484c2b7e505a460b"
+    "sha256": "ed9279f567fa0588376bd82758a21a69261ebe87b0ff4a2c6e180e1f9c21706f"
   },
   {
     "path": "dist/domain/summary/source-deletion.js",
@@ -861,7 +861,7 @@
   },
   {
     "path": "dist/domain/time/schedule.js",
-    "sha256": "001067f78c316681109386d097947ff05b20fc10078abcaa715afa5542cfcec7"
+    "sha256": "d07858a35b752be9361f2f0707bc194b6ed89a1503e37e6a55504303f660d0ab"
   },
   {
     "path": "dist/domain/time/service.js",
@@ -893,7 +893,7 @@
   },
   {
     "path": "dist/domain/tracking/data.js",
-    "sha256": "48b784c2517f2e98522b7f4aeb946f0291242ce2d13f6a38bdfbf0ff157bf63d"
+    "sha256": "7444680799c399779b18fbffa373b0c577545de95cfbd487442b3123d82df3cf"
   },
   {
     "path": "dist/domain/tracking/exclusions.js",
@@ -957,7 +957,7 @@
   },
   {
     "path": "dist/platform/sillytavern/ai-provider.js",
-    "sha256": "bcaf6688ee565044c405a0f945bc3c812760c80af3fefa2e7d3c5fda450586ac"
+    "sha256": "774dc72a6d27fa1d6f1545d6c6d783a57db32fe405fea029feb4d31e8193a082"
   },
   {
     "path": "dist/platform/sillytavern/api-settings-operations.js",
@@ -1005,11 +1005,11 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-display.js",
-    "sha256": "eb2df72dc2c1ac70992656e6ba72a10a828e7694b39a77d396614d3e0c7e492d"
+    "sha256": "533424445250be40575c8b48451aa7b8d9fd59637abca05f6848846a45fd6cef"
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "sha256": "97cf05549cf781ac054df796be905998f5d8ec0c647144196f6be65d059ba8b4"
+    "sha256": "71364cd0a4a3897341650fd8197720fbeba08e44c122028ca425ea76f0afa9ef"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -1021,11 +1021,11 @@
   },
   {
     "path": "dist/platform/sillytavern/management-runtime.js",
-    "sha256": "d26002a3e05e0d6090caf7146e979c68520fc42a441e7690d4157056516211f3"
+    "sha256": "50780cfdd97f6041a2f8499993653596a436e2961c0ae786757b0d70bc64de59"
   },
   {
     "path": "dist/platform/sillytavern/memory-adapter.js",
-    "sha256": "c5f7e0949db6e9f98a19f3783543a6b7e87ec4eb584e6323b1c1d2450081115c"
+    "sha256": "9ba2179de24b13d7e00491635da9fff1356981fbfacd938175e07ac4713abec3"
   },
   {
     "path": "dist/platform/sillytavern/memory-host.css",
@@ -1033,7 +1033,7 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "0170e1b44052ff4b03dfb8fd50eaa7c6f2f827dd2ad45f33690c90f0ff973471"
+    "sha256": "1106604422143bb3ca12a9fe8343a747e0a14c7c05b4e004cbdf7b0a1439f3b8"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1061,15 +1061,15 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-ai-transport.js",
-    "sha256": "259529a8cece6fc1b68511c1633603312f2ae6ad09e21e93d4e096a59e5cd2b2"
+    "sha256": "aa4c230b8a780d14c4abdc21c18c6e997dc6fc89a5e9d72400282f46ca60b4a0"
   },
   {
     "path": "dist/platform/sillytavern/recall-multichannel-worker.js",
-    "sha256": "ed49cd6300bf6eb53c89d6fe1a7f599fee08364911ad45d8693f7dcfa50abb3d"
+    "sha256": "eefbf283dad6e6904d8fa547cfeb11d0bb70d1d0f2661cc19050dd9139103e1a"
   },
   {
     "path": "dist/platform/sillytavern/recall-multichannel.js",
-    "sha256": "a57238258ad6ecc1504458dd1330c2d254659d82e3f0b6ffe4ae7f5fc824cc9e"
+    "sha256": "a765a531a9a4c8a2908d67b243bde783453a7a942291e4db34179a5fac74ab6e"
   },
   {
     "path": "dist/platform/sillytavern/recall-preview-worker.js",
@@ -1081,11 +1081,11 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-runtime.js",
-    "sha256": "eee4518bd93f6ff1d01cd6ff2f7de7108fad648fde2f9042481dd08d816ff146"
+    "sha256": "c600501658ebdfe83616acd5576afb3fbe470a391a72c25f3620d2ab2dfadd3e"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
-    "sha256": "dca25619c619bf7eec839f8e1403f97b6eb07d742a9d1224a67da3e7566d3ae4"
+    "sha256": "8b29169e235bdc6b9bdd0628f530bb9c3dfd1df3df403654c3f4bf0d3ab7a986"
   },
   {
     "path": "dist/platform/sillytavern/secret-references.js",
@@ -1125,7 +1125,7 @@
   },
   {
     "path": "dist/platform/sillytavern/tracking-runtime.js",
-    "sha256": "c72c0ac83431d718a9a65bf519a6e36819bd1a878e929b7b4fe22b784e58af15"
+    "sha256": "ba3a34887b2f503cbecfa3efaf65bb5c1510c992aa93d307f48bfbb531352c43"
   },
   {
     "path": "dist/platform/sillytavern/vector-maintenance.js",
@@ -1161,7 +1161,7 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-send-context.js",
-    "sha256": "488ae37de72b12d2a36a8fcfd6790c461d43d185ffef97979a24bb29b1eafac3"
+    "sha256": "07be78e53cebbc087346a47d6f6c7dd05c144b3fec966a70bf29b6a10e6a15df"
   },
   {
     "path": "dist/probe/runtime-probe.js",
@@ -1169,11 +1169,11 @@
   },
   {
     "path": "dist/shared/ai/provider.js",
-    "sha256": "679eb51a931464677b1bfdbf97f5860f310747d391b4323842b029f8b70fe897"
+    "sha256": "3e2bd7f2fe216feb7532aadcea86d1994e86825e5ca32ca26e741968b57e632c"
   },
   {
     "path": "dist/shared/ai/recall-provider.js",
-    "sha256": "f5962cc5b351fd540104765c9ad5792d2d15931b000d4faa55990c1807aa33ca"
+    "sha256": "1d58b9161cbaf2e5e8881cd75692318d312450a016ad23bbf6b93f09ded9ca5c"
   },
   {
     "path": "dist/shared/runtime/background-tasks.js",
@@ -1225,10 +1225,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "8840b5f6ba3c8caf0593581583669c60a00092d0884ea23a8c4392428751e4be"
+    "sha256": "b7bb939cd3d30b1742c074ecad662340273440ea5eda2cc81070fd3f95f1eecd"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "63086ed8fc16b77243da09dfe802c1a21b47fe8d580d857517d0cc6a103998e0"
+    "sha256": "fa58925cd21d16eedc2bccdc1f62876dcd746bfa36bb3fe7215c8c26233c648c"
   }
 ]

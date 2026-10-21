@@ -14,11 +14,12 @@ export function createEventSummaryService({repository,manager,provider,getGenera
   const durableTrackingContext=context=>({identities:context.identities??{},allowed:context.allowed??{itemsEnabled:true,npcsEnabled:true}});
   const readTrackingContext=()=>{const context=getTrackingContext();return structuredClone({...durableTrackingContext(context),...(context.proofs?{proofs:{items:context.proofs.items??null,npcs:context.proofs.npcs??null}}:{})});};
   function targetCurrent(snapshot,target) {
-    try{return !disposed&&sameTarget(target,repository.captureTarget())&&(!control||(snapshot.controlProof?control.matches(snapshot.controlProof):control.allowed()))&&equalData(snapshot.identities??{},readTrackingContext().identities)&&(!snapshot.tracking||equalData(snapshot.tracking.context,readTrackingContext()));}catch{return false;}
+    const record=[...records.values()].find(item=>item.operationId===snapshot.operationId),execution=record?.executionProvider,proof=record?.resumeControlProof??snapshot.controlProof;
+    try{return !disposed&&execution?.isCurrent?.()!==false&&sameTarget(target,repository.captureTarget())&&(!control||(proof?control.matches(proof):control.allowed()))&&equalData(snapshot.identities??{},readTrackingContext().identities)&&(!snapshot.tracking||equalData(snapshot.tracking.context,readTrackingContext()));}catch{return false;}
   }
   function sourceCurrent(snapshot,target) {
     const record=[...records.values()].find(item=>item.operationId===snapshot.operationId);
-    try{return (repository.matchesSummaryTask??repository.matchesSummary).call(repository,target,record?.selection??snapshot.selection)&&(!snapshot.tracking||repository.matchesTrackingRevision(target,snapshot.tracking.ticket.revision))&&matchesSummarySource(snapshot.source,captureSource(target));}catch{return false;}
+    try{const selection=record?.selection??snapshot.selection,proof=repository.matchesSummaryTaskProof?.(target,selection,snapshot.source,snapshot.tracking?.ticket.revision);if(proof!==undefined)return proof;return (repository.matchesSummaryTask??repository.matchesSummary).call(repository,target,selection)&&(!snapshot.tracking||repository.matchesTrackingRevision(target,snapshot.tracking.ticket.revision))&&matchesSummarySource(snapshot.source,captureSource(target));}catch{return false;}
   }
   const available=settings=>settings.eventWords.filter(item=>item.enabled!==false).map(item=>item.name);
   function notify(taskId) {const value=inspect(taskId);if(value)for(const listener of [...listeners])try{listener(value);}catch{/* observers cannot stop a task */}}
@@ -144,7 +145,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
       try{
       if([...records.keys()].some(id=>{const state=inspect(id);return state&&sameTarget(state.target,repository.captureTarget())&&busyStatuses.includes(state.status);}))throw new Error('当前聊天已有总结任务，请先完成本批');
       const initialTarget=repository.captureTarget(),capturedSettings=continuation?.settings??readSettings(),initial=repository.captureSummaryTask?{selection:repository.captureSummaryTask(initialTarget,origin==='regeneration'?options.batchId:undefined),raw:structuredClone(captureSource(initialTarget))}:null;
-      executionProvider=options.restoreOnly?provider:(continuation?.provider??provider.captureSession?.('summary')??provider);
+      executionProvider=continuation?.provider??provider.captureSession?.('summary')??provider;
       if(await getPendingNarrative?.())throw new Error('请先继续、重试或跳过当前自述与大纲批次');
       const snapshot=await capture(origin,options,capturedSettings,initial),resume=options.resumePending;
       if(control)snapshot.controlProof=operationProof;
@@ -187,7 +188,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
       records.set(taskId,execution);adopted=true;notify(taskId);return taskId;
       }finally{reservations.delete(key);if(!adopted&&executionProvider!==provider)executionProvider?.dispose?.();}
     },
-    resumeAutoConfirm(){for(const [id,record]of records)if(record.autoConfirmPaused&&control?.allowed()){record.autoConfirmPaused=false;queueMicrotask(()=>void confirm(id));}},
+    resumeAutoConfirm(){for(const [id,record]of records){const state=inspect(id);if(record.autoConfirmPaused&&!record.reviewRequired&&!record.restoreOnly&&record.outcome!=='unconfirmed'&&state?.status==='awaiting-user'&&!state.reviewPending&&state.candidate&&control?.allowed()&&sameTarget(state.target,repository.captureTarget())){record.resumeControlProof=control.capture();record.autoConfirmPaused=false;queueMicrotask(()=>void confirm(id));}}},
     confirm,inspect,isBusy,
     async restorePendingNarrative(origin='manual'){
       const target=repository.captureTarget(),key=JSON.stringify([target.chatId,target.rootId,target.epoch]);

@@ -76,4 +76,3 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
  });render(focusAction);
  return {refresh:render,refreshAvailability:patch,back(){if(route==='schedule')return scheduleView?.back()??false;if(route==='features'){route='root';render('features');return true;}return false;},dispose(){disposed=true;scheduleView?.dispose();pendingThemeFocus=false;lifetime.abort();off();offAppearance();}};
 }
-

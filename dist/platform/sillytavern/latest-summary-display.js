@@ -37,7 +37,7 @@ export function mountLatestSummaryDisplay({
         if (state?.entry.frontend) shared.requestCleanup({ ...state, ownsChat: state.snapshot?.ownsChat });
         box.replaceChildren();
         const details = doc.createElement('details');
-        details.open = !!info.body || ['running', 'failed'].includes(info.status);
+        details.open = !!info.body || ['running', 'failed', 'cancelled'].includes(info.status);
         const heading = doc.createElement('summary'); heading.textContent = '最新摘要';
         const entry = createDisplayBody(doc, 'lantai-latest-summary-body', info.body ?? '');
         const actions = doc.createElement('div'); actions.className = 'lantai-latest-summary-actions';

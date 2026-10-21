@@ -172,7 +172,9 @@ export async function createManagementRuntime({ repository, getContext, document
     const current = getContext();
     return { mainApi: current?.mainApi, onlineStatus: current?.onlineStatus,
       generateRaw: current?.generateRaw, getRequestHeaders: current?.getRequestHeaders,
-      getLantaiMainIdentity: mainIdentity };
+      // The native route must retain its monotonic change evidence too:
+      // model/preset A -> B -> A cannot revive an in-flight captured session.
+      getLantaiMainIdentity: () => { observeMain(); return JSON.stringify([mainEpoch, mainIdentity()]); } };
   };
   const provider = createAiProvider({ getConfig, transport: createSillyTavernAiTransport({ getContext: transportContext, fetchImpl,
     resolveCredential: (config, context) => settings.resolveCredential(config, context),captureCredential:(config,context)=>settings.captureCredential(config,context) }) });

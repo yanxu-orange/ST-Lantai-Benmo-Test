@@ -74,7 +74,7 @@ export function createRecallAiTransport({fetchImpl=globalThis.fetch,resolveCrede
     const dispose=()=>{if(!active)return;active=false;key=null;ticket.dispose?.();};
     const valid=()=>{try{if(active&&ticket.resolve()===key)return true;}catch{}dispose();return false;};
     const credential={valid,resolve(){if(!valid())throw new AiProviderError('configuration');return key;}};
-    return Object.freeze({dispose,request:args=>send({...args,config,models:false},credential)});
+    return Object.freeze({dispose,isCurrent:valid,request:args=>send({...args,config,models:false},credential)});
   }
   return Object.freeze({captureSession,request:args=>send(args),fetchModels:args=>send({...args,models:true})});
 }
