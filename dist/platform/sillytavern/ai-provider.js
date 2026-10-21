@@ -1,3 +1,4 @@
+import {beginGenerationRequest} from './generation-diagnostic.js';
 import { AiProviderError, assertAiCurrent, freezeAiConfig, assertMaxOutputTokens } from '../../shared/ai/provider.js';
 import { getSillyTavernContext } from './context.js';
 export const PROXY_SOURCES = Object.freeze(['claude', 'openai', 'mistralai', 'makersuite', 'vertexai', 'deepseek', 'xai', 'zai', 'moonshot']);
@@ -87,6 +88,8 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
         const latest = getContext();
         return Boolean(latest?.onlineStatus && latest.onlineStatus !== 'no_connection' && mainSnapshot(latest) === snapshot);
       };
+      const finishDiagnostic=beginGenerationRequest(main?'raw':'independent',taskGroup);
+      let diagnosticStatus='failed';
       try {
         assertAiCurrent(signal, current);
         const prepared = prepareSillyTavernAiRequest({ task, messages, jsonSchema, mainApi: main ? context.mainApi : null });
@@ -122,11 +125,16 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
         }
         assertAiCurrent(signal, current);
         if (typeof text !== 'string' || !text.trim()) throw new AiProviderError('empty_output');
+        diagnosticStatus='success';
         return text;
       } catch (error) {
+        if(signal?.aborted)diagnosticStatus='cancelled';
         assertAiCurrent(signal, current);
         throw new AiProviderError(error instanceof AiProviderError ? error.code : 'transport');
+      } finally {
+        try{finishDiagnostic(diagnosticStatus);}catch{/* Diagnostics cannot affect generation. */}
       }
     },
   });
 }
+

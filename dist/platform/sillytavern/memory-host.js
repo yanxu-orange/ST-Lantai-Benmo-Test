@@ -1,3 +1,4 @@
+import {bindGenerationDiagnostic,bindGenerationDiagnosticPanel,downloadGenerationDiagnostic} from './generation-diagnostic.js';
 import {createWorkshopHistoryTicket} from './workshop-history.js';
 import {createSummaryNarrativeActions} from '../../app/summary-controller.js';
 import { ensureBookThemeFont } from '../../app/styles/book-font.js';
@@ -79,6 +80,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryHistory,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
+  let releasePanelDiagnostic=null;
   const bookStylesByTheme = new Map();
   const storybarTheme=mountStorybarTheme({document:doc});
   const appearance = createAppearanceSession({ adapter: createAppearanceAdapter({ getContext, fetchImpl: request, ...appearanceOptions }), prepareTheme: async theme => { if (theme === 'snow-ermine') await snowStyles(); if (theme === 'spring') await springStyles(); if (Object.hasOwn(BOOK_THEME_STYLE_ENTRIES,theme)) await bookStyles(theme); }, canSave: () => {
@@ -268,6 +270,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       for (const bundle of bookStylesByTheme.values()) bundle.style=null;
       cleanup(()=>currentObserver?.disconnect());
     } finally {
+      releasePanelDiagnostic?.();releasePanelDiagnostic=null;
       const currentPanel=panel;panel=null;content=memoryContent=benmoContent=settingsContent=summaryContent=null;
       cleanup(()=>currentPanel?.remove());cleanup(()=>entry?.focus());closing=false;
       requestBenmoWarmup(false);
@@ -637,7 +640,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function mountSettingsRoot(focusAction=null){
     if(!panel||closing||replacingPage)return;
     settingsRootView?.dispose();apiView?.dispose();apiView=null;
-    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,availability,focusAction,onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onTaskApi:openTaskApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
+    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,availability,focusAction,onGenerationDiagnostic:()=>downloadGenerationDiagnostic(doc),onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onTaskApi:openTaskApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
     syncAppearance();
   }
   function openApiSettings(){
@@ -871,6 +874,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       panel = doc.createElement('lantai-benmo-host'); panel.id = 'lantai-benmo-panel';
       panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', '兰台本末');
       const shadow = panel.attachShadow({ mode: 'open' });
+      releasePanelDiagnostic=bindGenerationDiagnosticPanel(shadow);
       const shellStyle=doc.createElement('style');shellStyle.setAttribute('data-host-shell','');shellStyle.textContent=MEMORY_SHELL_CSS;shadow.prepend(shellStyle);
       let composing = false;
       shadow.addEventListener('compositionstart', () => { composing = true; });
@@ -953,6 +957,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     entry.append(brand,label); entry.addEventListener('click', () => void open());entry.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();void open();}}); menu.append(entry);
   }
   const context = getContext(), source = context?.eventSource, readyEvent = context?.eventTypes?.APP_READY;
+  const releaseGenerationDiagnostic=bindGenerationDiagnostic({document:doc,context});
   const ready = () => installEntry();
   if (source?.on && readyEvent) source.on(readyEvent, ready);
   installEntry();
@@ -996,9 +1001,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>summaryHistory?.inspect()??{status:'retained',reason:'not-initialized',removed:0},
     dispose() {
-      if(disposed)return;disposed = true;workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeHistory?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();summaryHistory?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      if(disposed)return;disposed = true;releaseGenerationDiagnostic();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeHistory?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();summaryHistory?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;if(closeError)throw closeError;
     },
   };
 }
+
