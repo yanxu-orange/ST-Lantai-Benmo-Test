@@ -69,18 +69,18 @@ export function createRecallAiProvider({getConfig,transport,signal:lifecycleSign
     try{return freezeRecallConfig(getConfig(capability),capability);}
     catch(error){bad(error?.code==='TASK_PRESET_MISSING'?'task_preset_missing':error?.code==='TASK_CAPABILITY_MISMATCH'?'capability':error instanceof AiProviderError?error.code:'configuration');}
   }
-  async function perform(capability,args={}){
+  async function perform(capability,args={},captured=null){
     if(typeof args.isCurrent!=='function')bad('request');
     assertAiCurrent(args.signal,args.isCurrent);
     assertAiCurrent(lifecycleSignal,args.isCurrent);
-    const config=configFor(capability),fingerprint=JSON.stringify(config),request=prepareRecallRequest(capability,args);
-    const current=()=>{try{return args.isCurrent()===true&&JSON.stringify(configFor(capability))===fingerprint;}catch{return false;}};
+    const config=captured?captured.config:configFor(capability),fingerprint=JSON.stringify(config),request=prepareRecallRequest(capability,args);
+    const current=()=>{try{return args.isCurrent()===true&&(captured!==null||JSON.stringify(configFor(capability))===fingerprint);}catch{return false;}};
     const controller=new AbortController(),abort=()=>controller.abort();
     const sources=[...new Set([args.signal,lifecycleSignal].filter(Boolean))];
     for(const source of sources){source.addEventListener('abort',abort,{once:true});if(source.aborted)controller.abort();}
     try{
       assertAiCurrent(controller.signal,current);
-      const response=await transport.request({config,request,signal:controller.signal,isCurrent:current});
+      const response=await (captured?captured.transport:transport).request({config,request,signal:controller.signal,isCurrent:current});
       assertAiCurrent(controller.signal,current);
       const result=validateRecallResponse(capability,response,request,config.model);
       assertAiCurrent(controller.signal,current);
@@ -88,5 +88,26 @@ export function createRecallAiProvider({getConfig,transport,signal:lifecycleSign
     }catch(error){assertAiCurrent(controller.signal,current);throw new AiProviderError(error instanceof AiProviderError?error.code:'transport');}
     finally{for(const source of sources)source.removeEventListener('abort',abort);controller.abort();}
   }
-  return Object.freeze({embed:args=>perform('embedding',args),rerank:args=>perform('rerank',args)});
+  // Capture before any task await. These closures stay on the caller thread;
+  // only non-secret configs may be inspected. Lane errors remain lane-local.
+  function captureSession(capabilities=['embedding','rerank']){
+    if(!Array.isArray(capabilities)||capabilities.some(value=>!['embedding','rerank'].includes(value)))bad('capability');
+    const lanes=new Map();
+    for(const capability of new Set(capabilities)){
+      try{
+        const config=configFor(capability);
+        if(typeof transport.captureSession!=='function')bad('configuration');
+        const bound=transport.captureSession(config);
+        if(typeof bound?.request!=='function')bad('configuration');
+        lanes.set(capability,{config,transport:bound});
+      }catch(error){lanes.set(capability,{error:new AiProviderError(error instanceof AiProviderError?error.code:'configuration')});}
+    }
+    let disposed=false;
+    const dispose=()=>{if(disposed)return;disposed=true;for(const value of lanes.values())value.transport?.dispose?.();lanes.clear();};
+    const lane=capability=>{if(disposed)bad('cancelled');const value=lanes.get(capability);if(!value)bad('capability');if(value.error)bad(value.error.code);return value;};
+    return Object.freeze({dispose,getConfig:capability=>lane(capability).config,
+      embed:async args=>perform('embedding',args,lane('embedding')),
+      rerank:async args=>perform('rerank',args,lane('rerank'))});
+  }
+  return Object.freeze({captureSession,embed:args=>perform('embedding',args),rerank:args=>perform('rerank',args)});
 }

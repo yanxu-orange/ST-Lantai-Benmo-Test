@@ -78,8 +78,8 @@ export function createVectorIndex({provider,store=null}={}){
    cache.error=safeCode(error);cache.storageError=cache.error==='storage';if(current(job,isCurrent)&&!['stale','cancelled'].includes(cache.error))caches.set(cacheKey,cache);if(caches.get(cacheKey)===cache)notify();throw new AiProviderError(cache.error);
   }finally{signal?.removeEventListener('abort',abort);if(jobs.get(cacheKey)===job)jobs.delete(cacheKey);notify();}
  }
- async function query({target,events,config,text,signal,isCurrent,dateById=new Map()}){
-  if(disposed||typeof provider?.embed!=='function')throw new AiProviderError('configuration');assertAiCurrent(signal,isCurrent);
+ async function query({target,events,config,text,signal,isCurrent,dateById=new Map(),requestProvider=provider}){
+  if(disposed||typeof requestProvider?.embed!=='function')throw new AiProviderError('configuration');assertAiCurrent(signal,isCurrent);
   await hydrate({target,events,config,signal,isCurrent});
   const state=view(target,events,config),cache=caches.get(key(target));
   if(!text.trim())return{status:'empty-query',rows:[],index:state};
@@ -87,7 +87,7 @@ export function createVectorIndex({provider,store=null}={}){
   const docs=documents(events).filter(doc=>cache.entries.get(doc.id)?.version===doc.version&&!dateById.get(doc.id)?.blocked);
   if(!docs.length)return{status:'no-date-eligible',rows:[],index:state};
   const guarded=()=>isCurrent()===true&&!disposed&&caches.get(key(target))===cache&&cache.identity===identity(config);
-  const result=await provider.embed({inputs:[{id:'query',text}],inputType:'query',expectedDimensions:cache.dimensions,signal,isCurrent:guarded});
+  const result=await requestProvider.embed({inputs:[{id:'query',text}],inputType:'query',expectedDimensions:cache.dimensions,signal,isCurrent:guarded});
   assertAiCurrent(signal,guarded);const checked=checkedRows(result,[{id:'query',text}],cache.dimensions),vector=checked.rows[0].vector;
   const order=new Map(events.map((event,index)=>[event.id,index]));
   const rows=docs.map(doc=>({id:doc.id,score:cosine(vector,cache.entries.get(doc.id).vector),libraryIndex:order.get(doc.id)}))

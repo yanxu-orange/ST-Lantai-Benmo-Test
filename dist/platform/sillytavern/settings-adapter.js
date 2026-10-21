@@ -8,6 +8,10 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
   fetchImpl = globalThis.fetch, saveHost, loadHostModule = () => import('/script.js'), readServerNamespace, onTiming } = {}) {
   let disposed = false, confirmed = null, marker = null, epoch = 0;
   let observed = null, notificationActive = false;
+  // Numeric invalidation only: credentials remain in the existing settings root
+  // or short-lived task closures, never in an additional adapter key cache.
+  let credentialAuthorityEpoch = 0;
+  const credentialGenerations = new Map();
   const domainEpochs = Object.fromEntries(SETTINGS_DOMAIN_KEYS.map(field => [field, 0]));
   const domainFingerprints = Object.fromEntries(SETTINGS_DOMAIN_KEYS.map(field => [field, null]));
   const listeners = new Set(), events = [], notificationQueue = [];
@@ -47,12 +51,15 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
     let snapshot;
     try { snapshot = local(); }
     catch (error) {
-      if (observed !== 'invalid') { observed = 'invalid'; epoch++; for (const field of SETTINGS_DOMAIN_KEYS) domainEpochs[field]++; confirmed = null; announce(); }
+      if (observed !== 'invalid') { credentialAuthorityEpoch++; observed = 'invalid'; epoch++; for (const field of SETTINGS_DOMAIN_KEYS) domainEpochs[field]++; confirmed = null; announce(); }
       throw error instanceof SettingsError ? error : new SettingsError();
     }
     const fingerprint = snapshot.absent ? 'absent' : settingsFingerprint(snapshot.root);
     let ticketEpoch = epoch;
     if (observed !== fingerprint) {
+      // Only our validated staged write or ordinary local commit can preserve
+      // previously granted credential authority. Unknown host edits fail closed.
+      if (!acceptLocal && !(marker?.inFlight && marker.stagedFingerprint === fingerprint)) credentialAuthorityEpoch++;
       observed = fingerprint; epoch++; ticketEpoch = epoch;
       for (const field of SETTINGS_DOMAIN_KEYS) {
         const next = settingsDomainFingerprint(snapshot.root, field);
@@ -151,6 +158,28 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
       if (!confirmed || marker) throw new SettingsError('SETTINGS_COMMIT_UNCONFIRMED');
       return confirmed;
     },
+    captureCredential(presetId, value) {
+      observe();
+      if (!confirmed || marker || !confirmed.ai.presets.some(item => item.id === presetId)
+        || confirmed.credentials.find(item => item.presetId === presetId)?.value !== value) throw new SettingsError('SETTINGS_CONFLICT');
+      const authority = credentialAuthorityEpoch, generation = credentialGenerations.get(presetId) ?? 0;
+      let secret = value, active = true;
+      const dispose = () => { active = false; secret = null; };
+      return Object.freeze({
+        resolve() {
+          try {
+            if (!active) throw new Error();
+            const ticket = observe();
+            const trusted = !!confirmed && !marker || marker?.inFlight && marker.stagedFingerprint === ticket.fingerprint;
+            if (!trusted || authority !== credentialAuthorityEpoch || generation !== (credentialGenerations.get(presetId) ?? 0)
+              || !ticket.root.ai.presets.some(item => item.id === presetId)
+              || ticket.root.credentials.find(item => item.presetId === presetId)?.value !== secret) throw new Error();
+            return secret;
+          } catch { dispose(); throw new SettingsError('SETTINGS_CONFLICT'); }
+        },
+        dispose,
+      });
+    },
     epochs() { observe(); return Object.freeze({ epoch, ...domainEpochs }); },
     snapshot() {
       // One synchronous observation pairs the confirmed root and domain epochs.
@@ -217,7 +246,14 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
         return { status: 'committed', root: next };
       }
       // Mark before staging. No reader can treat the pending namespace as saved.
-      const record = { inFlight: true }; marker = record;
+      // Revoke before staging, including delete/replace followed by restoration.
+      for (const credential of confirmed.credentials) {
+        if (!next.ai.presets.some(item => item.id === credential.presetId)
+          || next.credentials.find(item => item.presetId === credential.presetId)?.value !== credential.value) {
+          credentialGenerations.set(credential.presetId, (credentialGenerations.get(credential.presetId) ?? 0) + 1);
+        }
+      }
+      const record = { inFlight: true, stagedFingerprint: settingsFingerprint(next) }; marker = record;
       ticket.ctx.extensionSettings[SETTINGS_KEY] = next;
       ticket = observe(); record.stagedFingerprint = ticket.fingerprint; announce();
       try {
@@ -253,7 +289,7 @@ export function createSillyTavernSettingsAdapter({ getContext = getSillyTavernCo
     },
     dispose() {
       if (disposed) return;
-      disposed = true; confirmed = null; epoch++;
+      disposed = true; confirmed = null; epoch++; credentialAuthorityEpoch++; credentialGenerations.clear();
       for (const off of events.splice(0)) off();
       listeners.clear();
     },

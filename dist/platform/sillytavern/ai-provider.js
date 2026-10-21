@@ -63,9 +63,8 @@ export function prepareSillyTavernAiRequest({ task, messages, jsonSchema = null,
 }
 
 // Host calls and private backend routes live only in this platform adapter.
-export function createSillyTavernAiTransport({ getContext = getSillyTavernContext, fetchImpl = globalThis.fetch, resolveCredential } = {}) {
-  return Object.freeze({
-    async generate({ config: configured, task, taskGroup, messages, jsonSchema = null, signal, isCurrent = () => true, maxTokens, maxOutputTokens }) {
+export function createSillyTavernAiTransport({ getContext = getSillyTavernContext, fetchImpl = globalThis.fetch, resolveCredential, captureCredential } = {}) {
+    async function generate({ config: configured, task, taskGroup, messages, jsonSchema = null, signal, isCurrent = () => true, maxTokens, maxOutputTokens }, execution=null) {
       if (maxTokens !== undefined && (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > 128)) throw new AiProviderError('request');
       assertMaxOutputTokens(maxOutputTokens);
       if (maxTokens !== undefined && maxOutputTokens !== undefined) throw new AiProviderError('request');
@@ -82,8 +81,11 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
         throw new AiProviderError('unavailable');
       }
       const snapshot = main ? mainSnapshot(context) : null;
+      if(execution&&main&&snapshot!==execution.mainIdentity)throw new AiProviderError('stale');
+      const credentialCurrent=()=>{try{return !execution?.credential||typeof execution.credential.resolve()==='string';}catch{return false;}};
       const current = () => {
         if (isCurrent() !== true) return false;
+        if (!credentialCurrent())return false;
         if (!main) return true;
         const latest = getContext();
         return Boolean(latest?.onlineStatus && latest.onlineStatus !== 'no_connection' && mainSnapshot(latest) === snapshot);
@@ -104,7 +106,7 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
             trimNames: false, quietToLoud: false, instructOverride: false, ...(outputLimit === undefined ? {} : { responseLength: outputLimit }) });
         } else {
           let key;
-          try { key = resolveCredential(config, { taskGroup }); } catch { throw new AiProviderError('configuration'); }
+          try { key = execution?.credential?execution.credential.resolve():resolveCredential(config, { taskGroup }); } catch { throw new AiProviderError('configuration'); }
           if (typeof key !== 'string' || !key.trim() || key.length > 8192 || /[\u0000-\u001f\u007f-\u009f]/.test(key)) throw new AiProviderError('configuration');
           const authorization = JSON.stringify({ Authorization: `Bearer ${key}` });
           key = null;
@@ -134,7 +136,17 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
       } finally {
         try{finishDiagnostic(diagnosticStatus);}catch{/* Diagnostics cannot affect generation. */}
       }
+    }
+  return Object.freeze({generate,
+    captureSession(configured,{taskGroup}={}) {
+      const config=freezeAiConfig(configured),main=config.source==='sillytavern';
+      let active=true;
+      const execution=main?{mainIdentity:mainSnapshot(getContext())}:{credential:captureCredential?.(config,{taskGroup})};
+      if(!main&&typeof execution.credential?.resolve!=='function')throw new AiProviderError('capability');
+      if(!main)execution.credential.resolve();
+      // Keep the original route for every stage. Native ST settings are checked
+      // at stage boundaries and during requests; only Lantai configuration is frozen.
+      return Object.freeze({generate:args=>{if(!active)throw new AiProviderError('stale');return generate({...args,config,isCurrent:()=>active&&args.isCurrent()},execution);},dispose(){active=false;execution.credential?.dispose?.();}});
     },
   });
 }
-

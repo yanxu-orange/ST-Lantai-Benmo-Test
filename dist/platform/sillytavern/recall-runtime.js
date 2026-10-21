@@ -40,9 +40,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     const check=(value,reason)=>{if(!value)guardFailure=reason;return value;};
     guardFailure=null;
     return check(gate.matches(config.controlProof),'control-proof')&&check(!disposed,'disposed')&&check(serial===ticket,'ticket')
-      &&check(sameTarget(target,repository.captureTarget()),'target')&&check(settings.captureRecall().epoch===config.epoch,'recall-epoch')
-      &&check(config.aiEpoch===undefined||settings.captureAi().epoch===config.aiEpoch,'ai-epoch')
-      &&check(!config.timeReminders||settings.matchesTimeReminders(config.timeReminders),'time-settings')
+      &&check(sameTarget(target,repository.captureTarget()),'target')
       &&check(!captureSource||JSON.stringify(captureSource(target))===source,'source');
   };
   function clear(reason='cancelled',expectedTarget=null) {
@@ -74,19 +72,47 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     onStage('start');
     if(signal?.aborted)throw new AiProviderError('cancelled');
     if(!gate.allowed())throw new Error('事件记忆已关闭');
-    const controlProof=gate.capture();
+    // Ordinary edits belong to the next task. Keep provider sessions private,
+    // never in replacement proofs, monitor records, or Worker messages.
+    const config={controlProof:gate.capture(),...settings.captureRecall(),timeReminders:settings.captureTimeReminders?.()??null};
+    const channels=recallChannels(config.recall),timeEnabled=timeGate.allowed();
+    const capabilities=[...(channels.vector?['embedding']:[]),...(channels.rerank?['rerank']:[])];
+    const taskProvider=capabilities.length&&recallProvider?.captureSession?recallProvider.captureSession(capabilities):recallProvider;
+    try {
+    let vectorConfig=null;
+    if(channels.vector)try{vectorConfig=taskProvider?.getConfig?taskProvider.getConfig('embedding'):settings.getAiConfig('embedding');}catch{/* A missing optional route degrades in the builder. */}
     onStage('date');
-    const observed=dateRuntime&&timeGate.allowed()?await dateRuntime.request():null;
-    if(disposed||serial!==ticket||!sameTarget(target,repository.captureTarget()))throw new Error('stale');
+    const observed=dateRuntime&&timeEnabled?await dateRuntime.request():null;
+    if(disposed||serial!==ticket||signal?.aborted||!sameTarget(target,repository.captureTarget()))throw new Error('stale');
     onStage('settings-source');
-    const config={controlProof,...settings.captureRecall(),timeReminders:settings.captureTimeReminders?.()??null},source=captureSource?JSON.stringify(captureSource(target)):null;
-    const channels=recallChannels(config.recall);
-    if(channels.vector||channels.rerank)config.aiEpoch=settings.captureAi().epoch;
+    const source=captureSource?JSON.stringify(captureSource(target)):null;
+    let retries=0,stage='guard-after-read';
+    const budget={remainingMs:5000};
+    const mark=value=>{stage=value;onStage(value);};
+    for(;;){
+      try{
+        // Recheck the original chat source before rebuilding from a newer root.
+        mark('guard-after-read');
+        if(signal?.aborted||!current(target,serial,config,source))throw new Error('stale');
+        return await computeCaptured(messages,target,serial,previewInput,signal,mark,{config,source,channels,timeEnabled,observed,vectorConfig,taskProvider,budget});
+      }catch(error){
+        // No automatic replay once a builder/API request may have started.
+        if(error?.code!=='COMMIT_UNCONFIRMED'||stage!=='guard-after-read'||!repository.waitForPendingWrite)throw error;
+        if(retries>=2)throw Object.assign(new Error('保存期间重建次数已达上限'),{code:'COMMIT_RETRY_LIMIT'});
+        if(signal?.aborted||disposed||serial!==ticket||!sameTarget(target,repository.captureTarget())||!gate.matches(config.controlProof))throw new Error('stale');
+        retries++;
+        mark('wait-pending-save');
+        await repository.waitForPendingWrite(target,{signal,budget});
+      }
+    }
+    } finally { if(taskProvider!==recallProvider)taskProvider?.dispose?.(); }
+  }
+  async function computeCaptured(messages,target,serial,previewInput,signal,onStage,{config,source,channels,timeEnabled,observed,vectorConfig,taskProvider,budget}) {
     const guard=()=>current(target,serial,config,source);
     if(previewInput===null&&flight?.abort.signal===signal)flight.guard=guard;
     else if(previewAbort?.signal===signal)previewGuard=guard;
     onStage('read-before');
-    const root=await repository.read(target);
+    const root=await repository.read(target,{signal,budget});
     onStage('read-returned');
     if(signal?.aborted){onStage('post-read-aborted');throw new Error('stale');}
     onStage('guard-after-read');
@@ -94,19 +120,19 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     onStage('inputs');
     const context=getContext(),inputs=previewInput===null?recallInputs(messages,config.recall.recentFloorCount,context?.chat)
       :extractRecallInputs(messages,{recentFloorCount:config.recall.recentFloorCount,input:previewInput,currentIndex:messages.length});
-    const multi=build===buildRecall&&usesMultichannel(config.recall);let vectorConfig=null;
-    if(multi&&channels.vector)try{vectorConfig=settings.getAiConfig('embedding');}catch{/* This lane will visibly degrade without changing another route. */}
+    const multi=build===buildRecall&&usesMultichannel(config.recall);
     onStage(multi?'build-worker':'build-main');
-    const result=await (multi?buildMulti:previewInput===null?build:buildPreview)({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,time:root.time??null,timeAvailable:timeGate.allowed()&&(!dateRuntime||!['failed','needs-calibration','cancelled','no-calendar','unavailable'].includes(observed?.status)),timeReminders:config.timeReminders?.reminders??null,
+    const result=await (multi?buildMulti:previewInput===null?build:buildPreview)({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,time:root.time??null,timeAvailable:timeEnabled&&(!dateRuntime||!['failed','needs-calibration','cancelled','no-calendar','unavailable'].includes(observed?.status)),timeReminders:config.timeReminders?.reminders??null,
       countTokens:typeof context?.getTokenCountAsync==='function'?body=>context.getTokenCountAsync(body):null},
-      {signal,isCurrent:()=>current(target,serial,config,source),target,vectorConfig});
+      {signal,isCurrent:()=>current(target,serial,config,source),target,vectorConfig,taskProvider});
     onStage('guard-after-build');
     if(!current(target,serial,config,source))throw new Error('stale');
     onStage('read-authority');
-    const authority=await repository.read(target);
+    const authority=await repository.read(target,{signal,budget});
     onStage('guard-authority');
     if(!current(target,serial,config,source))throw new Error('stale');
-    if(JSON.stringify(authority)!==JSON.stringify(root)){guardFailure='root-changed';throw new Error('stale');}
+    const recallAuthority=value=>({events:value.events,batches:value.summary?.batches??[],time:value.time??null});
+    if(JSON.stringify(recallAuthority(authority))!==JSON.stringify(recallAuthority(root))){guardFailure='root-changed';throw new Error('stale');}
     return {result,target,config,source,serial,revision:root.revision};
   }
   async function preview(input='',messages) {
@@ -154,7 +180,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     }catch(error) {
       // Diagnostic-only allowlists: never expose error.message, stack, story text or credentials.
       const names=new Set(['Error','TypeError','RangeError','SyntaxError','DataCloneError','AbortError','AiProviderError','SettingsError']);
-      const codes=new Set(['COMMIT_UNCONFIRMED','SETTINGS_COMMIT_UNCONFIRMED','SETTINGS_CONFLICT','SETTINGS_UNAVAILABLE','SETTINGS_INVALID','read-target-changed','read-not-ready','read-binding-changed','read-root-invalid','read-duplicate-id','read-unavailable','cancelled','stale','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing','unavailable','storage']);
+      const codes=new Set(['COMMIT_UNCONFIRMED','COMMIT_WAIT_TIMEOUT','COMMIT_RETRY_LIMIT','SETTINGS_COMMIT_UNCONFIRMED','SETTINGS_CONFLICT','SETTINGS_UNAVAILABLE','SETTINGS_INVALID','read-target-changed','read-not-ready','read-binding-changed','read-root-invalid','read-duplicate-id','read-unavailable','cancelled','stale','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing','unavailable','storage']);
       const readErrors={'聊天目标已变化，请返回列表重新进入':'read-target-changed','请等待当前聊天读取完成':'read-not-ready','记忆聊天归属已变化，请重新读取':'read-binding-changed','数据版本或归属无法确认，已停止读取和写入':'read-root-invalid','重复记忆身份':'read-duplicate-id','无法确认聊天已保存，请检查连接后重试':'read-unavailable','无法读回聊天文件，请检查连接后重试':'read-unavailable'};
       const code=codes.has(error?.code)?error.code:Object.hasOwn(readErrors,error?.message)?readErrors[error.message]:null;
       const abort=flight?.abortDiagnostic;
@@ -171,11 +197,8 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   if(repository.subscribeEventCommits)releases.push(repository.subscribeEventCommits(notice=>{
     if(materialAuthority&&sameTarget(materialAuthority.target,notice.target)&&!selectedUnchanged(materialAuthority,notice.events))materialAuthority.revoked=true;
   }));
-  const unsubscribeSettings=settings.subscribe?.(()=>{
-    try{if(previewGuard&&!previewGuard())cancelPreview();}catch{cancelPreview();}
-    try{if(flight?.guard&&!flight.guard()){flight.abortDiagnostic={reason:'settings-guard',guard:guardFailure};flight.abort.abort();}}catch(error){if(flight)flight.abortDiagnostic={reason:'settings-error',name:['Error','TypeError','SettingsError'].includes(error?.name)?error.name:'Error',...(['SETTINGS_COMMIT_UNCONFIRMED','SETTINGS_CONFLICT','SETTINGS_UNAVAILABLE','SETTINGS_INVALID','COMMIT_UNCONFIRMED'].includes(error?.code)?{code:error.code}:{})};flight?.abort.abort();}
-  });
-  if(typeof unsubscribeSettings==='function')releases.push(unsubscribeSettings);
+  // Ordinary settings changes do not cancel a captured task. Explicit host
+  // lifecycle/feature-stop hooks still clear it, and source checks remain live.
   releases.push(maintenance.subscribe(notify));
   for(const name of ['CHAT_CHANGED','GENERATION_ENDED','GENERATION_STOPPED','MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED']) {
     const event=context?.eventTypes?.[name],source=context?.eventSource;
@@ -195,7 +218,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
       try{
         if(!proof||!current(proof.target,proof.serial,proof.config,proof.source)||!injectedMaterials)return null;
         const owner=copy(proof.target),config=proof.config,memories=copy(injectedMaterials),authority={target:owner,selected:copy(injectedSelections),revoked:false};materialAuthority=authority;
-        return {memories,isCurrent:()=>!disposed&&!authority.revoked&&(!captureEvents||selectedUnchanged(authority,captureEvents(owner)))&&sameTarget(owner,repository.captureTarget())&&gate.matches(config.controlProof)&&settings.captureRecall().epoch===config.epoch&&(config.aiEpoch===undefined||settings.captureAi().epoch===config.aiEpoch)&&(!config.timeReminders||settings.matchesTimeReminders(config.timeReminders))};
+        return {memories,isCurrent:()=>!disposed&&!authority.revoked&&(!captureEvents||selectedUnchanged(authority,captureEvents(owner)))&&sameTarget(owner,repository.captureTarget())&&gate.matches(config.controlProof)};
       }catch{return null;}
     },
     getReplacementProof(){try{return proof&&current(proof.target,proof.serial,proof.config,proof.source)?proof:null;}catch{return null;}},

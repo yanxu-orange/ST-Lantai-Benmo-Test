@@ -22,17 +22,17 @@ export function recallPayload(config,request){
 
 // Dedicated JSON endpoints must permit browser CORS. Never use the host's chat
 // completions proxy to carry vectors or rerank scores, or forward host cookies.
-export function createRecallAiTransport({fetchImpl=globalThis.fetch,resolveCredential,timeoutMs=RECALL_REQUEST_LIMITS.timeoutMs}={}){
+export function createRecallAiTransport({fetchImpl=globalThis.fetch,resolveCredential,captureCredential,timeoutMs=RECALL_REQUEST_LIMITS.timeoutMs}={}){
   if(typeof fetchImpl!=='function'||typeof resolveCredential!=='function'||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>RECALL_REQUEST_LIMITS.timeoutMs)throw new AiProviderError('configuration');
-  async function send({config:configured,request,signal,isCurrent,models=false}){
+  async function send({config:configured,request,signal,isCurrent,models=false},credential=null){
     const config=freezeRecallConfig(models?{...configured,model:'models-only'}:configured,configured?.capability);
     if(typeof isCurrent!=='function')throw new AiProviderError('request');
     assertAiCurrent(signal,isCurrent);
     const controller=new AbortController();let timer,abortListener,timedOut=false;
-    const current=()=>isCurrent()===true;
+    const current=()=>isCurrent()===true&&(!credential||credential.valid());
     try{
       const publicCatalog=models&&new URL(config.endpoint).hostname==='openrouter.ai',headers={Accept:'application/json'};
-      if(!publicCatalog){let key;try{key=resolveCredential(config,{taskGroup:config.capability});}catch{throw new AiProviderError('configuration');}
+      if(!publicCatalog){let key;try{key=credential?credential.resolve():resolveCredential(config,{taskGroup:config.capability});}catch{throw new AiProviderError('configuration');}
        if(typeof key!=='string'||!key.trim()||key.length>8192||/[\u0000-\u001f\u007f-\u009f]/.test(key))throw new AiProviderError('configuration');headers.Authorization=`Bearer ${key}`;}
       if(!models)headers['Content-Type']='application/json';
       const url=recallEndpoint(config,models?'models':config.capability==='embedding'?'embeddings':'rerank');
@@ -59,5 +59,22 @@ export function createRecallAiTransport({fetchImpl=globalThis.fetch,resolveCrede
     }catch(error){assertAiCurrent(signal,current);throw new AiProviderError(timedOut?'timeout':error instanceof AiProviderError?error.code:'cors_network');}
     finally{clearTimeout(timer);signal?.removeEventListener('abort',abortListener);controller.abort();}
   }
-  return Object.freeze({request:args=>send(args),fetchModels:args=>send({...args,models:true})});
+  function captureSession(configured){
+    const config=freezeRecallConfig(configured,configured?.capability);
+    if(typeof captureCredential!=='function')throw new AiProviderError('configuration');
+    let ticket,key;
+    try{
+      ticket=captureCredential(config,{taskGroup:config.capability});
+      key=ticket.resolve();
+      if(typeof key!=='string'||!key.trim()||key.length>8192||/[\u0000-\u001f\u007f-\u009f]/.test(key))throw Error();
+    }catch{ticket?.dispose?.();throw new AiProviderError('configuration');}
+    // Keep the captured secret and revocation check private to this transport.
+    // A changed/deleted credential fails closed; a route/model edit does not.
+    let active=true;
+    const dispose=()=>{if(!active)return;active=false;key=null;ticket.dispose?.();};
+    const valid=()=>{try{if(active&&ticket.resolve()===key)return true;}catch{}dispose();return false;};
+    const credential={valid,resolve(){if(!valid())throw new AiProviderError('configuration');return key;}};
+    return Object.freeze({dispose,request:args=>send({...args,config,models:false},credential)});
+  }
+  return Object.freeze({captureSession,request:args=>send(args),fetchModels:args=>send({...args,models:true})});
 }

@@ -139,6 +139,14 @@ export function createSettingsRepository(adapter) {
         return value;
       } catch { throw new SettingsError('SETTINGS_CONFLICT'); }
     },
+    captureCredential(config, {taskGroup}={}) {
+      // Validate initial routing using the ordinary confirmed authority. The
+      // adapter owns a private revocation-aware ticket, not a public root copy.
+      const root=adapter.peek(),current=aiConfig(root,adapter.epochs().ai,taskGroup);
+      if(current.source!=='plugin'||config?.source!=='plugin'||config.credentialId!==current.credentialId||config.capability!==current.capability||config.protocol!==current.protocol||config.credentialEpoch!==current.credentialEpoch||config.model!==current.model||new URL(config.endpoint).toString().replace(/\/$/,'')!==new URL(current.endpoint).toString().replace(/\/$/,'')||typeof adapter.captureCredential!=='function')throw new SettingsError('SETTINGS_CONFLICT');
+      const value=assertCredential(root.credentials.find(item=>item.presetId===config.credentialId)?.value);
+      return adapter.captureCredential(config.credentialId,value);
+    },
     resolveCredential(config, { taskGroup } = {}) {
       try {
         const root = adapter.peek(), current = aiConfig(root, adapter.epochs().ai, taskGroup);

@@ -175,9 +175,9 @@ export async function createManagementRuntime({ repository, getContext, document
       getLantaiMainIdentity: mainIdentity };
   };
   const provider = createAiProvider({ getConfig, transport: createSillyTavernAiTransport({ getContext: transportContext, fetchImpl,
-    resolveCredential: (config, context) => settings.resolveCredential(config, context) }) });
+    resolveCredential: (config, context) => settings.resolveCredential(config, context),captureCredential:(config,context)=>settings.captureCredential(config,context) }) });
   const recallProvider = createRecallAiProvider({getConfig,signal:recallAbort.signal,transport:createRecallAiTransport({fetchImpl,
-    resolveCredential:(config,context)=>settings.resolveCredential(config,context)})});
+    resolveCredential:(config,context)=>settings.resolveCredential(config,context),captureCredential:(config,context)=>settings.captureCredential(config,context)})});
   const apiOperations = createApiSettingsOperations({ getContext: transportContext, fetchImpl,
     captureMain() { if (disposed) throw new AiProviderError('unavailable'); mainIdentity(); observeMain(); return mainEpoch; } });
   const eventGeneration=()=>{if(!allowed('event'))throw new Error('事件记忆已关闭');return getGenerationSettings('event');};

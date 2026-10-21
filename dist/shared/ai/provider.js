@@ -63,7 +63,8 @@ export function freezeAiConfig(value) {
     if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password
       || endpoint.search || endpoint.hash) throw new Error();
   } catch { throw new AiProviderError('configuration'); }
-  return Object.freeze({ source: value.source, endpoint: endpoint.toString().replace(/\/$/, ''),
+  return Object.freeze({
+ source: value.source, endpoint: endpoint.toString().replace(/\/$/, ''),
     model: value.model.trim(), credentialId: value.credentialId.trim(), credentialEpoch: value.credentialEpoch });
 }
 
@@ -206,6 +207,14 @@ export function createAiProvider({ getConfig, transport } = {}) {
     catch (error) { throw new AiProviderError(error?.code === 'TASK_PRESET_MISSING' || error?.code === 'task_preset_missing' ? 'task_preset_missing' : error?.code === 'TASK_ROUTE_UNRESOLVED' ? 'task_route_unresolved' : error?.code === 'TASK_CAPABILITY_MISMATCH' ? 'capability' : 'configuration'); }
   }
   return Object.freeze({
+    // Runtime-only session: never add credentials or connection data to task snapshots.
+    dispose(){transport.dispose?.();},
+    captureSession(taskGroup) {
+      const config=readConfig(taskGroup);
+      if(typeof transport.captureSession!=='function')throw new AiProviderError('capability');
+      const captured=transport.captureSession(config,{taskGroup});
+      return createAiProvider({getConfig:group=>{if(group!==taskGroup)throw new AiProviderError('request');return config;},transport:captured});
+    },
     async generateText({ task, messages, signal, isCurrent, maxOutputTokens } = {}) {
       if (typeof isCurrent !== 'function') throw new AiProviderError('request');
       assertAiCurrent(signal, isCurrent);

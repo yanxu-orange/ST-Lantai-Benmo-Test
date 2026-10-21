@@ -165,20 +165,34 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
   function requireConfirmed(current) {
     if (uncertaintyFor(current)) throw unconfirmed();
   }
-  async function waitForWrite(current, ticket = epoch) {
+  function waitForCompletion(record, {signal, budget} = {}) {
+    const now=()=>globalThis.performance?.now?.()??Date.now(),started=now(),remaining=budget?Math.max(0,budget.remainingMs):undefined;
+    if(signal?.aborted)return Promise.reject(Object.assign(new Error('任务已取消'),{code:'cancelled'}));
+    if(remaining!==undefined&&remaining<=0)return Promise.reject(Object.assign(new Error('等待保存超时'),{code:'COMMIT_WAIT_TIMEOUT'}));
+    return new Promise((resolve,reject)=>{
+      let timer,done=false;
+      const finish=(error,value)=>{if(done)return;done=true;if(budget)budget.remainingMs=error?.code==='COMMIT_WAIT_TIMEOUT'?0:Math.max(0,budget.remainingMs-Math.max(0,now()-started));clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};
+      const abort=()=>finish(Object.assign(new Error('任务已取消'),{code:'cancelled'}));
+      signal?.addEventListener('abort',abort,{once:true});
+      if(remaining!==undefined)timer=setTimeout(()=>finish(Object.assign(new Error('等待保存超时'),{code:'COMMIT_WAIT_TIMEOUT'})),remaining);
+      record.completion.then(value=>finish(null,value),error=>finish(error));
+      if(signal?.aborted)abort();
+    });
+  }
+  async function waitForWrite(current, ticket = epoch, options) {
     // A known local transaction is still working, not an unknown save outcome.
     // Never expose its staged metadata, and wait through readback/proof too.
     for (;;) {
       const record = uncertaintyFor(current);
       if (!record?.inFlight) return;
       if (record.epoch !== ticket) throw unconfirmed();
-      const committed = await record.completion;
+      const committed = await waitForCompletion(record, options);
       if (ticket !== epoch || !sameBinding(observe(), current)) throw stale();
       if (!committed) throw unconfirmed();
     }
   }
-  async function reconcile(current = observe(), joinWrites = false) {
-    if (joinWrites) while (uncertaintyFor(current)?.inFlight) await waitForWrite(current);
+  async function reconcile(current = observe(), joinWrites = false, waitOptions) {
+    if (joinWrites) while (uncertaintyFor(current)?.inFlight) await waitForWrite(current, epoch, waitOptions);
     const record = uncertaintyFor(current);
     if (!record) return;
     if (record.inFlight) throw unconfirmed();
@@ -509,10 +523,20 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       if (!sameBinding(root.binding, current)) throw new Error('记忆聊天归属已变化，请重新读取');
       return assertRoot(root, target);
     },
-    async read(target) {
+    async waitForPendingWrite(target, options) {
+      const current=check(target),record=uncertaintyFor(current);
+      // Only a known local transaction may be joined. Never reconcile an unknown outcome here.
+      if(!record?.inFlight)throw unconfirmed();
+      if(record.epoch!==target.epoch)throw unconfirmed();
+      const committed=await waitForCompletion(record,options);
+      check(target);
+      if(!committed)throw unconfirmed();
+      return true;
+    },
+    async read(target, waitOptions) {
       const current = check(target);
-      await reconcile(current, true);
-      while (uncertaintyFor(current)?.inFlight) await waitForWrite(current, target.epoch);
+      await reconcile(current, true, waitOptions);
+      while (uncertaintyFor(current)?.inFlight) await waitForWrite(current, target.epoch, waitOptions);
       requireConfirmed(check(target));
       const raw = getContext().chatMetadata[MEMORY_KEY];
       const root = raw === undefined ? prepared : raw;

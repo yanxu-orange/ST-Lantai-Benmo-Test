@@ -45,10 +45,10 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).length!==keys.length||keys.some(key=>!Object.hasOwn(value,key))||['cumulativeEpoch','cleaningEpoch','aiEpoch'].some(key=>!Number.isSafeInteger(value[key])||value[key]<0)||!(value.aiIdentity===null||typeof value.aiIdentity==='string'&&value.aiIdentity.trim()))throw new Error('古法公开配置票据无效');
     assertCumulativeGeneration(value.generation);publicCumulativeEvidence({...value.generation,summaryCleaning:value.summaryCleaning});return value;
   }
-  const targetCurrent=(snapshot,target)=>{try{return !disposed&&sameTarget(target,repository.captureTarget())&&equalData(snapshot.settings,settings())&&(!snapshot.tracking||equalData(snapshot.tracking.context,readTrackingContext()));}catch{return false;}};
+  const targetCurrent=(snapshot,target)=>{try{return !disposed&&sameTarget(target,repository.captureTarget())&&(!control||(snapshot.controlProof?control.matches(snapshot.controlProof):control.allowed()))&&(!snapshot.tracking||equalData(snapshot.tracking.context,readTrackingContext()));}catch{return false;}};
   function sourceCurrent(snapshot,target) {
     const record=[...records.values()].find(item=>item.operationId===snapshot.operationId);
-    try{return repository.matchesCumulative(target,record?.selection??snapshot.selection)&&(!snapshot.tracking||repository.matchesTrackingRevision(target,snapshot.tracking.ticket.revision))&&matchesCumulativeSource(snapshot.source,captureSource(target));}catch{return false;}
+    try{return (repository.matchesCumulativeTask??repository.matchesCumulative).call(repository,target,record?.selection??snapshot.selection)&&(!snapshot.tracking||repository.matchesTrackingRevision(target,snapshot.tracking.ticket.revision))&&matchesCumulativeSource(snapshot.source,captureSource(target));}catch{return false;}
   }
   const current=(snapshot,target)=>targetCurrent(snapshot,target)&&sourceCurrent(snapshot,target);
   function inspect(taskId) {
@@ -70,15 +70,15 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     await record.narrativePromise;return inspect(taskId);
   }
   function evidence(config,params){return publicCumulativeEvidence({...config.generation,injectionPosition:config.generation.injectionPosition??9999,summaryCleaning:config.summaryCleaning,includeUser:params.includeUser,checkBeforeSave:params.checkBeforeSave,hideSource:params.hideSource});}
-  async function capture(origin,options={},pending=null) {
+  async function capture(origin,options={},pending=null,capturedSettings=settings(),initial=null) {
     if(!['manual','auto','regeneration'].includes(origin))throw new Error('古法生成来源无效');
-    const target=repository.captureTarget(),selection=await repository.captureCumulative(target),config=settings(),domain=selection.cumulative,previous=domain.versions.at(-1)??null;
+    const target=repository.captureTarget(),selection=initial?.selection??await repository.captureCumulative(target),config=capturedSettings,domain=selection.cumulative,previous=domain.versions.at(-1)??null;
     const stored=origin==='regeneration'?previous:null;
     if(origin==='regeneration'&&(!stored||options.versionId!==undefined&&options.versionId!==stored.id))throw new Error('再生成须选择当前已确认古法版本');
     const pref=domain.preferences[origin==='auto'?'auto':'manual'];
     const params={includeUser:options.includeUser??pref.includeUser,checkBeforeSave:origin==='regeneration'||(options.checkBeforeSave??pref.checkBeforeSave),hideSource:options.hideSource??pref.hideSource};
     if(Object.values(params).some(item=>typeof item!=='boolean'))throw new Error('古法参数须明确提供');
-    const raw=captureSource(target),savedSource=pending?.version.sourceSnapshot??stored?.sourceSnapshot;
+    const raw=initial?.raw??captureSource(target),savedSource=pending?.version.sourceSnapshot??stored?.sourceSnapshot;
     const range=savedSource?.requestedRange??{start:options.startFloor??pref.startFloor,end:options.endFloor??(origin==='auto'?null:pref.endFloor)};
     if(range.end===null)range.end=raw.messages.length?Math.max(...raw.messages.map(item=>item.floor)):-1;
     if(savedSource&&!matchesStoredCumulativeSource(savedSource,raw))throw new Error('保留版本的原始来源已变化');
@@ -123,7 +123,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
       record.writeInFlight=true;
       try{
         await repository.read(ctx.target);
-        const options={isCurrent:ctx.isCurrent,...(record.pendingId?{pendingId:record.pendingId}:{})};
+        const options={executionSnapshot:true,isCurrent:ctx.isCurrent,...(record.pendingId?{pendingId:record.pendingId}:{})};
         if(ctx.snapshot.tracking){
           const selected=await repository.captureTracking(ctx.target),applied=applyBatchTracking(selected.tracking,ctx.snapshot.tracking.ticket,ctx.candidate.trackingParts,captureSource(ctx.target),{makeId:uuid,batchId:ctx.snapshot.tracking.ticket.batchId});
           options.trackingUpdate={expectedRevision:ctx.snapshot.tracking.ticket.revision,value:applied.tracking};
@@ -136,40 +136,45 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     if(result.status==='succeeded'&&record.narrative?.status==='running'){const source=state.snapshot.source,{start,end}=source.requestedRange;await runNarrative(taskId,()=>afterSummaryCommit({target:state.target,startFloor:start,endFloor:end,sentFloors:structuredClone(source.sentFloors)}));}
     notify(taskId);return {...result,...(result.status==='succeeded'?{status:inspect(taskId).status}:{}),outcome:record.outcome};
   }
+  const releaseSession=record=>{if(record?.executionProvider&&record.executionProvider!==provider){try{record.executionProvider.dispose?.();}catch{}record.executionProvider=null;}};
   const release=manager.subscribe(state=>{
-    const record=records.get(state.taskId);if(!record)return;notify(state.taskId);
+    const record=records.get(state.taskId);if(!record)return;if(['succeeded','stale','cancelled'].includes(state.status))releaseSession(record);notify(state.taskId);
     if(state.status==='awaiting-user'&&!state.reviewPending&&!record.reviewRequired&&!record.autoConfirmScheduled){record.autoConfirmScheduled=true;queueMicrotask(()=>void confirm(state.taskId));}
   });
   async function launch(origin,options={},pending=null) {
     const operationProof=control?.capture();if(control&&!control.allowed())throw new Error('功能已关闭');
     if(disposed)throw new Error('古法服务已关闭');
     const initialTarget=repository.captureTarget(),key=initialTarget?.chatId;if(!key||reservations.has(key))throw new Error('当前聊天已有古法任务');reservations.add(key);
+    let executionProvider=null,adopted=false;
     try{
       for(const id of records.keys()){const state=inspect(id);if(state?.target.chatId===key&&(busyStatuses.includes(state.status)||state.outcome==='unconfirmed'||state.rebindRequired))throw new Error('当前聊天已有古法任务或未确认保存');}
+      const capturedSettings=settings(),initial=repository.captureCumulativeTask?{selection:repository.captureCumulativeTask(initialTarget),raw:structuredClone(captureSource(initialTarget))}:null;
+      executionProvider=pending?provider:(provider.captureSession?.('summary')??provider);
       if(await getPendingNarrative?.())throw new Error('请先继续、重试或跳过当前自述与大纲批次');
-      const snapshot=await capture(origin,options,pending);
+      const snapshot=await capture(origin,options,pending,capturedSettings,initial);
+      if(control)snapshot.controlProof=operationProof;
       if(control&&!control.matches(operationProof))throw new Error('功能开关已变化，请重新开始');
       if(!sameTarget(initialTarget,snapshot.target))throw new Error('古法聊天目标已变化');
       if(snapshot.selection.cumulative.pending&&!pending)throw new Error('请先处理保留的古法草稿');
       if(pending&&!equalData(snapshot.selection.cumulative.pending,pending))throw new Error('古法草稿已变化');
-      const record={origin,operationId:snapshot.operationId,selection:snapshot.selection,reviewRequired:!!pending||snapshot.params.checkBeforeSave,restoreOnly:!!pending,pendingId:pending?.id??null,stage:'starting',outcome:null,reviewResolution:null,discardAttempted:false,writeInFlight:false,rebindRequired:false,receipt:null,errorMessage:'',autoConfirmScheduled:false,trackingParts:structuredClone(pending?.tracking?.parts??null),diagnostics:Object.entries(pending?.tracking?.parts?.errors??{}).flatMap(([category,message])=>message?[{kind:'tracking',category,message}]:[])};
+      const record={executionProvider,origin,operationId:snapshot.operationId,selection:snapshot.selection,reviewRequired:!!pending||snapshot.params.checkBeforeSave,restoreOnly:!!pending,pendingId:pending?.id??null,stage:'starting',outcome:null,reviewResolution:null,discardAttempted:false,writeInFlight:false,rebindRequired:false,receipt:null,errorMessage:'',autoConfirmScheduled:false,trackingParts:structuredClone(pending?.tracking?.parts??null),diagnostics:Object.entries(pending?.tracking?.parts?.errors??{}).flatMap(([category,message])=>message?[{kind:'tracking',category,message}]:[])};
       const taskId=manager.start({key:`cumulative-summary:${key}`,target:snapshot.target,snapshot,validateCurrent:target=>targetCurrent(snapshot,target),validateSnapshot:sourceCurrent,worker:async ctx=>{
         if(pending){record.stage='final-review';return {kind:'cumulative-summary',version:structuredClone(pending.version),trackingParts:record.trackingParts};}
         await repository.read(ctx.target);
         const isCurrent=()=>!ctx.signal.aborted&&current(ctx.snapshot,ctx.target);
         if(!isCurrent())throw new Error('古法来源已变化');record.stage='summary';notify(ctx.taskId);
         let output;
-        try{output=await provider.generateJson({...request(ctx.snapshot),signal:ctx.signal,isCurrent,validate:data=>validCumulativeSummary(ctx.snapshot.tracking&&data&&typeof data==='object'?Object.fromEntries(Object.entries(data).filter(([key])=>key!=='tracking')):data)});}catch(error){writeError(record,error);throw error;}
+        try{output=await executionProvider.generateJson({...request(ctx.snapshot),signal:ctx.signal,isCurrent,validate:data=>validCumulativeSummary(ctx.snapshot.tracking&&data&&typeof data==='object'?Object.fromEntries(Object.entries(data).filter(([key])=>key!=='tracking')):data)});}catch(error){writeError(record,error);throw error;}
         if(!isCurrent()||!validCumulativeSummary(ctx.snapshot.tracking&&output?.data?Object.fromEntries(Object.entries(output.data).filter(([key])=>key!=='tracking')):output?.data))throw new Error('古法结果或来源无效');
         if(snapshot.tracking){record.trackingParts=parseBatchTrackingResponseParts(output.data.tracking,{ticket:snapshot.tracking.ticket});record.diagnostics=Object.entries(record.trackingParts.errors).flatMap(([category,message])=>message?[{kind:'tracking',category,message}]:[]);}
         const timestamp=now(),version={id:snapshot.versionId,taskId:snapshot.operationId,body:output.data.summary,startTime:snapshot.startTime,endTime:snapshot.endTime,baseSnapshot:snapshot.baseSnapshot,sourceSnapshot:storedCumulativeSource(snapshot.source),coverageRanges:snapshot.coverageRanges,settingsEvidence:snapshot.settingsEvidence,createdAt:timestamp,updatedAt:timestamp};
         if(record.reviewRequired){const draft={schema:1,id:version.taskId,operation:origin==='regeneration'?'replace':'append',version,createdAt:timestamp,updatedAt:timestamp,...(snapshot.tracking?{tracking:{ticket:publicSummaryTrackingTicket(snapshot.tracking.ticket),context:durableTrackingContext(snapshot.tracking.context),parts:record.trackingParts}}:{})};record.pendingId=draft.id;
-          record.writeInFlight=true;try{const receipt=await repository.saveCumulativePending(ctx.target,record.selection,draft,{isCurrent});record.selection=receipt.selection;}catch(error){if(error.code!=='COMMIT_UNCONFIRMED')record.pendingId=null;writeError(record,error);throw error;}finally{record.writeInFlight=false;}
+          record.writeInFlight=true;try{const receipt=await repository.saveCumulativePending(ctx.target,record.selection,draft,{executionSnapshot:true,isCurrent});record.selection=receipt.selection;}catch(error){if(error.code!=='COMMIT_UNCONFIRMED')record.pendingId=null;writeError(record,error);throw error;}finally{record.writeInFlight=false;}
         }
         record.stage='final-review';return {kind:'cumulative-summary',version,trackingParts:record.trackingParts};
       }});
-      records.set(taskId,record);notify(taskId);return taskId;
-    }finally{reservations.delete(key);}
+      records.set(taskId,record);adopted=true;notify(taskId);return taskId;
+    }finally{reservations.delete(key);if(!adopted&&executionProvider!==provider)executionProvider?.dispose?.();}
   }
   const service={
     automaticPlan(domain,raw){const generation=settings().generation;return automaticCumulativePlan(domain,raw,{trackingEnabled:generation.trackingItemsEnabled===true||generation.trackingNpcsEnabled===true});},
@@ -197,7 +202,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     async skipNarrative(taskId){const state=inspect(taskId);if(!skipSummaryCommit||state?.status!=='narrative-failed'||!sameTarget(state.target,repository.captureTarget()))return false;return runNarrative(taskId,async()=>{await skipSummaryCommit();return {run:{status:'skipped'}};});},
     cancel:taskId=>records.has(taskId)&&manager.cancel(taskId),
     async discard(taskId){const record=records.get(taskId),state=inspect(taskId);if(!record||!state||record.outcome==='unconfirmed'||state.status==='committing')return false;const guard=()=>sameTarget(state.target,repository.captureTarget());if(!guard())return false;
-      if(record.pendingId){record.discardAttempted=true;record.writeInFlight=true;try{const receipt=await repository.clearCumulativePending(state.target,record.selection,{isCurrent:guard});record.selection=receipt.selection;record.receipt=receipt;}catch(error){writeError(record,error);notify(taskId);throw error;}finally{record.writeInFlight=false;}}
+      if(record.pendingId){record.discardAttempted=true;record.writeInFlight=true;try{const receipt=await repository.clearCumulativePending(state.target,record.selection,{executionSnapshot:true,isCurrent:guard});record.selection=receipt.selection;record.receipt=receipt;}catch(error){writeError(record,error);notify(taskId);throw error;}finally{record.writeInFlight=false;}}
       record.outcome='discarded';record.reviewResolution='discarded';record.errorMessage='';
       manager.cancel(taskId);notify(taskId);return true;
     },
@@ -243,7 +248,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
       notify(taskId);return structuredClone(record.receipt);
     },
     subscribe(listener){if(typeof listener!=='function')throw new TypeError('Observer must be a function');listeners.add(listener);return()=>listeners.delete(listener);},
-    dispose(){if(disposed)return;disposed=true;for(const id of records.keys())manager.cancel(id);release();listeners.clear();},
+    dispose(){if(disposed)return;disposed=true;for(const [id,record] of records){manager.cancel(id);releaseSession(record);}release();listeners.clear();},
   };
   return Object.freeze(service);
 }

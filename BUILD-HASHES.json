@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "1d0754f6316ef0f98ba0c4996ce709aa7367837ba7e959188723ab8222775c4e"
+    "sha256": "c25b119c3bc738062723df6c9d0da175822cc3a1569532ae4915a135fa698df9"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -517,7 +517,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "f5897c51818650134ba4264d27820518da066d6d398cc5e75671e9cd3b29bd5d"
+    "sha256": "d0fd5051d9cb07e4b786dd3a4c6f877dc8cc0188ff91a1f1283c845e2f16ca0d"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -561,7 +561,7 @@
   },
   {
     "path": "dist/domain/cumulative/service.js",
-    "sha256": "6872bea24d7c0ca32a5a5d7c9b891b54d94fa8601d3768a0d9e1085e7dac9744"
+    "sha256": "44c698fea92ffd3ce8936ab4964ffecdd5ce9d4885811ad8ddc790a27ac76b07"
   },
   {
     "path": "dist/domain/cumulative/source.js",
@@ -625,7 +625,7 @@
   },
   {
     "path": "dist/domain/memory/repository.js",
-    "sha256": "eb686a16e2c41306c0c185905e0fa653487ebb86238f8d085bacffd55ac72e29"
+    "sha256": "5c16ac73d0316b247022c0366c6daea8655794dbdea249e2177b1ccf60865304"
   },
   {
     "path": "dist/domain/memory/results-persistence.js",
@@ -741,7 +741,7 @@
   },
   {
     "path": "dist/domain/recall/vector-index.js",
-    "sha256": "0254c227b43d0709542d1248a99f354707115aa999afa5c358b624024e97cb8f"
+    "sha256": "d00dba6642222fbb5e44a0cb1f3cc618b745b34b778dc62f358816ca448ab692"
   },
   {
     "path": "dist/domain/recall/vector-records.js",
@@ -769,7 +769,7 @@
   },
   {
     "path": "dist/domain/summary/service.js",
-    "sha256": "84d4a4c5bf83389565f1f6041acd4b0b05bd9c51d5f1f1ecad89fba41b456740"
+    "sha256": "bcc009c3b901b943d990aa5153460f417129a8f1c8ec9be222fa062072daa83f"
   },
   {
     "path": "dist/domain/summary/source-deletion.js",
@@ -957,7 +957,7 @@
   },
   {
     "path": "dist/platform/sillytavern/ai-provider.js",
-    "sha256": "22a87480d1905203501b5c87236434ecd48c21a7277a9efc4bf8404f2bed5005"
+    "sha256": "bcaf6688ee565044c405a0f945bc3c812760c80af3fefa2e7d3c5fda450586ac"
   },
   {
     "path": "dist/platform/sillytavern/api-settings-operations.js",
@@ -1021,11 +1021,11 @@
   },
   {
     "path": "dist/platform/sillytavern/management-runtime.js",
-    "sha256": "67b86879fcb62e02be854ce86e884f374d2d4d1fd300848bbf733fbe0d69587f"
+    "sha256": "66435e1d795bb871e091456b497171b4272061bf5a3ca06df47dbc646ffdbfb3"
   },
   {
     "path": "dist/platform/sillytavern/memory-adapter.js",
-    "sha256": "a31b41f4fa81b320e1ee62fbb34879c6a8d1a51cf1f50688ed2b743d52d193e8"
+    "sha256": "2df33a0f6907eddbc40639c4d5662a188073daf94327ad942facd986ee378750"
   },
   {
     "path": "dist/platform/sillytavern/memory-host.css",
@@ -1057,7 +1057,7 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-ai-transport.js",
-    "sha256": "0d0b340428a06037360bc42d8baa69b9d79d548c7c4cca7dc99f613d171baf1a"
+    "sha256": "259529a8cece6fc1b68511c1633603312f2ae6ad09e21e93d4e096a59e5cd2b2"
   },
   {
     "path": "dist/platform/sillytavern/recall-multichannel-worker.js",
@@ -1065,7 +1065,7 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-multichannel.js",
-    "sha256": "db52052b0958a7389cd150d9b8c7c223c6c9073c8917063a7abc7ce09582f94c"
+    "sha256": "a57238258ad6ecc1504458dd1330c2d254659d82e3f0b6ffe4ae7f5fc824cc9e"
   },
   {
     "path": "dist/platform/sillytavern/recall-preview-worker.js",
@@ -1077,7 +1077,7 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-runtime.js",
-    "sha256": "c85a4129302a639f585508bb3f966e99535b69883e361187d9ea79181d7a913c"
+    "sha256": "eee4518bd93f6ff1d01cd6ff2f7de7108fad648fde2f9042481dd08d816ff146"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
@@ -1089,7 +1089,7 @@
   },
   {
     "path": "dist/platform/sillytavern/settings-adapter.js",
-    "sha256": "7b0cb0cfeeab871847110745f682891a3ed7d703d3ec712500f78c556caecddb"
+    "sha256": "be83abeadd13912753cd5fcd1dd1f66e4a674d70393701279e2e2d21d72e63aa"
   },
   {
     "path": "dist/platform/sillytavern/source-deletion-runtime.js",
@@ -1165,11 +1165,11 @@
   },
   {
     "path": "dist/shared/ai/provider.js",
-    "sha256": "b0ee809e24abe9135dfba82b7aba6ea9191d1264c103d23d93f0b606100fb30e"
+    "sha256": "679eb51a931464677b1bfdbf97f5860f310747d391b4323842b029f8b70fe897"
   },
   {
     "path": "dist/shared/ai/recall-provider.js",
-    "sha256": "e5916c275a98245f6f0c0d555d7b9fae81b4ac2cc75dbd9f4225d6c944a8ac1f"
+    "sha256": "f5962cc5b351fd540104765c9ad5792d2d15931b000d4faa55990c1807aa33ca"
   },
   {
     "path": "dist/shared/runtime/background-tasks.js",
@@ -1197,7 +1197,7 @@
   },
   {
     "path": "dist/shared/settings/repository.js",
-    "sha256": "6bfa772274f587ce615babdc6c92413cd8fb90afcb53b2b36764aa3b2767385f"
+    "sha256": "17a6d93a60f8681dec389fc1f05188ad430f7568eb60d848ea8054e7eeb0f4f4"
   },
   {
     "path": "dist/shared/settings/summary-prompts.js",
@@ -1221,10 +1221,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "1c58893f2d578ed908184d3ecc001ea4a5cdbfe2041a5a6b9f944378a34882e1"
+    "sha256": "09df42ee8e1358f0143553027981ed3bfe543a6c35d41591d9308ade5b6fbcf2"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "b7e5bea5db252854c5a63e2c11eb2bb9cf9a6fdcc26c40fe13b7e7405602c57c"
+    "sha256": "92d805a22c7d24b650f4d308a76fbd27758ee3b7da8ceb59e47f27f67e4684fa"
   }
 ]

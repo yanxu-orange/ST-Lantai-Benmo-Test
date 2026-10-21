@@ -5,7 +5,7 @@ const safeCode=error=>['configuration','capability','mapping','timeout','http','
 // One captured input per worker. API/IDB/host work stays in this caller;
 // credentials, provider objects and callbacks never cross postMessage.
 export function createMultichannelWorkerBuilder({Worker:WorkerClass=globalThis.Worker,vectorIndex,provider,loadTimeout=5000}={}){
- return async(input,{signal,isCurrent=()=>true,target,vectorConfig}={})=>{
+ return async(input,{signal,isCurrent=()=>true,target,vectorConfig,taskProvider=provider}={})=>{
   assertAiCurrent(signal,isCurrent);
   if(typeof WorkerClass!=='function')throw new AiProviderError('unavailable');
   let worker;try{worker=new WorkerClass(new URL('./recall-multichannel-worker.js',import.meta.url),{type:'module'});}catch{throw new AiProviderError('unavailable');}
@@ -29,9 +29,9 @@ export function createMultichannelWorkerBuilder({Worker:WorkerClass=globalThis.W
       let value;
       if(data.method==='count'&&typeof data.args?.text==='string'&&typeof input.countTokens==='function')value=await input.countTokens(data.args.text);
       else if(data.method==='vector'&&typeof data.args?.text==='string'&&Array.isArray(data.args.dates)&&vectorIndex?.query&&vectorConfig?.source==='plugin'){
-       value=await vectorIndex.query({target,events:activeEvents(input.events),config:vectorConfig,text:data.args.text,dateById:new Map(data.args.dates),signal,isCurrent});
-      }else if(data.method==='rerank'&&typeof data.args?.query==='string'&&Array.isArray(data.args.documents)&&provider?.rerank){
-       value=await provider.rerank({query:data.args.query,documents:data.args.documents,signal,isCurrent});
+       value=await vectorIndex.query({target,events:activeEvents(input.events),config:vectorConfig,text:data.args.text,dateById:new Map(data.args.dates),signal,isCurrent,requestProvider:taskProvider});
+      }else if(data.method==='rerank'&&typeof data.args?.query==='string'&&Array.isArray(data.args.documents)&&taskProvider?.rerank){
+       value=await taskProvider.rerank({query:data.args.query,documents:data.args.documents,signal,isCurrent});
       }else throw new AiProviderError('configuration');
       if(check())worker.postMessage({type:'rpc-result',id:data.id,value});
      }catch(error){if(check())worker.postMessage({type:'rpc-result',id:data.id,error:safeCode(error)});}

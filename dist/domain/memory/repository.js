@@ -65,7 +65,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
   const eventCommitListeners=new Set();
   const requireTarget = target => { if (!sameTarget(target, adapter.captureTarget())) throw new Error('聊天目标已变化，请返回列表重新进入'); };
   const enqueue = action => { const work = queue.then(action); queue = work.catch(() => {}); return work; };
-  const read = async target => { requireTarget(target); const root = assertRoot(await adapter.read(target), target); requireTarget(target); return root; };
+  const read = async (target, waitOptions) => { requireTarget(target); const root = assertRoot(await adapter.read(target, waitOptions), target); requireTarget(target); return root; };
   // One explicit display/maintenance pass may share a validated root. The
   // private proof checks exact host content, including same-revision edits.
   // No mutation method accepts this view; its read/commit path stays fresh.
@@ -108,12 +108,13 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     matchSnapshot(current, target, snapshot, hidden);
     return true;
   };
-  const matchSummary=(root,target,snapshot)=>{
+  const taskDomain=value=>{const {revision,preferences,excludedFloors,...evidence}=value;return evidence;};
+  const matchSummary=(root,target,snapshot,task=false)=>{
     root=comparisonRoot(root,'summary');
-    if(!snapshot||!sameTarget(target,snapshot.target)||!equal(summaryOf(root),snapshot.summary))throw new Error('总结参数或批历史已变化');
+    if(!snapshot||!sameTarget(target,snapshot.target)||!equal(task?taskDomain(summaryOf(root)):summaryOf(root),task?taskDomain(snapshot.summary):snapshot.summary))throw new Error('总结参数或批历史已变化');
     if(snapshot.batch){const batch=summaryOf(root).batches.find(item=>item.id===snapshot.batch.id);if(!equal(batch,snapshot.batch)||!equal(root.events.filter(event=>batch.eventIds.includes(event.id)),snapshot.events))throw new Error('所属批成员已变化');}
   };
-  const summaryGuard=(target,snapshot,options)=>current=>{if(typeof options.isCurrent!=='function'||options.isCurrent()!==true)throw new Error('总结来源或配置已失效');matchSummary(current,target,snapshot);if(options.trackingUpdate&&trackingOf(comparisonRoot(current,'tracking')).revision!==options.trackingUpdate.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');return true;};
+  const summaryGuard=(target,snapshot,options)=>current=>{if(typeof options.isCurrent!=='function'||options.isCurrent()!==true)throw new Error('总结来源或配置已失效');matchSummary(current,target,snapshot,options.executionSnapshot===true);if(options.trackingUpdate&&trackingOf(comparisonRoot(current,'tracking')).revision!==options.trackingUpdate.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');return true;};
   const summaryTracking=(root,options)=>{if(!options.trackingUpdate)return {};const current=trackingOf(root),update=options.trackingUpdate;if(current.revision!==update.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');const tracking=assertTracking(update.value);if(equal(current,tracking))return {};if(tracking.revision<current.revision||tracking.revision>current.revision+1)throw new Error('同步追踪版本无效');return {tracking};};
   const summaryTime=(root,batch)=>{const current=timeOf(root),next=importSummaryCandidates(current,[batch]);return equal(current,next)?{}:{time:{...next,revision:current.revision+1}};};
   const consumePending=(summary,options,draft,candidates)=>{
@@ -128,17 +129,18 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     return events.map(candidate=>{if(ids.has(candidate?.id)||root.events.some(event=>event.id===candidate?.id)||root.deletedMergeIds?.includes(candidate?.id)||candidate?.mergedFrom!=null||candidate?.supersededBy!=null)throw new Error('生成切片身份或关系无效');ids.add(candidate.id);return validateEventForSave({...copy(candidate),createdAt:timestamp,updatedAt:timestamp,sources:[copy(actualRange)],batch:{id,sources:[copy(actualRange)]}});});
   };
   const captureCumulativeRoot=(target,root)=>freeze({target:copy(target),cumulative:cumulativeOf(root)});
-  const matchCumulative=(root,target,snapshot)=>{
+  const matchCumulative=(root,target,snapshot,task=false)=>{
     root=comparisonRoot(root,'cumulative');
-    if(!snapshot||!sameTarget(target,snapshot.target)||!equal(cumulativeOf(root),snapshot.cumulative))throw new Error('古法基版、配置或进度已变化');
+    if(!snapshot||!sameTarget(target,snapshot.target)||!equal(task?taskDomain(cumulativeOf(root)):cumulativeOf(root),task?taskDomain(snapshot.cumulative):snapshot.cumulative))throw new Error('古法基版、配置或进度已变化');
   };
-  const cumulativeGuard=(target,snapshot,options,required=false)=>current=>{
+  const cumulativeGuard=(target,snapshot,options,required=false,task=false)=>current=>{
     if(required&&typeof options.isCurrent!=='function'||(options.isCurrent??(()=>true))()!==true)throw new Error('古法来源或配置已失效');
-    matchCumulative(current,target,snapshot);if(options.trackingUpdate&&trackingOf(comparisonRoot(current,'tracking')).revision!==options.trackingUpdate.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');return true;
+    matchCumulative(current,target,snapshot,task);if(options.trackingUpdate&&trackingOf(comparisonRoot(current,'tracking')).revision!==options.trackingUpdate.expectedRevision)throw new Error('同步追踪资料已变化，请重新总结');return true;
   };
-  const cumulativeMutation=(target,selection,options,change,required=false)=>{
+  const cumulativeMutation=(target,selection,options,change,required=false,allowTask=required)=>{
+    const task=allowTask&&options.executionSnapshot===true;
     const frozen=copy(target),snapshot=copy(selection);
-    return enqueue(async()=>{const root=await read(frozen);matchCumulative(root,frozen,snapshot);const domain=cumulativeOf(root),guard=cumulativeGuard(frozen,snapshot,options,required);guard(root);
+    return enqueue(async()=>{const root=await read(frozen);matchCumulative(root,frozen,snapshot,task);const domain=cumulativeOf(root),guard=cumulativeGuard(frozen,snapshot,options,required,task);guard(root);
       const changed=change(domain);if(!changed)return {status:'unchanged',root,selection:captureCumulativeRoot(frozen,root)};
       const next={...root,revision:root.revision+1,cumulative:{...changed,revision:domain.revision+1},...summaryTracking(root,options)};
       const committed=await commit(frozen,root,next,guard);
@@ -301,8 +303,11 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         return {status:'committed',root:saved,selection:freeze({target:frozen,workshop:workshopOf(saved)})};
       });
     },
+    async waitForPendingWrite(target, options) { requireTarget(target); if(!adapter.waitForPendingWrite)throw Object.assign(new Error('保存结果尚未确认'),{code:'COMMIT_UNCONFIRMED'}); await adapter.waitForPendingWrite(target,options); requireTarget(target); },
     captureTarget: () => { const target = adapter.captureTarget(); requireTarget(target); return copy(target); },
     read,
+    captureCumulativeTask(target){requireTarget(target);const root=assertRoot(adapter.peekConfirmed(target),target);return captureCumulativeRoot(target,root);},
+    matchesCumulativeTask(target,snapshot){try{requireTarget(target);matchCumulative(assertRoot(adapter.peekConfirmed(target),target),target,snapshot,true);requireTarget(target);return true;}catch{return false;}},
     async captureCumulative(target){const frozen=copy(target);return captureCumulativeRoot(frozen,await read(frozen));},
     matchesCumulative(target,snapshot){try{requireTarget(target);matchCumulative(assertRoot(adapter.peekConfirmed(target),target),target,snapshot);requireTarget(target);return true;}catch{return false;}},
     updateCumulativePreferences(target,selection,patch,options={}) {
@@ -320,7 +325,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
       },true);
     },
     clearCumulativePending(target,selection,options={}) {
-      return cumulativeMutation(target,selection,options,domain=>{if(!domain.pending)return null;const next={...domain};delete next.pending;return next;});
+      return cumulativeMutation(target,selection,options,domain=>{if(!domain.pending)return null;const next={...domain};delete next.pending;return next;},false,true);
     },
     removeCumulativeHiddenSegments(target,selection,ids,options={}) {
       const selected=selectedIds(ids,true);
@@ -364,13 +369,15 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         const versions=domain.versions.slice(0,index+1),version=versions.at(-1),next={...domain,versions,currentVersionId:id,progress:{lastProcessedFloor:Math.max(...version.coverageRanges.map(range=>range.end))}};delete next.pending;return next;
       });
     },
+    captureSummaryTask(target,batchId){requireTarget(target);const root=assertRoot(adapter.peekConfirmed(target),target),summary=summaryOf(root),base={target:copy(target),revision:root.revision,summary};if(batchId!==undefined){const batch=summary.batches.find(item=>item.id===batchId);if(!batch)throw new Error('没有可确认的独立批记录');Object.assign(base,{batch:copy(batch),events:copy(root.events.filter(event=>batch.eventIds.includes(event.id)))});}return freeze(base);},
+    matchesSummaryTask(target,snapshot){try{requireTarget(target);matchSummary(assertRoot(adapter.peekConfirmed(target),target),target,snapshot,true);requireTarget(target);return true;}catch{return false;}},
     async captureSummaryView(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,revision:root.revision,summary:summaryOf(root),formalIds:root.events.map(event=>event.id)});},
     async captureSummary(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,revision:root.revision,summary:summaryOf(root)});},
     async captureBatch(target,id){const frozen=copy(target),root=await read(frozen),summary=summaryOf(root),batch=summary.batches.find(item=>item.id===id);if(!batch)throw new Error('没有可确认的独立批记录');return freeze({target:frozen,revision:root.revision,summary,batch:copy(batch),events:copy(root.events.filter(event=>batch.eventIds.includes(event.id)))});},
     matchesSummary(target,snapshot){try{requireTarget(target);matchSummary(assertRoot(adapter.peekConfirmed(target),target),target,snapshot);requireTarget(target);return true;}catch{return false;}},
     saveSummaryPending(target,selection,pending,options={}) {
       const frozen=copy(target),snapshot=copy(selection),draft=assertSummaryPending(pending);
-      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot);const summary=summaryOf(root);
+      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot,options.executionSnapshot===true);const summary=summaryOf(root);
         if(summary.pending){const previous=summary.pending;if(previous.id!==draft.id||previous.batchId!==draft.batchId||previous.createdAt!==draft.createdAt||previous.origin!==draft.origin||previous.generationMode!==draft.generationMode||!equal(previous.params,draft.params)||!equal(previous.tracking,draft.tracking)||!equal(previous.generatedCandidates,draft.generatedCandidates)||!equal(previous.sourceSnapshot.excludedFloors,draft.sourceSnapshot.excludedFloors)||!equal(previous.settingsEvidence,draft.settingsEvidence)||!equal(previous.sourceSnapshot.requestedRange,draft.sourceSnapshot.requestedRange)||!equal(previous.sourceSnapshot.actualRange,draft.sourceSnapshot.actualRange)||!matchesStoredSummarySource(previous.sourceSnapshot,{epoch:draft.sourceSnapshot.epoch,messages:draft.sourceSnapshot.rawMessages})||previous.completedStages.length>draft.completedStages.length||draft.events.some(event=>!previous.events.some(item=>item.id===event.id)))throw new Error('已有其他、变化或更新阶段待审核草稿');}
         const nextSummary={...summary,revision:summary.revision+1,pending:draft};
         const committed=await commit(frozen,root,{...root,revision:root.revision+1,summary:nextSummary},summaryGuard(frozen,snapshot,options));
@@ -379,7 +386,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     },
     clearSummaryPending(target,selection,options={}) {
       const frozen=copy(target),snapshot=copy(selection);
-      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot);const summary=summaryOf(root);
+      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot,options.executionSnapshot===true);const summary=summaryOf(root);
         summaryGuard(frozen,snapshot,options)(root);
         if(!summary.pending)return {status:'unchanged',root};
         const nextSummary={...summary,revision:summary.revision+1};delete nextSummary.pending;
@@ -405,18 +412,18 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     },
     appendBatch(target,selection,events,batch,options={}) {
       const frozen=copy(target),snapshot=copy(selection),draft=copy(batch),candidates=copy(events);
-      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot);const summary=summaryOf(root);
+      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot,options.executionSnapshot===true);const summary=summaryOf(root);
         if(summary.batches.some(item=>item.id===draft.id||item.taskId===draft.taskId))throw new Error('该总结任务已入库，不得重复提交');
         const timestamp=now(),created=batchEvents(root,candidates,draft.id,draft.actualRange);
         const record=assertBatch({...draft,ordinal:summary.progress.nextBatchOrdinal,eventIds:created.map(event=>event.id),createdAt:timestamp,completedAt:timestamp,generatedCandidates:assertGeneratedEvidence(draft.generatedCandidates)});
-        if(record.sourceType==='auto'&&record.actualRange.start!==(summary.progress.lastProcessedFloor===null?summary.preferences.auto.startFloor:summary.progress.lastProcessedFloor+1))throw new Error('自动批次不从当前未完成处开始');
+        if(record.sourceType==='auto'&&record.actualRange.start!==(summary.progress.lastProcessedFloor===null?(options.executionSnapshot===true?snapshot.summary.preferences.auto.startFloor:summary.preferences.auto.startFloor):summary.progress.lastProcessedFloor+1))throw new Error('自动批次不从当前未完成处开始');
         const nextSummary={...consumePending(summary,options,draft,candidates),revision:summary.revision+1,batches:[...summary.batches,record],progress:{...summary.progress,lastProcessedFloor:Math.max(summary.progress.lastProcessedFloor??-1,record.actualRange.end),nextBatchOrdinal:record.ordinal+1}};
         return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,events:[...root.events,...created],summary:nextSummary,...summaryTracking(root,options),...summaryTime(root,record)},summaryGuard(frozen,snapshot,options),{requireConfirmation:true}),batch:copy(record),events:copy(created)};
       });
     },
     replaceBatch(target,selection,events,batch,options={}) {
       const frozen=copy(target),snapshot=copy(selection),draft=copy(batch),candidates=copy(events);
-      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot);const previous=snapshot.batch;if(!previous)throw new Error('替换缺少原始批快照');
+      return enqueue(async()=>{const root=await read(frozen);matchSummary(root,frozen,snapshot,options.executionSnapshot===true);const previous=snapshot.batch;if(!previous)throw new Error('替换缺少原始批快照');
         const members=root.events.filter(event=>previous.eventIds.includes(event.id));if(members.some(event=>event.supersededBy||event.mergedFrom))throw new Error('批成员参与合并，不能破坏撤销关系');
         if(!equal(draft.requestedRange,previous.requestedRange)||!equal(draft.actualRange,previous.actualRange))throw new Error('不能改变所属批原始范围');
         const created=batchEvents(root,candidates,previous.id,previous.actualRange),summary=summaryOf(root);
