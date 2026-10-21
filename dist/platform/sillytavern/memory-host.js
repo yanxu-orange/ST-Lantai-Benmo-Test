@@ -877,6 +877,11 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       let composing = false;
       shadow.addEventListener('compositionstart', () => { composing = true; });
       shadow.addEventListener('compositionend', () => { composing = false; });
+      // Shadow DOM retargets input events to this host outside the panel.
+      // Keep keyboard shortcuts inside Lantai without cancelling native editing
+      // or child handlers (caret movement, selection, IME, Enter, Tab, Escape).
+      const isolatePanelKeyboard = event => event.stopPropagation();
+      for (const type of ['keydown', 'keypress', 'keyup']) panel.addEventListener(type, isolatePanelKeyboard);
       panel.addEventListener('keydown', event => {
         if (disposed || event.currentTarget!==panel || !settingsContent || !summaryContent || event.defaultPrevented || event.isComposing || composing || shadow.querySelector('[data-composing=true]')) return;
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!settingsContent.hidden) apiSession?apiSession.exit('back'):settingsRootView?.back()||returnFromSettings('back'); else if(benmoView&&!benmoContent.hidden){benmoView.back();}else if(!summaryContent.hidden){if(areaPages.workshop.visible()){if(workshopView)workshopView.back();else void returnFromSummary();}else if(areaPages.time.visible())timeController.back();else if(cleaningFacade)cleaningFacade.back();else if(cumulativeSettingsView)cumulativeSettingsController.back();else if(cumulativeView)void runtime.cumulativeController.back().then(back=>{if(back)void returnFromCumulative();});else if(recallView)recallController.back();else if(summarySettingsView)summarySettingsController.back();else void runtime.summaryController.back().then(back=>{if(back)void returnFromSummary();});}else close(); return; }
