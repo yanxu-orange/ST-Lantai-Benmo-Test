@@ -19,6 +19,12 @@ self.onmessage=async({data})=>{
   const countTokens=data.hostCounter?text=>request('count',{text}):null;
   const result=await build({...data.input,countTokens},{vectorConfig:data.hasVectorConfig?{source:'plugin'}:null});
   self.postMessage({type:'result',result});
- }catch{self.postMessage({type:'failed'});}
+ }catch(error){
+  const known={'召回语境无效':'invalid-context','召回快照无效':'invalid-snapshot','召回身份重复':'duplicate-id','召回记忆重复':'duplicate-id','duplicate-recall-id':'duplicate-id','召回 Token 计数失败':'token-count'};
+  const code=known[error?.message]??error?.code;
+  const diagnostic={name:['Error','TypeError','RangeError','SyntaxError','DataCloneError','AbortError','AiProviderError'].includes(error?.name)?error.name:'Error',...(['invalid-context','invalid-snapshot','duplicate-id','token-count','cancelled','stale','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing','unavailable','storage'].includes(code)?{code}:{})};
+  self.postMessage({type:'failed',diagnostic});
+ }
 };
 self.postMessage({type:'ready'});
+

@@ -36,9 +36,14 @@ export function createMultichannelWorkerBuilder({Worker:WorkerClass=globalThis.W
       if(check())worker.postMessage({type:'rpc-result',id:data.id,value});
      }catch(error){if(check())worker.postMessage({type:'rpc-result',id:data.id,error:safeCode(error)});}
     }else if(data.type==='result'&&ready)finish(null,data.result);
-    else finish(new AiProviderError('mapping'));
+    else if(data.type==='failed'&&ready){
+     const error=new AiProviderError('mapping'),value=data.diagnostic;
+     error.workerDiagnostic={name:['Error','TypeError','RangeError','SyntaxError','DataCloneError','AbortError','AiProviderError'].includes(value?.name)?value.name:'Error',...(['invalid-context','invalid-snapshot','duplicate-id','token-count','cancelled','stale','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing','unavailable','storage'].includes(value?.code)?{code:value.code}:{})};
+     finish(error);
+    }else finish(new AiProviderError('mapping'));
    };
    check();
   });
  };
 }
+

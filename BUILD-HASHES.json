@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "70667493cce6c9eac9ed1a80c449182f21de815c252737e9b14590155273bd93"
+    "sha256": "b9c4ff70f0b2b362cad9f8e1b5bc86a8355ae97e47a44d6532c67600260aefab"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -517,7 +517,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "cd56ccae3cd566dbd0c50d0d56ae909b57f7f8fedc3ff1c258743613f31e9a2d"
+    "sha256": "111e75fc33843c3f9412d382419a62c95c268b2746bf5037d49fdd5953b963cd"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1057,11 +1057,11 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-multichannel-worker.js",
-    "sha256": "b28cbd880d012efafac3bbbbfba491fad06b0a40b0d9637cc823b4caf3239a0e"
+    "sha256": "ed49cd6300bf6eb53c89d6fe1a7f599fee08364911ad45d8693f7dcfa50abb3d"
   },
   {
     "path": "dist/platform/sillytavern/recall-multichannel.js",
-    "sha256": "d6b254f4bd1486be69e2320fe9297e7d88daf9e72cde7ca2a9640395f05c6fd0"
+    "sha256": "db52052b0958a7389cd150d9b8c7c223c6c9073c8917063a7abc7ce09582f94c"
   },
   {
     "path": "dist/platform/sillytavern/recall-preview-worker.js",
@@ -1073,7 +1073,7 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-runtime.js",
-    "sha256": "87360f5f154fcfd372c7f5321d1a7fb2a1b93c17b17eeae414e47ef1122bc93d"
+    "sha256": "3c2dcc35b0dbf88038991be1f1ef76b67a39e13934e68cc3953b7ba93ca43a71"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
@@ -1217,10 +1217,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "f9d0d58209af2c37cc9faa39263ef0a317fc164458aac9f5e2dcb0dd568a4de4"
+    "sha256": "ed3aadf113223b76ba90124c6b9ad07e3b5711f38f1f744d1a78b9912c4796f6"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "50cca614b7a44d01b1e543528ccb026e6c6041a6f6d377c777af61b3daa3698a"
+    "sha256": "2f674e5399320b6c992405f62a877f2380b932b198b641cab1a08cc5bcce4d2a"
   }
 ]

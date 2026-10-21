@@ -35,8 +35,16 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   const records=new Map(),listeners=new Set(),releases=[];
   const key=target=>JSON.stringify([target.chatId,target.rootId]);
   const notify=()=>{for(const fn of [...listeners])try{fn();}catch{/* observers cannot break host generation */}};
-  const current=(target,serial,config,source)=>gate.matches(config.controlProof)&&!disposed&&serial===ticket&&sameTarget(target,repository.captureTarget())
-    &&settings.captureRecall().epoch===config.epoch&&(config.aiEpoch===undefined||settings.captureAi().epoch===config.aiEpoch)&&(!config.timeReminders||settings.matchesTimeReminders(config.timeReminders))&&(!captureSource||JSON.stringify(captureSource(target))===source);
+  let guardFailure=null;
+  const current=(target,serial,config,source)=>{
+    const check=(value,reason)=>{if(!value)guardFailure=reason;return value;};
+    guardFailure=null;
+    return check(gate.matches(config.controlProof),'control-proof')&&check(!disposed,'disposed')&&check(serial===ticket,'ticket')
+      &&check(sameTarget(target,repository.captureTarget()),'target')&&check(settings.captureRecall().epoch===config.epoch,'recall-epoch')
+      &&check(config.aiEpoch===undefined||settings.captureAi().epoch===config.aiEpoch,'ai-epoch')
+      &&check(!config.timeReminders||settings.matchesTimeReminders(config.timeReminders),'time-settings')
+      &&check(!captureSource||JSON.stringify(captureSource(target))===source,'source');
+  };
   function clear(reason='cancelled',expectedTarget=null) {
     const previous=flight,oldProof=proof;ticket++;proof=null;injectedMaterials=null;injectedSelections=null;flight=null;
     cancelPreview();
@@ -62,30 +70,40 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     // Clearing can synchronously reenter the host and change the chat.
     try{if(sameTarget(target,repository.captureTarget()))record(target,{status:'failed',type,message:'本轮召回准备失败，未注入记忆；原上下文已保留。'});}catch{/* Unavailable target cannot receive a guessed record. */}
   }
-  async function compute(messages,target,serial,previewInput=null,signal=null) {
+  async function compute(messages,target,serial,previewInput=null,signal=null,onStage=()=>{}) {
+    onStage('start');
     if(signal?.aborted)throw new AiProviderError('cancelled');
     if(!gate.allowed())throw new Error('事件记忆已关闭');
     const controlProof=gate.capture();
+    onStage('date');
     const observed=dateRuntime&&timeGate.allowed()?await dateRuntime.request():null;
     if(disposed||serial!==ticket||!sameTarget(target,repository.captureTarget()))throw new Error('stale');
+    onStage('settings-source');
     const config={controlProof,...settings.captureRecall(),timeReminders:settings.captureTimeReminders?.()??null},source=captureSource?JSON.stringify(captureSource(target)):null;
     const channels=recallChannels(config.recall);
     if(channels.vector||channels.rerank)config.aiEpoch=settings.captureAi().epoch;
     const guard=()=>current(target,serial,config,source);
     if(previewInput===null&&flight?.abort.signal===signal)flight.guard=guard;
     else if(previewAbort?.signal===signal)previewGuard=guard;
+    onStage('read-root');
     const root=await repository.read(target);
     if(signal?.aborted||!guard())throw new Error('stale');
+    onStage('inputs');
     const context=getContext(),inputs=previewInput===null?recallInputs(messages,config.recall.recentFloorCount,context?.chat)
       :extractRecallInputs(messages,{recentFloorCount:config.recall.recentFloorCount,input:previewInput,currentIndex:messages.length});
     const multi=build===buildRecall&&usesMultichannel(config.recall);let vectorConfig=null;
     if(multi&&channels.vector)try{vectorConfig=settings.getAiConfig('embedding');}catch{/* This lane will visibly degrade without changing another route. */}
+    onStage(multi?'build-worker':'build-main');
     const result=await (multi?buildMulti:previewInput===null?build:buildPreview)({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,time:root.time??null,timeAvailable:timeGate.allowed()&&(!dateRuntime||!['failed','needs-calibration','cancelled','no-calendar','unavailable'].includes(observed?.status)),timeReminders:config.timeReminders?.reminders??null,
       countTokens:typeof context?.getTokenCountAsync==='function'?body=>context.getTokenCountAsync(body):null},
       {signal,isCurrent:()=>current(target,serial,config,source),target,vectorConfig});
+    onStage('guard-after-build');
     if(!current(target,serial,config,source))throw new Error('stale');
+    onStage('read-authority');
     const authority=await repository.read(target);
-    if(!current(target,serial,config,source)||JSON.stringify(authority)!==JSON.stringify(root))throw new Error('stale');
+    onStage('guard-authority');
+    if(!current(target,serial,config,source))throw new Error('stale');
+    if(JSON.stringify(authority)!==JSON.stringify(root)){guardFailure='root-changed';throw new Error('stale');}
     return {result,target,config,source,serial,revision:root.revision};
   }
   async function preview(input='',messages) {
@@ -106,26 +124,39 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     if(!clear())return;
     if(ticket!==invocation)return;
     if(!gate.allowed()||!supported.has(type)||messages?.some(message=>text(message).includes('[LANTAI_BACKGROUND_TASK:')))return;
-    let target;
+    let target,stage='capture-target';guardFailure=null;
     const serial=ticket;
     try {
       target=repository.captureTarget();
       const abort=new AbortController();flight={target,type,abort};
+      stage='record-preparing';
       record(target,{status:'preparing',type,message:'正在构造本轮召回，尚未注入记忆。'});
-      const value=await compute(messages,target,serial,null,abort.signal);
+      const value=await compute(messages,target,serial,null,abort.signal,value=>{stage=value;});
+      stage='guard-before-write';
       if(!current(target,serial,value.config,value.source))return;
+      stage='write-prompt';
       const context=getContext();
       if(typeof context?.setExtensionPrompt!=='function')throw new Error('injection-unavailable');
       context.setExtensionPrompt(RECALL_PROMPT_KEY,value.result.prompt,1,value.config.recall.memoryDepth,false,0);
       // Host callbacks may synchronously switch chat or settings during writing.
+      stage='guard-after-write';
       if(!current(target,serial,value.config,value.source)){clear();return;}
+      stage='capture-materials';
       injectedSelections=(value.result.selected??[]).map(({id,event})=>({id,event:copy(event)}));
       injectedMaterials=(value.result.selected??[]).map(({event})=>({startTime:event.startTime,endTime:event.endTime,title:event.title,body:event.body}));
+      stage='record-injected';
       proof={target:copy(target),eventIds:new Set(value.result.selectedIds),revision:value.revision,serial,config:value.config,source:value.source};
       record(target,{status:'injected',type,depth:value.config.recall.memoryDepth,prompt:value.result.prompt,result:value.result});
       flight=null;
-    }catch {
-      if(!disposed&&serial===ticket){const cleared=clear();if(cleared&&target&&sameTarget(target,repository.captureTarget()))record(target,{status:'failed',type,message:'本轮召回失败，未注入记忆。'});}
+    }catch(error) {
+      // Diagnostic-only allowlists: never expose error.message, stack, story text or credentials.
+      const names=new Set(['Error','TypeError','RangeError','SyntaxError','DataCloneError','AbortError','AiProviderError']);
+      const codes=new Set(['cancelled','stale','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing','unavailable','storage']);
+      const worker=error?.workerDiagnostic;
+      const workerCodes=new Set(['invalid-context','invalid-snapshot','duplicate-id','token-count',...codes]);
+      const workerDiagnostic=worker?{name:names.has(worker.name)?worker.name:'Error',...(workerCodes.has(worker.code)?{code:worker.code}:{})}:null;
+      const diagnostic={stage,...(workerDiagnostic?{worker:workerDiagnostic}:{}),...(guardFailure?{guard:guardFailure}:{}),name:names.has(error?.name)?error.name:'Error',...(codes.has(error?.code)?{code:error.code}:{})};
+      if(!disposed&&serial===ticket){const cleared=clear();if(cleared&&target&&sameTarget(target,repository.captureTarget()))record(target,{status:'failed',type,diagnostic,message:`本轮召回失败，未注入记忆。诊断：${diagnostic.stage}${diagnostic.guard?' / '+diagnostic.guard:''} / ${diagnostic.name}${diagnostic.code?' / '+diagnostic.code:''}${diagnostic.worker?' / worker:'+diagnostic.worker.name+(diagnostic.worker.code?'/'+diagnostic.worker.code:''):''}`});}
     }
   }
   const context=getContext();
