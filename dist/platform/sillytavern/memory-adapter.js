@@ -506,6 +506,14 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     hasTimeCalendar() {
       try {observe();const root=getContext().chatMetadata[MEMORY_KEY]??prepared;return !!root?.time?.activeCalendarId&&Array.isArray(root.time.calendars)&&root.time.calendars.some(item=>item.id===root.time.activeCalendarId);}catch{return false;}
     },
+    async verifyNativeHidden(target,expected) {
+      const current=check(target);requireConfirmed(current);
+      const disk=await serverChat(current);check(target);
+      if(disk[0].chat_metadata[MEMORY_KEY]?.rootId!==target.rootId)throw new Error('隐藏保存归属未确认');
+      const rows=chatSourceMessages(true,disk.slice(1),true),byFloor=new Map(rows.map(row=>[row.floor,row]));
+      if(expected.some(saved=>{const row=byFloor.get(saved.floor);return !row||!row.system||['identity','role','text','date','swipeId','replyId'].some(key=>row[key]!==saved[key]);}))throw new Error('原文隐藏尚未保存');
+      return true;
+    },
      captureChatSource, captureSummarySource,observeSourceVisibility,
     // Storage ownership only: never pass this visibility-neutral source to a
     // generation or prompt consumer. Hidden story replies still own summaries.

@@ -2,7 +2,7 @@ import {sameTarget} from '../../domain/memory/repository.js';
 import {cumulativeOf} from '../../domain/cumulative/data.js';
 import {emptyLatest} from '../../domain/latest/data.js';
 import {transformLatestMessages} from '../../domain/latest/transform.js';
-import {filterSummaryPromptCopy,mapSummaryPromptFloors} from './summary-history.js';
+import {mapSummaryPromptFloors} from './summary-history.js';
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const ordinary=(message,row)=>message&&row&&!message.is_system&&!row.system&&row.semanticRole!=='system'&&['user','assistant'].includes(row.role)&&(!row.specialPayload||row.role==='assistant'&&row.latestTextOnly===true)&&!message.extra?.type&&!message.extra?.tool_invocations&&typeof message.mes==='string'&&!!message.mes.trim();
 function mapped(messages,original,raw){
@@ -35,8 +35,8 @@ export function createWorkshopHistoryTicket({before,afterSummary,afterCumulative
    const byFloor=new Map(value.raw.messages.map(row=>[row.floor,row]));
    const copies=input.map(floor=>value.original[floor]).filter((message,index)=>ordinary(message,byFloor.get(input[index]))).map(message=>({...message}));
    const mappedInput=mapSummaryPromptFloors(copies,value.original);if(!mappedInput||!equal(mappedInput,input))return null;
-   const filtered=value.eventEnabled?filterSummaryPromptCopy({prompt:copies,original:value.original,root:value.root,raw:value.raw,type}).prompt:copies;
-   const remaining=mapSummaryPromptFloors(filtered,value.original);if(!remaining||!equal(input.filter(floor=>!remaining.includes(floor)),eventRemoved))return null;
+   // Native host visibility is the only batch-hiding authority now.
+   if(eventRemoved.length||ancientRemoved.length)return null;
    if(ancient&&(!value.cumulativeCurrent(ancientProof)||!equal(cumulativeAuthority(value.root),ancient)))return null;
    return value;
   };

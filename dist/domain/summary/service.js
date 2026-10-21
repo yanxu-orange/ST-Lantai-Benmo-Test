@@ -8,7 +8,7 @@ import { prepareBatchTracking, applyBatchTracking } from '../tracking/batch.js';
 import { parseBatchTrackingResponseParts } from '../tracking/requests.js';
 
 // Uses the shared manager/provider. Chat transactions remain repository-owned.
-export function createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID()}={}) {
+export function createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,hideSource=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID()}={}) {
   const records=new Map(),listeners=new Set(),reservations=new Set(),restorations=new Map(),continuations=new WeakMap();let disposed=false;
   const readSettings=()=>structuredClone(getGenerationSettings());
   const durableTrackingContext=context=>({identities:context.identities??{},allowed:context.allowed??{itemsEnabled:true,npcsEnabled:true}});
@@ -22,7 +22,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
   }
   const available=settings=>settings.eventWords.filter(item=>item.enabled!==false).map(item=>item.name);
   function notify(taskId) {const value=inspect(taskId);if(value)for(const listener of [...listeners])try{listener(value);}catch{/* observers cannot stop a task */}}
-  function inspect(taskId) {const record=records.get(taskId),task=manager.inspect(taskId)??record?.restoredTask;return task&&record?{...task,...(task.status==='succeeded'&&record.narrative?.status==='running'?{status:'narrative-running'}:task.status==='succeeded'&&record.narrative?.status==='failed'?{status:'narrative-failed'}:{}),narrative:record.narrative?{...record.narrative}:null,stage:record.stage,origin:record.origin,outcome:record.outcome,receipt:record.receipt,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,diagnostics:structuredClone(record.diagnostics),trackingRejected:structuredClone(record.trackingRejected??record.trackingParts?.rejected??null)}:null;}
+  function inspect(taskId) {const record=records.get(taskId),task=manager.inspect(taskId)??record?.restoredTask;return task&&record?{...task,...(task.status==='succeeded'&&record.narrative?.status==='running'?{status:'narrative-running'}:task.status==='succeeded'&&record.narrative?.status==='failed'?{status:'narrative-failed'}:{}),narrative:record.narrative?{...record.narrative}:null,stage:record.stage,origin:record.origin,outcome:record.outcome,receipt:record.receipt,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,hiding:record.hiding?{...record.hiding}:null,diagnostics:structuredClone(record.diagnostics),trackingRejected:structuredClone(record.trackingRejected??record.trackingParts?.rejected??null)}:null;}
   // The memory transaction has already completed. Narrative failures never enter
   // the guarded commit and cannot undo or retry the saved memory batch.
   async function runNarrative(taskId,work) {
@@ -109,7 +109,18 @@ export function createEventSummaryService({repository,manager,provider,getGenera
           for(const [category,message] of Object.entries(applied.errors))if(message)record.diagnostics.push({kind:'tracking',category,message});
         }
         const receipt=snapshot.origin==='regeneration'?await repository.replaceBatch(ctx.target,selection,events,batch,options):await repository.appendBatch(ctx.target,selection,events,batch,options);
-        record.receipt=receipt;if(receipt?.status==='committed'&&afterSummaryCommit)record.narrative={status:'running',error:''};return receipt;
+        record.receipt=receipt;
+        if(receipt?.status==='committed'&&ctx.snapshot.params.hideOriginal&&!record.hiding){
+          record.hiding={status:'pending'};
+          try{
+            if(typeof hideSource!=='function')throw new Error('原生隐藏不可用');
+            const isCurrent=()=>!ctx.signal.aborted&&targetCurrent(ctx.snapshot,ctx.target);
+            if(!isCurrent())throw new Error('隐藏目标已变化');
+            record.hiding=await hideSource({target:ctx.target,source:ctx.snapshot.source,isCurrent});
+            if(record.hiding?.status!=='hidden')throw new Error('隐藏未确认');
+          }catch{record.hiding={status:'failed',message:'记忆已保存；原文隐藏未完成，请检查酒馆隐藏状态'};}
+        }
+        if(receipt?.status==='committed'&&afterSummaryCommit)record.narrative={status:'running',error:''};return receipt;
       }catch(error){if(error.code==='COMMIT_UNCONFIRMED')record.outcome='unconfirmed';record.errorMessage=error.message;throw error;}
     });
     if(result.status==='succeeded'&&record.narrative?.status==='running'){const {start,end}=state.snapshot.source.actualRange;await runNarrative(taskId,()=>afterSummaryCommit({target:state.target,startFloor:start,endFloor:end}));}

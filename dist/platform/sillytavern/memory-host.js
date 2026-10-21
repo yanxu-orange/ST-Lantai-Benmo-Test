@@ -1,5 +1,6 @@
 import {bindGenerationDiagnostic,bindGenerationDiagnosticPanel,downloadGenerationDiagnostic} from './generation-diagnostic.js';
 import {createWorkshopHistoryTicket} from './workshop-history.js';
+import {createNativeSummaryHider} from './native-summary-hide.js';
 import {createSummaryNarrativeActions} from '../../app/summary-controller.js';
 import { ensureBookThemeFont } from '../../app/styles/book-font.js';
 import { MEMORY_SHELL_CSS } from './memory-shell-style.js';
@@ -44,12 +45,10 @@ import { createSummarySettingsController } from '../../app/summary-settings-cont
 import { mountSummarySettingsView } from '../../app/summary-settings-view.js';
 import { summaryReadonlyContent } from '../../domain/summary/requests.js';
 import {createSummaryNotifications} from './summary-notifications.js';
-import {createSummaryHistoryHook} from './summary-history.js';
 import {createRecallRuntime} from './recall-runtime.js';
 import {createRecallController} from '../../app/recall-controller.js';
 import {mountRecallView} from '../../app/recall-view.js';
 import {createCumulativeRuntime} from './cumulative-runtime.js';
-import {createCumulativeHistoryHook} from './cumulative-history.js';
 import {mountCumulativeView} from '../../app/cumulative-view.js';
 import {createCumulativeSettingsController} from '../../app/cumulative-settings-controller.js';
 import {mountCumulativeSettingsView} from '../../app/cumulative-settings-view.js';
@@ -77,7 +76,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter } = {}) {
   let adapter, repository, app, panel, content, memoryContent, benmoContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, openingTicket = null, stylePromise, baseCss, sharedCssCache,
-    summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryHistory,summaryReturnFocus,memoryEditFocus,
+    summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
   let releasePanelDiagnostic=null;
@@ -89,7 +88,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   const unsubscribeAppearance = appearance.subscribe(() => syncAppearance());
   const entryId = 'lantai-benmo-open';
   const lifetime = new AbortController();
-  let cumulativeRuntime,cumulativeHistory,cumulativeView,cumulativeSettingsView,cumulativeSettingsController,cumulativeSettingsTarget,cumulativeNotices,
+  let cumulativeRuntime,cumulativeView,cumulativeSettingsView,cumulativeSettingsController,cumulativeSettingsTarget,cumulativeNotices,
     cleaningController,cleaningTarget,cleaningFacade,memoryType='event',cumulativePage='root',cumulativeReturnPage='root',cumulativePageTarget=null;
   let controls,controlSubscription,previousPolicy=null,settingsRootView,settingsOpen=false;
   const allowed=key=>['benmo','summary','item','npc','self','outline'].includes(key)?availability()[key]===true:!!controls?.allowed(key);
@@ -214,7 +213,6 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     timeRuntime=createTimeRuntime({adapter,repository,getContext,getControls:()=>controls});
     // Confirmed batch policy controls source hiding independently of recall.
     // ST remains responsible for its subsequent preset/budget assembly.
-    summaryHistory=createSummaryHistoryHook({repository,captureSource:target=>adapter.captureSummarySource(target),peekConfirmed:target=>adapter.peekConfirmed(target),getContext,getControls:()=>controls});
     unsubscribe = adapter.subscribe(kind => {
       const sequence=++hostReloadSequence;
       if(controls){controls.invalidate();void controls.ensure().then(()=>{if(disposed||sequence!==hostReloadSequence)return;if(panel)syncControls();requestBenmoWarmup();});}
@@ -284,7 +282,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     return narrativeRuntime[action]();
   }
   async function ensureRuntime() {
-    if (!runtimePromise) runtimePromise = new Promise(afterPageFrame).then(()=>disposed||lifetime.signal.aborted?null:createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, signal: lifetime.signal,getControls:()=>controls,afterSummaryCommit:args=>narrativeRuntime.afterSummaryCommit(args),retrySummaryCommit:args=>resumeSummaryNarrative('retry',args),skipSummaryCommit:args=>resumeSummaryNarrative('skip',args),getPendingNarrative:async()=>{if(!narrativeRuntime)return null;await narrativeRuntime.load();return narrativeRuntime.hasPending()?narrativeRuntime.snapshot().run:null;},captureSummarySource:target=>adapter.captureSummarySource(target) }))
+    if (!runtimePromise) runtimePromise = new Promise(afterPageFrame).then(()=>disposed||lifetime.signal.aborted?null:createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, signal: lifetime.signal,getControls:()=>controls,afterSummaryCommit:args=>narrativeRuntime.afterSummaryCommit(args),retrySummaryCommit:args=>resumeSummaryNarrative('retry',args),skipSummaryCommit:args=>resumeSummaryNarrative('skip',args),getPendingNarrative:async()=>{if(!narrativeRuntime)return null;await narrativeRuntime.load();return narrativeRuntime.hasPending()?narrativeRuntime.snapshot().run:null;},captureSummarySource:target=>adapter.captureSummarySource(target),hideSource:createNativeSummaryHider({repository,getContext,captureSource:target=>adapter.captureSummarySource(target),verifyHidden:(target,rows)=>adapter.verifyNativeHidden(target,rows)}) }))
       .then(async value => { if(!value)return null;if (disposed) { value.dispose(); return null; } runtime = value;
         controls=createControlSession({settings:runtime.settings,repository,prepareTarget:()=>adapter.prepare()});
         await controls.ensure();
@@ -311,14 +309,14 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         latestDisplay=mountLatestSummaryDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator});
         workshopBackgroundDisplay=mountWorkshopBackgroundDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator,onOpenSchedule:()=>void openSchedule()});
         cumulativeRuntime=createCumulativeRuntime({repository,settings:runtime.settings,getContext});
-        cumulativeHistory=createCumulativeHistoryHook({repository,settings:runtime.settings,getContext,getReplacementProof:()=>cumulativeRuntime.getReplacementProof()});
         const seen=new Set();
         const noticeController={subscribeNotices(listener){return runtime.cumulativeService.subscribe(state=>{
           let phase,message;
           if(state.status==='starting'&&!state.restoreOnly){phase='started';message='已开始总结';}
           if(state.status==='awaiting-user'&&!state.restoreOnly&&(state.snapshot.params.checkBeforeSave||state.origin==='regeneration')){phase='complete';message='总结完成，请检查后采用';}
           if(state.status==='succeeded'){phase='complete';message='本批总结已保存';}
-          if(['failed','stale','cancelled'].includes(state.status)&&state.outcome!=='discarded'&&state.reviewResolution!=='discarded'&&!state.outcome?.startsWith('recovered-')){phase='failed';message=state.outcome==='unconfirmed'?'总结保存待确认':'总结未完成，请查看';}
+    if(state.hiding?.status==='failed'){phase='hide-failed';message=state.hiding.message;}
+          if(['failed','stale','cancelled'].includes(state.status)&&state.outcome!=='discarded'&&state.reviewResolution!=='discarded'&&!state.outcome?.startsWith('recovered-')){phase='failed';message=state.receipt?.status==='committed'?'记忆已保存；后续处理未完成，请检查酒馆隐藏状态':state.outcome==='unconfirmed'?'总结保存待确认':'总结未完成，请查看';}
           const key=JSON.stringify([state.taskId,state.attempt,phase]);if(!phase||seen.has(key))return;seen.add(key);
           // Mounted C1 pages own their own feedback; the background owner survives close.
           const pageOwnsFeedback=panel&&(!summaryContent.hidden&&cumulativeView||!memoryContent.hidden&&app?.memoryType()==='cumulative');
@@ -985,9 +983,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         await trackingRuntime?.intercept(...args);if(!current())return;
         await narrativeRuntime?.intercept(...args);if(!current())return;
         const historyBefore=Array.isArray(args[0])?args[0].map(message=>({...message})):null;
-        await summaryHistory.intercept(...args);if(!current())return;
         const historyAfterSummary=Array.isArray(args[0])?args[0].map(message=>({...message})):null;
-        await cumulativeHistory?.intercept(...args);if(!current())return;
         const history=createWorkshopHistoryTicket({before:historyBefore,afterSummary:historyAfterSummary,afterCumulative:args[0],type:args[3]??'normal',cumulativeProof:cumulativeRuntime?.getReplacementProof(),getCurrent:()=>({target:repository.captureTarget(),original:getContext().chat,raw:adapter.captureSummarySource(target),root:adapter.peekConfirmed(target),eventEnabled:controls.allowed('event'),summaryEnabled:controls.allowed('summary'),cumulativeCurrent:proof=>controls.allowed('cumulative')&&runtime.settings.matchesCumulativeGeneration(proof.config)})});
         await latestRuntime?.intercept(...args);if(!current())return;
         latestRuntime?.sealWorkshopSend(args[3]??'normal',recallRuntime?.captureWorkshopInjection()??null,history);
@@ -997,11 +993,11 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     timeStatus:()=>timeRuntime?.inspect()??{status:'idle',date:null},
     timePromptStatus:()=>timePrompts?.inspect()??{status:'empty'},
     cumulativeStatus:()=>cumulativeRuntime?.inspect()??{status:'empty'},
-    cumulativeHistoryStatus:()=>cumulativeHistory?.inspect()??{status:'retained',removed:0},
+    cumulativeHistoryStatus:()=>({status:'retained',reason:'native-visibility',removed:0}),
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
-    promptHistoryStatus:()=>summaryHistory?.inspect()??{status:'retained',reason:'not-initialized',removed:0},
+    promptHistoryStatus:()=>({status:'retained',reason:'native-visibility',removed:0}),
     dispose() {
-      if(disposed)return;disposed = true;releaseGenerationDiagnostic();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeHistory?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();summaryHistory?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      if(disposed)return;disposed = true;releaseGenerationDiagnostic();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;if(closeError)throw closeError;
     },

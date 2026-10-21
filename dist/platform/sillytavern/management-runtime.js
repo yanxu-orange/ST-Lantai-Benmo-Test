@@ -22,7 +22,7 @@ const MAIN_EVENTS = ['MAIN_API_CHANGED', 'CHATCOMPLETION_MODEL_CHANGED', 'CHATCO
 
 // One owner survives mounted pages. All network and host exports are injectable.
 export async function createManagementRuntime({ repository, getContext, document: doc,
-  fetchImpl = globalThis.fetch, settingsOptions = {}, mainIdentityOptions = {}, jquery = globalThis.jQuery, signal, captureSummarySource,getControls,afterSummaryCommit,retrySummaryCommit,skipSummaryCommit,getPendingNarrative } = {}) {
+  fetchImpl = globalThis.fetch, settingsOptions = {}, mainIdentityOptions = {}, jquery = globalThis.jQuery, signal, captureSummarySource,getControls,hideSource,afterSummaryCommit,retrySummaryCommit,skipSummaryCommit,getPendingNarrative } = {}) {
   const allowed=key=>!getControls||!!getControls()?.allowed(key);
   const manager = createBackgroundTaskManager(), releases = [];
   const recallAbort = new AbortController();
@@ -195,9 +195,9 @@ export async function createManagementRuntime({ repository, getContext, document
   });
   const trackingContext=()=>{const context=getContext(),character=context.characters?.[context.characterId];return {identities:promptIdentities({user:context.name1??context.userName,char:context.name2??character?.data?.name??character?.name}),allowed:{itemsEnabled:allowed('item'),npcsEnabled:allowed('npc')},proofs:{items:getControls?.()?.capture('item')??null,npcs:getControls?.()?.capture('npc')??null}};};
   if(typeof captureSummarySource==='function') {
-    summaryService=createEventSummaryService({repository,manager,provider,...narrativeHooks('event'),getGenerationSettings:eventGeneration,getTrackingContext:trackingContext,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
+    summaryService=createEventSummaryService({repository,manager,provider,hideSource,...narrativeHooks('event'),getGenerationSettings:eventGeneration,getTrackingContext:trackingContext,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
     summaryController=createSummaryController({repository,service:summaryService,control:featureGate(getControls,'event'),captureSource:captureSummarySource});
-    cumulativeService=createCumulativeSummaryService({repository,manager,provider,...narrativeHooks('cumulative'),getGenerationSettings:cumulativeGeneration,getTrackingContext:trackingContext,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
+    cumulativeService=createCumulativeSummaryService({repository,manager,provider,hideSource,...narrativeHooks('cumulative'),getGenerationSettings:cumulativeGeneration,getTrackingContext:trackingContext,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     cumulativeRunner=createAutomaticCumulativeRunner({repository,service:cumulativeService,captureSource:captureSummarySource});
     cumulativeController=createCumulativeController({repository,service:cumulativeService,runner:cumulativeRunner,control:featureGate(getControls,'cumulative'),captureSource:captureSummarySource});
     let replyRun=null,quietDepth=0,lastReplyFloor=(ctx?.chat?.length??0)-1;

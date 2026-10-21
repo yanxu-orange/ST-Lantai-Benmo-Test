@@ -25,25 +25,39 @@ export function transformLatestMessages({messages,sourceMap,raw,latest,diagnosti
   for(const floor of mapping)if(integer(floor))counts.set(floor,(counts.get(floor)??0)+1);
   const byFloor=new Map(source.messages.map(message=>[message.floor,message])),indexByFloor=new Map();
   mapping.forEach((floor,index)=>{if(integer(floor)&&counts.get(floor)===1&&byFloor.has(floor))indexByFloor.set(floor,index);});
-  const recentStart=Math.max(...source.messages.map(message=>message.floor))+1-domain.preferences.recentFloors,removed=new Set(),recordsByFloor=new Map();
-  for(const record of domain.records){const snapshot=record.sourceSnapshot,current=byFloor.get(snapshot.assistantFloor);if(record.stale!==true&&current?.replyId===snapshot.replyId)recordsByFloor.set(snapshot.assistantFloor,record);}
-  for(const [floor,index] of indexByFloor){
-    const original=byFloor.get(floor),record=recordsByFloor.get(floor);
-    if(original.role!=='assistant'||!record||floor>=recentStart)continue;
-    const key=plainMessage(messages[index],original);
-    if(!key){diagnostics.push({floor,reason:'unsupported-message-payload'});continue;}
-    const relevant={epoch:source.epoch,messages:record.sourceSnapshot.rawMessages.flatMap(item=>byFloor.has(item.floor)?[byFloor.get(item.floor)]:[])};
-    if(!matchesStoredLatestSource(record.sourceSnapshot,relevant))continue;
-    const userFloor=record.sourceSnapshot.userFloor,userIndex=indexByFloor.get(userFloor);
-    // A summary that covered a hidden or unrepresentable user floor would leak
-    // that omitted content back into the send copy. Keep the original reply.
-    if(userFloor!==null&&(userIndex===undefined||userIndex>=index||!plainMessage(messages[userIndex],byFloor.get(userFloor))))continue;
+  // Visibility and provenance are separate: native /hide changes the raw role
+  // to system, but the host's semanticRole still proves the original speaker.
+  // This copy is used only for identity matching, never to add hidden messages.
+  const semanticByFloor=new Map(source.messages.map(message=>[message.floor,
+    ['user','assistant','system'].includes(message.semanticRole)?{...message,role:message.semanticRole,system:message.semanticRole==='system'}:message]));
+  const recentStart=Math.max(...source.messages.map(message=>message.floor))+1-domain.preferences.recentFloors,removed=new Set();
+  for(const record of domain.records){
+    const snapshot=record.sourceSnapshot,floor=snapshot.assistantFloor,userFloor=snapshot.userFloor;
+    const reply=semanticByFloor.get(floor);
+    if(record.stale===true||reply?.specialPayload===true&&reply.latestTextOnly!==true)continue;
+    const relevant={epoch:source.epoch,messages:snapshot.rawMessages.flatMap(item=>semanticByFloor.has(item.floor)?[semanticByFloor.get(item.floor)]:[])};
+    if(!matchesStoredLatestSource(snapshot,relevant))continue;
+    const pairFloors=userFloor===null?[floor]:[userFloor,floor];
+    // Ambiguous or unsupported visible members are not hidden members. Never
+    // consume their text or fall back to another slot on incomplete mapping.
+    if(pairFloors.some(member=>(counts.get(member)??0)>1))continue;
+    const slots=pairFloors.flatMap(member=>{
+      const index=indexByFloor.get(member);
+      return index===undefined?[]:[{floor:member,index,key:plainMessage(messages[index],byFloor.get(member))}];
+    });
+    const unsupported=slots.filter(slot=>!slot.key);
+    if(unsupported.length){for(const slot of unsupported)diagnostics.push({floor:slot.floor,reason:'unsupported-message-payload'});continue;}
+    if(slots.length===2&&slots[0].index>=slots[1].index)continue;
+    // X counts original absolute floors, not visible rows or paired turns.
+    // A pair straddling the boundary replaces only its eligible old member.
+    const eligible=slots.filter(slot=>slot.floor<recentStart),chosen=eligible.at(-1);
+    if(!chosen)continue;
+    const {index,key}=chosen;
     // Allowlist the host envelope, never spread old text-bearing attachments.
-    // Mapping is already captured; dropping extra also removes shared aliases,
-    // reasoning and inactive swipes that the host could otherwise re-inject.
+    // Preserve this slot's role, including user-only replacements.
     output[index]=Object.fromEntries(['id','name','role','is_user','is_system','send_date'].filter(field=>Object.hasOwn(messages[index],field)).map(field=>[field,messages[index][field]]));
     output[index][key]=record.body;
-    if(userFloor!==null&&userFloor<recentStart&&userIndex!==undefined&&userIndex<index&&plainMessage(messages[userIndex],byFloor.get(userFloor))&&byFloor.get(userFloor)?.role==='user')removed.add(userIndex);
+    for(const slot of eligible)if(slot.index!==index)removed.add(slot.index);
   }
   return output.filter((_,index)=>!removed.has(index));
 }

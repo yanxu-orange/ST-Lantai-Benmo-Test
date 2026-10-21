@@ -45,6 +45,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   let backfillState={status:'idle',id:null,total:0,completed:0,skipped:0,failed:0,error:''},backfillController=null;
   let automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};
   const listeners=new Set(),visibilityReleases=new Set(),releases=[],jobs=new Set(),queuedFloors=new Set(),invalidatedFloors=new Set();
+  const latestEditedFloors=new Set(),latestEditedReplies=new Set();
+  const clearInvalidatedSources=()=>{invalidatedFloors.clear();latestEditedFloors.clear();latestEditedReplies.clear();};
   const allowed=()=>!disposed&&enabled&&getControls?.()?.allowed('enabled')===true;
   const summaryAllowed=()=>allowed()&&getControls?.()?.allowed('summary')===true;
   const summaryMatches=proof=>summaryAllowed()&&getControls?.()?.matches(proof)===true;
@@ -126,7 +128,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const captured=await repository.captureLatest(t,readView),workshop=await workshopRuntime?.backgroundState(t,{readView}),tracking=await trackingRuntime?.backgroundState(t,{readView,raw:source}),schedule=await scheduleRuntime?.backgroundState(t,{readView,raw:source});
     if(disposed||token!==readSerial||!current(t))return inspect();
     if(readView&&!repository.matchesPanelData(t,readView))return read({target:t});
-    if(target&&!sameTarget(target,t)){cancel();resetBackfill();state.floorStates={};invalidatedFloors.clear();}
+    if(target&&!sameTarget(target,t)){cancel();resetBackfill();state.floorStates={};clearInvalidatedSources();}
     displayRecoveryEpoch=null;
     lastReadView=readView;target=t;selection=captured;workshopState=workshop??null;trackingState=tracking??null;scheduleState=schedule??null;state={...captured.latest,status:state.status==='running'?'running':'ready',error:'',floorStates:state.floorStates};publish();return inspect();
     }catch(error){if(!disposed&&token===readSerial&&(!t||current(t)))failedDisplayRead(error,startedEpoch);throw error;}
@@ -148,7 +150,10 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const prepared=summaryAllowed()||captured.latest.records.length||workshop?.modules.length||workshop?.selection.workshop.results.some(row=>row.generationSource==='background')||getControls?.()?.allowed('item')||getControls?.()?.allowed('npc')||tracking?.tracking.snapshots.length||getControls?.()?.allowed('schedule')||schedule?.receipts.length?prepareWorkshopIdentities(identityChat,{allowPendingLast:true}):{changed:false,selected:[]},source=raw(t);
     let maintainedProof=null;
     if(config&&readView&&(!workshopRuntime||workshopPass?.displaySource||!config.gates.some(row=>['prompt','collect','sync'].includes(row.key)&&row.allowed))){const root=repository.readPanelRoot(t,readView);maintainedProof={target:copy(t),serial:ticket,source,versions:versions(),config,binding:[root.binding?.kind,root.binding?.owner],modules:copy(root.workshop?.modules??[]),workshopSource:workshopPass?.displaySource??null};}
-    const next=pruneLatestRecords(captured.latest,raw(t,true),{replyVersions:versions(),retainStale:true});
+    const retained=pruneLatestRecords(captured.latest,raw(t,true),{replyVersions:versions(),retainStale:true});
+    // Persist edit invalidation before releasing the synchronous send block.
+    // Existing stale records stay available for review, but never compress.
+    const next={...retained,records:retained.records.map(record=>(latestEditedReplies.has(record.sourceSnapshot.replyId)||record.sourceSnapshot.rawMessages.some(row=>latestEditedFloors.has(row.floor)))?{...record,stale:true}:record)};
     const valid=()=>{try{return !disposed&&!isSourceDeletionPending()&&ticket===serial&&current(t)&&matchesRaw(t,source);}catch{return false;}};
     if(prepared.changed||!equal(next,captured.latest)){
       const saved=await repository.updateLatest(t,captured,next,{isCurrent:valid,forceSave:prepared.changed,workshopProof:prepared.selected.map(({floor,swipeId,replyId})=>({floor,swipeId,replyId}))});
@@ -159,8 +164,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const trackingSelection=valid()?await trackingRuntime?.reconcile(t,options):null;
     const scheduleSelection=valid()?await scheduleRuntime?.reconcile(t,options):null;
     const tracked=valid()?await trackingRuntime?.backgroundState(t,{readView,raw:source,captured:trackingSelection??undefined}):null,scheduled=valid()?await scheduleRuntime?.backgroundState(t,{readView,raw:source,captured:scheduleSelection??undefined}):null;
-    if(valid()&&readView&&!repository.matchesPanelData(t,readView)){invalidatedFloors.clear();await read({target:t});if(lastReadView&&maintenanceMatches(maintainedProof,lastReadView))maintenanceProof=maintainedProof;return;}
-    if(valid()){displayRecoveryEpoch=null;invalidatedFloors.clear();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};if(maintenanceMatches(maintainedProof,readView))maintenanceProof=maintainedProof;publish();}
+    if(valid()&&readView&&!repository.matchesPanelData(t,readView)){clearInvalidatedSources();await read({target:t});if(lastReadView&&maintenanceMatches(maintainedProof,lastReadView))maintenanceProof=maintainedProof;return;}
+    if(valid()){displayRecoveryEpoch=null;clearInvalidatedSources();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};if(maintenanceMatches(maintainedProof,readView))maintenanceProof=maintainedProof;publish();}
   }
   function queueRefresh(allowProjection=false){
     initialized=true;
@@ -639,6 +644,30 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   }
 
 
+  // Compare actual text, not native visibility flags. MESSAGE_UPDATED also
+  // covers host presentation updates and swipe projection, neither of which
+  // authorizes invalidating an unchanged or different reply version.
+  const editState=()=> (getContext().chat??[]).map(message=>({text:message?.mes,isUser:message?.is_user,swipeId:message?.swipe_id??0,replyId:message?.extra?.[WORKSHOP_REPLY_KEY]??null}));
+  let editBaseline=editState();
+  function invalidateEditedSource(name,floor){
+    const next=editState();
+    if(name==='MESSAGE_EDITED'||name==='MESSAGE_UPDATED'){
+      next.forEach((row,index)=>{
+        if(Number.isSafeInteger(floor)&&floor!==index)return;
+        const previous=editBaseline[index];
+        if(previous?.text===row.text)return;
+        const sameReply=previous&&previous.swipeId===row.swipeId&&(!previous.replyId||!row.replyId||previous.replyId===row.replyId);
+        if(name==='MESSAGE_EDITED'||sameReply){
+          invalidatedFloors.add(index);
+          // A known AI UUID owns one swipe. User edits affect every paired
+          // reply; unidentified speakers fail closed at the original floor.
+          if(row.isUser===false&&typeof row.replyId==='string'&&row.replyId)latestEditedReplies.add(row.replyId);
+          else latestEditedFloors.add(index);
+        }
+      });
+    }
+    editBaseline=next;
+  }
   const context=getContext(),events=context?.eventSource;
   const on=(name,listener)=>{const type=context?.eventTypes?.[name];if(!type||!events?.on)return;events.on(type,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,type,listener));};
   function completedStream(floor,processor=getContext()?.streamingProcessor){
@@ -671,8 +700,8 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   // ST streaming ends its UI before MESSAGE_RECEIVED; non-streaming reverses
   // this order. Both receipts are required, with successful-stream evidence.
   on('GENERATION_ENDED',()=>{foregroundEnded=true;if(!receipt&&automaticState.status==='waiting')automaticStatus('waiting','已收到结束信号，等待宿主正文回执');flushReceipt();});
-  for(const name of ['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,payload=>{const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;if(name==='MESSAGE_EDITED'){for(const [index,message] of (getContext().chat??[]).entries())if(!Number.isSafeInteger(floor)||index===floor||index===floor+1){const id=message?.extra?.[WORKSHOP_REPLY_KEY];if(id){delete state.floorStates[id];delete workshopFloorStates[id];delete trackingFloorStates[id];delete scheduleFloorStates[id];}}}cancel();publish();void refresh().catch(()=>{});});
-  for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{activeHostGenerations=0;cancel();resetBackfill();readSerial++;invalidatedFloors.clear();target=null;selection=null;state={...emptyLatest(),status:'idle',error:'',floorStates:{}};workshopState=null;workshopFloorStates={};trackingState=null;trackingFloorStates={};scheduleState=null;scheduleFloorStates={};scheduleRuntime?.reset?.();automaticReceipts.clear();automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};publish();void refresh().catch(()=>{});});
+  for(const name of ['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,payload=>{const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;invalidateEditedSource(name,floor);if(name==='MESSAGE_EDITED'){for(const [index,message] of (getContext().chat??[]).entries())if(!Number.isSafeInteger(floor)||index===floor||index===floor+1){const id=message?.extra?.[WORKSHOP_REPLY_KEY];if(id){delete state.floorStates[id];delete workshopFloorStates[id];delete trackingFloorStates[id];delete scheduleFloorStates[id];}}}cancel();publish();void refresh().catch(()=>{});});
+  for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{editBaseline=editState();activeHostGenerations=0;cancel();resetBackfill();readSerial++;clearInvalidatedSources();target=null;selection=null;state={...emptyLatest(),status:'idle',error:'',floorStates:{}};workshopState=null;workshopFloorStates={};trackingState=null;trackingFloorStates={};scheduleState=null;scheduleFloorStates={};scheduleRuntime?.reset?.();automaticReceipts.clear();automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};publish();void refresh().catch(()=>{});});
   let displayReadQueued=false;
   const updateWorkshopDisplay=()=>{if(disposed||!initialized)return;if(pending){displayReadDirty=true;return;}if(displayReadQueued)return;displayReadQueued=true;queueMicrotask(()=>{displayReadQueued=false;if(!disposed){if(pending)displayReadDirty=true;else void read().catch(()=>{});}});};
   if(workshopRuntime?.subscribe)releases.push(workshopRuntime.subscribe(updateWorkshopDisplay));

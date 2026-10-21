@@ -30,7 +30,7 @@ const AI_FAILURE_MESSAGES=Object.freeze({
 // The host supplies PUBLIC tickets only:
 // {generation,cumulativeEpoch,summaryCleaning,cleaningEpoch,aiIdentity,aiEpoch}.
 // aiIdentity is an opaque public selection identity, never a credential or API object.
-export function createCumulativeSummaryService({repository,manager,provider,captureSource,getGenerationSettings,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}) {
+export function createCumulativeSummaryService({repository,manager,provider,captureSource,getGenerationSettings,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,hideSource=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}) {
   const records=new Map(),listeners=new Set(),reservations=new Set(),restorations=new Map(),reboundReceipts=new WeakSet();let disposed=false;
   const durableTrackingContext=context=>({identities:context.identities??{},allowed:context.allowed??{itemsEnabled:true,npcsEnabled:true}});
   const readTrackingContext=()=>structuredClone(getTrackingContext());
@@ -54,7 +54,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
   function inspect(taskId) {
     const record=records.get(taskId),state=manager.inspect(taskId)??record?.restoredTask;if(!state||!record)return null;
     const narrative=record.narrativeRetired?null:record.narrative;
-    return {...state,...(state.status==='succeeded'&&narrative?.status==='running'?{status:'narrative-running'}:state.status==='succeeded'&&narrative?.status==='failed'?{status:'narrative-failed'}:{}),narrative:narrative?{...narrative}:null,origin:record.origin,stage:record.stage,outcome:record.outcome,reviewResolution:record.reviewResolution,rebindRequired:record.rebindRequired,receipt:record.receipt?structuredClone(record.receipt):null,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,diagnostics:structuredClone(record.diagnostics??[]),trackingRejected:structuredClone(record.trackingRejected??record.trackingParts?.rejected??null)};
+    return {...state,...(state.status==='succeeded'&&narrative?.status==='running'?{status:'narrative-running'}:state.status==='succeeded'&&narrative?.status==='failed'?{status:'narrative-failed'}:{}),narrative:narrative?{...narrative}:null,origin:record.origin,stage:record.stage,outcome:record.outcome,reviewResolution:record.reviewResolution,rebindRequired:record.rebindRequired,receipt:record.receipt?structuredClone(record.receipt):null,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,hiding:record.hiding?{...record.hiding}:null,diagnostics:structuredClone(record.diagnostics??[]),trackingRejected:structuredClone(record.trackingRejected??record.trackingParts?.rejected??null)};
   }
   function notify(taskId){const state=inspect(taskId);if(state)for(const listener of [...listeners])try{listener(state);}catch{/* observation only */}}
   const busyStatuses=['starting','running','awaiting-user','committing','narrative-running','narrative-failed'];
@@ -130,7 +130,18 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
           record.trackingRejected=applied.rejected??null;record.diagnostics=Object.entries(applied.errors).flatMap(([category,message])=>message?[{kind:'tracking',category,message}]:[]);
         }
         const receipt=ctx.snapshot.origin==='regeneration'?await repository.replaceCumulative(ctx.target,record.selection,version,options):await repository.appendCumulative(ctx.target,record.selection,version,options);
-        record.receipt=receipt;record.selection=receipt.selection;record.stage='completed';record.reviewResolution='committed';if(receipt?.status==='committed'&&afterSummaryCommit)record.narrative={status:'running',error:''};return receipt;
+        record.receipt=receipt;
+        if(receipt?.status==='committed'&&ctx.snapshot.params.hideSource&&!record.hiding){
+          record.hiding={status:'pending'};
+          try{
+            if(typeof hideSource!=='function')throw new Error('原生隐藏不可用');
+            const isCurrent=()=>!ctx.signal.aborted&&targetCurrent(ctx.snapshot,ctx.target);
+            if(!isCurrent())throw new Error('隐藏目标已变化');
+            record.hiding=await hideSource({target:ctx.target,source:ctx.snapshot.source,isCurrent});
+            if(record.hiding?.status!=='hidden')throw new Error('隐藏未确认');
+          }catch{record.hiding={status:'failed',message:'记忆已保存；原文隐藏未完成，请检查酒馆隐藏状态'};}
+        }
+        record.selection=receipt.selection;record.stage='completed';record.reviewResolution='committed';if(receipt?.status==='committed'&&afterSummaryCommit)record.narrative={status:'running',error:''};return receipt;
       }catch(error){writeError(record,error);throw error;}finally{record.writeInFlight=false;}
     });
     if(result.status==='succeeded'&&record.narrative?.status==='running'){const source=state.snapshot.source,{start,end}=source.requestedRange;await runNarrative(taskId,()=>afterSummaryCommit({target:state.target,startFloor:start,endFloor:end,sentFloors:structuredClone(source.sentFloors)}));}
