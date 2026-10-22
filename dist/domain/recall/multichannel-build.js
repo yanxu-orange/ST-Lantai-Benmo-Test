@@ -6,7 +6,7 @@ import {collectStoryTimeRecallEvidence} from './story-time-evidence.js';
 import {collectSpecialDateRecallEvidence} from './special-date-evidence.js';
 import {selectSpecialDateCandidates} from './special-date-selection.js';
 import {orderMemoriesForNarrative} from './narrative-ordering.js';
-import {createBodyIndex,rankBodyIndex,rankDateCandidates,dateEligibility,collectRouteCandidates,scoreScannedRouteCandidates,scoreRankSensitiveRouteCandidates,recallQueryText,eventCardText,RRF_K} from './multichannel.js';
+import {createBodyIndex,rankBodyIndex,scoreBodyHistoryTermMax,rankDateCandidates,dateEligibility,collectRouteCandidates,scoreScannedRouteCandidates,scoreRankSensitiveRouteCandidates,recallQueryText,eventCardText,RRF_K} from './multichannel.js';
 
 const safeCode=error=>['cancelled','stale','configuration','capability','mapping','timeout','http','authentication','endpoint','rate_limit','cors_network','request','task_preset_missing'].includes(error?.code)?error.code:'channel-failed';
 const now=()=>globalThis.performance?.now?.()??Date.now();
@@ -35,7 +35,8 @@ export function createMultichannelBuilder({vectorIndex,provider}={}){
    try{
     const signature=JSON.stringify([triggers.map(event=>[event.id,event.body,event.people,event.places,event.locationAliases??[]]),settings.excludedTerms]);
     if(bodyCache?.signature!==signature)bodyCache={signature,index:createBodyIndex(triggers,settings.excludedTerms)};
-    rankings.bm25=rankBodyIndex(bodyCache.index,timeResult.fragments,dateById);channels.bm25.qualified=rankings.bm25.length;
+    const bodyRows=rankBodyIndex(bodyCache.index,timeResult.fragments,dateById);
+    rankings.bm25=enabled.keyword&&!enabled.vector&&!enabled.rerank?scoreBodyHistoryTermMax(bodyRows):bodyRows;channels.bm25.qualified=rankings.bm25.length;
    }catch{rankings.bm25=[];channels.bm25.status='failed';channels.bm25.error='local-retrieval-failed';}
   }
   if(enabled.vector){

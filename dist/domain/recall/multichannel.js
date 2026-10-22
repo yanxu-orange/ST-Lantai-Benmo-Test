@@ -40,6 +40,21 @@ export function rankBodyIndex(index,fragments,dateById=new Map()){
   return{id:doc.id,score,libraryIndex:doc.libraryIndex,contributions};
  }).filter(row=>row&&Number.isFinite(row.score)&&row.score>0).sort((a,b)=>b.score-a.score||a.libraryIndex-b.libraryIndex).map((row,i)=>({...row,rank:i+1}));
 }
+// Offline K+B keeps the current query intact and consumes each historical
+// term once, after its original distance weight. Equal values retain the first
+// fragment; evidence contains only the contributions that actually vote.
+export function scoreBodyHistoryTermMax(rows){
+ return rows.map(row=>{
+  const winners=new Map();
+  row.contributions.forEach((fragment,index)=>{if(fragment.sourceKind==='current')return;for(const term of fragment.termContributions){const weighted=term.score*fragment.weight,old=winners.get(term.term);if(!old||weighted>old.weighted)winners.set(term.term,{index,weighted});}});
+  const contributions=row.contributions.flatMap((fragment,index)=>{
+   if(fragment.sourceKind==='current')return [fragment];
+   const terms=fragment.termContributions.filter(term=>winners.get(term.term)?.index===index);if(!terms.length)return [];
+   return [{...fragment,matchedTerms:terms.map(term=>term.term),termContributions:terms,score:terms.reduce((sum,term)=>sum+term.score,0)}];
+  });
+  return {...row,contributions,score:contributions.reduce((sum,fragment)=>sum+fragment.score*fragment.weight,0)};
+ }).sort((a,b)=>b.score-a.score||a.libraryIndex-b.libraryIndex).map((row,index)=>({...row,rank:index+1}));
+}
 export function rankDateCandidates(timeResult,dateById=dateEligibility(timeResult)){
  return timeResult.evaluated.flatMap(row=>{
   if(dateById.get(row.memoryId)?.blocked)return [];

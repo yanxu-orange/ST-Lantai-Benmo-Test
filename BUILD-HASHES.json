@@ -5,7 +5,7 @@
   },
   {
     "path": "README.md",
-    "sha256": "5c3868361673a7b798b4b530677312d32b387e6cc9839d00f52dd6e8baf57015"
+    "sha256": "7819fa79492c1e661ddd289d2f269b88d040b85fc1203100972bffa76bbe5d70"
   },
   {
     "path": "dist/app/api-settings-session.js",
@@ -517,7 +517,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "b0374503a454ed91f3800b0c2b0d0fa8aa68182bf1272f815e0a8abf8e77ac2b"
+    "sha256": "15358cd60351344091fbab3e46f0578e3846b883f48ef4aaa228a68e7d1c58f1"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -701,11 +701,11 @@
   },
   {
     "path": "dist/domain/recall/multichannel-build.js",
-    "sha256": "cdc6fb0e3892439e20e659ff66dd180f73ef989ba1eb4dab691c055f61029de3"
+    "sha256": "562e6b5a1a32d1de53f6b041663ccf532c448d81e74879ae814e0c3e351aafe6"
   },
   {
     "path": "dist/domain/recall/multichannel.js",
-    "sha256": "c3553a06fcbb3325e209fcb168c92d69edd749494db38cfb6f5ab300e83e047a"
+    "sha256": "7ad3d7fc91eb09ec7d6a3627c08a61401558de65d6d10c5466e71441ec97b954"
   },
   {
     "path": "dist/domain/recall/narrative-ordering.js",
@@ -1225,10 +1225,10 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "b8ce1ceafed5b05c461e17fc5b773001c89bace5014ac0160de1ab588e043efd"
+    "sha256": "f5aaa619d46e69d0f91c8a29990019411e2b1a8d863f3946fc157cad9d235c09"
   },
   {
     "path": "安装与验收说明.txt",
-    "sha256": "256883d41e34bc50392b33d1e77aba5ff21cb58c1660a73e85d1d3a67d9cb4a8"
+    "sha256": "12c73b2a28779c2a506a8e8a76d896e2aafaadee694a99f0de6c2737e2002352"
   }
 ]
