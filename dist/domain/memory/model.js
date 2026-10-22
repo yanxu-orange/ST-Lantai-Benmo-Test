@@ -8,7 +8,7 @@ import {emptySummary,assertSummary,summaryOf} from '../summary/data.js';
 import {effectiveBatchPositions,effectiveBatchRanges} from '../summary/source-positions.js';
 import {assertCumulative,inheritCumulative} from '../cumulative/data.js';
 import {assertLatest,inheritLatest,migrateLatestPreferences} from '../latest/data.js';
-import {validateEvent,assertMergeRelations,validRange} from './event-model.js';
+import {assertEventShape,assertMergeRelations,validRange} from './event-model.js';
 // Keep the existing public entry point while summary uses the leaf event model.
 export {blankEvent,splitWords,detailWordError,validateEvent,activeEvents,assertMergeRelations,validRange,validateEventForSave} from './event-model.js';
 const clone = value => structuredClone(value);
@@ -18,7 +18,7 @@ export function assertRoot(root, target) {
   if (!root || root.schema !== SCHEMA || root.rootId !== target.rootId || (!Number.isSafeInteger(root.revision) || root.revision < 0) || !Array.isArray(root.events)) throw new Error('数据版本或归属无法确认，已停止读取和写入');
   root=normalizeResultSources(clone(root));
   const ids = new Set();
-  for (const event of root.events) { validateEvent(event); if(ids.has(event.id)) throw new Error('重复记忆身份'); ids.add(event.id); }
+  for (const event of root.events) { assertEventShape(event); if(ids.has(event.id)) throw new Error('重复记忆身份'); ids.add(event.id); }
   assertMergeRelations(root.events, Object.hasOwn(root, 'deletedMergeIds') ? root.deletedMergeIds : []);
   if(Object.hasOwn(root,'summary')){root.summary=assertSummary(root.summary,root.events);if(root.summary.pending?.events.some(event=>root.deletedMergeIds?.includes(event.id)))throw new Error('待审核身份占用合并删除证明');}
   if(Object.hasOwn(root,'cumulative'))root.cumulative=assertCumulative(root.cumulative);

@@ -199,13 +199,21 @@ export function parseStrictJson(text) {
 
 // Settings owns getConfig; this gateway neither discovers nor stores settings.
 export function createAiProvider({ getConfig, transport } = {}) {
+  return createProvider(getConfig, transport);
+}
+// Only captureSession reaches this constant path; public getConfig remains live.
+function createProvider(getConfig, transport, constant) {
   if (typeof getConfig !== 'function' || typeof transport?.generate !== 'function') {
     throw new AiProviderError('configuration');
   }
   function readConfig(taskGroup) {
-    try { return freezeAiConfig(getConfig(taskGroup)); }
+    try {
+      if(constant){if(taskGroup!==constant.taskGroup)throw new AiProviderError('request');return constant.config;}
+      return freezeAiConfig(getConfig(taskGroup));
+    }
     catch (error) { throw new AiProviderError(error?.code === 'TASK_PRESET_MISSING' || error?.code === 'task_preset_missing' ? 'task_preset_missing' : error?.code === 'TASK_ROUTE_UNRESOLVED' ? 'task_route_unresolved' : error?.code === 'TASK_CAPABILITY_MISMATCH' ? 'capability' : 'configuration'); }
   }
+  const fingerprintOf=(taskGroup,config)=>constant?(readConfig(taskGroup),constant.fingerprint):JSON.stringify(config??readConfig(taskGroup));
   return Object.freeze({
     // Runtime-only session: never add credentials or connection data to task snapshots.
     isCurrent(){try{return transport.isCurrent?.()!==false;}catch{return false;}},
@@ -214,16 +222,16 @@ export function createAiProvider({ getConfig, transport } = {}) {
       const config=readConfig(taskGroup);
       if(typeof transport.captureSession!=='function')throw new AiProviderError('capability');
       const captured=transport.captureSession(config,{taskGroup});
-      return createAiProvider({getConfig:group=>{if(group!==taskGroup)throw new AiProviderError('request');return config;},transport:captured});
+      return createProvider(()=>config,captured,{taskGroup,config,fingerprint:fingerprintOf(taskGroup,config)});
     },
     async generateText({ task, messages, signal, isCurrent, maxOutputTokens } = {}) {
       if (typeof isCurrent !== 'function') throw new AiProviderError('request');
       assertAiCurrent(signal, isCurrent);
       const taskGroup = aiTaskGroup(task);
-      const config = readConfig(taskGroup), fingerprint = JSON.stringify(config);
+      const config = readConfig(taskGroup), fingerprint = fingerprintOf(taskGroup,config);
       const request = requestCopy({ task, messages, maxOutputTokens });
       const current = () => {
-        try { return isCurrent() === true && JSON.stringify(readConfig(taskGroup)) === fingerprint; }
+        try { return isCurrent() === true && fingerprintOf(taskGroup) === fingerprint; }
         catch { return false; }
       };
       try {
@@ -242,10 +250,10 @@ export function createAiProvider({ getConfig, transport } = {}) {
       assertAiCurrent(signal, isCurrent);
       const taskGroup = aiTaskGroup(task);
       const config = readConfig(taskGroup);
-      const fingerprint = JSON.stringify(config);
+      const fingerprint = fingerprintOf(taskGroup,config);
       const request = requestCopy({ task, messages, jsonSchema, maxOutputTokens });
       const current = () => {
-        try { return isCurrent() === true && JSON.stringify(readConfig(taskGroup)) === fingerprint; }
+        try { return isCurrent() === true && fingerprintOf(taskGroup) === fingerprint; }
         catch { return false; }
       };
       try {

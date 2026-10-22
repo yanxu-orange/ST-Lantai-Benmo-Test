@@ -13,7 +13,7 @@ export function detailWordError(term, terms) {
   if(term.aliases.some(alias=>typeof alias!=='string'||! /^[\p{Script=Han}0-9]+$/u.test(alias)||alias===term.word||!term.word.includes(alias)))return '简称须为细节词中的连续汉字或数字片段，且不能等于完整细节词';
   return '';
 }
-export function validateEvent(event) {
+export function assertEventShape(event) {
   if (!event || typeof event.id !== 'string' || !event.id || !['resident', 'trigger'].includes(event.mode)) throw new Error('记忆身份或召回方式无效');
   for (const key of ['title','body','startTime','endTime']) if (typeof event[key] !== 'string') throw new Error('记忆字段无效');
   if (!event.body.trim()) throw new Error('请填写正文');
@@ -30,6 +30,11 @@ export function validateEvent(event) {
   if (event.supersededBy != null && (typeof event.supersededBy !== 'string' || !event.supersededBy.trim() || event.supersededBy === event.id)) throw new Error('合并来源关系无效');
   if (event.mergedFrom != null && (!Array.isArray(event.mergedFrom) || event.mergedFrom.length < 2 || new Set(event.mergedFrom).size !== event.mergedFrom.length || event.mergedFrom.some(id => typeof id !== 'string' || !id.trim() || id === event.id) || event.supersededBy)) throw new Error('合并结果关系无效');
   if (event.mergedFrom && event.batch !== null) throw new Error('合并结果不能属于总结批次');
+  return event;
+}
+// Public callers retain a defensive result; aggregate validation already owns its root.
+export function validateEvent(event) {
+  assertEventShape(event);
   return clone(event);
 }
 // Hidden originals remain hidden even after an explicitly deleted merge result.

@@ -15,28 +15,32 @@ const copy=value=>structuredClone(value);
 const text=message=>typeof message?.mes==='string'?message.mes:typeof message?.content==='string'?message.content:'';
 // These are the actual interceptor messages after ST's own transformations.
 // Their filtered index is not an original floor identifier.
-export function recallInputs(messages,recentFloorCount,original=null) {
+export function recallInputs(messages,recentFloorCount,original=null) {return selectRecallInputs(messages,recentFloorCount,original).inputs;}
+function selectRecallInputs(messages,recentFloorCount,original=null) {
   const usable=Array.isArray(messages)?messages:[],eligible=message=>message&&!message.is_system&&message.role!=='system';
   const mapping=original&&messages!==original?mapSummaryPromptFloors(messages,original):null;
   let index=-1;
   for(let i=usable.length-1;i>=0;i--)if(eligible(usable[i])&&usable[i]?.is_user&&text(usable[i]).trim()){index=i;break;}
   if(index<0)for(let i=usable.length-1;i>=0;i--)if(eligible(usable[i])&&text(usable[i]).trim()){index=i;break;}
-  const recentHistory=[];
-  for(let i=index-1;i>=0&&recentHistory.length<recentFloorCount;i--)if(eligible(usable[i])&&text(usable[i]).trim())recentHistory.push({floor:mapping?.[i]??i,text:text(usable[i]),distanceFromCurrent:mapping?mapping[index]-mapping[i]:index-i});
-  return {input:index<0?'':text(usable[index]),recentHistory};
+  const recentHistory=[],positions=index<0?[]:[index];
+  for(let i=index-1;i>=0&&recentHistory.length<recentFloorCount;i--)if(eligible(usable[i])&&text(usable[i]).trim()){positions.push(i);recentHistory.push({floor:mapping?.[i]??i,text:text(usable[i]),distanceFromCurrent:mapping?mapping[index]-mapping[i]:index-i});}
+  return {inputs:{input:index<0?'':text(usable[index]),recentHistory},floors:usable===original?positions:mapping?positions.map(index=>mapping[index]):null};
 }
-export function createRecallRuntime({repository,settings,getContext,captureSource,captureEvents=null,dateRuntime=null,build=buildRecall,previewBuild,getControls,recallProvider=null,vectorStore,Worker:WorkerClass=globalThis.Worker}={}) {
+export function createRecallRuntime({repository,settings,getContext,captureSource,captureRecallSource,matchesRecallSource,captureEvents=null,dateRuntime=null,build=buildRecall,previewBuild,getControls,recallProvider=null,vectorStore,Worker:WorkerClass=globalThis.Worker}={}) {
   const gate=featureGate(getControls,'event'),timeGate=featureGate(getControls,'time');
-  let disposed=false,ticket=0,proof=null,injectedMaterials=null,injectedSelections=null,materialAuthority=null,flight=null,previewAbort=null,previewGuard=null,recordSequence=0;
-  const buildPreview=previewBuild??(build===buildRecall?createRecallPreviewBuilder():build);
+  let disposed=false,ticket=0,proof=null,injectedMaterials=null,injectedSelections=null,materialAuthority=null,flight=null,previewAbort=null,previewGuard=null,previewSource=null,recordSequence=0;
+  const buildKeyword=build===buildRecall?createRecallPreviewBuilder({Worker:WorkerClass}):build;
+  const buildPreview=previewBuild??buildKeyword;
   const maintenance=createVectorMaintenance({repository,settings,provider:recallProvider,getControls,store:vectorStore}),buildMulti=createMultichannelWorkerBuilder({Worker:WorkerClass,vectorIndex:maintenance.index,provider:recallProvider});
   function cancelIndexPreparation(){maintenance.pause();}
   const providerSessions=new Map();let previewConfig=null;
   const releaseSession=config=>{const session=providerSessions.get(config);providerSessions.delete(config);try{session?.dispose?.();}catch{/* Cleanup cannot interrupt host generation. */}};
-  const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;previewGuard=null;releaseSession(previewConfig);previewConfig=null;};
+  const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;previewGuard=null;previewSource=null;releaseSession(previewConfig);previewConfig=null;};
   const records=new Map(),listeners=new Set(),releases=[];
   const key=target=>JSON.stringify([target.chatId,target.rootId]);
   const notify=()=>{for(const fn of [...listeners])try{fn();}catch{/* observers cannot break host generation */}};
+  const scopedSources=typeof captureRecallSource==='function'&&typeof matchesRecallSource==='function';
+  const sourceMatches=(target,source)=>source?.kind==='recall-scoped'?matchesRecallSource(target,source.receipt):!captureSource||JSON.stringify(captureSource(target))===source;
   let guardFailure=null;
   const current=(target,serial,config,source)=>{
     const check=(value,reason)=>{if(!value)guardFailure=reason;return value;};
@@ -44,7 +48,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     return check(gate.matches(config.controlProof),'control-proof')&&check(!disposed,'disposed')&&check(serial===ticket,'ticket')
       &&check(sameTarget(target,repository.captureTarget()),'target')
       &&check(providerSessions.get(config)?.isCurrent?.()!==false,'credential-proof')
-      &&check(!captureSource||JSON.stringify(captureSource(target))===source,'source');
+      &&check(sourceMatches(target,source),'source');
   };
   function clear(reason='cancelled',expectedTarget=null) {
     const previous=flight,oldProof=proof;ticket++;proof=null;injectedMaterials=null;injectedSelections=null;flight=null;
@@ -91,7 +95,17 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     const observed=dateRuntime&&timeEnabled?await dateRuntime.request():null;
     if(disposed||serial!==ticket||signal?.aborted||!sameTarget(target,repository.captureTarget()))throw new Error('stale');
     onStage('settings-source');
-    const source=captureSource?JSON.stringify(captureSource(target)):null;
+    const original=getContext()?.chat;
+    let selected;
+    if(previewInput===null)selected=selectRecallInputs(messages,config.recall.recentFloorCount,original);
+    else{
+      const inputs=extractRecallInputs(messages,{recentFloorCount:config.recall.recentFloorCount,input:previewInput,currentIndex:messages.length});
+      const mapping=messages===original?null:mapSummaryPromptFloors(messages,original);
+      selected={inputs,floors:messages===original?inputs.recentHistory.map(row=>row.floor):mapping?inputs.recentHistory.map(row=>mapping[row.floor]):null};
+    }
+    const source=scopedSources&&selected.floors!==null?{kind:'recall-scoped',target:copy(target),floors:[...selected.floors],receipt:captureRecallSource(target,{floors:selected.floors})}:captureSource?JSON.stringify(captureSource(target)):null;
+    if(previewInput===null&&flight?.abort.signal===signal)flight.source=source;
+    else if(previewAbort?.signal===signal)previewSource=source;
     let retries=0,stage='guard-after-read';
     const budget={remainingMs:5000};
     const mark=value=>{stage=value;onStage(value);};
@@ -100,7 +114,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
         // Recheck the original chat source before rebuilding from a newer root.
         mark('guard-after-read');
         if(signal?.aborted||!current(target,serial,config,source))throw new Error('stale');
-        return await computeCaptured(messages,target,serial,previewInput,signal,mark,{config,source,channels,timeEnabled,observed,vectorConfig,taskProvider,budget});
+        return await computeCaptured(messages,target,serial,previewInput,signal,mark,{config,source,inputs:selected.inputs,channels,timeEnabled,observed,vectorConfig,taskProvider,budget});
       }catch(error){
         // No automatic replay once a builder/API request may have started.
         if(error?.code!=='COMMIT_UNCONFIRMED'||stage!=='guard-after-read'||!repository.waitForPendingWrite)throw error;
@@ -113,7 +127,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     }
     } catch(error) { releaseSession(config);throw error; }
   }
-  async function computeCaptured(messages,target,serial,previewInput,signal,onStage,{config,source,channels,timeEnabled,observed,vectorConfig,taskProvider,budget}) {
+  async function computeCaptured(messages,target,serial,previewInput,signal,onStage,{config,source,inputs,channels,timeEnabled,observed,vectorConfig,taskProvider,budget}) {
     const guard=()=>current(target,serial,config,source);
     if(previewInput===null&&flight?.abort.signal===signal)flight.guard=guard;
     else if(previewAbort?.signal===signal)previewGuard=guard;
@@ -124,11 +138,10 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     onStage('guard-after-read');
     if(!guard())throw new Error('stale');
     onStage('inputs');
-    const context=getContext(),inputs=previewInput===null?recallInputs(messages,config.recall.recentFloorCount,context?.chat)
-      :extractRecallInputs(messages,{recentFloorCount:config.recall.recentFloorCount,input:previewInput,currentIndex:messages.length});
+    const context=getContext();
     const multi=build===buildRecall&&usesMultichannel(config.recall);
-    onStage(multi?'build-worker':'build-main');
-    const result=await (multi?buildMulti:previewInput===null?build:buildPreview)({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,time:root.time??null,timeAvailable:timeEnabled&&(!dateRuntime||!['failed','needs-calibration','cancelled','no-calendar','unavailable'].includes(observed?.status)),timeReminders:config.timeReminders?.reminders??null,
+    onStage(multi||build===buildRecall&&typeof WorkerClass==='function'?'build-worker':'build-main');
+    const result=await (multi?buildMulti:previewInput===null?buildKeyword:buildPreview)({events:root.events,batches:root.summary?.batches??[],...inputs,settings:config.recall,time:root.time??null,timeAvailable:timeEnabled&&(!dateRuntime||!['failed','needs-calibration','cancelled','no-calendar','unavailable'].includes(observed?.status)),timeReminders:config.timeReminders?.reminders??null,
       countTokens:typeof context?.getTokenCountAsync==='function'?body=>context.getTokenCountAsync(body):null},
       {signal,isCurrent:()=>current(target,serial,config,source),target,vectorConfig,taskProvider});
     onStage('guard-after-build');
@@ -151,7 +164,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
       // compute owns this isolated result; preview never installs it in the
       // runtime's actual/proof cache. A second full clone has no shared owner.
       return value.result;
-    }finally{if(previewAbort===abort){previewAbort=null;previewGuard=null;releaseSession(previewConfig);previewConfig=null;}}
+    }finally{if(previewAbort===abort){previewAbort=null;previewGuard=null;previewSource=null;releaseSession(previewConfig);previewConfig=null;}}
   }
   async function intercept(messages,_size,_abort,type='normal') {
     if(disposed)return;
@@ -198,6 +211,36 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
       if(!disposed&&serial===ticket){const cleared=clear();if(cleared&&target&&sameTarget(target,repository.captureTarget()))record(target,{status:'failed',type,diagnostic,message:`本轮召回失败，未注入记忆。诊断：${diagnostic.stage}${diagnostic.guard?' / '+diagnostic.guard:''} / ${diagnostic.name}${diagnostic.code?' / '+diagnostic.code:''}${diagnostic.abort?' / abort:'+diagnostic.abort.reason+(diagnostic.abort.guard?'/'+diagnostic.abort.guard:'')+(diagnostic.abort.code?'/'+diagnostic.abort.code:''):''}${diagnostic.worker?' / worker:'+diagnostic.worker.name+(diagnostic.worker.code?'/'+diagnostic.worker.code:''):''}`});}
     }
   }
+  // The host has more await boundaries after recall injection. Keep this
+  // adoption check separate from building: stale selections are cleared once,
+  // never recomputed or sent through another paid request.
+  async function finalizeSend(){
+    const owner=proof,selected=injectedSelections;
+    if(!owner)return true;
+    const reject=()=>{
+      if(proof!==owner)return false;
+      const clearedTicket=ticket+1,cleared=clear('stale',owner.target);
+      try{if(cleared&&!disposed&&proof===null&&ticket===clearedTicket&&sameTarget(owner.target,repository.captureTarget()))record(owner.target,{status:'failed',type:'final-adoption',message:'本轮召回资格已变化，已清除过期记忆，未重新请求。'});}catch{/* A changed target cannot receive the old send's failure. */}
+      return false;
+    };
+    try{
+      const authority=await repository.read(owner.target);
+      if(proof!==owner)return false;
+      if(!current(owner.target,owner.serial,owner.config,owner.source)||!selected||!selectedUnchanged({selected},authority.events))return reject();
+      // The host invokes this once after its final await. An async method's
+      // own last check would leave another microtask gap before host adoption.
+      let consumed=false;
+      return ()=>{
+        if(consumed)return false;consumed=true;
+        if(proof!==owner)return false;
+        try{
+          if(!current(owner.target,owner.serial,owner.config,owner.source)||!captureEvents||!selectedUnchanged({selected},captureEvents(owner.target)))return reject();
+          if(!current(owner.target,owner.serial,owner.config,owner.source))return reject();
+          return proof===owner;
+        }catch{return reject();}
+      };
+    }catch{return reject();}
+  }
   const context=getContext();
   const selectedUnchanged=(authority,events)=>authority.selected.every(saved=>JSON.stringify(events.find(row=>row.id===saved.id))===JSON.stringify(saved.event));
   if(repository.subscribeEventCommits)releases.push(repository.subscribeEventCommits(notice=>{
@@ -206,10 +249,19 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   // Ordinary settings changes do not cancel a captured task. Explicit host
   // lifecycle/feature-stop hooks still clear it, and source checks remain live.
   releases.push(maintenance.subscribe(notify));
-  for(const name of ['CHAT_CHANGED','GENERATION_ENDED','GENERATION_STOPPED','MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED']) {
+  for(const name of ['CHAT_CHANGED','GENERATION_ENDED','GENERATION_STOPPED','MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED','MESSAGE_DELETED']) {
     const event=context?.eventTypes?.[name],source=context?.eventSource;
     if(!event||typeof source?.on!=='function')continue;
-    const listener=()=>{clear(name==='GENERATION_STOPPED'?'stopped':name);notify();};
+    const listener=payload=>{
+      if(name==='MESSAGE_EDITED'||name==='MESSAGE_UPDATED'){
+        const floor=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;
+        const owners=[...(flight?[flight.source]:[]),...(proof?[proof.source]:[]),...(previewAbort?[previewSource]:[])];
+        // Only a proven, ordinary edit outside every active consumed set may
+        // survive. Unknown locations and all structural/lifecycle events revoke.
+        try{if(Number.isSafeInteger(floor)&&floor>=0&&floor<(getContext()?.chat?.length??0)&&owners.length&&owners.every(owner=>owner?.kind==='recall-scoped'&&!owner.floors.includes(floor)&&sourceMatches(owner.target,owner)))return;}catch{/* Revoke when the source cannot be established. */}
+      }
+      clear(name==='GENERATION_STOPPED'?'stopped':name);notify();
+    };
     source.on(event,listener);releases.push(()=>(source.off??source.removeListener)?.call(source,event,listener));
   }
   function inspect(limit=null){try{const value=records.get(key(repository.captureTarget()))??{status:'empty'};
@@ -219,7 +271,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     if(rebuild)throw new AiProviderError('request');return maintenance.process({mode});
   }
   const vectorIndexState=()=>maintenance.state();
-  return Object.freeze({preview,intercept,clear,preparationFailed,cancelPreview,prepareVectorIndex,vectorIndexState,cancelIndexPreparation,
+  return Object.freeze({preview,intercept,finalizeSend,clear,preparationFailed,cancelPreview,prepareVectorIndex,vectorIndexState,cancelIndexPreparation,
     captureWorkshopInjection(){
       try{
         if(!proof||!current(proof.target,proof.serial,proof.config,proof.source)||!injectedMaterials)return null;

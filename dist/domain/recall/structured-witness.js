@@ -1,7 +1,7 @@
 // Pure compatibility evidence: old fixed 01e50d63, adapted to TASK-016 boundaries.
 import {
     buildDetailQuerySurfaceModel,
-    matchDetailQuerySurface,
+    prepareDetailQuerySurface,
     normalizeQuerySurfaceDisplay,
 } from './detail-query-surface.js';
 
@@ -72,9 +72,8 @@ function continuesIdentity(char) {
     return /[\p{N}\p{M}\p{Script=Latin}_]/u.test(char);
 }
 
-function matchLiteralSurface(storedValue, queryText) {
+function matchLiteralSurface(storedValue, query) {
     const stored = canonicalFactKey(storedValue).toLowerCase();
-    const query = normalizeQuerySurfaceDisplay(queryText).toLowerCase();
     if (!stored) return null;
     for (let start = query.indexOf(stored); start !== -1; start = query.indexOf(stored, start + stored.length)) {
         const end = start + stored.length;
@@ -139,7 +138,11 @@ function locationAliasesByParent(memory) {
     ]));
 }
 
-function collectOccurrenceWitnesses(memoryId, occurrence, fragments) {
+export function prepareRecallQuerySurfaces(fragments) {
+    return new Map(fragments.map(fragment => [fragment, prepareDetailQuerySurface(fragment.cleanedText)]));
+}
+
+function collectOccurrenceWitnesses(memoryId, occurrence, fragments, preparedQueries) {
     const model = occurrence.field === 'detail' ? buildDetailQuerySurfaceModel(occurrence.storedValue) : null;
     const querySurfaces = [{ value: occurrence.storedValue }, ...(occurrence.aliases ?? [])
         .map(alias => ({ value: alias, matchedAlias: alias }))];
@@ -148,8 +151,8 @@ function collectOccurrenceWitnesses(memoryId, occurrence, fragments) {
         if (!fragment.cleanedText) continue;
         for (const querySurface of querySurfaces) {
             const surface = model
-                ? matchDetailQuerySurface(model, fragment.cleanedText)
-                : matchLiteralSurface(querySurface.value, fragment.cleanedText);
+                ? preparedQueries.get(fragment).match(model)
+                : matchLiteralSurface(querySurface.value, preparedQueries.get(fragment).folded);
             if (!surface?.matched && occurrence.field === 'detail') continue;
             if (!surface) continue;
             const alias = querySurface.matchedAlias;
@@ -181,7 +184,7 @@ function collectOccurrenceWitnesses(memoryId, occurrence, fragments) {
  * Distinct detail array entries remain distinct atoms. Literal fields with the
  * same conservative canonical key join one unambiguous detail atom when present.
  */
-export function collectMemoryStructuredWitnesses(memory, fragments) {
+export function collectMemoryStructuredWitnesses(memory, fragments, preparedQueries) {
     if (!memory || typeof memory !== 'object') throw new TypeError('memory must be an object');
     assertString(memory.id, 'memory.id');
     if (!Array.isArray(fragments)) throw new TypeError('fragments must be an array');
@@ -210,6 +213,7 @@ export function collectMemoryStructuredWitnesses(memory, fragments) {
         fragmentIds.add(fragment.id);
     });
 
+    preparedQueries ??= prepareRecallQuerySurfaces(fragments);
     const matchedOccurrences = [];
     const locationAliases = locationAliasesByParent(memory);
     FIELD_SPECS.forEach(([field, getter], fieldRank) => {
@@ -220,7 +224,7 @@ export function collectMemoryStructuredWitnesses(memory, fragments) {
                 canonicalKey: canonicalFactKey(storedValue),
                 ...(field === 'locations' ? { aliases: locationAliases.get(storedValue) ?? [] } : {}),
             };
-            const witnesses = collectOccurrenceWitnesses(memory.id, occurrence, fragments);
+            const witnesses = collectOccurrenceWitnesses(memory.id, occurrence, fragments, preparedQueries);
             if (witnesses.length) matchedOccurrences.push({ ...occurrence, witnesses });
         });
     });

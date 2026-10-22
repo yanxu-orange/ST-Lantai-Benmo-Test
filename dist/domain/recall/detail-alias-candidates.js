@@ -1,7 +1,7 @@
 // Pure compatibility evidence: old fixed 01e50d63, adapted to TASK-016 boundaries.
 import {
     buildDetailQuerySurfaceModel,
-    matchDetailQuerySurface,
+    prepareDetailQuerySurface,
     normalizeQuerySurfaceDisplay,
 } from './detail-query-surface.js';
 import { detailAliasParentText, isEligibleDetailAliasParent } from './alias-parent.js';
@@ -158,9 +158,9 @@ export function normalizeDetailAliasBindings({ memories = [], bindings = [] } = 
     return { relations: [...mergedByParent.values()], diagnostics };
 }
 
-function bestAliasMatch(relation, fragment) {
+function bestAliasMatch(relation, fragment, preparedQueries) {
     const matches = relation.aliases.flatMap(alias => {
-        const surface = matchDetailQuerySurface(alias.model, fragment.cleanedText);
+        const surface = preparedQueries.get(fragment).match(alias.model);
         if (!surface.matched) return [];
         const range = surface.usedComponents[0]?.range ?? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER];
         return [{ alias, surface, range }];
@@ -184,10 +184,11 @@ export function collectDetailAliasCandidates({ memories = [], fragments = [], bi
     const { relations, diagnostics } = normalizeDetailAliasBindings({ memories, bindings });
     const candidates = [];
 
+    const preparedQueries = new Map(fragments.filter(fragment => typeof fragment?.cleanedText === 'string' && fragment.cleanedText).map(fragment => [fragment, prepareDetailQuerySurface(fragment.cleanedText)]));
     const completeRelations = new Set();
     for (const relation of relations) {
         if (!fragments.some(fragment => fragment?.cleanedText
-            && matchDetailQuerySurface(relation.parentModel, fragment.cleanedText).matched)) continue;
+            && preparedQueries.get(fragment).match(relation.parentModel).matched)) continue;
         completeRelations.add(relation);
     }
 
@@ -195,11 +196,11 @@ export function collectDetailAliasCandidates({ memories = [], fragments = [], bi
         if (!fragment || typeof fragment !== 'object' || typeof fragment.cleanedText !== 'string'
             || !fragment.cleanedText) continue;
         const completeParents = relations.filter(relation =>
-            matchDetailQuerySurface(relation.parentModel, fragment.cleanedText).matched);
+            preparedQueries.get(fragment).match(relation.parentModel).matched);
 
         for (const relation of relations) {
             if (completeRelations.has(relation) || completeParents.includes(relation)) continue;
-            const best = bestAliasMatch(relation, fragment);
+            const best = bestAliasMatch(relation, fragment, preparedQueries);
             if (!best) continue;
             const conflictingParent = completeParents.find(other =>
                 other.parentModel.normalized !== relation.parentModel.normalized

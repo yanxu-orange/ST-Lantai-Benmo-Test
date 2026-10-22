@@ -2,6 +2,7 @@
 import {
     buildRecallQueryFragments,
     collectMemoryStructuredWitnesses,
+    prepareRecallQuerySurfaces,
 } from './structured-witness.js';
 
 export const STRUCTURED_CANDIDATE_VERSION = 'structured-candidate-v1';
@@ -87,6 +88,7 @@ export function buildMemoryLocalEvidenceBundles(memoryEvidence, fragments) {
 export function collectStructuredRecallCandidates({ memories, currentInput, recentHistory = [] } = {}) {
     if (!Array.isArray(memories)) throw new TypeError('memories must be an array');
     const fragments = buildRecallQueryFragments({ currentInput, recentHistory });
+    const preparedQueries = prepareRecallQuerySurfaces(fragments);
     const memoryIds = new Set();
     const candidates = [];
     memories.forEach((memory, libraryIndex) => {
@@ -95,7 +97,7 @@ export function collectStructuredRecallCandidates({ memories, currentInput, rece
         if (memoryIds.has(memory.id)) throw new TypeError(`Duplicate memory id: ${memory.id}`);
         memoryIds.add(memory.id);
         if (memory.mode !== 'trigger') return;
-        const evidence = collectMemoryStructuredWitnesses(memory, fragments);
+        const evidence = collectMemoryStructuredWitnesses(memory, fragments, preparedQueries);
         if (!evidence.parentFacts.length) return;
         candidates.push({
             memoryId: memory.id,

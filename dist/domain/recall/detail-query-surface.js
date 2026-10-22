@@ -179,11 +179,34 @@ function anchorTouchesRun(text, anchor, overlap) {
  * Consumers retain parentDetail alongside memory/field identity; canonical text
  * is never a storage identity. A successful result consumes no facts itself.
  */
+// One query-local preparation can serve all detail models in the same build.
+// Keep raw text for identifier classification and preserve normalized UTF-16 offsets.
+export function prepareDetailQuerySurface(queryFragment) {
+    requireText(queryFragment);
+    const display = displayText(queryFragment);
+    const folded = display.toLowerCase();
+    let identifierForms;
+    const classifyIdentifier = (model, normalizedStart) => {
+        identifierForms ??= Array.from(queryFragment.matchAll(/[A-Za-z0-9Ａ-Ｚａ-ｚ０-９]+(?:[-－][A-Za-z0-9Ａ-Ｚａ-ｚ０-９]+)*/gu), raw => ({
+            raw: raw[0], display: displayText(raw[0]),
+            start: displayText(queryFragment.slice(0, raw.index) + '\u0001').slice(0, -1).toLowerCase().length,
+        }));
+        const form = identifierForms.find(item => item.start === normalizedStart);
+        if (!form) return 'identifier-safe-variant';
+        if (form.raw === model.parentDetail.trim()) return 'identifier-exact';
+        return form.display !== form.raw ? 'identifier-nfkc-variant' : 'identifier-safe-variant';
+    };
+    return Object.freeze({display, folded,
+        match: model => matchPreparedDetailQuerySurface(model, queryFragment, display, folded, classifyIdentifier)});
+}
 export function matchDetailQuerySurface(model, queryFragment) {
     requireText(queryFragment);
     if (model?.version !== DETAIL_QUERY_SURFACE_VERSION) throw new TypeError('Unsupported detail surface model version');
-    const display = displayText(queryFragment);
-    const text = model.ruleFamily === 'measurement' || model.ruleFamily === 'signed-unit' ? display : display.toLowerCase();
+    return matchPreparedDetailQuerySurface(model, queryFragment, displayText(queryFragment));
+}
+function matchPreparedDetailQuerySurface(model, queryFragment, display, folded = display.toLowerCase(), classifyIdentifier = (model, start) => identifierMatchClass(model, queryFragment, start)) {
+    if (model?.version !== DETAIL_QUERY_SURFACE_VERSION) throw new TypeError('Unsupported detail surface model version');
+    const text = model.ruleFamily === 'measurement' || model.ruleFamily === 'signed-unit' ? display : folded;
     const result = (matched, matchClass, usedComponents = []) => ({
         matched, version: model.version, ruleFamily: model.ruleFamily,
         parentDetail: model.parentDetail, matchClass,
@@ -200,7 +223,7 @@ export function matchDetailQuerySurface(model, queryFragment) {
             if (!parsed) continue;
             if (parsed[1] === c.letters && parsed[2] === c.number) {
                 const hit = { value: token[0], start: token.index, end: token.index + token[0].length };
-                const matchClass = identifierMatchClass(model, queryFragment, token.index);
+                const matchClass = classifyIdentifier(model, token.index);
                 return result(true, matchClass, [component('identifier', hit, 'letters-number-identity')]);
             }
             if (parsed[1] !== c.letters && parsed[2] === c.number) reason = 'identifier-prefix-conflict';

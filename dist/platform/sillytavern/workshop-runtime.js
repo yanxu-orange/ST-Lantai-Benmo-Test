@@ -107,8 +107,12 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     }catch{if(!disposed&&serial===ticket)clear();}
   }
   async function backgroundState(target,{readView,captured}={}){
-    const config=settings.captureWorkshop(),selection=captured??await repository.captureWorkshop(target,readView),root=readView?await repository.readPanelRoot(target,readView):await repository.read(target);
+    const config=settings.captureWorkshop();
+    const canShare=typeof repository.capturePanelData==='function'&&typeof repository.readPanelRoot==='function'&&typeof repository.matchesPanelData==='function';
+    const view=readView??(canShare?await repository.capturePanelData(target):undefined);
+    const selection=captured??await repository.captureWorkshop(target,view),root=view?repository.readPanelRoot(target,view):await repository.read(target);
     if(disposed||!sameTarget(target,repository.captureTarget()))throw new Error('聊天已变化');
+    if(view&&repository.matchesPanelData(target,view)!==true)throw new Error('工坊资料读取期间已变化，请重新读取');
     const modules=applicableModules(config.workshop,selection.workshop,root.binding?.kind==='character'?root.binding.owner:null).filter(module=>gates[module.lifecycle].allowed());
     return {target,config,selection,modules:backgroundModules(modules)};
   }

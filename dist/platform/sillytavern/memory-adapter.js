@@ -6,7 +6,7 @@ import {emptySummary} from '../../domain/summary/data.js';
 import {emptyCumulative} from '../../domain/cumulative/data.js';
 import {emptyWorkshop} from '../../domain/workshop/model.js';
 import {assertWorkshopProof} from './workshop-identities.js';
-import {latestSourceMetadata} from './latest-source-metadata.js';
+import {latestSourceMetadata,pendingProjection} from './latest-source-metadata.js';
 import { getSillyTavernContext } from './context.js';
 import { emptyRoot, assertRoot, inheritMemoryRoot } from '../../domain/memory/model.js';
 import { sameTarget } from '../../domain/memory/repository.js';
@@ -43,7 +43,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
   const configurationSaves = new Set();
   let activeSnapshot = null;
   let sourceEpoch=0,sourceSerial=0;
-  const messageIds=new WeakMap(),sourceVersions=new Map();
+  const messageIds=new WeakMap(),sourceVersions=new Map(),recallSources=new WeakMap();
   const deletionListeners=new Set(),visibilityObservers=new Set();
   let deletionBaseline=null,deletionSerial=0,regenerationRemoval=null;
   function messageIdentity(message,floor){
@@ -426,28 +426,74 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
     // outside story sources even when hidden user/assistant rows are included.
     return (includeHidden||message.is_system!==true)&&typeof message.is_user==='boolean'&&!message.extra?.type&&!message.extra?.tool_invocations&&(!includeHidden||message.role!=='system'&&message.role!=='tool')?(message.is_user?'user':'assistant'):'system';
   }
-  function chatSourceMessages(includeHidden=false,messages=getContext().chat,includeLatestMetadata=false){
-    return messages.map((message,floor)=>{
+  function chatSourceMessages(includeHidden=false,messages=getContext().chat,includeLatestMetadata=false,range){
+    const project=(message,floor)=>{
         if(!message||typeof message.mes!=='string')throw new Error('总结原始消息不可用');
         const role=sourceRole(message,includeHidden);
         const date=message.send_date==null?null:String(message.send_date);
         const identity=JSON.stringify([floor,typeof message.id==='string'||Number.isSafeInteger(message.id)?message.id:null,date]);
         return {floor,identity,objectTicket:messageIdentity(message,floor),revision:sourceVersions.get(floor)??0,role,semanticRole:sourceRole(message,true),system:message.is_system===true,text:message.mes,date,swipeId:Number.isSafeInteger(message.swipe_id)&&message.swipe_id>=0?message.swipe_id:null,...(includeLatestMetadata?latestSourceMetadata(message):{})};
-      });
+      };
+    if(range!==undefined){
+      if(!Number.isSafeInteger(range?.start)||range.start<0||!Number.isSafeInteger(range.end)||range.end<range.start)throw new Error('总结来源范围无效');
+      // The former full capture rejected malformed chat even outside the
+      // requested range. Keep that check without projecting every message.
+      for(const message of messages)if(!message||typeof message.mes!=='string')throw new Error('总结原始消息不可用');
+      return messages.slice(range.start,range.end+1).map((message,index)=>project(message,range.start+index));
+    }
+    return messages.map(project);
   }
-  function captureChatSource(target,includeHidden=false,includeLatestMetadata=false) {
+  function captureChatSource(target,includeHidden=false,includeLatestMetadata=false,range) {
       const current=check(target);requireConfirmed(current);
       if(['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED'].some(name=>!context.eventTypes[name]))throw new Error('酒馆缺少总结来源变化监听能力');
-      const messages=chatSourceMessages(includeHidden,getContext().chat,includeLatestMetadata);
+      const messages=chatSourceMessages(includeHidden,getContext().chat,includeLatestMetadata,range);
       check(target);return copy({epoch:sourceEpoch,messages});
   }
-   function captureSummarySource(target) {
-     const source=captureChatSource(target,true,true);
+   function captureSummarySource(target,range) {
+     const source=captureChatSource(target,true,true,range);
      // SillyTavern also sets is_system when a normal chat row is hidden. Event
      // summaries use the semantic role. Old system-only rows cannot safely
      // prove the hidden speaker or an unchanged regeneration input set.
      return {...source,messages:source.messages.map(message=>({...message,system:message.role==='system'}))};
    }
+  // Recall owns only the consumed text, while the host still owns the full
+  // container and row structure. These receipts and object references are local
+  // to this adapter instance; they are never written into the chat root.
+  function recallStructure(message,floor){
+    if(!message||typeof message.mes!=='string')throw new Error('总结原始消息不可用');
+    const metadata=latestSourceMetadata(message),swipe=Number.isSafeInteger(message.swipe_id)&&message.swipe_id>=0?message.swipe_id:null;
+    return {object:message,id:typeof message.id==='string'||Number.isSafeInteger(message.id)?message.id:null,
+      name:message.name,date:message.send_date==null?null:String(message.send_date),role:sourceRole(message),semanticRole:sourceRole(message,true),
+      system:message.is_system===true,swipeId:swipe,...metadata,
+      pending:pendingProjection(message)||!!(Array.isArray(message.swipes)&&message.swipes.length&&typeof message.swipes[message.swipe_id??0]!=='string')};
+  }
+  function captureRecallSource(target,scope){
+    const current=check(target);requireConfirmed(current);
+    if(['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED'].some(name=>!context.eventTypes[name]))throw new Error('酒馆缺少总结来源变化监听能力');
+    const chat=getContext().chat,floors=scope?.floors;
+    if(!Array.isArray(floors)||new Set(floors).size!==floors.length||floors.some(floor=>!Number.isSafeInteger(floor)||floor<0||floor>=chat.length))throw new Error('召回来源范围无效');
+    const selected=new Set(floors),structure=[],messages=[];
+    for(let floor=0;floor<chat.length;floor++){
+      const shape=recallStructure(chat[floor],floor);structure.push(shape);
+      if(selected.has(floor))messages.push(Object.freeze({floor,objectTicket:messageIdentity(chat[floor],floor),revision:sourceVersions.get(floor)??0,
+        role:shape.role,semanticRole:shape.semanticRole,system:shape.system,date:shape.date,swipeId:shape.swipeId,replyId:shape.replyId,text:chat[floor].mes}));
+    }
+    const receipt=Object.freeze({epoch:sourceEpoch,messages:Object.freeze(messages)});
+    check(target);recallSources.set(receipt,{chat,structure,target:copy(target)});return receipt;
+  }
+  function matchesRecallSource(target,receipt){
+    try{
+      const current=check(target);requireConfirmed(current);
+      const saved=recallSources.get(receipt),chat=getContext().chat;
+      if(!saved||!sameTarget(target,saved.target)||receipt.epoch!==sourceEpoch||chat!==saved.chat||chat.length!==saved.structure.length)return false;
+      for(let floor=0;floor<chat.length;floor++){
+        const before=saved.structure[floor],after=recallStructure(chat[floor],floor);
+        if(Object.keys(before).some(key=>before[key]!==after[key]))return false;
+      }
+      for(const row of receipt.messages)if(row.objectTicket!==messageIdentity(chat[row.floor],row.floor)||row.revision!==(sourceVersions.get(row.floor)??0)||row.text!==chat[row.floor].mes)return false;
+      check(target);return receipt.epoch===sourceEpoch&&getContext().chat===chat;
+    }catch{return false;}
+  }
   function matchesSource(target,snapshot,includeHidden=false) {
       try {
         const current=check(target);requireConfirmed(current);
@@ -514,7 +560,7 @@ export function createSillyTavernMemoryAdapter({ getContext = getSillyTavernCont
       if(expected.some(saved=>{const row=byFloor.get(saved.floor);return !row||!row.system||['identity','role','text','date','swipeId','replyId'].some(key=>row[key]!==saved[key]);}))throw new Error('原文隐藏尚未保存');
       return true;
     },
-     captureChatSource, captureSummarySource,observeSourceVisibility,
+     captureChatSource, captureSummarySource,captureRecallSource,matchesRecallSource,observeSourceVisibility,
     // Storage ownership only: never pass this visibility-neutral source to a
     // generation or prompt consumer. Hidden story replies still own summaries.
     captureLatestRetentionSource(target){const source=captureChatSource(target,true);return {...source,messages:source.messages.map(message=>({...message,system:message.role==='system'}))};},

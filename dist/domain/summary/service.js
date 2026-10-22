@@ -19,7 +19,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
   }
   function sourceCurrent(snapshot,target) {
     const record=[...records.values()].find(item=>item.operationId===snapshot.operationId);
-    try{const selection=record?.selection??snapshot.selection,proof=repository.matchesSummaryTaskProof?.(target,selection,snapshot.source,snapshot.tracking?.ticket.revision);if(proof!==undefined)return proof;return (repository.matchesSummaryTask??repository.matchesSummary).call(repository,target,selection)&&(!snapshot.tracking||repository.matchesTrackingRevision(target,snapshot.tracking.ticket.revision))&&matchesSummarySource(snapshot.source,captureSource(target));}catch{return false;}
+    try{const selection=record?.selection??snapshot.selection,proof=repository.matchesSummaryTaskProof?.(target,selection,snapshot.source,snapshot.tracking?.ticket.revision);if(proof!==undefined)return proof;return (repository.matchesSummaryTask??repository.matchesSummary).call(repository,target,selection)&&(!snapshot.tracking||repository.matchesTrackingRevision(target,snapshot.tracking.ticket.revision))&&matchesSummarySource(snapshot.source,captureSource(target,snapshot.source.requestedRange));}catch{return false;}
   }
   const available=settings=>settings.eventWords.filter(item=>item.enabled!==false).map(item=>item.name);
   function notify(taskId) {const value=inspect(taskId);if(value)for(const listener of [...listeners])try{listener(value);}catch{/* observers cannot stop a task */}}

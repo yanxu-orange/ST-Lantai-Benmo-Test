@@ -389,22 +389,24 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     }catch(error){
       if(!disposed&&ticket===serial&&(!t||current(t))){
         if(generationCurrent&&!generationCurrent()&&error?.code!=='COMMIT_UNCONFIRMED')return false;
-        // Configuration/preparation can fail before valid exists. Compare the
-        // original input pair too, including hidden flags and user content.
-        try{if(originSource&&!equal(originSource,inputPair(raw(t))))return false;}catch{if(error?.code!=='COMMIT_UNCONFIRMED')return false;}
+        // Only preparation failures lack a frozen task's ownership guard.
+        // Established tasks may finish against their original text after edits.
+        if(!generationCurrent)try{if(originSource&&!equal(originSource,inputPair(raw(t))))return false;}catch{if(error?.code!=='COMMIT_UNCONFIRMED')return false;}
         const message=failure(error);
         retainFailure({requestId,target:t,replyIds:key?[key]:[],taskIds:requestedTaskIds,rawResponse,error:message});
-        report('failed',`本轮自动生成失败：${firstFailure||'未收到可保存结果，请重试。'}`);
+        const hasSaved=state.floorStates[key]?.status==='ready'||trackingFloorStates[key]?.status==='ready'||scheduleFloorStates[key]?.status==='ready'||Object.values(workshopFloorStates[key]??{}).some(row=>row.status==='ready');
+        report(hasSaved?'partial':'failed',hasSaved?'本轮部分结果已保存，后续处理失败':`本轮自动生成失败：${firstFailure||'未收到可保存结果，请重试。'}`);
         // refresh may create the reply UUID before preparation fails. Bind only
         // to the same reply version; a floor number is never an error owner.
         const messageNow=getContext().chat?.[floor];
-        if(messageNow!==origin||messageNow?.mes!==originText||(messageNow?.swipe_id??0)!==originSwipe)return false;
-        try{key=t?raw(t).messages.find(row=>row.floor===floor)?.replyId:null;}catch{key=null;}
+        if(messageNow!==origin||!generationCurrent&&messageNow?.mes!==originText||(messageNow?.swipe_id??0)!==originSwipe)return false;
+        if(generationCurrent){if(latestSourceMetadata(messageNow).replyId!==key)return false;}
+        else try{key=t?raw(t).messages.find(row=>row.floor===floor)?.replyId:null;}catch{key=null;}
         if(!key)return false;
-        if(latestTask||!plan&&!workshopOnly&&summaryAllowed()){state.status='failed';state.error=message;state.floorStates[key]={status:'failed',error:message};}
+        if((latestTask||!plan&&!workshopOnly&&summaryAllowed())&&state.floorStates[key]?.status!=='ready'){state.status='failed';state.error=message;state.floorStates[key]={status:'failed',error:message};}
         const affected=plan?.tasks??((automatic||workshopOnly)?workshopState?.modules.filter(module=>taskId===undefined||module.id===taskId).map(module=>({module}))??[]:[]);
-        for(const task of affected)markWorkshop(task,'failed',failure(error));
-        if(trackingPlan||((automatic||workshopOnly)&&(!taskId||taskId==='tracking')&&(getControls?.()?.allowed('item')||getControls?.()?.allowed('npc'))))markTracking('failed',failure(error));if(schedulePlan||((automatic||workshopOnly)&&(!taskId||taskId==='schedule_tracking')&&scheduleRuntime?.allowed?.()))markSchedule('failed',failure(error));publish();
+        for(const task of affected)if(workshopFloorStates[key]?.[task.module.id]?.status!=='ready')markWorkshop(task,'failed',failure(error));
+        if(trackingFloorStates[key]?.status!=='ready'&&(trackingPlan||((automatic||workshopOnly)&&(!taskId||taskId==='tracking')&&(getControls?.()?.allowed('item')||getControls?.()?.allowed('npc')))))markTracking('failed',failure(error));if(scheduleFloorStates[key]?.status!=='ready'&&(schedulePlan||((automatic||workshopOnly)&&(!taskId||taskId==='schedule_tracking')&&scheduleRuntime?.allowed?.())))markSchedule('failed',failure(error));publish();
       }
       return false;
     }finally{

@@ -19,6 +19,8 @@ const assertKind=kind=>{if(!kinds.includes(kind))throw new Error('本末类别�
 const content=(domain,kind)=>kind==='self'?domain.self:domain.outline;
 const stable=value=>value&&typeof value==='object'?Array.isArray(value)?value.map(stable):Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):value;
 async function digest(value){const bytes=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(stable(value))));return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');}
+const roleTargets=(preferences,kind)=>kind==='self'?preferences.characters.map(({id,name})=>({id,name})):null;
+const targetsRemain=(preferences,targets)=>targets===null||targets.every(target=>preferences.characters.some(row=>row.id===target.id&&row.name===target.name));
 const materialPreferences=(domain,selected)=>selected.map(kind=>{const p=domain.preferences[kind];return {kind,readMemory:p.readMemory,readOriginal:p.readOriginal,autoSource:p.autoSource??'event',...(kind==='self'?{readCard:p.readCard}:{})};});
 const semanticReview=(review,owner)=>review?{...review,progress:Object.fromEntries(review.kinds.map(kind=>[kind,semanticProgress(review.progress[kind],owner)]))}:review;
 const durableGeneration=value=>Object.fromEntries(Object.entries(value).filter(([key])=>!['epoch','generationEpoch'].includes(key)));
@@ -101,17 +103,22 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
   function matches(received){
     try{return !!received&&current(received.target)&&received.serial===serial&&received.epoch===epochs[received.kind]&&allowed(received.kind)&&controls()?.matches(received.master)===true&&controls()?.matches(received.category)===true;}catch{return false;}
   }
+  // Reuse the existing mutation tail only for short read/compare/write phases.
+  // Model and tokenizer waits remain outside it. The root queue still owns CAS.
+  function queueMutation(work){const result=mutationTail.catch(()=>{}).then(work);mutationTail=result;return result;}
   function mutate(kind,change,{original,preferences=false}={}){
     assertKind(kind);
     if(unconfirmed)throw new Error('保存结果尚未确认，请重新读取后再操作');
     const requestedTarget=clone(target),requested=selection,ticket=serial;
     const expected=clone(original??(requested?preferences?requested.narrative.preferences[kind]:content(requested.narrative,kind):null));
     const guard=preferences?null:proof(kind,requestedTarget);
-    // Any setting/content mutation invalidates a previously dispatched response,
-    // including a value changed away and then restored before the response lands.
-    epochs[kind]++;if(guard)guard.epoch=epochs[kind];
-    if(taskOwner?.kinds.includes(kind))manager.cancel(taskOwner.id);
-    clearSlots();
+    // Defaults belong to the next run. Manual results still revoke dispatched
+    // work, including an edit changed away and then restored.
+    if(!preferences){
+      epochs[kind]++;guard.epoch=epochs[kind];
+      if(taskOwner?.kinds.includes(kind))manager.cancel(taskOwner.id);
+      clearSlots();
+    }else if(!sequenceRun||!['running','awaiting-review'].includes(sequenceRun.status)){clearSlots();}
     const valid=()=>!unconfirmed&&current(requestedTarget)&&ticket===serial&&(preferences||matches(guard));
     const work=mutationTail.catch(()=>{}).then(async()=>{
       if(!requested||!valid())throw new Error('聊天或功能开关已变化，请重新读取本末');
@@ -121,7 +128,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       const next=assertNarrative(change(clone(latest.narrative)));
       const saved=await repository.updateNarrative(requestedTarget,latest,next,{isCurrent:valid,requireConfirmation:!preferences});
       if(!valid())throw new Error('聊天或功能开关已变化，请重新读取本末');
-      state[kind]={...state[kind],status:'ready',error:''};return adopt(requestedTarget,saved.selection);
+      if(!preferences)state[kind]={...state[kind],status:'ready',error:''};return adopt(requestedTarget,saved.selection);
     });
     const guarded=work.catch(error=>{if(error.code==='COMMIT_UNCONFIRMED'&&current(requestedTarget))blockWrites(error);throw error;});
     mutationTail=guarded;return guarded;
@@ -166,17 +173,22 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     return pending;
   }
   function checkpointDomain(domain,active){const next=clone(domain);next.pendingRun=pendingCheckpoint(active,next);return next;}
-  async function persistCheckpoint(active,isCurrent=()=>true){
+  function persistCheckpoint(active,isCurrent=()=>true){return queueMutation(()=>writeCheckpoint(active,isCurrent));}
+  async function writeCheckpoint(active,isCurrent=()=>true){
     const t=active.target,ticket=serial;
     if(!current(t)||sequenceRun!==active||!isCurrent())return;
     const latest=await repository.captureNarrative(t),next=checkpointDomain(latest.narrative,active);
     const saved=await repository.updateNarrative(t,latest,next,{isCurrent:()=>!unconfirmed&&current(t)&&ticket===serial&&sequenceRun===active&&isCurrent(),requireConfirmation:true});
     adopt(t,saved.selection);
   }
-  async function saveRunPreferences(patch){
+  function saveRunPreferences(patch){
+    const t=repository.captureTarget(),ticket=serial,value=clone(patch);
+    return queueMutation(()=>writeRunPreferences(value,t,ticket));
+  }
+  async function writeRunPreferences(patch,t,ticket){
     if(unconfirmed)throw new Error('保存结果尚未确认，请重新读取后再操作');
-    if(sequencePromise)throw new Error('请先暂停当前生成');
-    const t=repository.captureTarget(),ticket=serial,latest=await repository.captureNarrative(t);
+    if(!current(t)||ticket!==serial)throw new Error('聊天已变化，请重新读取本末');
+    const latest=await repository.captureNarrative(t);
     const next=assertNarrative({...latest.narrative,preferences:{...latest.narrative.preferences,run:{...runPreferences(latest.narrative),...clone(patch)}}});
     if(equal(next.preferences.run,latest.narrative.preferences.run))return adopt(t,latest);
     try{const saved=await repository.updateNarrative(t,latest,next,{isCurrent:()=>!unconfirmed&&current(t)&&ticket===serial,requireConfirmation:false});return adopt(t,saved.selection);}
@@ -190,6 +202,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     return {captured,root,raw:source(t)};
   }
   async function preview(options={}){
+    if(unconfirmed)throw new Error('保存结果尚未确认，请重新读取后再操作');
     const t=repository.captureTarget(),captured=await repository.captureNarrative(t);
     return planRange(captured.narrative,source(t),t,options);
   }
@@ -224,6 +237,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     return {status:active.length&&ranges.length?'ready':'waiting',kinds:active,startFloor,endFloor,latestFloor,batchSize,ranges,restart,...(active.length>1?{jointBudget:options.jointBudget??narrativeJointBudget(domain)}:{})};
   }
   async function previewRequest(options={}){
+    if(unconfirmed)throw new Error('保存结果尚未确认，请重新读取后再操作');
     if(currentRequestPreview&&previewGuard?.()&&sequenceRun?.status==='running')return clone(currentRequestPreview);
     const t=repository.captureTarget(),ticket=serial,{captured,root,raw}=await captureInputs(t);
     const pending=sequenceRun&&['running','paused','failed','awaiting-review'].includes(sequenceRun.status)?sequenceRun:null;
@@ -269,7 +283,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const authorized=()=>sequenceRun===active&&authority.every(matches);
     if(!authorized())throw new Error('聊天或功能开关已变化，生成已停止');
     compactActiveSources(active);active.usage=null;currentRequestPreview=null;previewGuard=null;active.pairId??=crypto.randomUUID();publishRun();
-    const t=active.target,{captured,root,raw}=await captureInputs(t),projectedAtStart=reconcileNarrativeSource(captured.narrative,raw).domain;
+    const t=active.target,inputsAtStart=await captureInputs(t),root=inputsAtStart.root,raw=inputsAtStart.raw,captured={...inputsAtStart.captured,narrative:{...inputsAtStart.captured.narrative,preferences:clone(active.preferences)}},projectedAtStart=reconcileNarrativeSource(captured.narrative,raw).domain;
     if(!authorized())throw new Error('聊天或功能开关已变化，生成已停止');
     const proofs=authority.filter(({kind})=>allowed(kind)&&(!active.summary||(captured.narrative.preferences[kind].autoSource??'event')===(active.summarySource??'event'))&&(!options.only||options.only.includes(kind))&&(active.restart||active.regenerateLatest||(active.summary?narrativeHighWater(captured.narrative,kind):(projectedAtStart.progress[kind]?.lastProcessedFloor??-1))<range.endFloor));
     if(!proofs.length){active.index++;await persistCheckpoint(active);return;}
@@ -277,12 +291,11 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const durable=active.reviewBeforeCommit&&!active.summary,bind=durable?digest:async()=>null;
     const config=clone(generation()),usesCard=active.kinds.includes('self')&&captured.narrative.preferences.self.readCard,card=usesCard?cardSnapshot():null,tasks=[];
     let signal;
-    const materialSettings=materialPreferences(captured.narrative,active.kinds),materialEpochs=active.kinds.map(kind=>[kind,epochs[kind]]);
+    const materialEpochs=active.kinds.map(kind=>[kind,epochs[kind]]);
     const preparationCurrent=()=>!unconfirmed&&!signal?.aborted&&proofs.every(matches)&&materialEpochs.every(([kind,epoch])=>epochs[kind]===epoch);
     const valid=()=>{try{
       if(!preparationCurrent()||!equal(generation(),config)||usesCard&&!equal(cardSnapshot(),card))return false;
       const currentRaw=source(t),currentRoot=typeof adapter.peekConfirmed==='function'?adapter.peekConfirmed(t):null;
-      if(currentRoot?.narrative&&!equal(materialSettings,materialPreferences(currentRoot.narrative,active.kinds)))return false;
       const events=currentRoot?projectNarrativeMemory(currentRoot,currentRaw):null;
       return tasks.every(task=>matchesNarrativeSource(task.source,currentRaw)&&(events===null||matchesNarrativeMemory(task,events)));
     }catch{return false;}};
@@ -301,21 +314,22 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       if(!valid())throw new Error('材料、设置或聊天已变化，生成已停止');
       const responses=parseCombinedNarrativeResponse(output.text,proofs.map(row=>row.kind)),errors=[];
       active.stage='saving';publishRun();
+      return queueMutation(async()=>{
       const inputs=await captureInputs(t),{captured:latest,root:latestRoot}=inputs,results={},progress={},categories={};
       if(!valid())throw new Error('材料、设置或聊天已变化，生成已停止');
       for(const task of tasks){
         const kind=task.kind;
         try{
-          if(!equal(latest.narrative.preferences[kind],captured.narrative.preferences[kind])||!equal(latest.narrative[kind],captured.narrative[kind])||!equal(semanticProgress(latest.narrative.progress[kind],latest.narrative),semanticProgress(captured.narrative.progress[kind],captured.narrative)))throw new Error('本末内容已变化，请重试');
+          if(!targetsRemain(latest.narrative.preferences[kind],roleTargets(captured.narrative.preferences[kind],kind))||!equal(latest.narrative[kind],captured.narrative[kind])||!equal(semanticProgress(latest.narrative.progress[kind],latest.narrative),semanticProgress(captured.narrative.progress[kind],captured.narrative)))throw new Error('本末内容已变化，请重试');
           const applied=applyNarrativeResponse(prepared.projected,task,responses[kind],source(t),{events:projectNarrativeMemory(latestRoot,source(t))});
           results[kind]=applied[kind];progress[kind]=importNarrativeProgress(active,applied.progress[kind],applied);
-          categories[kind]={preferences:await bind(latest.narrative.preferences[kind]),entries:await bind(latest.narrative[kind]),progress:null,latestGeneration:null,memory:null,memoryIds:[],readMemory:false};
+          categories[kind]={...(durable&&kind==='self'?{targets:roleTargets(captured.narrative.preferences[kind],kind)}:{}),preferences:await bind(roleTargets(captured.narrative.preferences[kind],kind)),entries:await bind(latest.narrative[kind]),progress:null,latestGeneration:null,memory:null,memoryIds:[],readMemory:false};
         }catch(error){errors.push(error.message);categoryStatus(kind,{status:'failed',error:error.message});}
       }
       if(durable&&errors.length)throw new Error(errors[0]);
-      owner.inputs=inputs;owner.selection=latest;
+      owner.selection=latest;
       if(!Object.keys(results).length)throw new Error(errors[0]??'本批没有有效结果');
-      const review={kinds:Object.keys(results),range:clone(range),results,progress,bindings:{generation:await bind(durableConfig(config)),card:usesCard?await bind(card):null,categories},pairId:active.pairId};
+      const review={kinds:Object.keys(results),range:clone(range),results,progress,bindings:{...(durable?{version:2}:{}),generation:await bind(durableConfig(config)),card:usesCard?await bind(card):null,categories},pairId:active.pairId};
       if(!valid())throw new Error('材料、设置或聊天已变化，生成已停止');
       if(active.reviewBeforeCommit&&!active.summary){
         active.review=review;active.status='awaiting-review';active.stage='awaiting-review';reviewGuards={active,valid};
@@ -324,6 +338,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
         for(const kind of review.kinds)categoryStatus(kind,{status:'awaiting-review',error:''});publishRun();
       }
       return {review,errors};
+      });
     },valid);
     const result=await manager.settled(owner.id);
     if(result.status!=='awaiting-user'){
@@ -347,7 +362,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const authorized=()=>sequenceRun===active&&authority.every(matches);
     const work=(async()=>{
       active.status='running';active.error='';publishRun();
-      try{if(!checkpointPersisted)await persistCheckpoint(active,authorized);if(!authorized())throw new Error('聊天或功能开关已变化，生成已停止');}catch(error){active.status='failed';active.error=error.message;if(error.code==='COMMIT_UNCONFIRMED')blockWrites(error);publishRun();throw error;}
+      try{if(!active.preferences){active.preferences=clone((await repository.captureNarrative(active.target)).narrative.preferences);if(!authorized())throw new Error('聊天或功能开关已变化，生成已停止');}if(!checkpointPersisted)await persistCheckpoint(active,authorized);if(!authorized())throw new Error('聊天或功能开关已变化，生成已停止');}catch(error){active.status='failed';active.error=error.message;if(error.code==='COMMIT_UNCONFIRMED')blockWrites(error);publishRun();throw error;}
       while(sequenceRun===active&&active.index<active.ranges.length){
         if(active.pauseRequested){active.status='paused';await persistCheckpoint(active);break;}
         const only=active.failedKinds.length?[...active.failedKinds]:null;
@@ -368,16 +383,16 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const reservation={},requestedTarget=repository.captureTarget(),requestedSerial=serial;
     const requestedKinds=options.kind!==undefined?[assertKind(options.kind)]:Array.isArray(options.kinds)?options.kinds:kinds;
     const requestedProofs=requestedKinds.filter(allowed).map(kind=>proof(kind,requestedTarget));sequencePromise=reservation;
-    let plan;
+    let plan,preferences;
     try{const latest=await repository.captureNarrative(requestedTarget);
-    plan=planRange(latest.narrative,source(requestedTarget),requestedTarget,options);
+    preferences=clone(latest.narrative.preferences);plan=planRange(latest.narrative,source(requestedTarget),requestedTarget,options);
     if(!current(requestedTarget)||serial!==requestedSerial||!requestedProofs.every(matches))throw new Error('聊天已变化，请重新选择范围');
     if(latest.narrative.pendingRun)throw new Error('有未完成的叙事批次，请重新读取后继续');
     }finally{if(sequencePromise===reservation)sequencePromise=null;}
     if(plan.restart&&options.restart!==true){const error=new Error('所选范围已有处理结果，请确认替换所选类别的结果');error.code='NARRATIVE_REPLACE_CONFIRMATION';throw error;}
     if(!plan.kinds.length)return snapshot();
     if(!plan.ranges.length)throw new Error('尚无新的完整 AI 回复可生成');
-    sequenceRun={...plan,reviewBeforeCommit:options.reviewBeforeCommit===true,target:clone(requestedTarget),index:0,status:'running',stage:'preparing',error:'',failedKinds:[],pauseRequested:false,skipped:0};
+    sequenceRun={...plan,preferences,reviewBeforeCommit:options.reviewBeforeCommit===true,target:clone(requestedTarget),index:0,status:'running',stage:'preparing',error:'',failedKinds:[],pauseRequested:false,skipped:0};
     return drive(sequenceRun);
   }
   async function afterSummaryCommit({target:t,startFloor,endFloor,summarySource='event',sentFloors}){
@@ -394,10 +409,11 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const sharedStart=Math.max(startFloor,...active.map(kind=>narrativeHighWater(captured.narrative,kind)+1));
     if(sharedStart>endFloor)return {skipped:true};
     const ranges=[{startFloor:sharedStart,endFloor}];
-    sequenceRun={target:clone(t),kinds:active,...(active.length>1?{jointBudget:narrativeJointBudget(captured.narrative)}:{}),summarySource,...(sentFloors?{sentFloors:durableSourceMessages(sentFloors),summarySnapshot:(()=>{const rawMessages=durableSourceMessages(source(t).messages.filter(row=>row.floor<=endFloor));return {requestedRange:{start:0,end:endFloor},rawMessages,fingerprint:sourceFingerprint(rawMessages)};})()}:{}),ranges,index:0,restart:false,status:'running',stage:'preparing',error:'',failedKinds:[],pauseRequested:false,skipped:0,summary:true};
+    sequenceRun={target:clone(t),preferences:clone(captured.narrative.preferences),kinds:active,...(active.length>1?{jointBudget:narrativeJointBudget(captured.narrative)}:{}),summarySource,...(sentFloors?{sentFloors:durableSourceMessages(sentFloors),summarySnapshot:(()=>{const rawMessages=durableSourceMessages(source(t).messages.filter(row=>row.floor<=endFloor));return {requestedRange:{start:0,end:endFloor},rawMessages,fingerprint:sourceFingerprint(rawMessages)};})()}:{}),ranges,index:0,restart:false,status:'running',stage:'preparing',error:'',failedKinds:[],pauseRequested:false,skipped:0,summary:true};
     return drive(sequenceRun);
   }
-  async function commitCandidate(active,review,isCurrent,{persisted=false,expected,preparedInputs}={}){
+  function commitCandidate(active,review,isCurrent,options){return queueMutation(()=>writeCandidate(active,review,isCurrent,options));}
+  async function writeCandidate(active,review,isCurrent,{persisted=false,expected}={}){
     if(unconfirmed)throw new Error('保存结果尚未确认，请重新读取后再操作');
     const t=active.target,proofs=review.kinds.map(kind=>proof(kind,t)),config=clone(generation()),card=review.bindings.card===null?null:cardSnapshot();
     let latest,raw,events;
@@ -405,13 +421,13 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       try{return isCurrent()&&!unconfirmed&&sequenceRun===active&&(!persisted||equal(active.review,review))&&current(t)&&proofs.every(matches)&&equal(config,generation())&&(review.bindings.card===null||equal(card,cardSnapshot()))&&(!reviewGuards||reviewGuards.active!==active||reviewGuards.valid())&&review.kinds.every(kind=>matchesStoredNarrativeSource(review.progress[kind].sourceSnapshot,source(t),active))&&(!events||typeof adapter.peekConfirmed!=='function'||review.kinds.every(kind=>{const binding=review.bindings.categories[kind];return !binding.readMemory||equal(narrativeMemoryRows(projectNarrativeMemory(adapter.peekConfirmed(t),source(t)),review.range.endFloor).filter(row=>binding.memoryIds.includes(row.id)),events[kind]);}));}catch{return false;}
     };
     try{
-      const inputs=preparedInputs??await captureInputs(t);latest=inputs.captured;const root=inputs.root;raw=inputs.raw;
+      const inputs=await captureInputs(t);latest=inputs.captured;const root=inputs.root;raw=inputs.raw;
       if(!valid()||persisted&&!equal(semanticReview(latest.narrative.pendingRun?.review,latest.narrative),semanticReview(review,active)))throw new Error('待采用内容、材料或设置已变化，请放弃本批后重新生成');
       if(persisted&&(await digest(durableConfig(config))!==review.bindings.generation||review.bindings.card!==null&&await digest(card)!==review.bindings.card))throw new Error('生成设置或角色资料已变化，请重新生成');
       events={};
       for(const kind of review.kinds){
         const binding=review.bindings.categories[kind];
-        if(persisted?(await digest(latest.narrative.preferences[kind])!==binding.preferences||await digest(latest.narrative[kind])!==binding.entries||binding.progress!==null&&await digest(semanticProgress(latest.narrative.progress[kind],latest.narrative))!==binding.progress||binding.latestGeneration!==null&&await digest(semanticLatest(latest.narrative.latestGeneration?.[kind]??null,latest.narrative))!==binding.latestGeneration):(!equal(latest.narrative.preferences[kind],expected.narrative.preferences[kind])||!equal(latest.narrative[kind],expected.narrative[kind])||!equal(semanticProgress(latest.narrative.progress[kind],latest.narrative),semanticProgress(expected.narrative.progress[kind],expected.narrative))||!equal(semanticLatest(latest.narrative.latestGeneration?.[kind],latest.narrative),semanticLatest(expected.narrative.latestGeneration?.[kind],expected.narrative))))throw new Error('本末内容或设置已变化，请重新生成');
+        if(persisted?((review.bindings.version===2?(!targetsRemain(latest.narrative.preferences[kind],kind==='self'?binding.targets:null)||await digest(kind==='self'?binding.targets:null)!==binding.preferences):await digest(latest.narrative.preferences[kind])!==binding.preferences)||await digest(latest.narrative[kind])!==binding.entries||binding.progress!==null&&await digest(semanticProgress(latest.narrative.progress[kind],latest.narrative))!==binding.progress||binding.latestGeneration!==null&&await digest(semanticLatest(latest.narrative.latestGeneration?.[kind]??null,latest.narrative))!==binding.latestGeneration):(!targetsRemain(latest.narrative.preferences[kind],roleTargets(active.preferences[kind],kind))||!equal(latest.narrative[kind],expected.narrative[kind])||!equal(semanticProgress(latest.narrative.progress[kind],latest.narrative),semanticProgress(expected.narrative.progress[kind],expected.narrative))||!equal(semanticLatest(latest.narrative.latestGeneration?.[kind],latest.narrative),semanticLatest(expected.narrative.latestGeneration?.[kind],expected.narrative))))throw new Error('本末内容或设置已变化，请重新生成');
         events[kind]=narrativeMemoryRows(projectNarrativeMemory(root,raw),review.range.endFloor).filter(row=>binding.memoryIds.includes(row.id));
         if(persisted&&binding.memory!==null&&binding.readMemory&&await digest(events[kind])!==binding.memory)throw new Error('记忆材料已变化，请重新生成');
       }
@@ -421,7 +437,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       for(const kind of review.kinds){
         next[kind]=clone(review.results[kind]);next.progress[kind]=importNarrativeProgress(next,review.progress[kind],active);
         next.highWater={...(next.highWater??{self:null,outline:null}),[kind]:Math.max(narrativeHighWater(latest.narrative,kind),review.progress[kind].lastProcessedFloor)};
-        next=recordNarrativeGeneration(next,baseline,kind,{range:review.range,pairId:review.pairId,source:(active.summarySource??next.preferences[kind].autoSource)==='cumulative'?'cumulative':'event',regenerateLatest:active.regenerateLatest===true,persistedBefore:latest.narrative,nonlinear:active.restart===true});
+        next=recordNarrativeGeneration(next,baseline,kind,{range:review.range,pairId:review.pairId,source:(active.summarySource??active.preferences?.[kind]?.autoSource??next.preferences[kind].autoSource)==='cumulative'?'cumulative':'event',regenerateLatest:active.regenerateLatest===true,persistedBefore:latest.narrative,nonlinear:active.restart===true});
       }
       const remaining=active.failedKinds.filter(kind=>!review.kinds.includes(kind));
       next.pendingRun=pendingCheckpoint({...active,status:remaining.length?'failed':active.status,index:active.index+(remaining.length?0:1),review:null,pairId:remaining.length?active.pairId:null,failedKinds:remaining},next);
@@ -444,7 +460,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     if(!candidate)throw new Error('当前叙事候选不可用');
     const persisted=active.reviewBeforeCommit&&!active.summary;
     const result=await manager.confirm(owner.id,async ctx=>{
-      try{return await commitCandidate(active,ctx.candidate.review,ctx.isCurrent,{persisted,expected:owner.selection,preparedInputs:persisted?undefined:owner.inputs});}
+      try{return await commitCandidate(active,ctx.candidate.review,ctx.isCurrent,{persisted,expected:owner.selection});}
       catch(error){owner.error=error;throw error;}
     });
     if(result.status!=='succeeded')throw owner.error??new Error('材料、设置或聊天已变化，生成已停止');
@@ -476,11 +492,11 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     }
     return snapshot();
   }
-  function resume(){if(!sequenceRun||!['paused','failed'].includes(sequenceRun.status))return Promise.resolve(snapshot());sequenceRun.pauseRequested=false;return drive(sequenceRun);}
+  function resume(){if(!sequenceRun||!['paused','failed'].includes(sequenceRun.status))return Promise.resolve(snapshot());sequenceRun.pauseRequested=false;delete sequenceRun.preferences;return drive(sequenceRun);}
   function skip(){
     if(sequencePromise)throw new Error('请等待当前批次结束');
     if(!sequenceRun||!['failed','paused','awaiting-review'].includes(sequenceRun.status))return Promise.resolve(snapshot());
-    sequenceRun.review=null;compactActiveSources(sequenceRun);reviewGuards=null;currentRequestPreview=null;previewGuard=null;sequenceRun.pairId=null;sequenceRun.index++;sequenceRun.skipped++;sequenceRun.failedKinds=[];sequenceRun.usage=null;sequenceRun.pauseRequested=false;return drive(sequenceRun);
+    sequenceRun.review=null;compactActiveSources(sequenceRun);reviewGuards=null;currentRequestPreview=null;previewGuard=null;sequenceRun.pairId=null;sequenceRun.index++;sequenceRun.skipped++;sequenceRun.failedKinds=[];sequenceRun.usage=null;sequenceRun.pauseRequested=false;delete sequenceRun.preferences;return drive(sequenceRun);
   }
   async function intercept(messages,_size,_abort,type='normal'){
     if(disposed)return;

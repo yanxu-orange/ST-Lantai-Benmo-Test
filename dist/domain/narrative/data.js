@@ -287,14 +287,15 @@ function assertNarrativeReview(pending, owner) {
     || !Array.isArray(review.kinds) || !review.kinds.length || new Set(review.kinds).size !== review.kinds.length
     || review.kinds.some(kind => !pending.kinds.includes(kind)) || !floorRange(review.range) || !same(review.range, pending.ranges[pending.index])
     || !exact(review.results, review.kinds) || !exact(review.progress, review.kinds)
-    || !exact(review.bindings, ['generation', 'card', 'categories']) || !digest(review.bindings.generation)
+    || !exact(review.bindings, ['generation', 'card', 'categories', ...(Object.hasOwn(review.bindings??{}, 'version') ? ['version'] : [])]) || Object.hasOwn(review.bindings??{}, 'version') && review.bindings.version !== 2 || !digest(review.bindings.generation)
     || !(review.bindings.card === null || digest(review.bindings.card)) || !exact(review.bindings.categories, review.kinds)) throw new Error('叙事待采用内容无效');
   const ids = new Set();
   for (const kind of review.kinds) {
     const binding = review.bindings.categories[kind], progress = review.progress[kind];
-    if (!exact(binding, ['preferences', 'entries', 'progress', 'memory', 'memoryIds', 'readMemory', 'latestGeneration'])
+    if (!exact(binding, ['preferences', 'entries', 'progress', 'memory', 'memoryIds', 'readMemory', 'latestGeneration', ...(review.bindings.version === 2 && kind === 'self' ? ['targets'] : [])])
       || ['preferences', 'entries'].some(key => !digest(binding[key])) || ['progress','memory','latestGeneration'].some(key=>binding[key]!==null&&!digest(binding[key]))
       || typeof binding.readMemory !== 'boolean' || !Array.isArray(binding.memoryIds) || binding.memoryIds.some(id => !text(id)) || new Set(binding.memoryIds).size !== binding.memoryIds.length) throw new Error('叙事待采用来源绑定无效');
+    if (review.bindings.version === 2 && kind === 'self' && (!Array.isArray(binding.targets) || binding.targets.some(row => !exact(row, ['id', 'name']) || !text(row.id) || !text(row.name)) || new Set(binding.targets.map(row => row.id)).size !== binding.targets.length)) throw new Error('叙事待采用角色归属无效');
     assertKindContent(review.results[kind], progress, kind, owner);
     assertEntries(entriesForKind(review.results[kind], kind), ids);
     if (!progress || !same(progress.sourceSnapshot.requestedRange, {start: review.range.startFloor, end: review.range.endFloor})) throw new Error('叙事待采用进度与范围不一致');

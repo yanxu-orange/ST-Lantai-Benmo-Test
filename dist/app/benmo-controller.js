@@ -2,11 +2,14 @@ import {sameTarget} from '../domain/memory/repository.js';
 import {TRACKING_FIELDS} from '../domain/tracking/model.js';
 const BENMO_FEATURES=['summary','item','npc','self','outline'];
 const copy=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-export function createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime,repository,adapter,getControls}={}) {
+export function createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime,repository,adapter,getControls,isReadOnly=()=>false,loadBudgetMs=5000}={}) {
+  // Page reads have their own lifetime; abandoning one never cancels a paid task or host write.
+  let loadAttempt=0,cancelWait=null;
   let summaryCache=null,trackingCache=null,narrativeCache=null;
-  let disposed=false,target=null,status='loading',error='',busy=null,sequence=0,loading=null,sourceProof=null,projectionProof=null,dataView=null;
+  let disposed=false,target=null,status='loading',error='',busy=null,sequence=0,loading=null,sourceProof=null,projectionProof=null,dataView=null,readOnly=false,loadingReadOnly=false,readOnlyRecovery=null;
   const listeners=new Set(),availabilityListeners=new Set();
   const current=()=>{try{return !disposed&&target&&sameTarget(target,repository.captureTarget());}catch{return false;}};
+  const browsing=()=>isReadOnly()===true;
   const master=()=>!getControls||getControls()?.allowed('enabled')===true;
   // Navigation must not build record lists or inspect full global settings.
   function availability(){
@@ -25,7 +28,7 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     if(binding&&narrated&&sameTarget(narrated.target,binding))narrativeCache=narrativeProjection?copy(narrated):narrated;
     const summary=summaryCache??{records:[],missing:[],running:[],preferences:{enabled:false,recentFloors:6,prompt:latestRuntime.defaultPrompt??''}},tracking=trackingCache??{records:[],preferences:{itemsEnabled:false,npcsEnabled:false}};
     const narrative=narrativeCache??{self:{},outline:{}};
-    return copy({summary,tracking,narrative,...availability(),error:error||tracking.error||narrative.error||'',writeBlocked:!current()||!master()||status!=='ready'||tracking.writeBlocked===true||narrative.writeBlocked===true});
+    return copy({summary,tracking,narrative,narrativePreviewBlocked:!current()||!master()||status!=='ready'||(narrative.preferencesWriteBlocked??narrative.writeBlocked)===true||!sameTarget(narrative.target,binding),narrativeConfigWriteBlocked:!current()||!master()||status!=='ready'||(narrative.preferencesWriteBlocked??narrative.writeBlocked)===true||!sameTarget(narrative.target,binding),...availability(),error:error||tracking.error||narrative.error||'',writeBlocked:readOnly||browsing()||!current()||!master()||status!=='ready'||tracking.writeBlocked===true||narrative.writeBlocked===true});
   }
   const snapshot=()=>snapshotWithSummary();
   const publish=(projections,value)=>{
@@ -38,35 +41,70 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
   const offLatest=latestRuntime.subscribe(()=>{if(!loading)publish({cached:true,summaryChanged:true});}),offTracking=trackingRuntime.subscribe(tracking=>{if(!loading)publish({tracking,cached:true});}),offNarrative=narrativeRuntime?.subscribe(narrative=>{if(!loading)publish({narrative,cached:true});});
   async function load(){
     if(disposed)throw new Error('本末已关闭');if(loading)return loading;
-    const ticket=sequence;status='loading';error='';publish({cached:true});
-    const job=(async()=>{
-      const next=await adapter.prepare(),proof=adapter.captureChatSource?.(next);
-      // Modern runtimes coalesce their automatic initialization with this pass.
-      if(!latestRuntime.panelReadView)await latestRuntime.read();
-      await (latestRuntime.ensureData?.()??latestRuntime.refresh());
-      let readView=latestRuntime.panelReadView?.()??await repository.capturePanelData?.(next),projection;
+    let loadTarget;const ticket=sequence,attempt=++loadAttempt;const check=()=>{if(disposed||ticket!==sequence||attempt!==loadAttempt||loadTarget&&!sameTarget(loadTarget,repository.captureTarget()))throw Object.assign(new Error('页面读取已结束，请重新读取'),{code:'PANEL_LOAD_CANCELLED'});};status='loading';error='';publish({cached:true});
+    let timer;
+    const work=(async()=>{
+      const next=await adapter.prepare();loadTarget=copy(next);check();const proof=adapter.captureChatSource?.(next),readOnlyPass=browsing();
+      loadingReadOnly=readOnlyPass;
+      let readView;
+      if(readOnlyPass){
+        // Browsing confirmed facts does not need story collection or a stable
+        // streaming tail. A fixed root view still rejects uncertain saves.
+        readView=await repository.capturePanelData?.(next);
+        check();await latestRuntime.read({target:next,readView});
+      }else{
+        // Modern runtimes coalesce their automatic initialization with this pass.
+        check();if(!latestRuntime.panelReadView){await latestRuntime.read();check();}
+        await (latestRuntime.ensureData?.()??latestRuntime.refresh());check();
+        readView=latestRuntime.panelReadView?.()??await repository.capturePanelData?.(next);
+      }
+      let projection;
       do{
-        projection=latestRuntime.captureSource?.(next);
-        await trackingRuntime.load({target:next,readView,raw:projection});await narrativeRuntime?.load({target:next,readView});
+        check();projection=latestRuntime.captureSource?.(next);
+        await trackingRuntime.load({target:next,readView,raw:projection});check();await narrativeRuntime?.load({target:next,readView});check();
         if(disposed||ticket!==sequence||!sameTarget(next,repository.captureTarget()))throw new Error('聊天已变化，请重新打开本末');
         if(!readView||repository.matchesPanelData(next,readView))break;
         // Never stamp a new proof on projections from an earlier root. Refresh
         // every domain together when a concurrent write changed the fixed view.
-        readView=await repository.capturePanelData(next);await latestRuntime.read({target:next,readView});
+        readView=await repository.capturePanelData(next);check();await latestRuntime.read({target:next,readView});check();
       }while(true);
-      target=copy(next);sourceProof=proof;projectionProof=projection;dataView=readView;const sourceCurrent=(!proof||adapter.matchesChatSource?.(next,proof)!==false)&&(!latestRuntime.matchesSource||latestRuntime.matchesSource(next,projection));status=sourceCurrent?'ready':'unconfirmed';error=sourceCurrent?'':'来源在读取期间已变化，请重新读取本末';const value=snapshot();publish(undefined,value);return value;
-    })().catch(failure=>{if(!disposed&&ticket===sequence){status='unconfirmed';error=failure.message;publish();}throw failure;}).finally(()=>{if(loading===job)loading=null;});
+      target=copy(next);sourceProof=proof;projectionProof=projection;dataView=readView;const sourceCurrent=(!proof||adapter.matchesChatSource?.(next,proof)!==false)&&(!latestRuntime.matchesSource||latestRuntime.matchesSource(next,projection));readOnly=readOnlyPass||browsing();status=sourceCurrent||readOnly?'ready':'unconfirmed';error=sourceCurrent||readOnly?'':'来源在读取期间已变化，请重新读取本末';const value=snapshot();publish(undefined,value);return value;
+    })();
+    // Observe the underlying work after the UI deadline; every later domain entry checks its ticket.
+    const deadline=new Promise((_,reject)=>{const end=(message,code)=>{if(attempt===loadAttempt)loadAttempt++;reject(Object.assign(new Error(message),{code}));};cancelWait=()=>end('页面读取已结束，请重新读取','PANEL_LOAD_CANCELLED');timer=setTimeout(()=>end('读取等待已超时，请重新读取','PANEL_WAIT_TIMEOUT'),loadBudgetMs);});
+    const job=Promise.race([work,deadline]).catch(failure=>{if(!disposed&&ticket===sequence&&loading===job){status='unconfirmed';error=failure.message;publish();}throw failure;}).finally(()=>{clearTimeout(timer);if(loading===job){loading=null;loadingReadOnly=false;cancelWait=null;}});
     loading=job;return job;
   }
-  function writable(kind){if(!current()||!master()||status!=='ready')throw new Error(error||'聊天已变化，请重新读取本末');const tracking=trackingRuntime.writeState?.()??trackingRuntime.snapshot();if(tracking.writeBlocked)throw new Error(error||tracking.error||'聊天已变化，请重新读取本末');if(kind&&!availability().policy[kind])throw new Error('该功能已关闭');if(['self','outline'].includes(kind)){const narrative=narrativeRuntime?.writeState?.()??narrativeRuntime?.snapshot();if(narrative?.writeBlocked)throw new Error(narrative.error||'请重新读取本末');}}
-  async function write(kind,operation){
-    writable(kind);const ticket=sequence,t=copy(target);busy=kind;publish();
+  function writable(kind){if(readOnly||browsing())throw new Error('正文生成中，只能浏览已确认的本末资料');if(!current()||!master()||status!=='ready')throw new Error(error||'聊天已变化，请重新读取本末');const tracking=trackingRuntime.writeState?.()??trackingRuntime.snapshot();if(tracking.writeBlocked)throw new Error(error||tracking.error||'聊天已变化，请重新读取本末');if(kind&&!availability().policy[kind])throw new Error('该功能已关闭');if(['self','outline'].includes(kind)){const narrative=narrativeRuntime?.writeState?.()??narrativeRuntime?.snapshot();if(narrative?.writeBlocked)throw new Error(narrative.error||'请重新读取本末');}}
+  function configurable(kind){
+    if(!current()||!master()||status!=='ready')throw new Error(error||'聊天已变化，请重新读取本末');
+    if(kind&&!availability().policy[kind])throw new Error('该功能已关闭');
+    const narrative=narrativeRuntime?.snapshot();
+    if(!narrative||!sameTarget(narrative.target,target)||(narrative.preferencesWriteBlocked??narrative.writeBlocked)===true)throw new Error(narrative?.error||'请重新读取本末');
+  }
+  function previewable(options={}){configurable();for(const kind of options.kinds??(options.kind?[options.kind]:['self','outline']))if(!availability().policy[kind])throw new Error('该功能已关闭');}
+  async function write(kind,operation,{configuration=false}={}){
+    if(configuration)configurable(kind);else writable(kind);const ticket=sequence,t=copy(target);busy=kind;publish();
     try{await operation();if(disposed||ticket!==sequence||!sameTarget(t,repository.captureTarget()))throw new Error('聊天已变化，请重新读取本末');error='';return snapshot();}
     catch(failure){if(!disposed&&ticket===sequence){error=failure.message;if(failure.code==='COMMIT_UNCONFIRMED')status='unconfirmed';publish();}throw failure;}
     finally{if(!disposed&&ticket===sequence){busy=null;publish();}}
   }
   function ensure(){
-    if(loading)return loading;
+    if(loading){
+      if(loadingReadOnly&&!browsing()){
+        if(!readOnlyRecovery){
+          const owner=copy(repository.captureTarget()),ticket=sequence,previous=loading;
+          const work=previous.then(()=>{
+            if(disposed||ticket!==sequence||!sameTarget(owner,repository.captureTarget()))throw new Error('聊天已变化，请重新打开本末');
+            return ensure();
+          }).finally(()=>{if(readOnlyRecovery===work)readOnlyRecovery=null;});
+          readOnlyRecovery=work;
+        }
+        return readOnlyRecovery;
+      }
+      return loading;
+    }
+    if(current()&&status==='ready'&&readOnly&&browsing()&&dataView&&repository.matchesPanelData(target,dataView))return Promise.resolve(snapshot());
     // Reuse subscribed runtime state only while the exact chat source is current.
     // Adapters without a source proof keep the conservative reload path.
     if(current()&&status==='ready'&&sourceProof&&typeof adapter.matchesChatSource==='function'){
@@ -79,18 +117,18 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     }
     return load();
   }
-  return {snapshot,inspect:snapshot,availability,load,refresh:load,ensure,
+  return {snapshot,inspect:snapshot,availability,load,refresh:load,ensure,cancelLoad(){if(cancelWait){const cancel=cancelWait;loading=null;loadingReadOnly=false;cancelWait=null;status='unconfirmed';cancel();}},
     observeSummaryVisibility:options=>latestRuntime.observeVisibility?.(options)??(()=>{}),
     defaultPrompt:latestRuntime.defaultPrompt,
     defaultTrackingPrompts:trackingRuntime.defaultPrompts,
     defaultNarrativePrompts:narrativeRuntime?.defaultPrompts,
-    saveNarrativePreferences(kind,patch,options){return write(kind,()=>narrativeRuntime.savePreferences(kind,patch,options));},
+    saveNarrativePreferences(kind,patch,options){return write(kind,()=>narrativeRuntime.savePreferences(kind,patch,options),{configuration:true});},
     saveNarrativeEntries(kind,entries,options){return write(kind,()=>narrativeRuntime.saveEntries(kind,entries,options));},
-    previewNarrative(options){writable();return narrativeRuntime.preview(options);},
-    previewNarrativeRequest(options){writable();return narrativeRuntime.previewRequest(options);},
+    previewNarrative(options){previewable(options);return narrativeRuntime.preview(options);},
+    previewNarrativeRequest(options){previewable(options);return narrativeRuntime.previewRequest(options);},
     confirmNarrativeReview(){return write(null,()=>narrativeRuntime.confirmReview());},
     startNarrative(options){return write(null,()=>narrativeRuntime.start(options));},
-    saveNarrativeRunPreferences(patch){return write(null,()=>narrativeRuntime.saveRunPreferences(patch));},
+    saveNarrativeRunPreferences(patch){return write(null,()=>narrativeRuntime.saveRunPreferences(patch),{configuration:true});},
     pauseNarrative(){return narrativeRuntime.pause();},
     continueNarrative(){return write(null,()=>narrativeRuntime.resume());},
     retryNarrative(){return write(null,()=>narrativeRuntime.retry());},
@@ -132,6 +170,6 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     deleteRecord(kind,id){return write(kind,()=>trackingRuntime.deleteRecord(kind,id));},
     subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},
     subscribeAvailability(fn){availabilityListeners.add(fn);return()=>availabilityListeners.delete(fn);},
-    dispose(){disposed=true;sequence++;offLatest();offTracking();offNarrative?.();listeners.clear();availabilityListeners.clear();},
+    dispose(){cancelWait?.();disposed=true;sequence++;offLatest();offTracking();offNarrative?.();listeners.clear();availabilityListeners.clear();},
   };
 }

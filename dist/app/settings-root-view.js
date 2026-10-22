@@ -15,10 +15,11 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
   const toggles=row('启用兰台','enabled')+row('在当前聊天中使用','chat');
   const services=entry('功能管理','features')+entry('连接方案','api')+entry('任务 API','task-api');
   const appearanceFields=`<label class="ui-field"><span class="ui-field__label">界面皮肤</span><select class="ui-input" data-settings-theme>${THEMES.map(theme=>`<option value="${theme.id}">${theme.label}</option>`).join('')}</select></label><p class="lt-status" data-appearance-status hidden></p><button type="button" class="ui-button ui-button--secondary" data-settings-action="appearance-read" hidden>重新读取外观</button>`;
-  const identity=`<div class="lt-settings-brand"><div>${brand}<span>兰台本末</span><span class="lt-meta">v${esc(APP_VERSION)}</span></div><p class="lt-meta">剧情记忆与故事时间</p>${onGenerationDiagnostic?'<button type="button" class="ui-button ui-button--secondary" data-settings-action="generation-diagnostic">导出生成诊断</button><p class="lt-meta">记录仅在本机内存中，刷新后清空；点击导出 JSON，不自动上传。</p><p class="lt-status" data-generation-diagnostic-status role="status"></p>':''}</div>`;
-  if(!book)return `<section class="lt-settings-group"><h2>插件</h2>${toggles}${services}</section><section class="lt-settings-group"><h2>外观</h2>${appearanceFields}</section>${identity}`;
+  const identity=`<div class="lt-settings-brand"><div>${brand}<span>兰台本末</span><span class="lt-meta">v${esc(APP_VERSION)}</span></div><p class="lt-meta">剧情记忆与故事时间</p></div>`;
+  const diagnostics=onGenerationDiagnostic?'<button type="button" class="ui-button ui-button--secondary" data-settings-action="generation-diagnostic">导出生成诊断</button><p class="lt-meta">记录仅在本机内存中，刷新后清空；点击导出 JSON，不自动上传。</p><p class="lt-status" data-generation-diagnostic-status role="status"></p>':'';
+  if(!book)return `<section class="lt-settings-group"><h2>插件</h2>${toggles}${services}</section><section class="lt-settings-group"><h2>外观</h2>${appearanceFields}</section>${diagnostics?`<section class="lt-settings-group"><h2>生成诊断</h2>${diagnostics}</section>`:''}${identity}`;
   const group=(name,role,number,content)=>`<section class="lt-settings-section" data-settings-section="${role}"><h2 data-section-number="${number}">${name}</h2><div class="lt-settings-group" data-settings-material="${role}">${content}</div></section>`;
-  return group('插件设置','plugin','01',toggles)+group('功能与服务','services','02',services)+group('外观','appearance','03',appearanceFields)+group('关于兰台','about','04',identity.replace('<p class="lt-meta">剧情记忆与故事时间</p>',''));
+  return group('插件设置','plugin','01',toggles)+group('功能与服务','services','02',services)+group('外观','appearance','03',appearanceFields)+group('关于兰台','about','04',identity.replace('<p class="lt-meta">剧情记忆与故事时间</p>','')+diagnostics);
  }
  function render(focus=null,focusMain=true){
   if(disposed)return;scheduleView?.dispose();scheduleView=null;const state=controls.inspect();
