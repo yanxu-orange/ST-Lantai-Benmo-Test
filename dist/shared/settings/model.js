@@ -133,7 +133,7 @@ export function settingsFingerprint(value) {
   return JSON.stringify(ordered(value));
 }
 export const equalSettings = (a, b) => settingsFingerprint(a) === settingsFingerprint(b);
-export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:5,maxTokens:null,memoryDepth:9999,anniversaryPoolLimit:2,automaticSameDayEnabled:true,excludedTerms:[],recallCleaning:{rules:[]} }; }
+export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:10,maxTokens:null,memoryDepth:9999,anniversaryPoolLimit:2,automaticSameDayEnabled:true,excludedTerms:[],recallCleaning:{rules:[]} }; }
 export function recallChannels(value) { return value.channels??{keyword:true,bm25:false,vector:false,rerank:false}; }
 export function recallCandidateCounts(value) { return value.candidateCounts??{keyword:5,bm25:5,vector:5,date:5}; }
 export function assertRecallSettings(value) {

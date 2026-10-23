@@ -40,8 +40,8 @@ export function rankBodyIndex(index,fragments,dateById=new Map()){
   return{id:doc.id,score,libraryIndex:doc.libraryIndex,contributions};
  }).filter(row=>row&&Number.isFinite(row.score)&&row.score>0).sort((a,b)=>b.score-a.score||a.libraryIndex-b.libraryIndex).map((row,i)=>({...row,rank:i+1}));
 }
-// Offline K+B keeps the current query intact and consumes each historical
-// term once, after its original distance weight. Equal values retain the first
+// Adopted K+B and healthy K/B/V keep the current query intact and consume
+// each historical term once, after its original distance weight. Equal values retain the first
 // fragment; evidence contains only the contributions that actually vote.
 export function scoreBodyHistoryTermMax(rows){
  return rows.map(row=>{

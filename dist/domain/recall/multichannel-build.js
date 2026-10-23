@@ -36,7 +36,7 @@ export function createMultichannelBuilder({vectorIndex,provider}={}){
     const signature=JSON.stringify([triggers.map(event=>[event.id,event.body,event.people,event.places,event.locationAliases??[]]),settings.excludedTerms]);
     if(bodyCache?.signature!==signature)bodyCache={signature,index:createBodyIndex(triggers,settings.excludedTerms)};
     const bodyRows=rankBodyIndex(bodyCache.index,timeResult.fragments,dateById);
-    rankings.bm25=enabled.keyword&&!enabled.vector&&!enabled.rerank?scoreBodyHistoryTermMax(bodyRows):bodyRows;channels.bm25.qualified=rankings.bm25.length;
+    rankings.bm25=bodyRows;channels.bm25.qualified=rankings.bm25.length;
    }catch{rankings.bm25=[];channels.bm25.status='failed';channels.bm25.error='local-retrieval-failed';}
   }
   if(enabled.vector){
@@ -48,6 +48,9 @@ export function createMultichannelBuilder({vectorIndex,provider}={}){
    }catch(error){assertAiCurrent(signal,isCurrent);rankings.vector=[];channels.vector.status='failed';channels.vector.error=safeCode(error);}
    channels.vector.elapsedMs=now()-started;
   }
+  // Choose aggregation only after this call's vector status is known, before
+  // candidate discovery. Partial/unavailable V and every enabled R keep sum.
+  if(enabled.keyword&&enabled.bm25&&!enabled.rerank&&channels.bm25.status==='ready'&&(!enabled.vector||channels.vector.status==='ready'))rankings.bm25=scoreBodyHistoryTermMax(rankings.bm25);
   let collected=collectRouteCandidates(rankings,order,recallCandidateCounts(settings)),candidateById=new Map(collected.cards.map(row=>[row.id,row]));
   let ranked=[...collected.cards],orderingMethod='rrf',rrfK=RRF_K;
   if(enabled.rerank&&ranked.length){
