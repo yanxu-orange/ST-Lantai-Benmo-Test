@@ -113,12 +113,12 @@ export function itemsOnDate(calendar,items,date){
 
 // Calendar browsing is independent of AI reminder windows. Ongoing items are
 // already shown under today; preview each new occurrence starting tomorrow–day 7.
-export function upcomingItems(calendar,items,today){
+export function upcomingItems(calendar,items,today,readItems=itemsOnDate){
  if(!today||today.month==null||today.day==null)return [];
  const result=[];
  for(let daysUntil=1;daysUntil<=7;daysUntil++){
   const date=calendar.shiftDays(today,daysUntil);if(!date)break;
-  for(const item of itemsOnDate(calendar,items,date)){
+  for(const item of readItems(calendar,items,date)){
    if(calendar.compare(item.start,date)===0)result.push({...item,daysUntil,phase:'upcoming'});
   }
  }

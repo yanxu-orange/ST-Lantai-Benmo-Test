@@ -280,6 +280,13 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         return {status:'committed',root:saved,selection:freeze({target:frozen,time:timeOf(saved)})};
       });
     },
+    hasSummaryTimeCandidateChanges(target,view){
+      // A no-work decision is only valid for this exact confirmed read. It
+      // never supplies the baseline of a later mutation or waits on the queue.
+      if(!matchesPanelData(target,view))return null;
+      const root=readPanelRoot(target,view),current=timeOf(root),next=importSummaryCandidates(current,summaryOf(root).batches);
+      return matchesPanelData(target,view)?!equal(current,next):null;
+    },
     importSummaryTimeCandidates(target,{isCurrent=()=>true}={}){
       const frozen=copy(target);
       return enqueue(async()=>{
@@ -294,7 +301,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     async captureWorkshop(target,readView){const frozen=copy(target);return freeze({target:frozen,workshop:workshopOf(await panelRead(frozen,readView))});},
     updateWorkshop(target,selection,value,{isCurrent=()=>true,workshopProof,forceSave=false,requireConfirmation=false}={}){
       const frozen=copy(target),snapshot=copy(selection),candidate=assertWorkshop(value);
-      const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(workshopOf(comparisonRoot(root,'workshop')),snapshot.workshop))throw new Error('工坊来源或配置已变化');return true;};
+      const guard=root=>{requireTarget(frozen);if(isCurrent()!==true||!snapshot||!sameTarget(frozen,snapshot.target)||!equal(workshopOf(comparisonRoot(root,'workshop')),snapshot.workshop))throw Object.assign(new Error('工坊来源或配置已变化'),{code:'WORKSHOP_CONFLICT'});return true;};
       return enqueue(async()=>{
         const root=await read(frozen);guard(root);const current=workshopOf(root);
         const nextWorkshop={...candidate,revision:current.revision};

@@ -50,9 +50,13 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   }
   return refresh();
  }
- async function importCandidates(t,n,refreshId){
-  if(!repository.importSummaryTimeCandidates)return;
-  try{const receipt=await repository.importSummaryTimeCandidates(t,{isCurrent:()=>current(t,n)});if(receipt.status==='committed'&&current(t,n)&&refreshId===refreshTicket&&!state.draft&&!state.saving)await refresh(false);}
+ async function importCandidates(t,n,refreshId,view){
+  if(!repository.importSummaryTimeCandidates||!current(t,n)||refreshId!==refreshTicket)return;
+  try{
+   const changed=view?repository.hasSummaryTimeCandidateChanges?.(t,view):null;
+   if(!current(t,n)||refreshId!==refreshTicket)return;
+   if(changed===false&&repository.matchesPanelData?.(t,view)===true)return;
+   const receipt=await repository.importSummaryTimeCandidates(t,{isCurrent:()=>current(t,n)});if(receipt.status==='committed'&&current(t,n)&&refreshId===refreshTicket&&!state.draft&&!state.saving)await refresh(false);}
   catch(error){if(current(t,n)&&refreshId===refreshTicket&&!state.draft)fail(error);}
  }
  function refresh(importSummary=true,recover=false){
@@ -71,7 +75,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
     const reminders=settings.captureTimeReminders();resetWriter();baseline=selection;dataView=view;sourceProof=source;reminderProof=reminders;
     // Keep an editor's original settings proof, even while its displayed facts refresh.
     if(!state.draft)config=reminders;
-    state.time=copy(selection.time);state.reminders=copy(reminders.reminders);state.status='ready';state.invalidated=false;state.error='';setCursor();notify();if(importSummary)void importCandidates(t,n,refreshId);return true;
+    state.time=copy(selection.time);state.reminders=copy(reminders.reminders);state.status='ready';state.invalidated=false;state.error='';setCursor();notify();if(importSummary)void importCandidates(t,n,refreshId,view);return true;
    }catch(error){if(current(t,n)&&refreshId===refreshTicket){if(!baseline)state.status='failed';fail(error);}return false;}
   })();
   loading=job;void job.finally(()=>{if(loading===job)loading=null;});return job;

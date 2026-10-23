@@ -26,7 +26,9 @@ const aliases = value => [...new Set((Array.isArray(value) ? value : String(valu
 export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, onOpenCleaning = null, isCurrent = () => true, prepare, initialState = {}} = {}) {
   initialState ??= {};
   const lifetime = new AbortController();
-  let value = {}, loading = true, loadFailed = false, initializing = true;
+  const revalidationActions = new Set(['save','delete-narrative','delete-record','toggle-excluded','restore-excluded','new','generate','generate-narrative','preview-narrative','save-narrative-budget','start-narrative','continue-narrative','retry-narrative','skip-narrative','pause-narrative','confirm-narrative-review','regenerate-narrative','manual-summary','start-backfill']);
+  const revalidationControls = new Map();
+  let value = {}, loading = true, loadFailed = false, initializing = true, revalidating = false;
   let disposed = false, suspended = false, acting = false, composing = false;
   let error = '', dialog = null, draft = null, baseline = null, original = null, narrativeRecovery = null, narrativeDraftTarget = null, invalidated = false, renderedPolicy = '';
   let narrativeRange = null, narrativePlanning = false, narrativeKinds = null;
@@ -226,6 +228,39 @@ export async function mountBenmoView({container: app, controller, availability =
   function summaryView() {
     const current = summaryCurrentRows(), history = summaryHistoryRecords(), count = current.filter(row => row.id && row.body && !row.nativeHidden).length;
     return `${summaryToolbar(count)}<div class="section" aria-label="当前摘要">${current.map(summaryCurrentRow).join('')}${current.length ? '' : '<p class="meta">暂无最新摘要。</p>'}</div><section class="section benmo-summary-history" aria-label="历史摘要">${springHeading('历史摘要')}<button type="button" class="record-open" data-action="toggle-summary-history" aria-expanded="${state.summaryHistoryExpanded}" aria-controls="benmo-summary-history"><strong>历史摘要</strong><span class="meta">${history.length} 条 · ${state.summaryHistoryExpanded ? '收起' : '展开'}</span></button><div id="benmo-summary-history" class="${state.summaryHistoryExpanded ? 'section' : ''}" ${state.summaryHistoryExpanded ? '' : 'hidden'}>${state.summaryHistoryExpanded ? history.map(summaryCard).join('') : ''}</div></section>`;
+  }
+  function patchSummaryDisclosure(control, id) {
+    // Keep navigation state authoritative. The next full render must compare
+    // against the patched DOM even if its old markup string happens to match.
+    surfacePatched = true;
+    if (loading || loadFailed || state.tab !== 'records' || state.kind !== 'summary' || state.route !== 'list' || dialog) return false;
+    const main = app.querySelector('.lt-main');
+    if (!main?.contains?.(control)) return false;
+    if (control.dataset.action === 'expand') {
+      const body = control.closest('.summary-card')?.querySelector('.reading');
+      if (!body || body.id !== `benmo-summary-body-${id}`) return false;
+      const expanded = state.expanded.has(id);
+      body.className = `reading ${expanded ? '' : 'summary-collapsed'}`;
+      control.textContent = expanded ? '收起' : '展开全文';
+      control.setAttribute('aria-expanded', String(expanded));
+      main.scrollTop = state.scrolls[context()] ?? 0;
+      return true;
+    }
+    const body = app.querySelector('#benmo-summary-history'), label = control.querySelector('.meta');
+    if (!body || !label || !main.contains(body)) return false;
+    const history = summaryHistoryRecords(), expanded = state.summaryHistoryExpanded;
+    const previousPolicy = renderPolicy, external = readExternalPolicy();
+    renderPolicy = {external, policy: derivePolicy(external)};
+    restoreRevalidationControls();
+    try {
+      body.innerHTML = expanded ? history.map(summaryCard).join('') : '';
+      body.className = expanded ? 'section' : '';
+      if (expanded) body.removeAttribute('hidden'); else body.setAttribute('hidden', '');
+      control.setAttribute('aria-expanded', String(expanded));
+      label.textContent = `${history.length} 条 · ${expanded ? '收起' : '展开'}`;
+      main.scrollTop = state.scrolls[context()] ?? 0;
+    } finally { renderPolicy = previousPolicy; syncRevalidationControls(); }
+    return true;
   }
   // Decorative headings are hidden in every other appearance. They contain no
   // controls or source data; the existing fields keep their accessible labels.
@@ -587,9 +622,10 @@ export async function mountBenmoView({container: app, controller, availability =
     if (state.route === 'edit') return state.kind === 'summary' ? draft?.id ? '编辑最新摘要' : '手动补录摘要' : `${returnRoute === 'list' && !original ? '新建' : '编辑'}${state.kind === 'item' ? '物品' : '角色'}`;
     return '本末';
   }
-  let renderedMarkup = null;
+  let renderedMarkup = null, surfacePatched = false;
   function render() {
     if (disposed || suspended) return;
+    restoreRevalidationControls();
     // Only this synchronous render shares a policy projection. Actions, new
     // notifications and any continuation after an await read live authority.
     const previousPolicy = renderPolicy, external = readExternalPolicy(), current = derivePolicy(external);
@@ -606,7 +642,7 @@ export async function mountBenmoView({container: app, controller, availability =
     const subpage = state.route !== 'list';
     const markup = `<section class="lantai ${state.route === 'narrative-generate' ? 'lt-summary-workspace' : 'workshop'} benmo ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}" data-benmo-route="${state.route}" data-benmo-tab="${state.tab}" data-benmo-kind="${state.kind}">${subpage ? `<header class="lt-header ui-header ${state.route === 'narrative-generate' ? 'ui-header--centered' : 'subpage-header'}">${icon(draft && returnRoute === 'detail' ? '返回记录详情' : `返回${state.tab === 'records' ? KINDS[state.kind] : TABS[state.tab]}`, 'back', 'back')}<h1 class="ui-page-title">${pageTitle()}</h1>${icon('关闭兰台', 'close', 'close')}</header>` : `<header class="lt-header lt-header--root ui-header"><div class="lt-root-top">${rootTitle('benmo')}${icon('关闭兰台', 'close', 'close')}</div><nav class="ui-tablist" aria-label="本末分区">${enabledTabs().map(id => selectButton(id, TABS[id], state.tab, 'tab')).join('')}</nav></header>`}<main class="lt-main ui-main${state.route === 'narrative-generate' ? ' lt-summary-main ui-main--summary' : ''}" tabindex="-1">${state.route === 'narrative-generate' ? `<div data-narrative-errors ${error || value.error ? '' : 'hidden'}>${narrativeErrors()}</div>` : narrativeErrors()}${loading ? '<p class="wk-empty" role="status" aria-live="polite">正在读取本末记录…</p>' : loadFailed ? '' : content()}</main><footer class="lt-footer${state.route === 'narrative-generate' ? ' ui-action-footer' : ''}">${state.route === 'narrative-generate' ? narrativeFooter() : draft ? formActions() : mainNavigation({policy: policy(), current: 'benmo', actions: {memory: 'area', time: 'area', workshop: 'area', benmo: 'area', settings: 'area'}, attributes: Object.fromEntries(['memory', 'time', 'workshop', 'benmo', 'settings'].map(area => [area, `data-id="${area}"`]))})}</footer>${dialog ? `<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending ? '正在处理，请稍候…' : dialog.text)}</p>${(dialog.details ?? []).map(item => `<section class="section"><label class="ui-field"><span>后台新内容</span><textarea class="lt-textarea" rows="3" readonly aria-label="后台${esc(item.label)}">${esc(item.latest)}</textarea></label><label class="ui-field"><span>你的草稿</span><textarea class="lt-textarea" rows="3" readonly aria-label="草稿${esc(item.label)}">${esc(item.local)}</textarea></label></section>`).join('')}<div class="wk-dialog-actions">${button(dialog.cancelLabel ?? '取消', 'cancel-dialog', dialog.pending ? 'disabled' : '')}${button(dialog.pending ? '处理中…' : dialog.confirmLabel ?? '确认', 'confirm-dialog', dialog.pending ? 'disabled aria-busy="true"' : '', 'primary')}</div></div></div>` : ''}</section>`;
   // Repeated runtime receipts must not replace an unchanged surface.
-  if (markup !== renderedMarkup) { replaceSurfaceMarkup(app, markup, renderedMarkup); renderedMarkup = markup; }
+  if (markup !== renderedMarkup || surfacePatched) { replaceSurfaceMarkup(app, markup, renderedMarkup); renderedMarkup = markup; surfacePatched = false; }
     const main = app.querySelector('.lt-main');
     if (main) main.scrollTop = state.scrolls[context()] ?? 0;
     if (dialog) {
@@ -616,7 +652,7 @@ export async function mountBenmoView({container: app, controller, availability =
       const next = [...app.querySelectorAll('[data-action],input,textarea')].find(node => focusName ? node.name === focusName && (node.type !== 'radio' || node.value === focusValue) : focusData && JSON.stringify({...node.dataset}) === focusData);
       next?.focus?.({preventScroll: true});
     }
-    } finally { renderPolicy = previousPolicy; }
+    } finally { renderPolicy = previousPolicy; syncRevalidationControls(); }
   }
   function confirm(text, action, labels = {}) { remember(); dialog = {text, action, pending: false, ...labels}; render(); }
   function leave(action) { if (dirty()) confirm('放弃未保存的修改？', action, {cancelLabel: '继续编辑', confirmLabel: '放弃修改'}); else action(); }
@@ -745,6 +781,17 @@ export async function mountBenmoView({container: app, controller, availability =
   app.addEventListener('submit', event => event.preventDefault(), {signal: lifetime.signal});
   app.addEventListener('compositionstart', () => { composing = true; }, {signal: lifetime.signal});
   app.addEventListener('compositionend', () => { composing = false; }, {signal: lifetime.signal});
+  function restoreRevalidationControls() {
+    for (const [node, disabled] of revalidationControls) node.disabled = disabled;
+    revalidationControls.clear();
+  }
+  function syncRevalidationControls() {
+    restoreRevalidationControls();
+    if (!revalidating || disposed || suspended) return;
+    for (const node of app.querySelectorAll('[data-action]')) if (revalidationActions.has(node.dataset.action)) {
+      revalidationControls.set(node, node.disabled === true); node.disabled = true;
+    }
+  }
   function syncWriteControls() {
     if (disposed || suspended) return;
     for (const node of app.querySelectorAll('[data-action="delete-narrative"]')) node.disabled = blocked() || acting;
@@ -753,11 +800,13 @@ export async function mountBenmoView({container: app, controller, availability =
       if (acting) node.setAttribute('aria-busy', 'true'); else node.removeAttribute('aria-busy');
       node.textContent = acting ? '保存中…' : '保存';
     }
+    syncRevalidationControls();
   }
   app.addEventListener('click', async event => {
     const control = event.target.closest('[data-action]');
     if (!control || control.disabled || disposed || suspended || (initializing && !isCurrent())) return;
     const action = control.dataset.action, id = control.dataset.id;
+    if (revalidating && revalidationActions.has(action)) return;
     if (loading && !['close', 'area', 'back'].includes(action)) return;
     if (dialog && !['cancel-dialog', 'confirm-dialog'].includes(action)) return;
     if (acting && !['back', 'cancel', 'close', 'area', 'cancel-dialog', 'confirm-dialog'].includes(action)) return;
@@ -775,8 +824,8 @@ export async function mountBenmoView({container: app, controller, availability =
       if (action === 'close') { leave(() => { epoch++; clearDraft(); dialog = null; suspended = true; app.inert = true; stopSummaryVisibility(); onClose(); }); return; }
       if (action === 'area') { leave(() => navigate(id)); return; }
       if (action === 'reload') { acting = ownsAction = true; remember(); const token = epoch; loading = !draft; loadFailed = false; error = ''; render(); try { const next = await readValue(true); if (!disposed && token === epoch) { remember(); apply(next); invalidated = false; recoverNarrativeDraft(); } } catch (failure) { if (!disposed && token === epoch) { loadFailed = true; throw failure; } } finally { loading = false; if (!disposed && token === epoch) render(); } return; }
-      if (action === 'tab' && enabledTabs().includes(id)) { leave(() => { remember(); epoch++; state.tab = id; state.route = 'list'; clearDraft(); if(controller.snapshot)apply(controller.snapshot()); render(); }); return; }
-      if (action === 'kind' && enabledKinds().includes(id)) { leave(() => { remember(); epoch++; state.kind = id; state.route = 'list'; state.selected = state.selections[id] ?? null; clearDraft(); if(controller.snapshot)apply(controller.snapshot()); render(); }); return; }
+      if (action === 'tab' && enabledTabs().includes(id)) { leave(() => { remember(); epoch++; state.tab = id; state.route = 'list'; clearDraft(); if(!revalidating&&controller.snapshot)apply(controller.snapshot()); render(); }); return; }
+      if (action === 'kind' && enabledKinds().includes(id)) { leave(() => { remember(); epoch++; state.kind = id; state.route = 'list'; state.selected = state.selections[id] ?? null; clearDraft(); if(!revalidating&&controller.snapshot)apply(controller.snapshot()); render(); }); return; }
       if (action === 'narrative-cleaning' && state.route === 'narrative-settings' && onOpenCleaning) { remember(); clearNarrativePreview(); await onOpenCleaning(); return; }
       if (action === 'narrative-preview-tab' && ['memory','original','materials','prompt'].includes(id)) { remember(); generationPreview.view(id); render(); return; }
       if (action === 'preview-narrative' && state.route === 'narrative-generate' && !previewBlocked() && !previewState.previewBusy) {
@@ -846,8 +895,8 @@ export async function mountBenmoView({container: app, controller, availability =
       if (action === 'default-tracking-prompt' && state.route === 'tracking-settings') { remember(); draft.prompt = controller.defaultTrackingPrompts?.[state.kind] ?? ''; render(); return; }
       if (action === 'settings-summary' && state.kind === 'summary') { startEdit(null, 'list', 'summary-settings'); return; }
       if (action === 'default-prompt' && state.route === 'summary-settings') { remember(); draft.prompt = controller.defaultPrompt ?? ''; render(); return; }
-      if (action === 'expand') { remember(); state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id); render(); return; }
-      if (action === 'toggle-summary-history' && state.kind === 'summary') { remember(); state.summaryHistoryExpanded = !state.summaryHistoryExpanded; render(); return; }
+      if (action === 'expand') { remember(); state.expanded.has(id) ? state.expanded.delete(id) : state.expanded.add(id); if (!patchSummaryDisclosure(control, id)) render(); return; }
+      if (action === 'toggle-summary-history' && state.kind === 'summary') { remember(); state.summaryHistoryExpanded = !state.summaryHistoryExpanded; if (!patchSummaryDisclosure(control)) render(); return; }
       if (action === 'manual-summary' && state.kind === 'summary' && !blocked()) { const row = missingRows().find(record => Number(record.floor) === Number(id));if (row && !generating.has(Number(id))) startEdit(row, 'list');return; }
       if (action === 'start-backfill' && state.kind === 'summary') { await startBackfill();return; }
       if (action === 'stop-backfill' && state.kind === 'summary') { await stopBackfill();return; }
@@ -927,14 +976,20 @@ export async function mountBenmoView({container: app, controller, availability =
   let unsubscribe;
   function subscribe() { unsubscribe = controller.subscribe?.(next => {
     if (disposed) return;
+    // A navigation check may publish loading before it has new confirmed data.
+    // Keep the last readable projection and patch only its temporary write lock.
+    if (revalidating && next.dataStatus !== 'ready') { syncRevalidationControls(); return; }
     const livePreview = next.narrative?.requestPreview && ['running','paused','failed'].includes(next.narrative?.run?.status);
     if ((previewState.preview || previewState.previewBusy) && (!same(value.target,next.target) || !livePreview && !same(value.narrative?.narrative,next.narrative?.narrative) || (previewState.preview && next.narrative && Object.hasOwn(next.narrative,'requestPreview') && !next.narrative.requestPreview))) clearNarrativePreview();
     if (previewState.previewOpen && next.narrative?.requestPreview && ['running','paused','failed'].includes(next.narrative?.run?.status)) previewState.preview = clone(next.narrative.requestPreview);
     value = next;
-    const automaticStatus=app.querySelector('[data-latest-automatic-status]');
-    if(automaticStatus){const message=value.summary?.automatic?.message;automaticStatus.textContent=message?`自动生成：${message}`:'';automaticStatus.hidden=!message;}
     reconcileGenerating();
     reconcileBackfill();
+    // Ready receipts still retire stale reply/backfill tokens and invalidate
+    // preview state. Only their DOM work waits for navigation to finish.
+    if (revalidating) { syncRevalidationControls(); return; }
+    const automaticStatus=app.querySelector('[data-latest-automatic-status]');
+    if(automaticStatus){const message=value.summary?.automatic?.message;automaticStatus.textContent=message?`自动生成：${message}`:'';automaticStatus.hidden=!message;}
     // A background receipt must never rebuild an active input or its baseline.
     if (generationDraftVisible() && app.querySelector('#benmo-narrative-generate-form') && policy()[state.tab] && !dialog && !suspended) { readDraft(); syncNarrativeDraft({receipt:true}); }
     else if (!draft && !acting && !dialog && !suspended) { remember(); render(); }
@@ -967,7 +1022,16 @@ export async function mountBenmoView({container: app, controller, availability =
     loading() { if (disposed) return; remember(); loading = true; loadFailed = false; error = ''; suspended = false; app.inert = false; render(); },
     fail(failure) { if (disposed) return; loading = false; loadFailed = true; error = failure?.message || '读取未完成，请重试'; suspended = false; app.inert = false; render(); },
     failed() { return loadFailed; },
-    resume(next, {kind} = {}) { if (disposed) return; remember(); if (next) { apply(next); invalidated = false; } if (kind && Object.hasOwn(KINDS, kind) && policy()[kind] && !draft && (state.tab !== 'records' || state.kind !== kind)) { state.tab = 'records'; state.kind = kind; state.route = 'list'; state.selected = state.selections[kind] ?? null; } loading = false; loadFailed = false; suspended = false; app.inert = false; render(); },
+    resume(next, {kind,checking=false} = {}) {
+      if (disposed) return;
+      remember(); restoreRevalidationControls(); revalidating=checking;
+      const priorRoute=state.route, priorTab=state.tab, priorKind=state.kind, wasUnavailable=loading||loadFailed;
+      if (next) { apply(next); invalidated=false; }
+      if (kind && Object.hasOwn(KINDS,kind) && policy()[kind] && !draft && (state.tab!=='records'||state.kind!==kind)) { state.tab='records'; state.kind=kind; state.route='list'; state.selected=state.selections[kind]??null; }
+      loading=false; loadFailed=false; suspended=false; app.inert=false;
+      if (!wasUnavailable && priorRoute===state.route && priorTab===state.tab && priorKind===state.kind && JSON.stringify(policy())===renderedPolicy && (checking||draft)) { syncWriteControls(); return; }
+      render();
+    },
     dispose() { if (disposed) return; disposed = true; epoch++; stopSummaryVisibility(); unsubscribe?.(); lifetime.abort(); clearTimeout(toastTimer); clearTimeout(redirectTimer); app.innerHTML = ''; },
   };
 }

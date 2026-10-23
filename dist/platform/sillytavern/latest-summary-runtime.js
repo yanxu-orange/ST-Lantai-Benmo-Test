@@ -131,15 +131,21 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     lastReadView=readView;target=t;selection=captured;workshopState=workshop??null;trackingState=tracking??null;scheduleState=schedule??null;state={...captured.latest,status:state.status==='running'?'running':'ready',error:'',floorStates:state.floorStates};publish();return inspect();
     }catch(error){if(!disposed&&token===readSerial&&(!t||current(t)))failedDisplayRead(error,startedEpoch);throw error;}
   }
-  async function reconcile(){
+  function sendPreparationCurrent(owner){
+    try{return !disposed&&!isSourceDeletionPending()&&owner.serial===serial&&current(owner.target)&&equal(owner.config,maintenanceConfiguration());}catch{return false;}
+  }
+  async function reconcile(owner){
     maintenanceProof=null;
     // Verified suffix rollback owns all source-bound domains in one root write.
-    if(isSourceDeletionPending())return;
+    if(isSourceDeletionPending()||owner&&!sendPreparationCurrent(owner))return false;
     let config;try{config=maintenanceConfiguration();}catch{/* Unconfirmed settings cannot grant reuse. */}
-    const ticket=serial,t=await adapter.prepare(),workshopPass=await workshopRuntime?.request();
+    const ticket=serial,t=await adapter.prepare();
+    if(owner&&(!sameTarget(t,owner.target)||!sendPreparationCurrent(owner)))return false;
+    const workshopPass=await workshopRuntime?.request();
+    if(owner&&!sendPreparationCurrent(owner))return false;
     const readView=workshopPass?.readView??await repository.capturePanelData?.(t);let captured=await repository.captureLatest(t,readView);
     const sharedSource=raw(t),workshop=await workshopRuntime?.backgroundState(t,{readView}),tracking=await trackingRuntime?.backgroundState(t,{readView,raw:sharedSource}),schedule=await scheduleRuntime?.backgroundState(t,{readView,raw:sharedSource});
-    if(disposed||ticket!==serial||!current(t)||isSourceDeletionPending())return;
+    if(disposed||ticket!==serial||!current(t)||isSourceDeletionPending()||owner&&!sendPreparationCurrent(owner))return false;
     // Disabling generation must not disable ownership maintenance for saved
     // summaries: ST copies extension metadata into newly generated swipes.
     // Keep an unsettled host projection untouched until syncSwipeToMes runs;
@@ -149,7 +155,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     let maintainedProof=null;
     if(config&&readView&&(!workshopRuntime||workshopPass?.displaySource||!config.gates.some(row=>['prompt','collect','sync'].includes(row.key)&&row.allowed))){const root=repository.readPanelRoot(t,readView);maintainedProof={target:copy(t),serial:ticket,source,versions:versions(),config,binding:[root.binding?.kind,root.binding?.owner],modules:copy(root.workshop?.modules??[]),workshopSource:workshopPass?.displaySource??null};}
     const next=pruneLatestRecords(captured.latest,raw(t,true),{replyVersions:versions(),retainStale:true});
-    const valid=()=>{try{return !disposed&&!isSourceDeletionPending()&&ticket===serial&&current(t)&&matchesRaw(t,source);}catch{return false;}};
+    const valid=()=>{try{return !disposed&&!isSourceDeletionPending()&&ticket===serial&&current(t)&&matchesRaw(t,source)&&(!owner||sendPreparationCurrent(owner));}catch{return false;}};
     if(prepared.changed||!equal(next,captured.latest)){
       const saved=await repository.updateLatest(t,captured,next,{isCurrent:valid,forceSave:prepared.changed,workshopProof:prepared.selected.map(({floor,swipeId,replyId})=>({floor,swipeId,replyId}))});
       captured=saved.selection;
@@ -159,25 +165,34 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const trackingSelection=valid()?await trackingRuntime?.reconcile(t,options):null;
     const scheduleSelection=valid()?await scheduleRuntime?.reconcile(t,options):null;
     const tracked=valid()?await trackingRuntime?.backgroundState(t,{readView,raw:source,captured:trackingSelection??undefined}):null,scheduled=valid()?await scheduleRuntime?.backgroundState(t,{readView,raw:source,captured:scheduleSelection??undefined}):null;
-    if(valid()&&readView&&!repository.matchesPanelData(t,readView)){invalidatedFloors.clear();await read({target:t});if(lastReadView&&maintenanceMatches(maintainedProof,lastReadView))maintenanceProof=maintainedProof;return;}
-    if(valid()){displayRecoveryEpoch=null;invalidatedFloors.clear();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};if(maintenanceMatches(maintainedProof,readView))maintenanceProof=maintainedProof;publish();}
+    // This in-memory receipt keeps the maintained source bound through any
+    // trailing display reads; a display projection cannot certify new input.
+    const completion=()=>valid()?{isCurrent:valid}:null;
+    if(valid()&&readView&&!repository.matchesPanelData(t,readView)){invalidatedFloors.clear();await read({target:t});if(lastReadView&&maintenanceMatches(maintainedProof,lastReadView))maintenanceProof=maintainedProof;return completion();}
+    if(valid()){displayRecoveryEpoch=null;invalidatedFloors.clear();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};if(maintenanceMatches(maintainedProof,readView))maintenanceProof=maintainedProof;publish();return completion();}
+    return false;
   }
-  function queueRefresh(allowProjection=false){
+  function queueRefresh(allowProjection=false,owner){
     initialized=true;
     // Explicit refreshes retain their own queued pass and failure. Only the
     // panel's ensureData joins existing initialization, so an old chat's failed
     // pass cannot consume a later chat's initialization or hide its own error.
     const work=(pending??Promise.resolve()).catch(()=>{}).then(async()=>{
+      if(owner&&!sendPreparationCurrent(owner))return false;
       const ticket=serial,startedEpoch=settingsRecoveryEpoch;displayReadDirty=false;
-      try{if(!allowProjection||!await projectMaintainedPanel())await reconcile();
+      try{let completed=true;if(!allowProjection||!await projectMaintainedPanel())completed=await reconcile(owner);
       // Notifications received during a pass coalesce into a current read.
-      while(!disposed&&ticket===serial&&displayReadDirty){displayReadDirty=false;await read({target,readView:lastReadView});}
+      while(!disposed&&ticket===serial&&displayReadDirty&&(!owner||completed?.isCurrent?.()===true)){displayReadDirty=false;await read({target,readView:lastReadView});}
+      if(owner)return completed?.isCurrent?.()===true&&sendPreparationCurrent(owner);
       }catch(error){if(!disposed&&ticket===serial)failedDisplayRead(error,startedEpoch);throw error;}
     });pending=work;
     work.finally(()=>{if(pending===work){pending=null;if(displayRecoveryEpoch!==null&&settingsRecoveryEpoch>displayRecoveryEpoch)updateWorkshopDisplay();}}).catch(()=>{});return work;
   }
   const refresh=()=>queueRefresh();
   const ensureData=()=>pending??queueRefresh(true);
+  // Formal sampling waits for this target's own maintenance receipt, never a
+  // previous chat's pending display read or the separate model job queue.
+  const prepareSend=owner=>queueRefresh(false,{target:copy(owner),serial,config:maintenanceConfiguration()});
   function adoptLatestReceipt(saved,{resetFloors=false}={}){
     // The repository has already confirmed this write. Adopt its exact result;
     // a separate display read must never turn that receipt into a save failure.
@@ -711,7 +726,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     library:()=>library(),projectPanel(readView,{target:owner=target,source}={}){
       if(!readView||!sameTarget(owner,target)||!current(target)||!repository.matchesPanelData(target,readView)||source&&!matchesRaw(target,source))return null;
       return library(readView,source);
-    },editRecord,manualRecord,estimateBackfill,startBackfill,stopBackfill,generate:(floor,options={})=>enqueueGeneration(floor,{workshopOnly:options.workshopOnly===true,...(typeof options.taskId==='string'?{taskId:options.taskId}:{})}),intercept,floorInfo,floorInfos,workshopFloorInfo,workshopFloorInfos,refresh,ensureData,panelReadView:()=>lastReadView,matchesSource:(t,proof)=>matchesRaw(t,proof),captureSource:(t=target)=>raw(t),
+    },editRecord,manualRecord,estimateBackfill,startBackfill,stopBackfill,generate:(floor,options={})=>enqueueGeneration(floor,{workshopOnly:options.workshopOnly===true,...(typeof options.taskId==='string'?{taskId:options.taskId}:{})}),intercept,floorInfo,floorInfos,workshopFloorInfo,workshopFloorInfos,refresh,ensureData,prepareSend,panelReadView:()=>lastReadView,matchesSource:(t,proof)=>matchesRaw(t,proof),captureSource:(t=target)=>raw(t),
     replaceWorkshopSend:()=>workshopSends.replace(),sealWorkshopSend:(type,injection,history)=>workshopSends.seal(type,injection,history),invalidateWorkshopSend:()=>workshopSends.clear(),
     setEnabled(value){enabled=!!value;if(!enabled)cancel();publish();},
     dispose(){if(disposed)return;for(const stop of [...visibilityReleases])stop();cancel();disposed=true;readSerial++;for(const release of releases)release();listeners.clear();}};

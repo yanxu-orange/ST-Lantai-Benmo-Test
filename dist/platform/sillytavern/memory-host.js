@@ -103,6 +103,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   let benmoController,benmoView,benmoSubscription,benmoTarget,benmoNavigation=null,benmoPolicyKey='';
   let benmoWarmupRequested=false,benmoWarmupScheduled=false;
   let workshopRegex,workshopRegexError=null,workshopRuntime,workshopController,workshopView,workshopTarget,workshopContainer,trackingRuntime,scheduleRuntime;
+  let workshopPreparation=Promise.resolve();
   // Area-owned views survive ordinary section and settings round trips. Runtime services
   // are deliberately not page resources: closing a page must not stop a task.
   const areaPages = {
@@ -285,6 +286,17 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(!snapshot.run?.summary||(snapshot.run.summarySource??'event')!==summarySource)throw new Error('请返回当前批次所属的总结继续');
     return narrativeRuntime[action]();
   }
+  function prepareWorkshopRegex(){
+    const settled=workshopRegex.ensure({settingsReady:true}).then(
+      ()=>{if(workshopPreparation===settled)workshopRegexError=null;},
+      error=>{if(workshopPreparation===settled)workshopRegexError=error;});
+    workshopPreparation=settled;return settled;
+  }
+  async function workshopReady(){
+    // A re-enable can replace the attempt while a caller is waiting. Only the
+    // current settled attempt owns its warning; failure keeps the old fallback.
+    let attempt;do{attempt=workshopPreparation;await attempt;}while(attempt!==workshopPreparation);
+  }
   async function ensureRuntime() {
     if (!runtimePromise) runtimePromise = new Promise(afterPageFrame).then(()=>disposed||lifetime.signal.aborted?null:createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, signal: lifetime.signal,getControls:()=>controls,afterSummaryCommit:args=>narrativeRuntime.afterSummaryCommit(args),retrySummaryCommit:args=>resumeSummaryNarrative('retry',args),skipSummaryCommit:args=>resumeSummaryNarrative('skip',args),getPendingNarrative:async()=>{if(!narrativeRuntime)return null;await narrativeRuntime.load();return narrativeRuntime.hasPending()?narrativeRuntime.snapshot().run:null;},captureSummarySource:(target,range)=>adapter.captureSummarySource(target,range),hideSource:createNativeSummaryHider({repository,getContext,captureSource:target=>adapter.captureSummarySource(target),verifyHidden:(target,rows)=>adapter.verifyNativeHidden(target,rows)}) }))
       .then(async value => { if(!value)return null;if (disposed) { value.dispose(); return null; } runtime = value;
@@ -298,9 +310,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         // result even though event summaries may read hidden original story rows.
         recallRuntime=createRecallRuntime({repository,settings:runtime.settings,recallProvider:runtime.recallProvider,getControls:()=>controls,getContext,dateRuntime:timeRuntime,captureEvents:target=>adapter.peekConfirmed(target).events,captureSource:target=>adapter.captureChatSource(target),...(typeof adapter.captureRecallSource==='function'&&typeof adapter.matchesRecallSource==='function'?{captureRecallSource:(target,scope)=>adapter.captureRecallSource(target,scope),matchesRecallSource:(target,source)=>adapter.matchesRecallSource(target,source)}:{})});
         if(runtime.settings?.captureWorkshop)workshopRegex=createWorkshopRegexInstaller({settings:runtime.settings,getContext,fetchImpl:request,...runtimeOptions.workshopRegexOptions,isCurrent:()=>!disposed&&!lifetime.signal.aborted&&allowed('workshop')});
-        if(workshopRegex&&allowed('workshop')){try{await workshopRegex.ensure({settingsReady:true});}catch(error){workshopRegexError=error;}}
+        if(workshopRegex&&allowed('workshop'))void prepareWorkshopRegex();
         if(disposed){value.dispose();return null;}
-        if(runtime.settings?.captureWorkshop)workshopRuntime=createWorkshopRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,captureSource:t=>adapter.captureChatSource(t),matchesSource:(t,s)=>adapter.matchesChatSource(t,s),isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true});
+        if(runtime.settings?.captureWorkshop)workshopRuntime=createWorkshopRuntime({repository,settings:runtime.settings,getControls:()=>controls,getContext,ensureReady:workshopReady,captureSource:t=>adapter.captureChatSource(t),matchesSource:(t,s)=>adapter.matchesChatSource(t,s),isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true});
         trackingRuntime=createTrackingRuntime({repository,adapter,settings:runtime.settings,getContext,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t),onChange:()=>{void latestRuntime.refresh().catch(()=>{});}});
         scheduleRuntime=createScheduleRuntime({repository,settings:runtime.settings,dateRuntime:timeRuntime,getControls:()=>controls,captureSource:t=>latestRuntime.captureSource(t)});
         latestRuntime=createLatestSummaryRuntime({repository,adapter,settings:runtime.settings,provider:runtime.provider,getGenerationSettings:(group='latest')=>runtime.getGenerationSettings(group),getContext,getControls:()=>controls,workshopRuntime,trackingRuntime,scheduleRuntime,isSourceDeletionPending:()=>sourceDeletionRuntime?.hasPendingRollback()===true,autoInitialize:false});
@@ -363,7 +375,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     benmoController?.refreshAvailability();
     if(!next.time){timeRuntime?.pause();timePrompts?.clear();}
     if(before&&before.time!==next.time)recallRuntime?.clear();
-    if(before&&!before.workshop&&next.workshop&&workshopRegex)void workshopRegex.ensure({settingsReady:true}).then(()=>{workshopRegexError=null;}).catch(error=>{workshopRegexError=error;});
+    if(before&&!before.workshop&&next.workshop&&workshopRegex)void prepareWorkshopRegex();
     if(!before||['prompt','collect','sync'].some(key=>before[key]!==next[key]))workshopRuntime?.clear();
   }
   async function openTask(taskId){
@@ -446,10 +458,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=true;summaryContent.inert=false;benmoContent.hidden=false;benmoContent.inert=false;
     benmoTarget=target;
     if(benmoView){
-      const view=benmoView;let settled=false;
-      afterPageFrame(()=>{if(!settled&&valid()&&view===benmoView)view.loading();});
-      try{const value=await benmoController.ensure();settled=true;if(!valid()||view!==benmoView)return false;view.resume(value,{kind});syncAppearance();return true;}
-      catch(error){settled=true;if(valid()&&view===benmoView){view.resume();view.fail(error);}return false;}
+      const view=benmoView;
+      view.resume(undefined,{kind,checking:true});
+      try{const value=await benmoController.ensure();if(!valid()||view!==benmoView)return false;view.resume(value);syncAppearance();return true;}
+      catch(error){if(valid()&&view===benmoView){view.resume();view.fail(error);}return false;}
     }
     const container=doc.createElement('div');container.className='benmo-mount';container.setAttribute('data-ui-theme',panel.getAttribute('data-ui-theme')??DEFAULT_THEME);benmoContent.replaceChildren(container);
     const prepare=async({refresh=false}={})=>{
@@ -564,15 +576,15 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     suspendPages();app?.suspendCumulative();memoryContent.hidden=true;memoryContent.inert=true;
     if(workshopTarget&&!sameTarget(workshopTarget,target))areaPages.workshop.unmount();
     if(workshopView){
-      const view=workshopView;showAreaContainer(workshopContainer);let settled=false;
-      afterPageFrame(()=>{if(!settled&&valid()&&view===workshopView)view.loading();});
-      try{const value=await workshopController.ensure();settled=true;if(!valid()||view!==workshopView)return false;view.resume(value,{kind});syncAppearance();return true;}
-      catch(error){settled=true;if(valid()&&view===workshopView){view.resume();view.fail(error);}return false;}
+      const view=workshopView;showAreaContainer(workshopContainer);
+      view.resume(undefined,{kind,checking:true});
+      try{const value=await workshopController.ensure();if(!valid()||view!==workshopView)return false;view.resume(value);syncAppearance();return true;}
+      catch(error){if(valid()&&view===workshopView){view.resume();view.fail(error);}return false;}
     }
     // Only an unfinished mount is replaced. A confirmed view owns its drafts.
     workshopController?.dispose();workshopTarget=target;
     const container=doc.createElement('div');container.className='wk-mount';workshopContainer=container;showAreaContainer(container);
-    const controller=createWorkshopController({repository,settings:runtime.settings,target,runtime:workshopRuntime,getCharacterName:binding=>getContext().characters?.find(c=>c.avatar===binding?.owner)?.name??'当前角色',ensureRegex:()=>{if(workshopRegexError)throw workshopRegexError;},onMemory:()=>void returnFromSummary(),onTime:()=>void openTime(),onSettings:openSettings,onBenmo:()=>void openBenmo(),onClose:close});
+    const controller=createWorkshopController({repository,settings:runtime.settings,target,runtime:workshopRuntime,isReadOnly:()=>foregroundBrowsing,getCharacterName:binding=>getContext().characters?.find(c=>c.avatar===binding?.owner)?.name??'当前角色',ensureRegex:async()=>{await workshopReady();if(workshopRegexError)throw workshopRegexError;},onMemory:()=>void returnFromSummary(),onTime:()=>void openTime(),onSettings:openSettings,onBenmo:()=>void openBenmo(),onClose:close});
     workshopController=controller;
     const prepare=async({refresh=false}={})=>{await new Promise(afterPageFrame);if(refresh?(!panel||settingsOpen||!summaryContent.contains(container)||summaryContent.hidden||controller!==workshopController||!sameTarget(target,repository.captureTarget())):!valid())return null;return refresh?controller.load({refresh:true}):controller.ensure();};
     const view=await mountWorkshopView({container,controller,availability,initialKind:kind??'prompt',prepare,isCurrent:valid});
@@ -965,9 +977,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   const context = getContext(), source = context?.eventSource, readyEvent = context?.eventTypes?.APP_READY;
   const releaseGenerationDiagnostic=bindGenerationDiagnostic({document:doc,context});
-  const updateBrowsing=value=>{foregroundBrowsing=value;benmoController?.refreshAvailability?.();if(!value&&areaPages.benmo.visible())void benmoController?.ensure().catch(()=>{});};
+  const updateBrowsing=value=>{foregroundBrowsing=value;benmoController?.refreshAvailability?.();workshopView?.refreshAvailability?.();if(!value&&areaPages.benmo.visible())void benmoController?.ensure().catch(()=>{});if(!value&&areaPages.workshop.visible())void openWorkshop();};
   for(const [name,listener] of [
-    ['GENERATION_STARTED',(type,_options,dryRun)=>{if(dryRun!==true&&['normal','regenerate','swipe','continue'].includes(type))updateBrowsing(true);}],
+    ['GENERATION_STARTED',(type,_options,dryRun)=>{if(dryRun!==true&&['normal','regenerate','swipe','continue'].includes(type===undefined?'normal':type))updateBrowsing(true);}],
     ...['GENERATION_ENDED','GENERATION_STOPPED','CHAT_CHANGED','CHAT_CREATED'].map(name=>[name,()=>updateBrowsing(false)]),
   ]){const event=context?.eventTypes?.[name];if(event&&source?.on){source.on(event,listener);generationBrowseReleases.push(()=>(source.removeListener??source.off)?.call(source,event,listener));}}
   const ready = () => installEntry();
@@ -985,10 +997,13 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         ensureAdapter();try{entryTarget=repository.captureTarget();}catch{/* Cold entry has no confirmed target yet. */}
         const target=await adapter.prepare();
         const current=()=>!disposed&&request===recallEntryRequest&&sameTarget(target,repository.captureTarget());
-        if(!current())return;await ensureRuntime();
+        if(!current())return;entryTarget=target;await ensureRuntime();
         if(disposed||request!==recallEntryRequest||!sameTarget(target,repository.captureTarget()))return;
+        await workshopReady();if(!current())return;
         await controls.ensure();if(!current())return;
         if(sourceDeletionRuntime?.hasPendingRollback()){recallRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();return;}
+        const prepared=await latestRuntime.prepareSend(target);if(!current())return;
+        if(!prepared)throw new Error('发送前资料准备已失效');
         latestRuntime?.replaceWorkshopSend();
         await timePrompts?.intercept(...args);if(!current())return;
         await recallRuntime?.intercept(...args);if(!current())return;

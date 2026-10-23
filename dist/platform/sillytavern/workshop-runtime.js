@@ -10,11 +10,13 @@ const supported = new Set(['normal','regenerate','swipe','continue']);
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const pendingProjection=message=>{const slot=message?.swipe_info?.[message.swipe_id??0]?.extra?.[WORKSHOP_REPLY_KEY],active=message?.extra?.[WORKSHOP_REPLY_KEY];return typeof slot==='string'&&!!slot&&typeof active==='string'&&!!active&&slot!==active;};
 const roleIds = {system:0,user:1,assistant:2};
-export function createWorkshopRuntime({repository,settings,getContext,captureSource,matchesSource,getControls,isSourceDeletionPending=()=>false}={}) {
+export function createWorkshopRuntime({repository,settings,getContext,captureSource,matchesSource,getControls,ensureReady,isSourceDeletionPending=()=>false}={}) {
   const gates=Object.fromEntries(['prompt','collect','sync'].map(key=>[key,featureGate(getControls,key)]));
   let disposed=false,serial=0,pending=null,identityUnconfirmed=true,backgroundSourceReader=null,lastCollection=null;
   const keys=new Set(),releases=[],listeners=new Set();
   const changed=()=>{for(const listener of listeners)try{listener();}catch{/* Display refresh cannot change a write. */}};
+  const preparationPolicy=()=>Object.values(gates).map(gate=>({gate,allowed:gate.allowed(),proof:gate.capture()}));
+  const policyCurrent=policy=>policy.every(({gate,allowed,proof})=>gate.allowed()===allowed&&(!allowed||gate.matches(proof)));
   // Display reuse needs the live story source as well as the repository root.
   // Reply ownership lives outside that root and can change without an event.
   const replyOwnership=()=>JSON.stringify(getContext().chat.map(message=>[message?.extra?.[WORKSHOP_REPLY_KEY],message?.swipe_info?.map(info=>info?.extra?.[WORKSHOP_REPLY_KEY]),message?.swipes?.length]));
@@ -78,7 +80,12 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     clearTimeout(timer);
     if(!gates.collect.allowed()&&!gates.sync.allowed()&&!gates.prompt.allowed())return Promise.resolve(null);
     const requestedSerial=serial,target=requestedTarget??repository.captureTarget();
-    const work=(pending??Promise.resolve()).catch(()=>{}).then(()=>requestedSerial===serial?collect({target,readView}):null) .then(result=>{
+    const policy=ensureReady?preparationPolicy():null;
+    const work=(pending??Promise.resolve()).catch(()=>{}).then(async()=>{
+      if(ensureReady)await ensureReady();
+      if(disposed||requestedSerial!==serial||!sameTarget(target,repository.captureTarget())||policy&&!policyCurrent(policy))return null;
+      return collect({target,readView});
+    }).then(result=>{
       if(result){
         const value={target:result.target,selection:result.selection,config:result.config,binding:result.binding,displaySource:result.displaySource};
         // A fixed readView is newly allocated even when all displayed facts and
@@ -107,6 +114,11 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     }catch{if(!disposed&&serial===ticket)clear();}
   }
   async function backgroundState(target,{readView,captured}={}){
+    if(ensureReady){
+      const ticket=serial,owner=structuredClone(target),policy=preparationPolicy();
+      await ensureReady();
+      if(disposed||ticket!==serial||!sameTarget(owner,repository.captureTarget())||!policyCurrent(policy))throw new Error('工坊准备期间聊天或功能已变化');
+    }
     const config=settings.captureWorkshop();
     const canShare=typeof repository.capturePanelData==='function'&&typeof repository.readPanelRoot==='function'&&typeof repository.matchesPanelData==='function';
     const view=readView??(canShare?await repository.capturePanelData(target):undefined);
