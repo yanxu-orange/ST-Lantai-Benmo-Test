@@ -1,0 +1,27 @@
+/* Four existing themes share stable page geometry. Their typography, colours,
+   corner shapes and navigation materials remain owned by their theme sheets. */
+.lantai.ui-workspace:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"],[data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-main {
+  scrollbar-gutter: stable;
+}
+.lantai.ui-workspace:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"],[data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-root-top,
+.lantai.ui-workspace:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"],[data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header:not(.lt-header--root) {
+  min-height: 64px;
+}
+.lantai.ui-workspace:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"],[data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header:not(.lt-header--root) .ui-page-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+}
+/* Photography belongs to the same title slot whether a root has tabs or not.
+   The paused panoramic overlay remains paused; these are existing root assets. */
+.lantai.ui-workspace[data-ui-theme="snow-ermine"] .lt-header--root { background-image: none; }
+.lantai.ui-workspace[data-ui-theme="snow-ermine"] .lt-root-top {
+  background-image: var(--lt-format-root-header-wash), var(--lt-format-root-header-image);
+  background-position: var(--lt-format-root-header-position);
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+@media (forced-colors: active) {
+  .lantai.ui-workspace[data-ui-theme="snow-ermine"] .lt-root-top { background-image: none; }
+}

@@ -1,3 +1,4 @@
+import {replacePageMarkup} from './stable-surface.js';
 import {summaryPreviewSource,summaryPreviewPrompt,summaryPreviewStage,summaryPreviewTabs,summaryPreviewPanel} from './shared-ui/summary-preview.js';
 import { DEFAULT_THEME, normalizeTheme, surfaceTheme } from './styles/theme.js';
 export const cumulativeEscape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -26,7 +27,7 @@ export function mountCumulativeSurface({container,controller,markup,input,click,
       previous=state;toast(state);return;
     }
     if(previous&&key===renderedScope&&preserveMain(state,previous)){if(footerContainer)footerContainer.innerHTML=footer(state);if(state.restore){for(const node of container.querySelectorAll('button,input,textarea')){if(!frozenControls.has(node))frozenControls.set(node,node.disabled);node.disabled=true;}}else{for(const [node,value] of frozenControls)node.disabled=value;frozenControls.clear();}previous=state;toast(state);return;}
-    remember();const saved=controller.inspect();renderedScope=key;container.innerHTML=markup(state,surfaceTheme(container));if(footerContainer)footerContainer.innerHTML=footer(state);previous=state;frozenControls.clear();
+    remember();const saved=controller.inspect();renderedScope=key;replacePageMarkup(container,markup(state,surfaceTheme(container)));if(footerContainer)footerContainer.innerHTML=footer(state);previous=state;frozenControls.clear();
     for(const detail of container.querySelectorAll('details[data-cu-open]'))detail.open=saved.opened[`${key}:${detail.dataset.cuOpen}`]??false;
     if(scrollNode())scrollNode().scrollTop=saved.scroll[key]??0;
     toast(state);

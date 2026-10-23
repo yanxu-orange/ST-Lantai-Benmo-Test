@@ -30,6 +30,9 @@ export const APPEARANCE_FORMAT_STYLE_ENTRIES=Object.freeze([
   entry('shared','../shared-ui/appearance-format.css'),
 ]);
 
+// Current shared geometry is deliberately last, after historical theme detail.
+export const SURFACE_STABILITY_STYLE_ENTRIES=Object.freeze([entry('shared','../shared-ui/surface-stability.css')]);
+
 // Product-owned appearance, after the preserved shared component layer.
 export const SNOW_ERMINE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../snow-ermine/appearance-tokens.css'),
@@ -43,6 +46,7 @@ export const SNOW_ERMINE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../snow-ermine/time.css'),
   entry('shared','../snow-ermine/benmo.css'),
   entry('shared','../snow-ermine/secondary.css'),
+  ...SURFACE_STABILITY_STYLE_ENTRIES,
 
 ]);
 
@@ -60,6 +64,7 @@ export const SPRING_STYLE_ENTRIES=Object.freeze([
   entry('shared','../spring/benmo.css'),
   entry('shared','../spring/workshop.css'),
   entry('shared','../spring/settings.css'),
+  ...SURFACE_STABILITY_STYLE_ENTRIES,
 ]);
 
 // Book themes share attribute-scoped tokens/components, never an existing theme's
@@ -71,6 +76,7 @@ export const PAPER_LETTER_STYLE_ENTRIES=Object.freeze([
   entry('shared','../book-themes/pages.css'),
   entry('shared','../book-themes/memory.css'),
   entry('shared','../book-themes/time-details.css'),
+  ...SURFACE_STABILITY_STYLE_ENTRIES,
 ]);
 export const PURPLE_GLOW_STYLE_ENTRIES=Object.freeze([...PAPER_LETTER_STYLE_ENTRIES]);
 export const BOOK_THEME_STYLE_ENTRIES=Object.freeze({

@@ -17,6 +17,25 @@ export function initialMergeTimes(events) {
 export function createMemoryManagementService({repository,manager,provider,getGenerationSettings,getOriginalSnapshot,control=null,uuid=()=>crypto.randomUUID()}={}) {
  if(!repository||typeof repository.matchesSelection!=='function'||!manager||typeof manager.start!=='function'||typeof provider?.generateJson!=='function'||typeof getGenerationSettings!=='function')throw new TypeError('记忆管理依赖未配置');
  const records=new Map();
+ const terminal=new Set(['succeeded','cancelled','stale']);
+ // Terminal receipts are still useful to mounted views; their input and result
+ // bodies are not. Only this service's tasks opt into releasing manager storage.
+ function releaseTerminal(state){
+  const record=records.get(state.taskId);if(!record||record.committing||record.outcome==='unconfirmed'||!terminal.has(state.status))return;
+  record.receipt={taskId:state.taskId,status:state.status,attempt:state.attempt,error:state.error,hasCandidate:false,reviewPending:false,target:manager.inspect(state.taskId)?.target};
+  queueMicrotask(()=>{
+   record.pending=manager.settled(state.taskId).then(()=>{
+    delete record.pending;
+    // Cancellation can precede an uncertain save receipt. Recovery still owns
+    // that evidence even though the manager status has become terminal.
+    if(record.outcome==='unconfirmed'){delete record.receipt;return manager.inspect(state.taskId);}
+    manager.forget(state.taskId);return record.receipt;
+   });
+   // forget refuses an in-flight commit; the completion above retries safely.
+   if(record.outcome!=='unconfirmed')manager.forget(state.taskId);
+  });
+ }
+ manager.subscribe(releaseTerminal);
  const readSettings=()=>generationSettings(getGenerationSettings());
  function targetCurrent(snapshot,target) {
   try{return sameTarget(target,repository.captureTarget())&&(!snapshot.settings||equalData(readSettings(),snapshot.settings));}catch{return false;}
@@ -51,7 +70,9 @@ export function createMemoryManagementService({repository,manager,provider,getGe
  function start(snapshot,worker) {
   if(!targetCurrent(snapshot,snapshot.selection.target)||!sourcesCurrent(snapshot,snapshot.selection.target))throw new Error('记忆来源或生成设置已变化');
   const taskId=manager.start({key:`memory:${snapshot.kind}:${snapshot.selection.target.chatId}:${snapshot.selection.events.map(event=>event.id).sort().join('|')}`,target:snapshot.selection.target,snapshot,validateCurrent:target=>targetCurrent(snapshot,target),validateSnapshot:sourcesCurrent,worker});
-  records.set(taskId,{kind:snapshot.kind,outcome:null,stage:snapshot.kind==='merge'?'merge-text':snapshot.kind==='keywords'?'keywords':'undo-review'});return taskId;
+  records.set(taskId,{kind:snapshot.kind,outcome:null,stage:snapshot.kind==='merge'?'merge-text':snapshot.kind==='keywords'?'keywords':'undo-review'});
+  const state=manager.inspect(taskId);if(state&&terminal.has(state.status))releaseTerminal({taskId,status:state.status,attempt:state.attempt,error:state.error});
+  return taskId;
  }
  return {
   async rebuildKeywords(ids) {
@@ -103,7 +124,7 @@ export function createMemoryManagementService({repository,manager,provider,getGe
   },
   async confirm(taskId,{reviewedIndexes}={}) {
    if(control&&!control.allowed())return {taskId,status:'paused'};
-   const record=records.get(taskId);if(!record||record.outcome==='unconfirmed')return {taskId,status:'rejected',outcome:record?.outcome??null};
+   const record=records.get(taskId);if(!record||record.committing||record.outcome==='unconfirmed')return {taskId,status:'rejected',outcome:record?.outcome??null};
    let reviewed;
    if(reviewedIndexes!==undefined){
     const state=manager.inspect(taskId);
@@ -123,6 +144,7 @@ export function createMemoryManagementService({repository,manager,provider,getGe
      }
     }catch{return {taskId,status:'invalid',error:'结果须完整覆盖所选记忆'};}
    }
+   record.committing=true;
    const result=await manager.confirm(taskId,async ctx=>{
     try {
      await checkAsync(ctx.snapshot,ctx.target);
@@ -132,10 +154,17 @@ export function createMemoryManagementService({repository,manager,provider,getGe
      if(ctx.candidate.kind==='undo')return await repository.undoMerge(ctx.target,ctx.snapshot.selection,options);
      throw new Error('候选类型无效');
     }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')record.outcome='unconfirmed';throw error;}
-   });
+   }).finally(()=>{record.committing=false;});
+   const finished=manager.inspect(taskId);if(finished)releaseTerminal(finished);
    return {...result,outcome:record.outcome};
   },
-  inspect(taskId) {const state=manager.inspect(taskId),record=records.get(taskId);return state&&record?{...state,outcome:record.outcome,stage:record.stage}:null;},
+  inspect(taskId) {const record=records.get(taskId),state=record?.receipt??manager.inspect(taskId);return state&&record?{...state,committing:record.committing===true,outcome:record.outcome,stage:record.stage}:null;},
+  forget(taskId,{recovered=false}={}) {
+   const record=records.get(taskId),state=manager.inspect(taskId);
+   if(!record||!state||record.outcome==='unconfirmed'&&!recovered||!terminal.has(state.status)&&!(recovered&&record.outcome==='unconfirmed'&&state.status==='failed'))return false;
+   if(!manager.forget(taskId))return false;
+   record.receipt={taskId,status:state.status,attempt:state.attempt,error:state.error,hasCandidate:false,reviewPending:false,target:state.target};return true;
+  },
   subscribe(listener) {return manager.subscribe(state=>{const record=records.get(state.taskId);if(record)listener({...state,outcome:record.outcome,stage:record.stage});});},
   cancel:taskId=>records.has(taskId)&&manager.cancel(taskId),
   retry(taskId) {
@@ -143,6 +172,6 @@ export function createMemoryManagementService({repository,manager,provider,getGe
    const previousStage=record.stage;record.stage=record.kind==='merge'?'merge-text':record.kind==='keywords'?'keywords':'undo-review';
    const retried=manager.retry(taskId);if(!retried)record.stage=previousStage;return retried;
   },
-  settled:taskId=>manager.settled(taskId)
+  settled:async taskId=>await (records.get(taskId)?.pending??manager.settled(taskId))??records.get(taskId)?.receipt??null
  };
 }

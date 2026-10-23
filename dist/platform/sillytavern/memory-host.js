@@ -569,6 +569,20 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(settingsOpen){settingsRootView?.dispose();settingsRootView=null;settingsOpen=false;settingsContent.replaceChildren();settingsContent.hidden=true;returnFocus=returnTarget=null;}
     return openTime({allowReadOnly:true,route:'schedules',candidates});
   }
+  async function revalidateWorkshop(view,{kind,valid}){
+    const controller=workshopController;
+    view.resume(undefined,{kind,checking:true});
+    try{const value=await controller.ensure();if(!valid()||view!==workshopView||controller!==workshopController)return false;view.resume(value);syncAppearance();return true;}
+    catch(error){if(valid()&&view===workshopView&&controller===workshopController){view.resume();view.fail(error);}return false;}
+  }
+  function refreshVisibleWorkshop(){
+    if(!allowed('workshop')||!panel||settingsOpen||!runtime?.settings||!workshopView||!areaPages.workshop.visible())return;
+    const target=repository.captureTarget(),serial=ticket,request=pageRequest;
+    const valid=()=>!!panel&&serial===ticket&&request===pageRequest&&!settingsOpen&&areaPages.workshop.visible()&&sameTarget(target,repository.captureTarget());
+    // Availability changed inside this page; retain navigation and its drafts.
+    // The same fresh ensure still owns the transition back to writable content.
+    return revalidateWorkshop(workshopView,{valid});
+  }
   async function openWorkshop({kind}={}){
     if(!allowed('workshop')||!panel||settingsOpen||!runtime?.settings)return false;
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
@@ -577,9 +591,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(workshopTarget&&!sameTarget(workshopTarget,target))areaPages.workshop.unmount();
     if(workshopView){
       const view=workshopView;showAreaContainer(workshopContainer);
-      view.resume(undefined,{kind,checking:true});
-      try{const value=await workshopController.ensure();if(!valid()||view!==workshopView)return false;view.resume(value);syncAppearance();return true;}
-      catch(error){if(valid()&&view===workshopView){view.resume();view.fail(error);}return false;}
+      return revalidateWorkshop(view,{kind,valid});
     }
     // Only an unfinished mount is replaced. A confirmed view owns its drafts.
     workshopController?.dispose();workshopTarget=target;
@@ -977,7 +989,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   const context = getContext(), source = context?.eventSource, readyEvent = context?.eventTypes?.APP_READY;
   const releaseGenerationDiagnostic=bindGenerationDiagnostic({document:doc,context});
-  const updateBrowsing=value=>{foregroundBrowsing=value;benmoController?.refreshAvailability?.();workshopView?.refreshAvailability?.();if(!value&&areaPages.benmo.visible())void benmoController?.ensure().catch(()=>{});if(!value&&areaPages.workshop.visible())void openWorkshop();};
+  const updateBrowsing=value=>{foregroundBrowsing=value;benmoController?.refreshAvailability?.();workshopView?.refreshAvailability?.();if(!value&&areaPages.benmo.visible())void benmoController?.ensure().catch(()=>{});if(!value&&areaPages.workshop.visible())void refreshVisibleWorkshop();};
   for(const [name,listener] of [
     ['GENERATION_STARTED',(type,_options,dryRun)=>{if(dryRun!==true&&['normal','regenerate','swipe','continue'].includes(type===undefined?'normal':type))updateBrowsing(true);}],
     ...['GENERATION_ENDED','GENERATION_STOPPED','CHAT_CHANGED','CHAT_CREATED'].map(name=>[name,()=>updateBrowsing(false)]),

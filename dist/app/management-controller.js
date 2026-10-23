@@ -12,10 +12,19 @@ export function createManagementController({ service, repository, originalAvaila
     const token=JSON.stringify([task.taskId,task.attempt,phase]);if(notified.has(token))return;notified.add(token);
     for(const listener of [...notices]){try{listener({taskId:task.taskId,count:entry.ids.length,phase});}catch{}}
   };
+  const releaseTerminal=(entry,task)=>{
+    if(task?.committing||task?.outcome==='unconfirmed'||!['succeeded','cancelled','stale'].includes(task?.status))return;
+    entry.selection=null;entry.events=[];entry.fields=null;entry.indexes=null;
+    for(const token of notified)if(JSON.parse(token)[0]===task.taskId)notified.delete(token);
+  };
   const release = service?.subscribe(task => {
     task=service.inspect(task.taskId);if(!task)return;
     const entry=[...operations.values()].find(entry=>entry.taskId===task.taskId);
-    if(entry){if(task.status==='awaiting-user'&&!task.reviewPending)notify(entry,task,'complete');else if(task.status==='failed'&&task.outcome!=='unconfirmed')notify(entry,task,'failed');}
+    if(entry){
+      if(['succeeded','cancelled','stale'].includes(task.status)){
+        releaseTerminal(entry,task);
+      }else if(task.status==='awaiting-user'&&!task.reviewPending)notify(entry,task,'complete');else if(task.status==='failed'&&task.outcome!=='unconfirmed')notify(entry,task,'failed');
+    }
     if(current?.taskId===task.taskId)emit();
   });
   const key = (kind, target, ids) => JSON.stringify([kind,target, [...ids].sort()]);
@@ -29,9 +38,10 @@ export function createManagementController({ service, repository, originalAvaila
       if (!ids.length || events.some(event => !event)) throw new Error('所选记忆已变化，请重新读取');
       if (kind === 'merge' && (ids.length < 2 || events.some(event => event.mergedFrom))) throw new Error('请至少选择两条未合并的记忆');
       const operationKey = key(kind,target,ids), previous = operations.get(operationKey), previousTask=previous?.taskId?service.inspect(previous.taskId):null;
-      if (previousTask && (previousTask.outcome==='unconfirmed'&&!previous.recovered||previousTask.status==='committing'||previousTask.outcome!=='unconfirmed'&&!['succeeded','cancelled','stale'].includes(previousTask.status)&&taskCurrent(previous,previousTask))) current = previous;
+      if (previousTask && (previousTask.outcome==='unconfirmed'&&!previous.recovered||previousTask.committing||previousTask.status==='committing'||previousTask.outcome!=='unconfirmed'&&!['succeeded','cancelled','stale'].includes(previousTask.status)&&taskCurrent(previous,previousTask))) current = previous;
       else {
         if(previousTask&&!['succeeded','cancelled','stale'].includes(previousTask.status))service.cancel(previous.taskId);
+        if(previous?.recovered)service.forget?.(previous.taskId,{recovered:true});
         const selection=await repository.captureSelection(target,ids);
         current = {kind,ids:[...ids],target,selection,events:structuredClone(selection.events),returnTo:structuredClone(returnTo),taskId:null,fields:null,error:'',busy:false,scroll:0};
         operations.set(operationKey,current);
@@ -42,6 +52,7 @@ export function createManagementController({ service, repository, originalAvaila
       if (!current) return null;
       if (!liveTarget(current)) return {kind:current.kind, target:current.target, status:'stale', error:'聊天目标已变化，请返回原工作面', returnTo:current.returnTo};
       const task = current.taskId ? service.inspect(current.taskId) : null;
+      releaseTerminal(current,task);
       if(!task&&!repository.matchesSelection(current.target,current.selection))return {...current,status:'stale',error:'所选记忆已变化，请返回后重新发起'};
       if(task && !['succeeded','committing','cancelled','stale'].includes(task.status) && task.outcome!=='unconfirmed' && !taskCurrent(current,task))return {...current,taskId:task.taskId,status:'stale',error:'记忆来源或设置已变化，请返回后重新发起'};
       const fields = task?.reviewPending ? current.fields ?? task.candidate.fields : current.fields;
@@ -68,7 +79,7 @@ export function createManagementController({ service, repository, originalAvaila
     async confirm() {const entry=current,state=this.inspect();if(!entry||entry.busy||!state?.taskId||state.reviewPending||state.status==='stale'||state.outcome==='unconfirmed')return null;entry.busy=true;emit();try {
       const options=state.candidate?.kind==='keywords'?{reviewedIndexes:state.indexes.map(item=>({id:item.id,eventWords:[...item.eventWords],detailWords:item.detailWords.map(term=>({id:term.id,word:term.word,aliases:term.aliasesText.split(/[，,]/).map(value=>value.trim()).filter(Boolean)}))}))}:undefined;
       const result=await service.confirm(entry.taskId,options);if(result?.status==='invalid'){entry.error=result.error;entry.errorIndex=result.errorIndex;}return result;
-    }finally{entry.busy=false;emit();}},
+    }finally{entry.busy=false;releaseTerminal(entry,service.inspect(entry.taskId));emit();}},
     cancel() {if(current?.taskId)service.cancel(current.taskId);if(current)current.error='';emit();},
     retry() {if(!current?.taskId)return false;current.error='';const retried=service.retry(current.taskId);if(retried){current.fields=null;current.indexes=null;notify(current,service.inspect(current.taskId),'started');}emit();return retried;},
     resume(taskId){const entry=[...operations.values()].find(entry=>entry.taskId===taskId),task=service?.inspect(taskId);if(!entry||!task||!taskCurrent(entry,task)||['succeeded','cancelled','stale'].includes(task.status))return false;current=entry;emit();return true;},
