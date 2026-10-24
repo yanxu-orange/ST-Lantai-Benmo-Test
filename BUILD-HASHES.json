@@ -266,8 +266,8 @@
   },
   {
     "path": "dist/app/persistent-decoration.js",
-    "bytes": 5605,
-    "sha256": "ce5f4c406cc57941bde1769c97642d833758f2d85e615a384a636aee9858bedd"
+    "bytes": 255,
+    "sha256": "7c9a2b66f873f24504bd42c9c279890d4663c37c792cb5c5b87cd14b9e2090d0"
   },
   {
     "path": "dist/app/recall-controller.js",
@@ -646,8 +646,8 @@
   },
   {
     "path": "dist/app/version.js",
-    "bytes": 50,
-    "sha256": "9d2c6b649d5319eb84635f824fd213b37200484b93f8a629e0d9d010758ea6bf"
+    "bytes": 55,
+    "sha256": "dce16fda41ba3054d16fd8441ace9f0c97f48fa0c19dec619e637756a659f39f"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1536,7 +1536,7 @@
   },
   {
     "path": "manifest.json",
-    "bytes": 419,
-    "sha256": "eb10b14f6dddc407012667ce293de7a6255daa877a205a6f699b66a84666b40e"
+    "bytes": 424,
+    "sha256": "1d1e55aa9a0f494955c81be9db7ec01777d60969bffe85074ef9d482637aca0c"
   }
 ]
