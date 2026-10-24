@@ -53,7 +53,7 @@
   },
   {
     "path": "dist/app/book-themes/pages.css",
-    "sha256": "c9ddff7882807dcfae3200cc23fd1f727f2147b649c9d7446fc5bce37f236ef6"
+    "sha256": "2e1be660e7f4b042fa8335045d713ce58ba2ceda947a90be7c48848885b42f9d"
   },
   {
     "path": "dist/app/book-themes/time-details.css",
@@ -61,7 +61,7 @@
   },
   {
     "path": "dist/app/book-themes/tokens.css",
-    "sha256": "a48c8ef12e5f165aa14eed3c3852f2ff1497756cbc473b01a13c64604402c14f"
+    "sha256": "8e06ea484f7dfe8114eb2692775f151d586fb0e95de9bd61074c6bd8ed637a95"
   },
   {
     "path": "dist/app/control-session.js",
@@ -212,6 +212,10 @@
     "sha256": "dd262297ef5289652b9769317deb39b6228312fbb38388bb92ed33d84ed39087"
   },
   {
+    "path": "dist/app/persistent-decoration.js",
+    "sha256": "ce5f4c406cc57941bde1769c97642d833758f2d85e615a384a636aee9858bedd"
+  },
+  {
     "path": "dist/app/recall-controller.js",
     "sha256": "08c17d1eaf33f91b5a1c6d36d5a0fd6c19505affd85a9153d539434975b538e9"
   },
@@ -237,11 +241,11 @@
   },
   {
     "path": "dist/app/settings-root-view.js",
-    "sha256": "ab45711f058e5167f13d02fe75bd219f64436034a0a15caf7d7cc93b486ebaa7"
+    "sha256": "13908a4ca2ac9fa752f25ea71f61913ca79c017cb8f41082ff911dfc85b5dd92"
   },
   {
     "path": "dist/app/shared-ui/appearance-format.css",
-    "sha256": "32554e3c5b69aad6c6f8c945535d4caa87a6f55f3c289b04cc6b0014bb1ec5dd"
+    "sha256": "bf54a16d96ca64c066bd848c84541eb76fb6f383b01ce6f658326dbbe8996f24"
   },
   {
     "path": "dist/app/shared-ui/candidate.web.css",
@@ -261,7 +265,7 @@
   },
   {
     "path": "dist/app/shared-ui/surface-stability.css",
-    "sha256": "a7c3d4a567b76b253148034bd9b46287d123f79c2a8133167182ce7acd841329"
+    "sha256": "3eb6bf4fe364236437550349951bc307a520739e927e8760d611ee589f8e8e9c"
   },
   {
     "path": "dist/app/snow-ermine/appearance-tokens.css",
@@ -293,7 +297,7 @@
   },
   {
     "path": "dist/app/snow-ermine/memory-tokens.css",
-    "sha256": "e2c7dd3dd7e48b0c9ccd9a8c4a646a4b9cd5ced4493dd282ce2af9845197efe7"
+    "sha256": "b6a85d07f10cc1eed5d20539de87963003cbbe0f9d2d55b1690889ebc595b90f"
   },
   {
     "path": "dist/app/snow-ermine/memory.css",
@@ -397,7 +401,7 @@
   },
   {
     "path": "dist/app/spring/memory-tokens.css",
-    "sha256": "ddbbaa6d2ee575d2d1284502c5f045c4609477988eee73ec23ab8442315015c8"
+    "sha256": "38f20b3b29a4841105b9bfa66fda73ceb66b617ce083b502251b66588e5ac356"
   },
   {
     "path": "dist/app/spring/memory.css",
@@ -433,7 +437,7 @@
   },
   {
     "path": "dist/app/stable-surface.js",
-    "sha256": "f7fd2117bfebc6be08269b7c575067fe89c8863a5662cdaf3f59857febbb2ad4"
+    "sha256": "b996f1eb290a2d1a602185d5a5b50e8d94d01a506972bc13e2d62d526f47577c"
   },
   {
     "path": "dist/app/styles/book-font.js",
@@ -513,7 +517,7 @@
   },
   {
     "path": "dist/app/version.js",
-    "sha256": "a964c9283af502c99d41aa4263565f7b5b0c7201a01a16fa3d0890b19fefb396"
+    "sha256": "6d802876677b94273eb2c79bfe7e5257f487680cf43524795c290e2722fc160d"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1025,11 +1029,11 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.css",
-    "sha256": "ab666634d3b80541aa139d8c716979ab2d81a6239d0fc4d2e67c79894d09d4e2"
+    "sha256": "7f6819e3448ad8cdb17e438a90a8012ac109f68a14b28f0d8ef99d3a3fdfe04a"
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "sha256": "872618eb4e1ec2aa39b926077d3c30075a856c7e35943537bfe7860722a41207"
+    "sha256": "0df718bacd81922ca476d418457682563deed253a25de17ac7a16177bf53b23a"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1221,6 +1225,6 @@
   },
   {
     "path": "manifest.json",
-    "sha256": "9483ed6e644bffab0bc2dbcd8e01e3d9785f2820ac94ce551aef4a2304e7eb63"
+    "sha256": "bd9a0e19512274efc202decf665b21c3428754cba00c372a0512448c012e5f55"
   }
 ]

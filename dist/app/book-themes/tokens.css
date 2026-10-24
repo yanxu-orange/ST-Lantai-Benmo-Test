@@ -197,6 +197,7 @@
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]),
 :host([data-ui-theme="paper-letter"]), :host([data-ui-theme="purple-glow"]) {
   --lt-book-root-header-height: 64px;
+  --lt-format-memory-title-size: .9375rem;
   --ui-color-canvas: var(--lt-book-canvas);
   --ui-color-workspace: var(--lt-book-canvas);
   --ui-color-surface-base: var(--lt-book-surface);

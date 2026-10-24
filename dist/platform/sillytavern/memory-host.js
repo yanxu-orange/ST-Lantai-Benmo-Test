@@ -56,6 +56,7 @@ import '../../app/shared-ui/compact-group-candidate.js';
 import {BASE_STYLE_ENTRIES,SHARED_STYLE_ENTRIES,SNOW_ERMINE_STYLE_ENTRIES,SPRING_STYLE_ENTRIES,BOOK_THEME_STYLE_ENTRIES} from '../../app/styles/style-entries.js';
 
 import { DEFAULT_THEME, applyTheme, resolveStyleAssets } from '../../app/styles/theme.js';
+import {createPersistentDecoration} from '../../app/persistent-decoration.js';
 import { createAppearanceAdapter } from './appearance-adapter.js';
 import { createAppearanceSession } from '../../app/appearance-session.js';
 
@@ -79,7 +80,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
-  let releasePanelDiagnostic=null,foregroundBrowsing=false;
+  let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null;
   const generationBrowseReleases=[];
   const bookStylesByTheme = new Map();
   const storybarTheme=mountStorybarTheme({document:doc});
@@ -272,6 +273,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       const currentObserver=sharedObserver;sharedObserver=null;sharedStyle=null;snowStyle=null;springStyle=null;
       for (const bundle of bookStylesByTheme.values()) bundle.style=null;
       cleanup(()=>currentObserver?.disconnect());
+      cleanup(()=>decoration?.dispose());decoration=null;
     } finally {
       releasePanelDiagnostic?.();releasePanelDiagnostic=null;
       const currentPanel=panel;panel=null;content=memoryContent=benmoContent=settingsContent=summaryContent=null;
@@ -854,22 +856,26 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     }
     // The extracted candidate retains shared choice/hit-area semantics.
     // Every supported theme uses this same component and touch layer.
-    const media=active?'all':'not all';if(sharedStyle.media!==media)sharedStyle.media=media;
+    // A section switch must not retire the panel's prepared presentation layer.
+    const media='all';if(sharedStyle.media!==media)sharedStyle.media=media;
     if (theme === 'snow-ermine' && !snowStyle) {
       snowStyle = doc.createElement('style'); snowStyle.textContent = snowCss; panel.shadowRoot.append(snowStyle);
     }
-    if(snowStyle){const snowMedia=active&&theme==='snow-ermine'?'all':'not all';if(snowStyle.media!==snowMedia)snowStyle.media=snowMedia;}
+    if(snowStyle){const snowMedia=theme==='snow-ermine'?'all':'not all';if(snowStyle.media!==snowMedia)snowStyle.media=snowMedia;}
     if (theme === 'spring' && springCss && !springStyle) {
       springStyle = doc.createElement('style'); springStyle.textContent = springCss; panel.shadowRoot.append(springStyle);
     }
-    if(springStyle){const springMedia=active&&theme==='spring'?'all':'not all';if(springStyle.media!==springMedia)springStyle.media=springMedia;}
+    if(springStyle){const springMedia=theme==='spring'?'all':'not all';if(springStyle.media!==springMedia)springStyle.media=springMedia;}
     for (const [identity,bundle] of bookStylesByTheme) {
       if (theme === identity && bundle.css && !bundle.style) {
         bundle.style = doc.createElement('style');bundle.style.textContent = bundle.css;panel.shadowRoot.append(bundle.style);
       }
-      if (bundle.style) { const bookMedia=active&&theme===identity?'all':'not all';if(bundle.style.media!==bookMedia)bundle.style.media=bookMedia; }
+      if (bundle.style) { const bookMedia=theme===identity?'all':'not all';if(bundle.style.media!==bookMedia)bundle.style.media=bookMedia; }
     }
     if (active && typeof globalThis.getComputedStyle === 'function') globalThis.UICompactGroupCandidate.sync(panel.shadowRoot);
+    const visiblePage=[settingsContent,benmoContent,summaryContent,memoryContent].find(page=>page&&!page.hidden&&page.querySelector('.lantai'));
+    const themeReady=theme==='spring'?!!springStyle:theme==='snow-ermine'?!!snowStyle:!!bookStylesByTheme.get(theme)?.style;
+    if(themeReady)decoration?.sync(visiblePage?.querySelector('.lantai'));
   }
   function errorView(error) {
     memoryContent.replaceChildren();
@@ -927,6 +933,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       summaryContent=doc.createElement('div');summaryContent.className='lt-host-page';summaryContent.hidden=true;
       benmoContent=doc.createElement('div');benmoContent.className='lt-host-page';benmoContent.hidden=true;
       content.append(memoryContent, settingsContent,summaryContent,benmoContent);
+      decoration=createPersistentDecoration({container:content});
       shadow.append(content); doc.body.append(panel);
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
@@ -949,7 +956,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if (!valid()) return;
       // Seed the presentation owner before any view creates its first root.
       syncAppearance();
-      if(!sharedObserver&&Observer){sharedObserver=new Observer(syncAppearance);sharedObserver.observe(content,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});}
+      if(!sharedObserver&&Observer){sharedObserver=new Observer(records=>{if(records.some(record=>!record.target.closest?.('[data-host-decoration]')))syncAppearance();});sharedObserver.observe(content,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','class','data-ui-theme']});}
       ensureAdapter();
       await adapter.prepare();
       if (!valid()) return;

@@ -107,6 +107,8 @@
 /* All settings chapters share one side rule and natural content spacing.
    Headings own the chapter underline; containers do not repeat it. */
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group { background: var(--lt-book-surface); border: 0; border-left: 2px solid var(--lt-book-strong); padding: 14px 16px; }
+/* Root chapters keep their heading underline; feature-page cards keep the side rule. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group[data-settings-section] { border-left: 0; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-api-settings .lt-editor > .lt-stack { background: var(--lt-book-surface); border: 0; padding: 16px 14px; }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-api-settings .lt-delete-confirmation { background: var(--lt-book-danger); color: var(--lt-book-dangerInk); padding: 12px; font-size: 13px; }
 /* Four semantic root groups reuse the same live controls and entry renderers. */
