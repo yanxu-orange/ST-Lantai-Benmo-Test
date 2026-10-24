@@ -1,4 +1,5 @@
 import {bindGenerationDiagnostic,bindGenerationDiagnosticPanel,downloadGenerationDiagnostic} from './generation-diagnostic.js';
+import {createUITransitionDiagnostic} from './ui-transition-diagnostic.js';
 import {createWorkshopHistoryTicket} from './workshop-history.js';
 import {createNativeSummaryHider} from './native-summary-hide.js';
 import {createSummaryNarrativeActions} from '../../app/summary-controller.js';
@@ -81,6 +82,15 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
   let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null;
+  let interfaceDiagnosticTarget=null;
+  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel});
+  // Evidence must never prevent ordinary navigation, saving or cleanup.
+  const interfaceDiagnostic=Object.fromEntries(['start','stop','stage','inspect','subscribe','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return name==='subscribe'?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
+  const releaseInterfaceDiagnostic=interfaceDiagnostic.subscribe(value=>{if(value.status!=='recording')interfaceDiagnosticTarget=null;});
+  function startInterfaceDiagnostic(){
+    try{interfaceDiagnosticTarget=repository.captureTarget();if(interfaceDiagnostic.start())return true;}catch{}
+    interfaceDiagnosticTarget=null;return false;
+  }
   const generationBrowseReleases=[];
   const bookStylesByTheme = new Map();
   const storybarTheme=mountStorybarTheme({document:doc});
@@ -219,6 +229,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     // Confirmed batch policy controls source hiding independently of recall.
     // ST remains responsible for its subsequent preset/budget assembly.
     unsubscribe = adapter.subscribe(kind => {
+      if(interfaceDiagnosticTarget){try{if(!sameTarget(interfaceDiagnosticTarget,repository.captureTarget()))interfaceDiagnostic.stop('chat-change');else if(kind==='reload')interfaceDiagnostic.stage('reload');}catch{interfaceDiagnostic.stop('chat-change');}}
       const sequence=++hostReloadSequence;
       if(controls){controls.invalidate();void controls.ensure().then(()=>{if(disposed||sequence!==hostReloadSequence)return;if(panel)syncControls();requestBenmoWarmup();});}
       if (!panel) return;
@@ -249,6 +260,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     });
   }
   function close() {
+    interfaceDiagnostic.stop('panel-close');
     if (closing) return;
     closing = true;
     let cleanupError;
@@ -410,15 +422,18 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     try{return !!proof&&sameTarget(proof.target,repository.captureTarget())&&adapter.matchesReadToken(proof.target,proof.root)&&latestRuntime.matchesSource(proof.target,proof.source)&&proof.stream===memoryStream();}catch{return false;}
   }
   async function returnFromSummary() {
-    pageRequest++;suspendPages();
+    interfaceDiagnostic.stage('requested','memory');
+    pageRequest++;const diagnosticRequest=pageRequest;suspendPages();
     if(!panel)return;
     if(!allowed('memory')){if(allowed('time'))return openTime();if(allowed('workshop'))return openWorkshop();if(allowed('benmo'))return openBenmo();openSettings();return;}
     summaryContent.replaceChildren();summaryContent.hidden=true;summaryContent.inert=false;memoryContent.hidden=false;memoryContent.inert=false;
+    interfaceDiagnostic.stage('shown','memory');
     if(!app)return open();
     await app.refreshAvailability();
     if(!matchesMemoryRead(memoryReadProof)){const proof=captureMemoryRead();await app.rebind();memoryReadProof=matchesMemoryRead(proof)?proof:null;}
     if(!panel)return;if(app?.memoryType()==='cumulative')app.resumeCumulative();
     if(app?.session.state.route==='editor'&&app.session.state.draft?.id&&!app.session.state.root.events.some(event=>event.id===app.session.state.draft.id))await app.refresh();
+    if(panel&&diagnosticRequest===pageRequest&&!memoryContent.hidden)interfaceDiagnostic.stage('ready','memory');
     const previous=summaryReturnFocus;
     (previous?.isConnected&&memoryContent.contains(previous)&&!previous.closest('[hidden],[inert]')?previous:memoryContent.querySelector('[data-action=summary-manual]')??memoryContent.querySelector('.lt-main'))?.focus({preventScroll:true});
   }
@@ -451,6 +466,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   async function openBenmo({kind}={}){
     if(!allowed('benmo')||!benmoController||!panel||settingsOpen)return false;
+    interfaceDiagnostic.stage('requested','benmo');
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
     const valid=()=>!!panel&&serial===ticket&&request===pageRequest&&!settingsOpen&&sameTarget(target,repository.captureTarget());
     if(benmoTarget&&!sameTarget(benmoTarget,target))areaPages.benmo.unmount({preserve:false});
@@ -461,8 +477,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     benmoTarget=target;
     if(benmoView){
       const view=benmoView;
-      view.resume(undefined,{kind,checking:true});
-      try{const value=await benmoController.ensure();if(!valid()||view!==benmoView)return false;view.resume(value);syncAppearance();return true;}
+      view.resume(undefined,{kind,checking:true});interfaceDiagnostic.stage('shown','benmo');
+      try{const value=await benmoController.ensure();if(!valid()||view!==benmoView)return false;view.resume(value);syncAppearance();interfaceDiagnostic.stage('ready','benmo');return true;}
       catch(error){if(valid()&&view===benmoView){view.resume();view.fail(error);}return false;}
     }
     const container=doc.createElement('div');container.className='benmo-mount';container.setAttribute('data-ui-theme',panel.getAttribute('data-ui-theme')??DEFAULT_THEME);benmoContent.replaceChildren(container);
@@ -477,7 +493,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(area==='memory')void returnFromSummary();else if(area==='time')void openTime();else if(area==='workshop')void openWorkshop();
     }});
     if(!view||!valid()){view?.dispose();return false;}
-    benmoView=view;syncAppearance();return !view.failed();
+    benmoView=view;syncAppearance();interfaceDiagnostic.stage('ready','benmo');return !view.failed();
   }
   const openLatestSummary=()=>openBenmo({kind:'summary'});
   function narrativeSettingsAccess(target){
@@ -550,6 +566,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   async function openTime({allowReadOnly=false,route=null,candidates=false}={}){
     if(!allowed('time')&&!(allowReadOnly&&allowed('enabled')))return false;
     if(!panel||settingsOpen||!runtime?.settings)return false;
+    interfaceDiagnostic.stage('requested','time');
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
     suspendPages();app?.suspendCumulative();
     if(timeController&&timeTarget?.chatId===target.chatId&&timeTarget?.rootId===target.rootId&&!sameTarget(timeTarget,target)){timeController.rebindTarget(target);timeTarget=target;}
@@ -561,8 +578,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(!timeContainer){timeContainer=doc.createElement('div');timeContainer.className='time-mount lt-host-page';}
     showAreaContainer(timeContainer);timeController.resume();
     if(!timeView)timeView=mountTimeView({container:timeContainer,controller:timeController,availability});
+    interfaceDiagnostic.stage('shown','time');
     const controller=timeController,valid=()=>panel&&serial===ticket&&request===pageRequest&&controller===timeController&&sameTarget(target,repository.captureTarget());
-    afterPageFrame(()=>{if(valid())void controller.ensure().then(ready=>{if(ready&&valid()){if(candidates)controller.openCandidates();else if(route)controller.open(route);}});});return true;
+    afterPageFrame(()=>{if(valid())void controller.ensure().then(ready=>{if(ready&&valid()){if(candidates)controller.openCandidates();else if(route)controller.open(route);interfaceDiagnostic.stage('ready','time');}});});return true;
   }
   async function openSchedule({candidates=false,fromSettings=false}={}){
     if(disposed||settingsOpen&&!fromSettings)return false;
@@ -571,10 +589,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(settingsOpen){settingsRootView?.dispose();settingsRootView=null;settingsOpen=false;settingsContent.replaceChildren();settingsContent.hidden=true;returnFocus=returnTarget=null;}
     return openTime({allowReadOnly:true,route:'schedules',candidates});
   }
-  async function revalidateWorkshop(view,{kind,valid}){
+  async function revalidateWorkshop(view,{kind,valid,diagnosticReady=false}){
     const controller=workshopController;
     view.resume(undefined,{kind,checking:true});
-    try{const value=await controller.ensure();if(!valid()||view!==workshopView||controller!==workshopController)return false;view.resume(value);syncAppearance();return true;}
+    try{const value=await controller.ensure();if(!valid()||view!==workshopView||controller!==workshopController)return false;view.resume(value);syncAppearance();if(diagnosticReady)interfaceDiagnostic.stage('ready','workshop');return true;}
     catch(error){if(valid()&&view===workshopView&&controller===workshopController){view.resume();view.fail(error);}return false;}
   }
   function refreshVisibleWorkshop(){
@@ -587,13 +605,14 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   async function openWorkshop({kind}={}){
     if(!allowed('workshop')||!panel||settingsOpen||!runtime?.settings)return false;
+    interfaceDiagnostic.stage('requested','workshop');
     const target=repository.captureTarget(),serial=ticket,request=++pageRequest;
     const valid=()=>!!panel&&serial===ticket&&request===pageRequest&&!settingsOpen&&sameTarget(target,repository.captureTarget());
     suspendPages();app?.suspendCumulative();memoryContent.hidden=true;memoryContent.inert=true;
     if(workshopTarget&&!sameTarget(workshopTarget,target))areaPages.workshop.unmount();
     if(workshopView){
-      const view=workshopView;showAreaContainer(workshopContainer);
-      return revalidateWorkshop(view,{kind,valid});
+      const view=workshopView;showAreaContainer(workshopContainer);interfaceDiagnostic.stage('shown','workshop');
+      return revalidateWorkshop(view,{kind,valid,diagnosticReady:true});
     }
     // Only an unfinished mount is replaced. A confirmed view owns its drafts.
     workshopController?.dispose();workshopTarget=target;
@@ -603,7 +622,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const prepare=async({refresh=false}={})=>{await new Promise(afterPageFrame);if(refresh?(!panel||settingsOpen||!summaryContent.contains(container)||summaryContent.hidden||controller!==workshopController||!sameTarget(target,repository.captureTarget())):!valid())return null;return refresh?controller.load({refresh:true}):controller.ensure();};
     const view=await mountWorkshopView({container,controller,availability,initialKind:kind??'prompt',prepare,isCurrent:valid});
     if(!view||!valid()){view?.dispose();controller.dispose();return false;}
-    workshopView=view;syncAppearance();return !view.failed();
+    workshopView=view;syncAppearance();interfaceDiagnostic.stage('ready','workshop');return !view.failed();
   }
   const openTracking=kind=>['item','npc'].includes(kind)?openBenmo({kind}):Promise.resolve(false);
   async function returnFromSettings(reason) {
@@ -651,6 +670,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function generationEpoch() { try { return runtime.getGenerationSettings('event').epoch; } catch { return null; } }
   function openSettings() {
     if (settingsOpen || !panel || !runtime) return;
+    interfaceDiagnostic.stage('requested','settings');
     settingsOpen=true;
     returnFocus = panel.shadowRoot.activeElement;
     suspendAreasForSettings();
@@ -668,8 +688,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function mountSettingsRoot(focusAction=null){
     if(!panel||closing||replacingPage)return;
     settingsRootView?.dispose();apiView?.dispose();apiView=null;
-    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,availability,focusAction,onGenerationDiagnostic:()=>downloadGenerationDiagnostic(doc),onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onTaskApi:openTaskApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
-    syncAppearance();
+    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,availability,focusAction,onGenerationDiagnostic:()=>downloadGenerationDiagnostic(doc),interfaceDiagnostic:{inspect:interfaceDiagnostic.inspect,subscribe:interfaceDiagnostic.subscribe,start:startInterfaceDiagnostic,stop:()=>interfaceDiagnostic.stop('manual'),download:interfaceDiagnostic.download},onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onTaskApi:openTaskApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
+    syncAppearance();interfaceDiagnostic.stage('shown','settings');
   }
   function openApiSettings(){
     if(!settingsOpen||apiSession||!panel)return;
@@ -1046,7 +1066,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>({status:'retained',reason:'native-visibility',removed:0}),
     dispose() {
-      if(disposed)return;disposed = true;generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      if(disposed)return;disposed = true;interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;if(closeError)throw closeError;
     },
