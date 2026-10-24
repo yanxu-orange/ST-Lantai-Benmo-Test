@@ -151,10 +151,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(workshopView?.blocking()){workshopController.rebindTarget(target);workshopView.invalidate('聊天已重新读取，草稿已保留。请重新读取后确认保存');return;}
         return openWorkshop();
       },
-      visible: () => !!workshopContainer && !summaryContent.hidden && summaryContent.contains(workshopContainer),
+      visible: () => !!workshopContainer && !summaryContent.hidden && !workshopContainer.hidden && summaryContent.contains(workshopContainer),
       suspend() { if(this.visible()){summaryContent.hidden=true;summaryContent.inert=true;}workshopView?.suspend(); },
       resume() { if(!workshopView)return false;showAreaContainer(workshopContainer);workshopView.resume();return true; },
-      unmount() { workshopView?.dispose();workshopView=null;workshopController?.dispose();workshopController=null;workshopContainer=null;workshopTarget=null;this.settingsReturn=false; },
+      unmount() { workshopView?.dispose();workshopView=null;workshopController?.dispose();workshopController=null;workshopContainer?.remove();workshopContainer=null;workshopTarget=null;this.settingsReturn=false; },
     },
     time: {
       open: openTime,
@@ -168,13 +168,17 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(this.settingsReturn)return timeController.ensure();
         return openTime();
       },
-      visible: () => !!timeContainer && !summaryContent.hidden && summaryContent.contains(timeContainer),
+      visible: () => !!timeContainer && !summaryContent.hidden && !timeContainer.hidden && summaryContent.contains(timeContainer),
       suspend() { if(this.visible()){summaryContent.hidden=true;summaryContent.inert=true;}timeController?.suspend(); },
       resume() { if(!timeView)return false;showAreaContainer(timeContainer);timeController.resume();return true; },
-      unmount() { timeView?.dispose();timeView=null;timeContainer=null;timeController?.suspend();this.settingsReturn=false; },
+      unmount() { timeView?.dispose();timeView=null;timeContainer?.remove();timeContainer=null;timeController?.suspend();this.settingsReturn=false; },
     },
   };
-  function focusAreaSettings(selector) { (summaryContent.querySelector(selector)??summaryContent.querySelector('.lt-main'))?.focus({preventScroll:true}); }
+  function activeSurface(page) { return [...(page?.querySelectorAll('.lantai')??[])].find(root=>!root.closest('[hidden]')); }
+  function focusAreaSettings(selector) {
+    const container=[...summaryContent.children].find(child=>!child.hidden);
+    (container?.querySelector(selector)??container?.querySelector('.lt-main'))?.focus({preventScroll:true});
+  }
   function suspendAreasForSettings() {
     for(const page of Object.values(areaPages)){
       const visible=page.visible();
@@ -192,7 +196,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   function showAreaContainer(container) {
     container.setAttribute('data-ui-theme',panel.getAttribute('data-ui-theme')??DEFAULT_THEME);
-    summaryContent.replaceChildren(container);summaryContent.hidden=false;summaryContent.inert=false;
+    // Warm time/workshop owners remain attached across ordinary area switches.
+    for(const child of [...summaryContent.children])if(child!==container){
+      if(child===timeContainer||child===workshopContainer){child.hidden=true;child.inert=true;}else child.remove();
+    }
+    if(container.parentNode!==summaryContent)summaryContent.append(container);
+    container.hidden=false;container.inert=false;summaryContent.hidden=false;summaryContent.inert=false;
   }
   function suspendPages() {
     benmoController?.cancelLoad();
@@ -426,7 +435,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     pageRequest++;const diagnosticRequest=pageRequest;suspendPages();
     if(!panel)return;
     if(!allowed('memory')){if(allowed('time'))return openTime();if(allowed('workshop'))return openWorkshop();if(allowed('benmo'))return openBenmo();openSettings();return;}
-    summaryContent.replaceChildren();summaryContent.hidden=true;summaryContent.inert=false;memoryContent.hidden=false;memoryContent.inert=false;
+    for(const child of [...summaryContent.children]){
+      if(child===timeContainer||child===workshopContainer){child.hidden=true;child.inert=true;}else child.remove();
+    }
+    summaryContent.hidden=true;summaryContent.inert=false;memoryContent.hidden=false;memoryContent.inert=false;
     interfaceDiagnostic.stage('shown','memory');
     if(!app)return open();
     await app.refreshAvailability();
@@ -619,7 +631,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const container=doc.createElement('div');container.className='wk-mount';workshopContainer=container;showAreaContainer(container);
     const controller=createWorkshopController({repository,settings:runtime.settings,target,runtime:workshopRuntime,isReadOnly:()=>foregroundBrowsing,getCharacterName:binding=>getContext().characters?.find(c=>c.avatar===binding?.owner)?.name??'当前角色',ensureRegex:async()=>{await workshopReady();if(workshopRegexError)throw workshopRegexError;},onMemory:()=>void returnFromSummary(),onTime:()=>void openTime(),onSettings:openSettings,onBenmo:()=>void openBenmo(),onClose:close});
     workshopController=controller;
-    const prepare=async({refresh=false}={})=>{await new Promise(afterPageFrame);if(refresh?(!panel||settingsOpen||!summaryContent.contains(container)||summaryContent.hidden||controller!==workshopController||!sameTarget(target,repository.captureTarget())):!valid())return null;return refresh?controller.load({refresh:true}):controller.ensure();};
+    const prepare=async({refresh=false}={})=>{await new Promise(afterPageFrame);if(refresh?(!panel||settingsOpen||!summaryContent.contains(container)||summaryContent.hidden||container.hidden||controller!==workshopController||!sameTarget(target,repository.captureTarget())):!valid())return null;return refresh?controller.load({refresh:true}):controller.ensure();};
     const view=await mountWorkshopView({container,controller,availability,initialKind:kind??'prompt',prepare,isCurrent:valid});
     if(!view||!valid()){view?.dispose();controller.dispose();return false;}
     workshopView=view;syncAppearance();interfaceDiagnostic.stage('ready','workshop');return !view.failed();
@@ -893,9 +905,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if (bundle.style) { const bookMedia=theme===identity?'all':'not all';if(bundle.style.media!==bookMedia)bundle.style.media=bookMedia; }
     }
     if (active && typeof globalThis.getComputedStyle === 'function') globalThis.UICompactGroupCandidate.sync(panel.shadowRoot);
-    const visiblePage=[settingsContent,benmoContent,summaryContent,memoryContent].find(page=>page&&!page.hidden&&page.querySelector('.lantai'));
+    const visiblePage=[settingsContent,benmoContent,summaryContent,memoryContent].find(page=>page&&!page.hidden&&activeSurface(page));
     const themeReady=theme==='spring'?!!springStyle:theme==='snow-ermine'?!!snowStyle:!!bookStylesByTheme.get(theme)?.style;
-    if(themeReady)decoration?.sync(visiblePage?.querySelector('.lantai'));
+    if(themeReady)decoration?.sync(activeSurface(visiblePage));
   }
   function errorView(error) {
     memoryContent.replaceChildren();
