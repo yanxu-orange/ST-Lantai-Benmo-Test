@@ -168,13 +168,13 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(this.settingsReturn)return timeController.ensure();
         return openTime();
       },
-      visible: () => !!timeContainer && !summaryContent.hidden && summaryContent.contains(timeContainer),
-      suspend() { if(this.visible()){summaryContent.hidden=true;summaryContent.inert=true;}timeController?.suspend(); },
+      visible: () => !!timeView && !settingsOpen && !!timeContainer && !timeContainer.hidden && !timeContainer.inert,
+      suspend() { if(timeView){timeView.dispose();timeView=null;if(timeContainer){timeContainer.replaceChildren();timeContainer.hidden=true;timeContainer.inert=true;}}timeController?.suspend(); },
       resume() { if(!timeView)return false;showAreaContainer(timeContainer);timeController.resume();return true; },
-      unmount() { timeView?.dispose();timeView=null;timeContainer=null;timeController?.suspend();this.settingsReturn=false; },
+      unmount() { const mounted=!!timeView;timeView?.dispose();timeView=null;if(mounted&&timeContainer){timeContainer.replaceChildren();timeContainer.hidden=true;timeContainer.inert=true;}timeContainer=null;timeController?.suspend();this.settingsReturn=false; },
     },
   };
-  function focusAreaSettings(selector) { (summaryContent.querySelector(selector)??summaryContent.querySelector('.lt-main'))?.focus({preventScroll:true}); }
+  function focusAreaSettings(selector) { const owner=areaPages.time.visible()?timeContainer:summaryContent;(owner.querySelector(selector)??owner.querySelector('.lt-main'))?.focus({preventScroll:true}); }
   function suspendAreasForSettings() {
     for(const page of Object.values(areaPages)){
       const visible=page.visible();
@@ -184,7 +184,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   function resumeAreaFromSettings(name,policy) {
     const page=areaPages[name];
-    if(!page.settingsReturn||!policy[name]||!page.view()||!sameTarget(returnTarget,repository.captureTarget()))return false;
+    if(!page.settingsReturn||!policy[name]||!(page.view()||name==='time'&&timeController)||!sameTarget(returnTarget,repository.captureTarget()))return false;
     page.settingsReturn=false;
     void page.open().then(()=>{if(page.visible()&&!settingsOpen&&name!=='benmo')focusAreaSettings(name==='time'?'[data-time-action=settings]':'[data-action=settings]');});
     returnFocus=returnTarget=null;
@@ -192,7 +192,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   function showAreaContainer(container) {
     container.setAttribute('data-ui-theme',panel.getAttribute('data-ui-theme')??DEFAULT_THEME);
-    summaryContent.replaceChildren(container);summaryContent.hidden=false;summaryContent.inert=false;
+    if(container===settingsContent){summaryContent.hidden=true;summaryContent.inert=true;container.hidden=false;container.inert=false;}else{settingsContent.hidden=true;settingsContent.inert=true;summaryContent.replaceChildren(container);summaryContent.hidden=false;summaryContent.inert=false;}
   }
   function suspendPages() {
     benmoController?.cancelLoad();
@@ -236,10 +236,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       // Only a retained editor needs identity resolution before the changed-chat
       // path. Cold/read-only entries must still begin replacement immediately.
       const timeReload=kind!=='reload'&&timeController?.inspect().draft&&(areaPages.time.visible()||areaPages.time.settingsReturn);
-      if ((kind === 'reload'||timeReload) && (app||workshopController||workshopView||benmoView||timeView)) {
+      if ((kind === 'reload'||timeReload) && (app||workshopController||workshopView||benmoView||timeView||areaPages.time.settingsReturn&&timeController)) {
         const current=app,visiblePanel=panel,previousTarget=runtime?.cumulativeController?.inspect().target;
         let eventTarget;try{eventTarget=repository.captureTarget();}catch{/* prepare establishes authority */}
-        const cumulativeVisible=memoryType==='cumulative'&&settingsContent.hidden&&!!(cumulativeView||!memoryContent.hidden);
+        const cumulativeVisible=memoryType==='cumulative'&&!settingsOpen&&!!(cumulativeView||!memoryContent.hidden);
         const valid=()=>{try{return !disposed&&panel===visiblePanel&&app===current&&sequence===hostReloadSequence&&!!eventTarget&&sameTarget(eventTarget,repository.captureTarget());}catch{return false;}};
         void adapter.prepare().then(async nextTarget=>{
           if(timeReload){
@@ -575,7 +575,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       timeController=createTimeController({repository,settings:runtime.settings,dateRuntime:timeRuntime,captureSource:t=>adapter.captureTimeSource?.(t)??adapter.captureChatSource?.(t)??adapter.captureSummarySource(t),matchesSource:typeof (adapter.matchesTimeSource??adapter.matchesChatSource)==='function'?(t,s)=>(adapter.matchesTimeSource??adapter.matchesChatSource)(t,s):null,onMemory:()=>void returnFromSummary(),onWorkshop:()=>void openWorkshop(),onBenmo:()=>void openBenmo(),onSettings:openSettings,onClose:close});
     }
     memoryContent.hidden=true;memoryContent.inert=true;
-    if(!timeContainer){timeContainer=doc.createElement('div');timeContainer.className='time-mount lt-host-page';}
+    if(!timeContainer)timeContainer=settingsContent;
     showAreaContainer(timeContainer);timeController.resume();
     if(!timeView)timeView=mountTimeView({container:timeContainer,controller:timeController,availability});
     interfaceDiagnostic.stage('shown','time');
@@ -671,12 +671,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function openSettings() {
     if (settingsOpen || !panel || !runtime) return;
     interfaceDiagnostic.stage('requested','settings');
-    settingsOpen=true;
     returnFocus = panel.shadowRoot.activeElement;
     suspendAreasForSettings();
+    settingsOpen=true;
     returnTarget = repository.captureTarget();
     returnEpoch = generationEpoch();
-    memoryContent.hidden = true; memoryContent.inert = true; settingsContent.hidden = false;
+    memoryContent.hidden = true; memoryContent.inert = true; settingsContent.hidden = false; settingsContent.inert = false;
     if (!runtime.settings) {
       settingsContent.textContent = '当前酒馆设置或密钥引用能力不可用。';
       const back = doc.createElement('button'); back.type = 'button'; back.textContent = '返回原页面';
@@ -938,7 +938,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       for (const type of ['keydown', 'keypress', 'keyup']) panel.addEventListener(type, isolatePanelKeyboard);
       panel.addEventListener('keydown', event => {
         if (disposed || event.currentTarget!==panel || !settingsContent || !summaryContent || event.defaultPrevented || event.isComposing || composing || shadow.querySelector('[data-composing=true]')) return;
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!settingsContent.hidden) apiSession?apiSession.exit('back'):settingsRootView?.back()||returnFromSettings('back'); else if(benmoView&&!benmoContent.hidden){benmoView.back();}else if(!summaryContent.hidden){if(areaPages.workshop.visible()){if(workshopView)workshopView.back();else void returnFromSummary();}else if(areaPages.time.visible())timeController.back();else if(cleaningFacade)cleaningFacade.back();else if(cumulativeSettingsView)cumulativeSettingsController.back();else if(cumulativeView)void runtime.cumulativeController.back().then(back=>{if(back)void returnFromCumulative();});else if(recallView)recallController.back();else if(summarySettingsView)summarySettingsController.back();else void runtime.summaryController.back().then(back=>{if(back)void returnFromSummary();});}else close(); return; }
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (settingsOpen) apiSession?apiSession.exit('back'):settingsRootView?.back()||returnFromSettings('back'); else if(benmoView&&!benmoContent.hidden){benmoView.back();}else if(areaPages.time.visible()){timeController.back();}else if(!summaryContent.hidden){if(areaPages.workshop.visible()){if(workshopView)workshopView.back();else void returnFromSummary();}else if(areaPages.time.visible())timeController.back();else if(cleaningFacade)cleaningFacade.back();else if(cumulativeSettingsView)cumulativeSettingsController.back();else if(cumulativeView)void runtime.cumulativeController.back().then(back=>{if(back)void returnFromCumulative();});else if(recallView)recallController.back();else if(summarySettingsView)summarySettingsController.back();else void runtime.summaryController.back().then(back=>{if(back)void returnFromSummary();});}else close(); return; }
         if (event.key !== 'Tab') return;
         const items = [...shadow.querySelectorAll('button,a,input,textarea,select,summary,[tabindex]')]
           .filter(node => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length);

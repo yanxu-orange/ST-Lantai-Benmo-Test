@@ -1,4 +1,5 @@
-import {replacePageMarkup} from './stable-surface.js';
+// KTM trial: each settings page commits header, main and footer together.
+const replacePageMarkup=(container,markup)=>{container.innerHTML=markup;};
 import {mountScheduleSettingsView} from './schedule-settings-view.js';
 import {THEMES,surfaceTheme} from './styles/theme.js';
 import {FEATURE_GROUPS,FEATURE_LABELS} from '../domain/controls/model.js';

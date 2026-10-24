@@ -301,8 +301,8 @@
   },
   {
     "path": "dist/app/settings-root-view.js",
-    "bytes": 12539,
-    "sha256": "65f132aab0add1830c5cc043d10ba5ec32239746f374c27539ac2fb3f0c156c9"
+    "bytes": 12634,
+    "sha256": "f227881a23ebf1d8f48c2229f6ac2ef73a9e7f521c4cfd86911e5686de498652"
   },
   {
     "path": "dist/app/shared-ui/appearance-format.css",
@@ -646,8 +646,8 @@
   },
   {
     "path": "dist/app/version.js",
-    "bytes": 50,
-    "sha256": "a780da5d200553a42495b3fcf7abc34628fb2e1ecbf03b74cfc8df6b5d9ac2e3"
+    "bytes": 53,
+    "sha256": "63b2b27e6a50481abef8acd81944c96ef9390d4eed3818cf34f29eabbb2f0e0d"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1291,8 +1291,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 90803,
-    "sha256": "da987a418b6840f3fe0218483f6cd98f9b0f4301fb01b98cca92220f97654473"
+    "bytes": 91354,
+    "sha256": "71d8a2aded79a863cc4827ca92f50b94bab3b64951ad3be0b7d8092fd270171f"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1536,7 +1536,7 @@
   },
   {
     "path": "manifest.json",
-    "bytes": 419,
-    "sha256": "8ea42d224ab3ab7cef76fa60694c2cc6624e5fa44b080112b2874e2f1c60e6fb"
+    "bytes": 422,
+    "sha256": "bc4563ba8b150f1ce9975e025b30f62d4a743afcc039cedea6a29dd4284093eb"
   }
 ]
