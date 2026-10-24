@@ -331,8 +331,8 @@
   },
   {
     "path": "dist/app/shared-ui/surface-stability.css",
-    "bytes": 1644,
-    "sha256": "3eb6bf4fe364236437550349951bc307a520739e927e8760d611ee589f8e8e9c"
+    "bytes": 1743,
+    "sha256": "325aa486cbcdfa11308c59eab425d430ba3cfb8fbd6f25bc98e139b65bbf79b8"
   },
   {
     "path": "dist/app/snow-ermine/appearance-tokens.css",
@@ -647,7 +647,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 53,
-    "sha256": "63b2b27e6a50481abef8acd81944c96ef9390d4eed3818cf34f29eabbb2f0e0d"
+    "sha256": "dd2896d0ba721c157eb33c2ff318320095968b2cf6338ab1655d9054f019851f"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1537,6 +1537,6 @@
   {
     "path": "manifest.json",
     "bytes": 422,
-    "sha256": "bc4563ba8b150f1ce9975e025b30f62d4a743afcc039cedea6a29dd4284093eb"
+    "sha256": "7f4f864cd546d8a49e981b088b49ed6014a2b3f204fa4c8dabe1cdc73f3e9e08"
   }
 ]

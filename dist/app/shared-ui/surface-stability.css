@@ -25,3 +25,5 @@
 @media (forced-colors: active) {
   .lantai.ui-workspace[data-ui-theme="snow-ermine"] .lt-root-top { background-image: none; }
 }
+
+.lantai.ui-workspace:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]){border-radius:0;}
