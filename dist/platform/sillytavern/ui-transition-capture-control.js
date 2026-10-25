@@ -11,10 +11,21 @@ export function mountUITransitionCaptureControl(shadow,{diagnostic,start=()=>dia
  const gridStatus=doc.createElement('p');gridStatus.className='ui-field__support';gridStatus.setAttribute('data-interface-capture-grid-status','');
  baseline.textContent='原裁剪（0 px）';unclip.textContent='取消外层裁剪（0 px）';
  const timeline=doc.createElement('p');timeline.className='ui-field__support';timeline.setAttribute('data-interface-capture-timeline','');
+ const readout=doc.createElement('div');readout.setAttribute('data-interface-capture-readout','');
+ const observerStatus=doc.createElement('p');observerStatus.setAttribute('data-interface-capture-observer','');
  const sampleLabel=doc.createElement('p');sampleLabel.className='ui-field__support';sampleLabel.setAttribute('data-interface-capture-sample-label','');sampleLabel.textContent=`切区样本：${sampleContent==='simplified'?'简化正文':'原正文'}${sampleWarmMode==='skip-warm-revalidation'?'，跳过切回复核':sampleWarmMode==='visibility-only'?'，仅显隐切换':''}${sampleWarmMode==='visibility-only'&&sampleObserverMode==='owned-hidden-filter'?'，过滤重复通知':''}，仅工坊／本末，关闭退出`;sampleLabel.hidden=!sampleMode;
- clear.textContent='没闪';bar.append(mark,clear,download,baseline,unclip,sample,simpleSample,heldSample,visibilitySample,filteredSample,sampleLabel,gridOriginal,gridFixed,gridStatus,timeline);shadow.append(bar);
+ readout.append(sampleLabel,observerStatus,timeline);
+ clear.textContent='没闪';bar.append(mark,clear,download,baseline,unclip,sample,simpleSample,heldSample,visibilitySample,filteredSample,readout,gridOriginal,gridFixed,gridStatus);shadow.append(bar);
  let disposed=false,samplePending=null,sampleFailed=null;
  const numeric=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0?String(value):'?';
+ function updateObserver(){
+  if(disposed)return;
+  const state=diagnostic.inspect(),counts=state.observerDelivery;
+  const shown=sampleMode&&sampleWarmMode==='visibility-only'&&['normal','owned-hidden-filter'].includes(state.sampleObserverMode)&&counts!==null&&typeof counts==='object';
+  const text=shown?`外观通知：已跳过 ${numeric(counts.skippedBatches)} 批／仍同步 ${numeric(counts.deliveredBatches)} 批`:'';
+  if(observerStatus.textContent!==text)observerStatus.textContent=text;
+  if(observerStatus.hidden!==!shown)observerStatus.hidden=!shown;
+ }
  function updateTimeline(){
   if(disposed)return;
   const state=diagnostic.inspect(),session=typeof state.sessionId==='string'&&/^[A-Za-z0-9_-]{1,64}$/.test(state.sessionId)?state.sessionId:null;
@@ -41,7 +52,7 @@ export function mountUITransitionCaptureControl(shadow,{diagnostic,start=()=>dia
  }
  function update(){
   if(disposed)return;
-  updateTimeline();updateGrid();
+  updateTimeline();updateGrid();updateObserver();
   const state=diagnostic.inspect(),recording=state.status==='recording';
   if(sampleMode){const text=`切区样本：${sampleContent==='simplified'?'简化正文':'原正文'}${sampleWarmMode==='skip-warm-revalidation'?'，跳过切回复核':sampleWarmMode==='visibility-only'?'，仅显隐切换':''}${sampleWarmMode==='visibility-only'&&sampleObserverMode==='owned-hidden-filter'?'，过滤重复通知':''}${state.reason==='failed'?'，读取失败，本次记录无效':'，仅工坊／本末，关闭退出'}`;if(sampleLabel.textContent!==text)sampleLabel.textContent=text;}
   bar.hidden=!state.hasData&&!sampleMode;mark.disabled=false;clear.hidden=!recording;
@@ -79,6 +90,6 @@ export function mountUITransitionCaptureControl(shadow,{diagnostic,start=()=>dia
  const clickSample=event=>launchSample(event,onSample,'original'),clickSimpleSample=event=>launchSample(event,onSimpleSample,'simplified'),clickHeldSample=event=>launchSample(event,onHeldSample,'held'),clickVisibilitySample=event=>launchSample(event,onVisibilitySample,'visibility'),clickFilteredSample=event=>launchSample(event,onFilteredSample,'filtered');
  function clickDownload(event){event.stopPropagation();if(!diagnostic.download())download.textContent='导出失败，重试';else update();}
  mark.addEventListener('click',clickMark);clear.addEventListener('click',clickClear);download.addEventListener('click',clickDownload);baseline.addEventListener('click',clickBaseline);unclip.addEventListener('click',clickUnclip);sample.addEventListener('click',clickSample);simpleSample.addEventListener('click',clickSimpleSample);heldSample.addEventListener('click',clickHeldSample);visibilitySample.addEventListener('click',clickVisibilitySample);filteredSample.addEventListener('click',clickFilteredSample);gridOriginal.addEventListener('click',clickGridOriginal);gridFixed.addEventListener('click',clickGridFixed);
- const unsubscribe=diagnostic.subscribe(update),unsubscribeTimeline=diagnostic.subscribeTimeline?.(updateTimeline)??(()=>{}),unsubscribeGrid=diagnostic.subscribeGrid?.(updateGrid)??(()=>{});update();
- return {dispose(){if(disposed)return;disposed=true;unsubscribe();unsubscribeTimeline();unsubscribeGrid();mark.removeEventListener('click',clickMark);clear.removeEventListener('click',clickClear);download.removeEventListener('click',clickDownload);baseline.removeEventListener('click',clickBaseline);unclip.removeEventListener('click',clickUnclip);sample.removeEventListener('click',clickSample);simpleSample.removeEventListener('click',clickSimpleSample);heldSample.removeEventListener('click',clickHeldSample);visibilitySample.removeEventListener('click',clickVisibilitySample);filteredSample.removeEventListener('click',clickFilteredSample);gridOriginal.removeEventListener('click',clickGridOriginal);gridFixed.removeEventListener('click',clickGridFixed);bar.remove();}};
+ const unsubscribe=diagnostic.subscribe(update),unsubscribeTimeline=diagnostic.subscribeTimeline?.(updateTimeline)??(()=>{}),unsubscribeGrid=diagnostic.subscribeGrid?.(updateGrid)??(()=>{}),unsubscribeObserver=diagnostic.subscribeObserver?.(updateObserver)??(()=>{});update();
+ return {dispose(){if(disposed)return;disposed=true;unsubscribe();unsubscribeTimeline();unsubscribeGrid();unsubscribeObserver();mark.removeEventListener('click',clickMark);clear.removeEventListener('click',clickClear);download.removeEventListener('click',clickDownload);baseline.removeEventListener('click',clickBaseline);unclip.removeEventListener('click',clickUnclip);sample.removeEventListener('click',clickSample);simpleSample.removeEventListener('click',clickSimpleSample);heldSample.removeEventListener('click',clickHeldSample);visibilitySample.removeEventListener('click',clickVisibilitySample);filteredSample.removeEventListener('click',clickFilteredSample);gridOriginal.removeEventListener('click',clickGridOriginal);gridFixed.removeEventListener('click',clickGridFixed);bar.remove();}};
 }

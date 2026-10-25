@@ -56,11 +56,11 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  const clone=value=>JSON.parse(JSON.stringify(value));
  const archiveSize=value=>JSON.stringify(value).length*2+64;
  const rowSizes=new WeakMap(),eventIndex=new Map(),references=new Map();
- const subscribers=new Set(),timelineSubscribers=new Set(),gridSubscribers=new Set();
+ const subscribers=new Set(),timelineSubscribers=new Set(),gridSubscribers=new Set(),observerSubscribers=new Set();
  let savedGrid=null,gridMode='original',gridInvalid=false,gridVerified=false;
  const gridProbe=createTransitionGridProbe({getStyle,onChange(detail){const state=gridProbe.inspect();gridMode=state.mode;gridInvalid=state.invalid;gridVerified=state.mode==='fixed'&&!state.invalid&&state.pending.length===0;if(!active)return;append('event',{sequence:++sequence,t:time(),kind:'grid-probe',nav,detail});for(const listener of gridSubscribers)safe(()=>listener(inspect()));}});
  const inspectGrid=()=>!active&&savedGrid?savedGrid:gridProbe.inspect();
- const inspect=()=>({sessionId,startAnchor:startAnchor?{...startAnchor}:null,navigationHistory:clone(navigationHistory),status,reason,mode,hasData:anchor!==null,capturePending:pending.size>0,captured:observations.some(item=>item.complete),observationCount:observations.length,pendingCount:pending.size,clipCondition,sizeCondition,conditionEpoch,gridCondition:inspectGrid().mode,gridReady:inspectGrid().ready,gridInvalid:inspectGrid().invalid,gridPending:[...inspectGrid().pending]});
+ const inspect=()=>({sampleObserverMode:observerCondition,observerDelivery:observerCondition===null?null:{...observerCounts},sessionId,startAnchor:startAnchor?{...startAnchor}:null,navigationHistory:clone(navigationHistory),status,reason,mode,hasData:anchor!==null,capturePending:pending.size>0,captured:observations.some(item=>item.complete),observationCount:observations.length,pendingCount:pending.size,clipCondition,sizeCondition,conditionEpoch,gridCondition:inspectGrid().mode,gridReady:inspectGrid().ready,gridInvalid:inspectGrid().invalid,gridPending:[...inspectGrid().pending]});
  const publishTimeline=()=>{for(const listener of timelineSubscribers)safe(()=>listener(inspect()));};
  const publish=()=>{for(const listener of subscribers)safe(()=>listener(inspect()));};
  const time=()=>number(now()-startAt,0,Number.MAX_SAFE_INTEGER);
@@ -277,7 +277,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  function observerBatch(outcome,count){
   if(!active||observerCondition===null||!['skipped','delivered'].includes(outcome)||!Number.isSafeInteger(count)||count<1)return false;
   observerCounts[outcome+'Batches']++;observerCounts[outcome+'Records']+=count;
-  append('event',{sequence:++sequence,t:time(),kind:'appearance-observer',nav,outcome,records:count});return true;
+  append('event',{sequence:++sequence,t:time(),kind:'appearance-observer',nav,outcome,records:count});for(const listener of observerSubscribers)safe(()=>listener(inspect()));return true;
  }
  function stage(phase,target='unknown'){
   if(!active||!PHASES.has(phase))return false;
@@ -341,5 +341,5 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    try{anchorNode.href=url;anchorNode.download='lantai-ui-transition-diagnostic.json';anchorNode.hidden=true;doc.body.append(anchorNode);anchorNode.click();}finally{anchorNode.remove();}return true;
   })===true;
  }
- return Object.freeze({start,stop,mark,setGridCondition,setSizeCondition,setClipCondition,stage,observerBatch,inspect,snapshot,download,subscribeGrid(fn){gridSubscribers.add(fn);return()=>gridSubscribers.delete(fn);},subscribeTimeline(fn){timelineSubscribers.add(fn);return()=>timelineSubscribers.delete(fn);},subscribe(fn){subscribers.add(fn);return()=>subscribers.delete(fn);},dispose(){if(disposed)return;stop('dispose');cleanup();safe(()=>releaseDownload?.());releaseDownload=null;disposed=true;subscribers.clear();timelineSubscribers.clear();gridSubscribers.clear();}});
+ return Object.freeze({start,stop,mark,setGridCondition,setSizeCondition,setClipCondition,stage,observerBatch,inspect,snapshot,download,subscribeObserver(fn){observerSubscribers.add(fn);return()=>observerSubscribers.delete(fn);},subscribeGrid(fn){gridSubscribers.add(fn);return()=>gridSubscribers.delete(fn);},subscribeTimeline(fn){timelineSubscribers.add(fn);return()=>timelineSubscribers.delete(fn);},subscribe(fn){subscribers.add(fn);return()=>subscribers.delete(fn);},dispose(){if(disposed)return;stop('dispose');cleanup();safe(()=>releaseDownload?.());releaseDownload=null;disposed=true;subscribers.clear();timelineSubscribers.clear();gridSubscribers.clear();observerSubscribers.clear();}});
 }

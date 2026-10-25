@@ -29,3 +29,7 @@
 [data-interface-capture][hidden], [data-interface-capture] [hidden] { display:none; }
 
 [data-interface-capture-timeline] { width:100%; white-space:pre-wrap; overflow-wrap:anywhere; margin:0; }
+
+/* Opaque evidence readout only; business surfaces and switching styles are unchanged. */
+[data-interface-capture-readout] { width:100%; box-sizing:border-box; background:#fff; color:#20242b; padding:var(--ui-space-control); }
+[data-interface-capture-readout] > p { margin:0; color:inherit; overflow-wrap:anywhere; }
