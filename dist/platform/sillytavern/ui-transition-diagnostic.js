@@ -1,3 +1,4 @@
+import {createTransitionGridProbe} from './transition-grid-probe.js';
 // Opt-in, bounded presentation evidence. No text, user values, arbitrary action,
 // class/dataset values, identities, URLs, errors or event/DOM objects enter rows.
 const AREAS=new Set(['memory','time','benmo','workshop','settings','none','unknown']);
@@ -36,7 +37,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  setTimer=(fn,ms)=>setTimeout(fn,ms),clearTimer=id=>clearTimeout(id),
  MutationObserver:MO=doc.defaultView?.MutationObserver,ResizeObserver:RO=doc.defaultView?.ResizeObserver,
  getStyle=node=>doc.defaultView?.getComputedStyle?.(node),limits={},sampleMode=false}={}){
- const caps={duration:limit(limits.duration,30000),frames:limit(limits.frames,2000),events:limit(limits.events,256),bytes:Math.max(4096,limit(limits.bytes,1048576))};
+ const caps={duration:limit(limits.duration,30000),frames:limit(limits.frames,2000),events:limit(limits.events,256),bytes:Math.max(sampleMode?32768:4096,limit(limits.bytes,1048576))};
  let active=false,disposed=false,epoch=0,status='idle',reason=null,mode='phase-style-and-attributes',anchor=null,startAt=null,endedAt=null;
  let frames=[],events=[],bytes=0,sequence=0,nav=0,frameId=null,timerId=null,mutation=null,resize=null,targets=[],ids=null,geometry=null,styles=null,nodeSerial=0;
  let dirty=true,known=false,area='none',route='unknown',lastFrame=null,mutations=0,slowFrames=0,slowStyles=0,lastStyleKey='',releaseDownload=null,frameAvailable=null,geometryAvailable=null,mutationAvailable=null;
@@ -49,8 +50,11 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  const clone=value=>JSON.parse(JSON.stringify(value));
  const archiveSize=value=>JSON.stringify(value).length*2+64;
  const rowSizes=new WeakMap(),eventIndex=new Map(),references=new Map();
- const subscribers=new Set(),timelineSubscribers=new Set();
- const inspect=()=>({sessionId,startAnchor:startAnchor?{...startAnchor}:null,navigationHistory:clone(navigationHistory),status,reason,mode,hasData:anchor!==null,capturePending:pending.size>0,captured:observations.some(item=>item.complete),observationCount:observations.length,pendingCount:pending.size,clipCondition,sizeCondition,conditionEpoch});
+ const subscribers=new Set(),timelineSubscribers=new Set(),gridSubscribers=new Set();
+ let savedGrid=null,gridMode='original',gridInvalid=false,gridVerified=false;
+ const gridProbe=createTransitionGridProbe({getStyle,onChange(detail){const state=gridProbe.inspect();gridMode=state.mode;gridInvalid=state.invalid;gridVerified=state.mode==='fixed'&&!state.invalid&&state.pending.length===0;if(!active)return;append('event',{sequence:++sequence,t:time(),kind:'grid-probe',nav,detail});for(const listener of gridSubscribers)safe(()=>listener(inspect()));}});
+ const inspectGrid=()=>!active&&savedGrid?savedGrid:gridProbe.inspect();
+ const inspect=()=>({sessionId,startAnchor:startAnchor?{...startAnchor}:null,navigationHistory:clone(navigationHistory),status,reason,mode,hasData:anchor!==null,capturePending:pending.size>0,captured:observations.some(item=>item.complete),observationCount:observations.length,pendingCount:pending.size,clipCondition,sizeCondition,conditionEpoch,gridCondition:inspectGrid().mode,gridReady:inspectGrid().ready,gridInvalid:inspectGrid().invalid,gridPending:[...inspectGrid().pending]});
  const publishTimeline=()=>{for(const listener of timelineSubscribers)safe(()=>listener(inspect()));};
  const publish=()=>{for(const listener of subscribers)safe(()=>listener(inspect()));};
  const time=()=>number(now()-startAt,0,Number.MAX_SAFE_INTEGER);
@@ -67,6 +71,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   conditionContent=null;previousCondition=null;sizeCondition=null;
  }
  function cleanup(){
+  if(gridProbe.inspect().pages.length||gridProbe.inspect().invalid)savedGrid=gridProbe.inspect();gridProbe.reset();
   resetSizeCondition();
   if(frameId!==null)safe(()=>cancelFrame(frameId));if(timerId!==null)safe(()=>clearTimer(timerId));frameId=timerId=null;
   for(const timer of pending.values())safe(()=>clearTimer(timer));pending.clear();
@@ -105,13 +110,13 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   for(let i=events.length-1;i>=0;i--)if(events[i].t<cutoff&&!references.has(events[i].sequence))drop('event',i,'age');
   while(frames.length>caps.frames)drop('frame',0,'capacity');
   while(events.length>caps.events)drop('event',0,'capacity');
-  while(bytes>caps.bytes-3072&&(frames.length||events.length)){
+  while(bytes>caps.bytes-(sampleMode?16384:3072)&&(frames.length||events.length)){
    if(!events.length||(frames.length&&frames[0].sequence<events[0].sequence))drop('frame',0,'capacity');else drop('event',0,'capacity');
   }
  }
  function append(kind,row){
   if(!active)return null;
-  row.conditionEpoch=conditionEpoch;row.shrinkCssPx=sizeCondition;row.clipMode=clipCondition;
+  row.conditionEpoch=conditionEpoch;row.shrinkCssPx=sizeCondition;row.clipMode=clipCondition;row.gridMode=sampleMode?gridMode:null;row.gridInvalid=sampleMode?gridInvalid:null;row.gridVerified=sampleMode?gridVerified:null;
   const list=kind==='frame'?frames:events;
   const size=JSON.stringify(row).length+32;
   list.push(row);rowSizes.set(row,size);bytes+=size;countReferences(row,1);
@@ -141,7 +146,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    const candidates=events.filter(row=>row.kind==='phase'&&row.phase==='requested'&&row.nav>lastMarkedNav);
    const expectedCount=nav-lastMarkedNav;
    const association=expectedCount===1&&candidates.length===1?'single-observed-transition':expectedCount>1?'multiple-transitions':'unknown';
-   const item={sessionId,conditionAtMark:{epoch:conditionEpoch,shrinkCssPx:sizeCondition,clipMode:clipCondition},ordinal:observations.length+1,label,markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false,stopReason:null,
+   const item={sessionId,conditionAtMark:{epoch:conditionEpoch,shrinkCssPx:sizeCondition,clipMode:clipCondition,gridMode:sampleMode?gridProbe.inspect().mode:null,gridInvalid:sampleMode?gridInvalid:null,gridVerified:sampleMode?gridVerified:null},ordinal:observations.length+1,label,markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false,stopReason:null,
     transition:{association,fromNavExclusive:lastMarkedNav,toNavInclusive:nav,expectedCount,candidates:candidates.map(row=>({nav:row.nav,t:row.t,target:row.target})),missingRequests:Math.max(0,expectedCount-candidates.length)},
     coverage:{earliestFrameRelativeMs:frames[0]?.t??null,latestPreFrameRelativeMs:frames.at(-1)?.t??null,evicted:clone(evicted)},frames:clone(frames),events:clone(events)};
    const size=archiveSize(item);
@@ -166,27 +171,37 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   const css=node&&['surface','main','decoration','page'].includes(role)?safe(()=>getStyle(node)):null;
   const overflow=css?{x:OVERFLOW.has(css.overflowX)?css.overflowX:null,y:OVERFLOW.has(css.overflowY)?css.overflowY:null}:null;
   return {role,overflow,rect:bounds?Object.fromEntries(['x','y','top','right','bottom','left','width','height'].map(key=>[key,precise(bounds[key])])):null,
-   clientWidth:precise(node?.clientWidth),clientHeight:precise(node?.clientHeight),scrollWidth:precise(node?.scrollWidth),scrollHeight:precise(node?.scrollHeight)};
+   clientWidth:precise(node?.clientWidth),clientHeight:precise(node?.clientHeight),scrollWidth:precise(node?.scrollWidth),scrollHeight:precise(node?.scrollHeight),scrollTop:precise(node?.scrollTop)};
  }
- function scheduleLayout(){
+ function scheduleLayout(ready=false,verifyGrid=false){
   if(!active||sizeCondition===null&&sampleMode!==true)return;
   if(layoutFrame!==null)safe(()=>cancelFrame(layoutFrame));
-  const token=epoch,condition=conditionEpoch;
+  const token=epoch,condition=conditionEpoch,scheduledNav=nav,scheduledSurface=targets[0];
   layoutFrame=requestFrame(()=>{
-   if(!active||token!==epoch||condition!==conditionEpoch)return;
+   if(!active||token!==epoch||condition!==conditionEpoch||nav!==scheduledNav)return;
    layoutFrame=requestFrame(()=>{
-    if(!active||token!==epoch||condition!==conditionEpoch)return;layoutFrame=null;
+    if(!active||token!==epoch||condition!==conditionEpoch||nav!==scheduledNav)return;layoutFrame=null;
     try{
      const t=time();layoutTimes=layoutTimes.filter(value=>value>=t-caps.duration);if(layoutTimes.length>=64)return;layoutTimes.push(t);
      refresh();const panel=getPanel(),content=panel?.shadowRoot?.querySelector('#lt-host-content'),win=doc.defaultView,viewport=win?.visualViewport;
      const layout=[layoutNode('host',panel),layoutNode('content',content),layoutNode('surface',targets[0]),layoutNode('header',targets[1]),layoutNode('main',targets[5]),layoutNode('footer',targets[6]),layoutNode('decoration',targets[7]),layoutNode('page',targets[0]?.parentNode)];
+     const viewportData={innerWidth:precise(win?.innerWidth),innerHeight:precise(win?.innerHeight),devicePixelRatio:precise(win?.devicePixelRatio),width:precise(viewport?.width),height:precise(viewport?.height),offsetLeft:precise(viewport?.offsetLeft),offsetTop:precise(viewport?.offsetTop),scale:precise(viewport?.scale)};
+     if(sampleMode&&targets[0]===scheduledSurface&&(ready||verifyGrid))gridProbe.observe(area,targets[0],layout,{ready,viewport:viewportData});
      const expected=clipCondition==='visible'?'visible':null,observed=layout[2].overflow;
      append('event',{sequence:++sequence,t,kind:'layout',nav,shrinkCssPx:sizeCondition,settling:'two-animation-frames-not-paint-proof',
-      viewport:{innerWidth:precise(win?.innerWidth),innerHeight:precise(win?.innerHeight),devicePixelRatio:precise(win?.devicePixelRatio),width:precise(viewport?.width),height:precise(viewport?.height),offsetLeft:precise(viewport?.offsetLeft),offsetTop:precise(viewport?.offsetTop),scale:precise(viewport?.scale)},
+      viewport:viewportData,
       clipVerification:{rule:clipCondition==='visible'?'force-visible':clipCondition==='original'?'no-override':'inactive',expectedSurfaceOverflow:expected,surfaceMatches:expected&&observed?.x&&observed?.y?observed.x===expected&&observed.y===expected:null},layout});
     }catch{stop('failed');}
    });
   });
+ }
+ function setGridCondition(value){
+  if(!active||!sampleMode||!['original','fixed'].includes(value))return false;
+  if(value===gridProbe.inspect().mode)return true;
+  if(value==='fixed'&&(!gridProbe.inspect().ready||gridProbe.inspect().invalid))return false;
+  conditionEpoch++;const changed=gridProbe.setMode(value);
+  if(changed.mode!==value)return false;
+  append('event',{sequence:++sequence,t:time(),kind:'grid-condition',nav});scheduleLayout(false,true);return true;
  }
  function setSizeCondition(value){
   if(!active||!(value===0||value===1))return false;
@@ -262,7 +277,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    let entry=navigationHistory.find(item=>item.nav===nav);
    if(!entry){entry={nav,stages:[],omittedStages:0};navigationHistory.push(entry);if(navigationHistory.length>2)navigationHistory.shift();}
    entry.stages.push({phase,sequence:event.sequence,t:event.t});if(entry.stages.length>8){entry.stages.shift();entry.omittedStages++;}
-   if(active&&(phase==='shown'||phase==='ready')){sampleStyle();scheduleLayout();}publishTimeline();return active;
+   if(active&&(phase==='shown'||phase==='ready')){sampleStyle();scheduleLayout(phase==='ready');}publishTimeline();return active;
   }catch{stop('failed');return false;}
  }
  function tick(token){
@@ -282,7 +297,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  function visibility(){if(active&&doc.visibilityState==='hidden')stop('document-hidden');}
  function start(){
   if(disposed||active||doc.visibilityState==='hidden')return false;
-  cleanup();safe(()=>releaseDownload?.());releaseDownload=null;
+  cleanup();savedGrid=null;safe(()=>releaseDownload?.());releaseDownload=null;
   frames=[];events=[];eventIndex.clear();references.clear();observations=[];archiveBytes=0;lastMarkedNav=0;sessionId=null;startAnchor=null;navigationHistory=[];conditionEpoch=0;layoutTimes=[];evicted={age:{frame:0,event:0},capacity:{frame:0,event:0},referencesExpired:0};styleTimes=[];bytes=sequence=nav=nodeSerial=mutations=slowFrames=slowStyles=0;lastFrame=null;lastStyleKey='';anchor=startAt=endedAt=reason=null;frameAvailable=geometryAvailable=mutationAvailable=null;mode='phase-style-and-attributes';
   try{
    startAt=now();anchor=number(wall(),0,9007199254740991);if(!Number.isFinite(startAt)||anchor===null)throw new Error();
@@ -299,12 +314,12 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   if(active)trim(time());
   const rows=[...frames,...events.filter(row=>row.kind!=='style'&&row.kind!=='geometry')];
   const earliest=rows.length?Math.min(...rows.map(row=>row.t)):null;
-  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v7',sample:sampleMode===true?'fixed-switch-v1':null,videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
+  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v8',gridExperiment:sampleMode?(active?gridProbe.inspect():savedGrid):null,sample:sampleMode===true?'fixed-switch-v1':null,videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
    limits:{windowMs:caps.duration,frames:caps.frames,events:caps.events,bytes:caps.bytes,captureBytes:archiveCaps.bytes,observations:archiveCaps.observations},mode,observations,sizeExperiment:{target:'lt-host-content',anchor:'top',allowedShrinkCssPx:[0,1],currentShrinkCssPx:sizeCondition,conditionEpoch},clipExperiment:{target:'direct-business-surface-only',currentMode:clipCondition,shrinkCssPx:0},
    captureStorage:{estimatedBytes:archiveBytes,policy:'immutable-labeled-windows-stop-on-capacity',order:'observation-ordinal; rows-by-sequence',postWindowMs:2000},
    retention:{earliestRelativeMs:earliest,latestFrameRelativeMs:frames.at(-1)?.t??null,evicted,policy:'rolling-window-with-capacity-eviction; older-referenced-events-may-be-retained'},
    nodeColumns:['role','id','present','connected','ownHidden','ownInert','treeHidden','treeInert','imageComplete','imageNaturalWidth','styleEvent','geometryEvent'],
-   sampling:{frameCallbackAvailable:frameAvailable,geometryObserverAvailable:geometryAvailable,mutationObserverAvailable:mutationAvailable,targetFreshness:mutationAvailable===false?'host-phase-refresh-only-internal-replacements-may-be-stale':'host-phase-or-observed-mutation-refresh',costScope:'row-collection-and-serialization-excludes-observer-callbacks',frames:'attributes-no-style-or-rect',styles:'up-to-four-nodes-per-phase-checkpoint-max64-per-window',geometry:'asynchronous-content-size',missing:'null-is-unknown; references-point-to-retained-timestamped-events; capacity-expired-references-are-cleared-and-counted',layout:'size-experiment-only-two-raf-after-change-or-shown-ready-max64-per-window-unrounded-numbers',screenPixelsObserved:false},frames,events}));
+   sampling:{frameCallbackAvailable:frameAvailable,geometryObserverAvailable:geometryAvailable,mutationObserverAvailable:mutationAvailable,targetFreshness:mutationAvailable===false?'host-phase-refresh-only-internal-replacements-may-be-stale':'host-phase-or-observed-mutation-refresh',costScope:'row-collection-and-serialization-excludes-observer-callbacks',frames:'attributes-no-style-or-rect',styles:'up-to-four-nodes-per-phase-checkpoint-max64-per-window',geometry:'asynchronous-content-size',missing:'null-is-unknown; references-point-to-retained-timestamped-events; capacity-expired-references-are-cleared-and-counted',layout:'sample-or-size-experiment-two-raf-after-change-or-shown-ready-max64-per-window-unrounded-numbers',screenPixelsObserved:false},frames,events}));
  }
  function download(urlApi=doc.defaultView?.URL??globalThis.URL,BlobType=doc.defaultView?.Blob??globalThis.Blob){
   if(anchor===null)return false;
@@ -315,5 +330,5 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    try{anchorNode.href=url;anchorNode.download='lantai-ui-transition-diagnostic.json';anchorNode.hidden=true;doc.body.append(anchorNode);anchorNode.click();}finally{anchorNode.remove();}return true;
   })===true;
  }
- return Object.freeze({start,stop,mark,setSizeCondition,setClipCondition,stage,inspect,snapshot,download,subscribeTimeline(fn){timelineSubscribers.add(fn);return()=>timelineSubscribers.delete(fn);},subscribe(fn){subscribers.add(fn);return()=>subscribers.delete(fn);},dispose(){if(disposed)return;stop('dispose');cleanup();safe(()=>releaseDownload?.());releaseDownload=null;disposed=true;subscribers.clear();timelineSubscribers.clear();}});
+ return Object.freeze({start,stop,mark,setGridCondition,setSizeCondition,setClipCondition,stage,inspect,snapshot,download,subscribeGrid(fn){gridSubscribers.add(fn);return()=>gridSubscribers.delete(fn);},subscribeTimeline(fn){timelineSubscribers.add(fn);return()=>timelineSubscribers.delete(fn);},subscribe(fn){subscribers.add(fn);return()=>subscribers.delete(fn);},dispose(){if(disposed)return;stop('dispose');cleanup();safe(()=>releaseDownload?.());releaseDownload=null;disposed=true;subscribers.clear();timelineSubscribers.clear();gridSubscribers.clear();}});
 }

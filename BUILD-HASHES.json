@@ -647,7 +647,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 54,
-    "sha256": "d4299b8de24c7679d32d3559a1ae71c244714c4dadb91aa4e85bc86eb201f38d"
+    "sha256": "8f6d96d069944e04b23fa8d967830650407d878521f72e3a792bc042f145cf1c"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1291,8 +1291,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 94325,
-    "sha256": "b3623d0a1f23297c16c2a0859a47a3de9fdff4e23cdcb7f59ea286b3f597af64"
+    "bytes": 94384,
+    "sha256": "48bdc2f01bf52f97867fec6fda744ca06f6c4cfd43bf89e100ab4c5cfe55c8e2"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1410,19 +1410,24 @@
     "sha256": "ba3a34887b2f503cbecfa3efaf65bb5c1510c992aa93d307f48bfbb531352c43"
   },
   {
+    "path": "dist/platform/sillytavern/transition-grid-probe.js",
+    "bytes": 6053,
+    "sha256": "fce0bcdac1c726a7a7c4ac0fd623b3d3f52971ea700d7bbda5ede2df8f788a2d"
+  },
+  {
     "path": "dist/platform/sillytavern/transition-sample-fixture.js",
     "bytes": 7930,
     "sha256": "a62d9070e6a3c75de7715f90cf097bbf5f70828d62e8c9d13e18b2563890bb18"
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-capture-control.js",
-    "bytes": 5857,
-    "sha256": "7ae0ca12a3e9eb6c8ab888af10b45e62952ee60bb4be484d1e11fda6ee6becb7"
+    "bytes": 7945,
+    "sha256": "64b73b45d73ddaf56a3e6b75aee5ecb141397bb75b6fd37ae72f3a2bec0babd6"
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-diagnostic.js",
-    "bytes": 27317,
-    "sha256": "6e168fb1ed15f5e8a075c2a451ffe9029359134678d40fdce6885ef380ed89bd"
+    "bytes": 29536,
+    "sha256": "c8035e9977d094306b476213e57442731802ed18013b4cc8cb11004de39322f7"
   },
   {
     "path": "dist/platform/sillytavern/vector-maintenance.js",
@@ -1547,6 +1552,6 @@
   {
     "path": "manifest.json",
     "bytes": 423,
-    "sha256": "552db792942ba49e8caac801abc42a3e9984b1538efb1e63a3e3d99e42437f81"
+    "sha256": "276d92a70105c77e07e0b9962ff9956157542ed29a39b1272bab50fd96389098"
   }
 ]
