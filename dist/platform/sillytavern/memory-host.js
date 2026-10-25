@@ -1,3 +1,4 @@
+import {createTransitionSampleFixture} from './transition-sample-fixture.js';
 import {bindGenerationDiagnostic,bindGenerationDiagnosticPanel,downloadGenerationDiagnostic} from './generation-diagnostic.js';
 import {createUITransitionDiagnostic} from './ui-transition-diagnostic.js';
 import {mountUITransitionCaptureControl} from './ui-transition-capture-control.js';
@@ -76,15 +77,15 @@ export function cancelDisabledManagedTasks(runtime,policy){
 // Only this platform module touches the host document. Shadow DOM prevents
 // host skins from changing the approved UI and prevents our UI CSS leakage.
 export function createMemoryHost({ document: doc = globalThis.document, getContext = getSillyTavernContext, fetch: request = globalThis.fetch,
-  runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter } = {}) {
+  runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter,diagnosticSample=false,onSampleExit=null,onSampleDispose=null } = {}) {
   let adapter, repository, app, panel, content, memoryContent, benmoContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, openingTicket = null, stylePromise, baseCss, sharedCssCache,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
   let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null;
-  let interfaceDiagnosticTarget=null,interfaceCaptureControl=null;
-  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel});
+  let interfaceDiagnosticTarget=null,interfaceCaptureControl=null,sampleHost=null,sampleOpening=false;
+  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel,sampleMode:diagnosticSample});
   // Evidence must never prevent ordinary navigation, saving or cleanup.
   const interfaceDiagnostic=Object.fromEntries(['start','stop','mark','setSizeCondition','setClipCondition','stage','inspect','subscribe','subscribeTimeline','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return (name==='subscribe'||name==='subscribeTimeline')?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
   const releaseInterfaceDiagnostic=interfaceDiagnostic.subscribe(value=>{if(value.status!=='recording')interfaceDiagnosticTarget=null;});
@@ -92,9 +93,26 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     try{interfaceDiagnosticTarget=repository.captureTarget();if(interfaceDiagnostic.start())return true;}catch{}
     interfaceDiagnosticTarget=null;return false;
   }
+  async function openTransitionSample(){
+    if(disposed||diagnosticSample||sampleHost||sampleOpening)return false;
+    sampleOpening=true;
+    try{
+      const fixture=createTransitionSampleFixture({assetFetch:request,theme:panel?.getAttribute('data-ui-theme')??appearance.inspect().theme});
+      close();
+      const child=createMemoryHost({document:doc,getContext:()=>fixture.ctx,fetch:fixture.request,runtimeOptions:fixture.runtimeOptions,appearanceOptions:fixture.appearanceOptions,MutationObserver:Observer,diagnosticSample:true,onSampleDispose:()=>fixture.dispose(),onSampleExit:()=>{
+        if(sampleHost!==child)return;sampleHost=null;child.dispose();if(!disposed)void open();
+      }});
+      sampleHost=child;await child.open();
+      if(sampleHost!==child)return false;
+      if(!child.sampleReady()){sampleHost=null;child.dispose();if(!disposed)void open();return false;}
+      return true;
+    }catch{
+      const child=sampleHost;sampleHost=null;child?.dispose();if(!disposed)void open();return false;
+    }finally{sampleOpening=false;}
+  }
   const generationBrowseReleases=[];
   const bookStylesByTheme = new Map();
-  const storybarTheme=mountStorybarTheme({document:doc});
+  const storybarTheme=diagnosticSample?{dispose(){}}:mountStorybarTheme({document:doc});
   const appearance = createAppearanceSession({ adapter: createAppearanceAdapter({ getContext, fetchImpl: request, ...appearanceOptions }), prepareTheme: async theme => { if (theme === 'snow-ermine') await snowStyles(); if (theme === 'spring') await springStyles(); if (Object.hasOwn(BOOK_THEME_STYLE_ENTRIES,theme)) await bookStyles(theme); }, canSave: () => {
     try { if(controls?.inspect().busy)return false;if (apiSession && !['ready','saved'].includes(apiSession.inspect().status)) return false; runtime.settings.getEpoch(); return true; } catch { return false; }
   } });
@@ -218,6 +236,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function ensureAdapter() {
     if (adapter) return;
     adapter = createAdapter({ getContext, fetch: request });
+    // Fixed sample messages never change visibility; do not observe the real chat DOM.
+    if(diagnosticSample)adapter={...adapter,observeSourceVisibility:()=>()=>{}};
     repository = createRepository(adapter);
     if(typeof adapter.subscribeSourceDeletions==='function'){
       const listeners=new Set();
@@ -261,6 +281,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     });
   }
   function close() {
+    const child=sampleHost;sampleHost=null;child?.dispose();
+    const wasOpen=!!panel;
     interfaceDiagnostic.stop('panel-close');
     if (closing) return;
     closing = true;
@@ -293,6 +315,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       cleanup(()=>currentPanel?.remove());cleanup(()=>entry?.focus());closing=false;
       requestBenmoWarmup(false);
     }
+    if(diagnosticSample&&wasOpen&&!disposed)onSampleExit?.();
     if(cleanupError)throw cleanupError;
   }
   function resumeSummaryNarrative(action,{summarySource='event'}={}){
@@ -336,9 +359,11 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         const narrativeActions=Object.fromEntries(['retry','resume','skip','pause'].map(action=>[action,()=>summaryNarrativeActions[narrativeRuntime.snapshot().run?.summarySource==='cumulative'?'cumulative':'event'][action]()]));
         benmoController=createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime:{...narrativeRuntime,...narrativeActions},repository,adapter,getContext,getControls:()=>controls,isReadOnly:()=>foregroundBrowsing});
         benmoSubscription=benmoController.subscribeAvailability(syncBenmoAvailability);
+        if(!diagnosticSample){
         const displayCoordinator=createFloorDisplayCoordinator({document:doc,runtime:latestRuntime,MutationObserver:Observer,formatter:createWorkshopDisplayFormatter({getContext})});
         latestDisplay=mountLatestSummaryDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator});
         workshopBackgroundDisplay=mountWorkshopBackgroundDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator,onOpenSchedule:()=>void openSchedule()});
+        }
         cumulativeRuntime=createCumulativeRuntime({repository,settings:runtime.settings,getContext});
         const seen=new Set();
         const noticeController={subscribeNotices(listener){return runtime.cumulativeService.subscribe(state=>{
@@ -904,7 +929,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const main = doc.createElement('main'); main.className = 'lt-main lt-stack';
     const message = doc.createElement('p'); message.className = 'lt-error'; message.setAttribute('role', 'alert'); message.textContent = error?.code === 'APPEARANCE_STYLE_UNAVAILABLE' ? '皮肤资源未能加载，请恢复连接后重试。' : '记忆读取失败，请恢复连接后重试。';
     const retry = doc.createElement('button'); retry.type = 'button'; retry.className = 'ui-button ui-button--secondary'; retry.textContent = '重试'; retry.addEventListener('click', () => void open());
-    const exit = doc.createElement('button'); exit.type = 'button'; exit.className = 'ui-button ui-button--tertiary'; exit.textContent = '返回聊天'; exit.addEventListener('click', close);
+    const exit = doc.createElement('button');if(diagnosticSample)exit.setAttribute('data-action','close'); exit.type = 'button'; exit.className = 'ui-button ui-button--tertiary'; exit.textContent = '返回聊天'; exit.addEventListener('click', close);
     main.append(message, retry, exit); surface.append(main); memoryContent.append(surface); retry.focus();
   }
   function installPanelStyles(){
@@ -920,14 +945,25 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   async function open() {
     if (disposed) return;
+    const child=sampleHost;sampleHost=null;child?.dispose();
     const currentTicket = ++ticket,currentPageRequest=++pageRequest;openingTicket=currentTicket;
     app?.dispose(); app = null;memoryReadProof=null;unmountPages();areaPages.time.settingsReturn=false;
     if(panel){settingsRootView?.dispose();settingsRootView=null;settingsOpen=false;summaryContent.replaceChildren();summaryContent.hidden=true;summaryContent.inert=false;memoryContent.hidden=false;memoryContent.inert=false;apiView?.dispose();apiView=null;const previous=apiSession;apiSession=null;replacingPage=true;try{previous?.exit('back');}finally{replacingPage=false;}settingsContent.replaceChildren();settingsContent.hidden=true;}
     if (!panel) {
       panel = doc.createElement('lantai-benmo-host'); panel.id = 'lantai-benmo-panel';
+      if(diagnosticSample)panel.setAttribute('data-lt-transition-sample','fixed-v1');
       panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', '兰台本末');
       const shadow = panel.attachShadow({ mode: 'open' });
-      releasePanelDiagnostic=bindGenerationDiagnosticPanel(shadow);
+      releasePanelDiagnostic=diagnosticSample?null:bindGenerationDiagnosticPanel(shadow);
+      if(diagnosticSample){
+        const guard=event=>{
+          if(event.target?.closest?.('[data-interface-capture]'))return;
+          const control=event.target?.closest?.('button,a,input,select,textarea,summary');
+          if(event.type==='click'&&control?.tagName==='BUTTON'&&(['workshop','benmo','home','close'].includes(control.dataset?.action)||control.dataset?.action==='area'&&['workshop','benmo'].includes(control.dataset?.id)))return;
+          if(control||event.type==='submit'){event.preventDefault();event.stopImmediatePropagation?.();event.stopPropagation();}
+        };
+        shadow.addEventListener('click',guard,true);shadow.addEventListener('submit',guard,true);
+      }
       const shellStyle=doc.createElement('style');shellStyle.setAttribute('data-host-shell','');shellStyle.textContent=MEMORY_SHELL_CSS;shadow.prepend(shellStyle);
       let composing = false;
       shadow.addEventListener('compositionstart', () => { composing = true; });
@@ -939,6 +975,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       for (const type of ['keydown', 'keypress', 'keyup']) panel.addEventListener(type, isolatePanelKeyboard);
       panel.addEventListener('keydown', event => {
         if (disposed || event.currentTarget!==panel || !settingsContent || !summaryContent || event.defaultPrevented || event.isComposing || composing || shadow.querySelector('[data-composing=true]')) return;
+        if(diagnosticSample&&event.key==='Escape'){event.preventDefault();close();return;}
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!settingsContent.hidden) apiSession?apiSession.exit('back'):settingsRootView?.back()||returnFromSettings('back'); else if(benmoView&&!benmoContent.hidden){benmoView.back();}else if(!summaryContent.hidden){if(areaPages.workshop.visible()){if(workshopView)workshopView.back();else void returnFromSummary();}else if(areaPages.time.visible())timeController.back();else if(cleaningFacade)cleaningFacade.back();else if(cumulativeSettingsView)cumulativeSettingsController.back();else if(cumulativeView)void runtime.cumulativeController.back().then(back=>{if(back)void returnFromCumulative();});else if(recallView)recallController.back();else if(summarySettingsView)summarySettingsController.back();else void runtime.summaryController.back().then(back=>{if(back)void returnFromSummary();});}else close(); return; }
         if (event.key !== 'Tab') return;
         const items = [...shadow.querySelectorAll('button,a,input,textarea,select,summary,[tabindex]')]
@@ -956,7 +993,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       content.append(memoryContent, settingsContent,summaryContent,benmoContent);
       decoration=createPersistentDecoration({container:content});
       shadow.append(content); doc.body.append(panel);
-      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic});
+      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:openTransitionSample,sampleMode:diagnosticSample});
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
     installPanelStyles();syncAppearance();
@@ -986,6 +1023,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if (!valid()) return;
       await controls.ensure();
       if(!valid())return;
+      if(diagnosticSample){startInterfaceDiagnostic();await openWorkshop();syncAppearance();return;}
       if(!allowed('memory')){if(allowed('time'))await openTime();else if(allowed('workshop'))await openWorkshop();else if(allowed('benmo'))await openBenmo();else openSettings();syncAppearance();return;}
       if(!allowed(memoryType))memoryType=allowed('event')?'event':'cumulative';
       const memoryProof=captureMemoryRead();
@@ -1003,7 +1041,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     finally {if(openingTicket===currentTicket){openingTicket=null;requestBenmoWarmup(false);}}
   }
   function installEntry() {
-    if (disposed) return;
+    if (disposed||diagnosticSample) return;
     // Subscribe before the first page open: host renames must be observed
     // even when the user has not opened Lantai after a browser reload.
     try { ensureAdapter(); } catch { /* APP_READY/open will retry capability detection. */ }
@@ -1017,7 +1055,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     entry.append(brand,label); entry.addEventListener('click', () => void open());entry.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();void open();}}); menu.append(entry);
   }
   const context = getContext(), source = context?.eventSource, readyEvent = context?.eventTypes?.APP_READY;
-  const releaseGenerationDiagnostic=bindGenerationDiagnostic({document:doc,context});
+  const releaseGenerationDiagnostic=diagnosticSample?()=>{}:bindGenerationDiagnostic({document:doc,context});
   const updateBrowsing=value=>{foregroundBrowsing=value;benmoController?.refreshAvailability?.();workshopView?.refreshAvailability?.();if(!value&&areaPages.benmo.visible())void benmoController?.ensure().catch(()=>{});if(!value&&areaPages.workshop.visible())void refreshVisibleWorkshop();};
   for(const [name,listener] of [
     ['GENERATION_STARTED',(type,_options,dryRun)=>{if(dryRun!==true&&['normal','regenerate','swipe','continue'].includes(type===undefined?'normal':type))updateBrowsing(true);}],
@@ -1028,9 +1066,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   installEntry();
   // Host startup may add the Extensions menu after loading the module.
   const observer = new Observer(installEntry);
-  observer.observe(doc.documentElement, { childList: true, subtree: true });
+  if(!diagnosticSample)observer.observe(doc.documentElement, { childList: true, subtree: true });
   return {
-    open, close, openSettings, openTask,openBenmo,openLatestSummary,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,openTime,openSchedule,openWorkshop,openTracking,openCumulative:showCumulative,openCumulativeSettings,
+    open, close, openTransitionSample,sampleReady:()=>diagnosticSample&&!!panel?.shadowRoot?.querySelector('.workshop')&&!panel.shadowRoot.querySelector('.workshop .lt-error'), openSettings, openTask,openBenmo,openLatestSummary,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,openTime,openSchedule,openWorkshop,openTracking,openCumulative:showCumulative,openCumulativeSettings,
     async interceptPrompt(...args){
       if(disposed)return;
       const request=++recallEntryRequest;let entryTarget;
@@ -1070,7 +1108,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     dispose() {
       if(disposed)return;disposed = true;interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
-      entry?.remove(); entry = null;if(closeError)throw closeError;
+      entry?.remove(); entry = null;if(diagnosticSample)onSampleDispose?.();if(closeError)throw closeError;
     },
   };
 }
