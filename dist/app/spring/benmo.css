@@ -158,7 +158,7 @@
 .lantai.benmo[data-ui-theme="spring"] .detail-field .detail-field-empty { color: var(--ui-color-text-meta); }
 .lantai.benmo[data-ui-theme="spring"] .detail-actions { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
 .lantai.benmo[data-ui-theme="spring"] [data-action="delete-record"]:enabled { border-color: var(--lt-format-page-danger-border); background: var(--lt-format-page-danger-background); color: var(--lt-format-page-danger-ink); }
-.lantai.benmo[data-ui-theme="spring"] :is([data-action="new"],[data-action="start-backfill"],[data-action="generate-narrative"],[data-action="save"],[data-action="edit"],[data-action="confirm-dialog"]):enabled {
+.lantai.benmo[data-ui-theme="spring"] :is([data-action="new"],[data-action="start-backfill"],[data-action="generate-narrative"],[data-action="save"],[data-action="edit"],[data-action="confirm-dialog"]:not(:where(.ui-button--danger))):enabled {
   border-color: var(--lt-format-page-primary-border);
   background: var(--lt-format-page-primary-background);
   color: var(--lt-format-page-primary-ink);

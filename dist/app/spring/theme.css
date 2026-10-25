@@ -268,7 +268,7 @@
   font-weight: 700;
 }
 .lantai[data-ui-theme="spring"] .ui-button--danger {
-  border-color: #efdae0;
+  border-color: var(--ui-color-danger-text);
   background: var(--ui-color-danger-background);
   color: var(--ui-color-danger-text);
 }
@@ -276,7 +276,7 @@
   border-color: #b9d2bf;
   background-color: #f4f9f1;
 }
-.lantai[data-ui-theme="spring"] .ui-button--danger:hover:enabled { border-color: #dfb9c6; background: #f7e3e9; }
+.lantai[data-ui-theme="spring"] .ui-button--danger:hover:enabled { border-color: var(--ui-color-danger-text); background: var(--ui-color-danger-background); }
 .lantai[data-ui-theme="spring"] :is(.ui-button,.ui-icon-button,.ui-segment):active:enabled { box-shadow: inset 0 0 0 100vmax var(--ui-color-pressed-overlay); }
 .lantai[data-ui-theme="spring"] :is(.ui-segment,.ui-button)[aria-pressed="true"]:not(:disabled),
 .lantai[data-ui-theme="spring"] :is(.ui-tag--selected,.lt-mode:has(:checked):not(:has(:disabled))) {

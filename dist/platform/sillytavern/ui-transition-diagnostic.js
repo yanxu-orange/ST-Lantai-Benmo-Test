@@ -14,8 +14,8 @@ const limit=(n,cap)=>Number.isSafeInteger(n)&&n>0?Math.min(n,cap):cap;
 function view(panel){
  const shadow=panel?.shadowRoot,content=shadow?.querySelector('#lt-host-content');
  if(!content)return {known:false,area:'none',route:'unknown',nodes:ROLES.map(()=>null)};
- const root=[...content.children].filter(n=>n.classList?.contains('lt-host-page')&&!n.hidden).flatMap(page=>[...page.querySelectorAll('.lantai')]).find(node=>!node.closest('[hidden]'))??null;
- const header=root?.querySelector('header.lt-header')??null;
+ const page=[...content.children].find(n=>n.classList?.contains('lt-host-page')&&!n.hidden);
+ const root=page?.querySelector('.lantai')??null,header=root?.querySelector('header.lt-header')??null;
  const close=header?.querySelector('[data-action=close],[data-time-action=close],[data-settings-action=close],[data-api-action=close],[data-task-api-action=close]')??null;
  const has=name=>root?.classList.contains(name);
  const area=!root?'none':has('lt-time')?'time':has('benmo')?'benmo':has('lt-settings')||has('lt-api-settings')||has('lt-task-api-settings')?'settings':has('workshop')?'workshop':root.hasAttribute('data-memory-type')||has('lt-summary-workspace')||has('lt-recall')?'memory':'unknown';

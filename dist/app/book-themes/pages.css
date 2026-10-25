@@ -173,7 +173,7 @@
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-summary-workspace [data-summary-open-term],
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-summary-workspace [data-summary-open-term]:enabled:hover { background: transparent; border: 0; color: var(--lt-book-secondary); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time[data-time-route="manage"] .time-group-body { padding-inline: 0; }
-.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-meta .ui-button:enabled { background: transparent; border: 0; color: var(--lt-book-accentInk); }
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).workshop:not(.benmo) .wk-result-meta .ui-button:not(.ui-button--danger):enabled { background: transparent; border: 0; color: var(--lt-book-accentInk); }
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-api-settings [data-api-action="confirm-delete"]:enabled { background: var(--lt-book-danger); color: var(--lt-book-dangerInk); border-color: var(--lt-book-dangerInk); }
 
 /* Persistent editor add affordances use the reference's quiet action material. */
@@ -204,3 +204,5 @@
 /* Only semantic back actions lose the frame. Close retains its square control. */
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header > :is([data-ss-action="back"],[data-action="back"],[data-time-action="back"],[data-api-action="back"],[data-recall-action="back"],[data-cu-action="back"],[data-management-action="back"],[data-settings-action="back"],[data-summary-action="back"],.ui-icon-button:has(>img[src$="/back.svg"])):enabled,
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header > :is([data-ss-action="back"],[data-action="back"],[data-time-action="back"],[data-api-action="back"],[data-recall-action="back"],[data-cu-action="back"],[data-management-action="back"],[data-settings-action="back"],[data-summary-action="back"],.ui-icon-button:has(>img[src$="/back.svg"])):enabled:hover { background: transparent; border-color: transparent; box-shadow: none; }
+
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-state-tabs:has(> .ui-button:nth-child(4)) { grid-template-columns: repeat(4,minmax(0,1fr)); }

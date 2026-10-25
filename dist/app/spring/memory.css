@@ -96,7 +96,6 @@
 .lantai[data-ui-theme="spring"][data-memory-settings] .lt-summary-rule-actions { border-top: 1px solid #edf0e9; }
 .lantai[data-ui-theme="spring"][data-memory-settings] .lt-summary-rule-actions > .ui-button { font-size: .8125rem; border: 0; }
 .lantai[data-ui-theme="spring"][data-memory-settings] .lt-summary-rule-actions > .ui-button + .ui-button { border-inline-start: 1px solid #edf0e9; }
-.lantai[data-ui-theme="spring"][data-memory-settings] .lt-summary-rule-actions > .ui-button:last-child:enabled { color: #a57483; background: #fdf7f9; }
 .lantai[data-ui-theme="spring"][data-memory-settings] .lt-summary-library-link { background: #f5f8f0; border-color: #e1ebe1; border-radius: 9px; }/* Recall remains a flat hierarchy, including real failure and injection details. */
 
 .lantai[data-ui-theme="spring"].lt-recall :is(.lt-recall-domains,.lt-recall-segment) > .ui-button { border: 0; border-radius: var(--lt-format-segment-recall-base-border-radius); font-size: var(--lt-format-segment-recall-base-font-size); }
@@ -136,8 +135,8 @@
 .lantai[data-ui-theme="spring"].lt-summary-workspace :is(.lt-summary-access .ui-button,.lt-summary-history-row > .ui-button):enabled { background: #f4f9f3; color: #577b61; border-color: #dfeadf; }
 .lantai[data-ui-theme="spring"].lt-summary-workspace .lt-summary-switches > button:enabled { background: transparent; border-color: transparent; color: var(--lt-format-segment-idle-ink); }
 .lantai[data-ui-theme="spring"].lt-summary-workspace .ui-choice:focus-within { outline: none; }
-.lantai[data-ui-theme="spring"][data-memory-settings] .lt-summary-rule-actions > .ui-button:enabled { background: #fff; }
-.lantai[data-ui-theme="spring"][data-memory-settings] .lt-summary-prompt-body .lt-summary-editor-actions > .ui-button:enabled { background: #f4f8f3; border-color: #dfebdf; color: #5b7c63; }
+.lantai[data-ui-theme="spring"][data-memory-settings] .lt-summary-rule-actions > .ui-button:not(:where(.ui-button--danger)):enabled { background: #fff; }
+.lantai[data-ui-theme="spring"][data-memory-settings] .lt-summary-prompt-body .lt-summary-editor-actions > .ui-button:not(:where(.ui-button--danger)):enabled { background: #f4f8f3; border-color: #dfebdf; color: #5b7c63; }
 .lantai[data-ui-theme="spring"][data-memory-settings] .lt-summary-prompt-body .lt-summary-editor-actions > :is([type="submit"],.ui-button--primary):enabled { background: #e3f1e4; border-color: #cce1cf; color: #446f4e; }
 .lantai[data-ui-theme="spring"]:is([data-memory-settings],.lt-recall) .ui-switch__track { background: var(--lt-format-switch-off-background); border-color: var(--lt-format-switch-off-border); }
 .lantai[data-ui-theme="spring"]:is([data-memory-settings],.lt-recall) .ui-switch[aria-checked="true"]:enabled .ui-switch__track { background: var(--lt-format-switch-on-background); border-color: var(--lt-format-switch-on-border); }
@@ -145,3 +144,5 @@
 .lantai[data-ui-theme="spring"]:is([data-memory-settings],.lt-recall) .ui-switch:disabled .ui-switch__track { background: var(--ui-color-disabled-background); border-color: var(--ui-color-border-subtle); }
 .lantai[data-ui-theme="spring"].lt-recall [data-recall-rule] > .lt-recall-heading:first-child { background: #f4f8f2; }
 .lantai[data-ui-theme="spring"].lt-recall .lt-recall-segment > .ui-button:enabled { background: transparent; color: var(--lt-format-segment-idle-ink); }
+
+.lantai[data-ui-theme="spring"]:is([data-memory-settings],.lt-recall) .ui-button--danger:enabled { color: var(--ui-color-danger-text); background: var(--ui-color-danger-background); border-color: var(--ui-color-danger-text); }

@@ -157,7 +157,7 @@ export function createSourceDeletionDialog({ document:doc = globalThis.document,
         header.append(title,close);
         const body = make('div','lt-source-deletion__body');
         const description = make('p','',`本次删除影响 ${batchCount} 个总结批次，共 ${count} 条活动记忆。`);description.id = 'lt-source-deletion-description';
-        body.append(description,make('p','lt-source-deletion__meta','按总结批次判断影响，同批记忆共享来源范围。确认前全部保留。'));
+        body.append(description,make('p','lt-source-deletion__meta','同批生成的记忆也列在下方。'));
         const inputs = {};
         for (const key of ['normal','merged']) {
           const rows = categories[key];

@@ -4,7 +4,7 @@ import {BUILTIN_SUMMARY_CLEANING_SHORTCUTS} from '../domain/summary/cleaning.js'
 import {recallRankingReason} from './recall-ranking-reasons.js';
 import {recallChannels,recallCandidateCounts} from '../shared/settings/model.js';
 const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const button=(label,action,extra='',secondary=false)=>`<button type="button" class="ui-button ui-button--${secondary?'secondary':'tertiary'}" data-recall-action="${action}" ${extra}>${label}</button>`;
+const button=(label,action,extra='',secondary=false)=>`<button type="button" class="ui-button ui-button--${action==='delete-rule'?'danger':secondary?'secondary':'tertiary'}" data-recall-action="${action}" ${extra}>${label}</button>`;
 const icon=(name,label,action)=>`<button type="button" class="ui-icon-button ui-button--tertiary" data-recall-action="${action}" aria-label="${label}"><img class="lt-icon" src="${new URL(`./icons/${name}.svg`,import.meta.url)}" alt=""></button>`;
 const arrow='<svg class="lt-recall-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 const numericFields=['recentFloorCount','maxCount','maxTokens','memoryDepth','anniversaryPoolLimit'];

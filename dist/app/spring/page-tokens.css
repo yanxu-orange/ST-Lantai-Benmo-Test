@@ -5,9 +5,9 @@
 .lantai[data-ui-theme="spring"] {
   --lt-format-page-paper: #fff;
   --lt-format-page-utility-ink: #58775e;
-  --lt-format-page-danger-background: #fff3f3;
-  --lt-format-page-danger-ink: #b47978;
-  --lt-format-page-danger-border: #efdada;
+  --lt-format-page-danger-background: var(--ui-color-danger-background);
+  --lt-format-page-danger-ink: var(--ui-color-danger-text);
+  --lt-format-page-danger-border: var(--ui-color-danger-text);
   --lt-format-page-primary-background: #e0efdf;
   --lt-format-page-primary-ink: #426b4b;
   --lt-format-page-primary-border: #d0e4d0;
@@ -83,7 +83,7 @@
   --lt-format-time-query-label-ink: #69836f;
   --lt-format-time-query-shadow: 0 1px 4px rgb(55 88 61 / 2%);
   --lt-format-time-query-border: #dce8dc;
-  --lt-format-time-record-toggle-ink: #7d9483;
+  --lt-format-time-record-toggle-ink: var(--ui-color-action-tertiary-text);
   --lt-format-time-field-label-ink: #536e5a;
   --lt-format-time-field-ink: #49634f;
   --lt-format-time-field-radius: 8px;

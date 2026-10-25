@@ -41,8 +41,8 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "bytes": 108675,
-    "sha256": "377f66bd6cf35ef5ca06c40b84f9342df8be845e630b5d4f9c312b4883e41475"
+    "bytes": 108491,
+    "sha256": "5865737b9e47b3a4c8f87d4989c61142f46708fe8bc051c1015e3fa7b6004b1e"
   },
   {
     "path": "dist/app/book-themes/assets/PinyonScript-OFL.txt",
@@ -56,8 +56,8 @@
   },
   {
     "path": "dist/app/book-themes/components.css",
-    "bytes": 22590,
-    "sha256": "866e516414ebd1afef7dbe04653b1377941edcb40bce481a7974bdb53da174df"
+    "bytes": 22701,
+    "sha256": "9b3144d504611c578ce52989f7d82ffe237ec44e71a6e76b5bd9e4981ba93b9a"
   },
   {
     "path": "dist/app/book-themes/memory.css",
@@ -66,13 +66,13 @@
   },
   {
     "path": "dist/app/book-themes/pages.css",
-    "bytes": 31924,
-    "sha256": "2e1be660e7f4b042fa8335045d713ce58ba2ceda947a90be7c48848885b42f9d"
+    "bytes": 32130,
+    "sha256": "c5f19802b3ed27c29c4b71e837c7e2d868b163df6379806dac01ef15936d9f21"
   },
   {
     "path": "dist/app/book-themes/time-details.css",
-    "bytes": 18880,
-    "sha256": "73149cbda1c7228ee67cf373a924d96992d1a15075113be1132034ed5d086e1d"
+    "bytes": 18909,
+    "sha256": "0600b3be034f0d0a67060aa95d87f58d028a4da4ff05572fe9b9b66ee18ff969"
   },
   {
     "path": "dist/app/book-themes/tokens.css",
@@ -101,8 +101,8 @@
   },
   {
     "path": "dist/app/cumulative-settings-view.js",
-    "bytes": 7994,
-    "sha256": "7a79f711574d6fc35d32595acf67274894d90969587b74dba944f72fefe1226f"
+    "bytes": 7784,
+    "sha256": "d200d83d54b645df1eb3bd6462f825378475d1fcafc15cdf425aa33dcf828999"
   },
   {
     "path": "dist/app/cumulative-view.js",
@@ -286,13 +286,13 @@
   },
   {
     "path": "dist/app/recall-view.js",
-    "bytes": 32915,
-    "sha256": "030778b09197e9cf908647b73743476c603e8f90ec5adf506fa3d5e03633af33"
+    "bytes": 32947,
+    "sha256": "e184bb9b31cca4a2d055bf1e4d743e355efaa4b789076e25dd46596fc6522a1d"
   },
   {
     "path": "dist/app/schedule-settings-view.js",
-    "bytes": 10301,
-    "sha256": "29312e575ef3d4b9c829f2912bd80dbab45f3ee12528169b4a216252f4aaf8de"
+    "bytes": 10194,
+    "sha256": "550a7db9fb7b03eae9c4bfbe9101f856b9ca2410fed81ad2ee09e0e3e589fcd7"
   },
   {
     "path": "dist/app/settings-root-view.css",
@@ -301,8 +301,8 @@
   },
   {
     "path": "dist/app/settings-root-view.js",
-    "bytes": 12539,
-    "sha256": "65f132aab0add1830c5cc043d10ba5ec32239746f374c27539ac2fb3f0c156c9"
+    "bytes": 12483,
+    "sha256": "49eae391adef2a019ffb136d358496a6dc61bdf67328a2beb8cdb00538e8218b"
   },
   {
     "path": "dist/app/shared-ui/appearance-format.css",
@@ -361,8 +361,8 @@
   },
   {
     "path": "dist/app/snow-ermine/benmo.css",
-    "bytes": 6562,
-    "sha256": "d8705d11eb059c538f51f018d1184f290e778a12f040661d0ab0a40dcb238342"
+    "bytes": 6600,
+    "sha256": "4e5d0defc469672a2df824717dca5538e7303bdaad16de9cab9e836b607a7011"
   },
   {
     "path": "dist/app/snow-ermine/manifest.json",
@@ -376,8 +376,8 @@
   },
   {
     "path": "dist/app/snow-ermine/memory.css",
-    "bytes": 28367,
-    "sha256": "897542638ced93900669437e354c4ecb03a8cc1f7324cb38d4d3ff3370f7fd0f"
+    "bytes": 28358,
+    "sha256": "250eaaaed13cb5ee511b6cf0c17579d97bc02e8c35b8d35fdde812bdfac34dc4"
   },
   {
     "path": "dist/app/snow-ermine/page-tokens.css",
@@ -401,18 +401,18 @@
   },
   {
     "path": "dist/app/snow-ermine/theme.css",
-    "bytes": 28905,
-    "sha256": "0a80324dc08785fb6caaeef52249ebe4679566b8d4242a736760d7ff7a72c984"
+    "bytes": 29100,
+    "sha256": "896621e8398737bf2e66ad46a9ab1fa9e1e04b390ce738f206378c52632a59a9"
   },
   {
     "path": "dist/app/snow-ermine/time.css",
-    "bytes": 13255,
-    "sha256": "b3b84ec7e579d3074f024031009548de481429dc281ef42a2c81465bfbf7e5f0"
+    "bytes": 13313,
+    "sha256": "0f3a15616bf29ed629723770f8824c3d2579ff7202ccbde65cf7f1bccb7d22a1"
   },
   {
     "path": "dist/app/source-deletion-dialog.js",
-    "bytes": 15239,
-    "sha256": "0e1cd84b0b56fa3e3f5a21f3989680d7bd970e3b000b5c3f9c63b7f0a624f879"
+    "bytes": 15191,
+    "sha256": "f76692fd47c0cd4b267e757e6412c3e7b03225145bf3bdb311ad06eb0f65d888"
   },
   {
     "path": "dist/app/spring/appearance-tokens.css",
@@ -491,8 +491,8 @@
   },
   {
     "path": "dist/app/spring/benmo.css",
-    "bytes": 19287,
-    "sha256": "499ab7701105dda6d1917f7aa404ab6d09e1ba438aefb63867334a3dee23bd91"
+    "bytes": 19319,
+    "sha256": "e864db0e47b2cd6c79358d54a31e00d1c7d2363f5c1923bb590a0fae1b92a234"
   },
   {
     "path": "dist/app/spring/manifest.json",
@@ -506,13 +506,13 @@
   },
   {
     "path": "dist/app/spring/memory.css",
-    "bytes": 18027,
-    "sha256": "95f464c25f13a5d1c74740ed5d26b8f6a51fb7d2f017f7d0e811ab50da4ee4dc"
+    "bytes": 18167,
+    "sha256": "dc642a403c97bd7b811dd91e3ce7415184a57c641ffda6262d7d643cfff4011a"
   },
   {
     "path": "dist/app/spring/page-tokens.css",
-    "bytes": 10120,
-    "sha256": "f898a1b61d299ab415bae334fa6bbc9d87084b7e1fb06a3d1585de92a3720a8a"
+    "bytes": 10215,
+    "sha256": "8510c7660df00162f7a5953d062ae7cdfc822f32b8ae622300c55660ac1390aa"
   },
   {
     "path": "dist/app/spring/segment-tokens.css",
@@ -531,18 +531,18 @@
   },
   {
     "path": "dist/app/spring/theme.css",
-    "bytes": 18692,
-    "sha256": "e41805df5bfc088a8906686e8c765f8909a1e9f8a39df1a8dcf486ba451b50ff"
+    "bytes": 18758,
+    "sha256": "690563a2cefa2f77a6889f62adb6012c6c2410f14ff596359137cac3914ad267"
   },
   {
     "path": "dist/app/spring/time.css",
-    "bytes": 19772,
-    "sha256": "1c4b4bf0a160efa56bf3fb1db5b568dd2031c4e62b56d6911c5dd7f85c178aa7"
+    "bytes": 19830,
+    "sha256": "704b21eed9a76bbba661ab24ecde40d5ae361e570ace1f2e186f2742f2a0539e"
   },
   {
     "path": "dist/app/spring/workshop.css",
-    "bytes": 10187,
-    "sha256": "49117d3ec276092cde1be95e5b48a40b5ef97899151f1ef6d1fbb86dd5b9206a"
+    "bytes": 10219,
+    "sha256": "6c5da3909990facf13b9950442cf279237e540e1c42985a96b8a5c9b7f7bde14"
   },
   {
     "path": "dist/app/stable-surface.js",
@@ -586,8 +586,8 @@
   },
   {
     "path": "dist/app/summary-settings-view.js",
-    "bytes": 35321,
-    "sha256": "2e9637acf47b18d1aae3669544e552b9d1cc08805f04c0b13fb8ed2a4843b877"
+    "bytes": 34874,
+    "sha256": "6947ae10a17723cc89029a7b967e7352c5da61930c9ac8dcffca97116399cfd1"
   },
   {
     "path": "dist/app/summary-settings.css",
@@ -647,7 +647,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "9d2c6b649d5319eb84635f824fd213b37200484b93f8a629e0d9d010758ea6bf"
+    "sha256": "5111229035a28994f609158d8d3db2b31f27e7e1b9476798a0a85fcc167fc71b"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -666,8 +666,8 @@
   },
   {
     "path": "dist/app/workshop-view.js",
-    "bytes": 27036,
-    "sha256": "2e20bfce7073f6efe2c0de91d0184ef3c09eb18ce930e5d458a845f14eae93e6"
+    "bytes": 27117,
+    "sha256": "fd70169caf73b4b6c6f6b3745f345a4de7b099e95dd06485417b055904b8bccc"
   },
   {
     "path": "dist/domain/background/round.js",
@@ -1286,13 +1286,13 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.css",
-    "bytes": 2278,
-    "sha256": "78b79e03546bcea82cd5516c177a71c6b6d6a4726db45b8dac5f2adb1bc01395"
+    "bytes": 2259,
+    "sha256": "7f6819e3448ad8cdb17e438a90a8012ac109f68a14b28f0d8ef99d3a3fdfe04a"
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 91609,
-    "sha256": "f2b7422158b8a04830c325a0dce79637057c10993138276e1b17eae8ae962cf1"
+    "bytes": 90803,
+    "sha256": "da987a418b6840f3fe0218483f6cd98f9b0f4301fb01b98cca92220f97654473"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1411,8 +1411,8 @@
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-diagnostic.js",
-    "bytes": 13021,
-    "sha256": "06ad20859e67c12ff95a2e8e743db0fa5e29e987bddd732a76816cefd2bbc8d0"
+    "bytes": 12964,
+    "sha256": "8a6f8cb8cde08475c3fb9d547097c53f2a9fa988d93450f1266374c406a3cefb"
   },
   {
     "path": "dist/platform/sillytavern/vector-maintenance.js",
@@ -1537,6 +1537,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "eb10b14f6dddc407012667ce293de7a6255daa877a205a6f699b66a84666b40e"
+    "sha256": "e998d5a0e916aba761d2407c661ab78506bfe263d251d00fc9a3dfbab2b0170e"
   }
 ]

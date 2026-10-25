@@ -130,7 +130,7 @@
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-state-tabs > .ui-button { padding-inline: 5px; border: 1px solid transparent; border-radius: var(--lt-format-time-segment-control-radius); background: transparent; color: var(--ui-color-text-meta); }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-state-tabs > .ui-button[aria-pressed="true"]:enabled { background: var(--ui-color-selected-background); border-color: var(--ui-color-selected-border); color: var(--ui-color-selected-text); font-weight: 700; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-record { padding-block: 12px; gap: 10px; }
-.lantai[data-ui-theme="snow-ermine"].lt-time .time-record-actions > [data-time-action="toggle-item"] { border-color: transparent; background: transparent; font-size: 12px; padding-inline: 5px; }
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-record-actions > [data-time-action="toggle-item"] { border-color: var(--ui-color-border-subtle); background: var(--ui-color-surface-raised); border-radius: 8px; font-size: 12px; padding-inline: 10px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-holiday-record { padding-block: 12px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-holiday-detail { line-height: 1.7; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-field { gap: 7px; }
