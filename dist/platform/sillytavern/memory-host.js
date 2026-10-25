@@ -77,7 +77,7 @@ export function cancelDisabledManagedTasks(runtime,policy){
 // Only this platform module touches the host document. Shadow DOM prevents
 // host skins from changing the approved UI and prevents our UI CSS leakage.
 export function createMemoryHost({ document: doc = globalThis.document, getContext = getSillyTavernContext, fetch: request = globalThis.fetch,
-  runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter,diagnosticSample=false,onSampleExit=null,onSampleDispose=null } = {}) {
+  runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter,diagnosticSample=false,diagnosticSimpleMain=false,onSampleExit=null,onSampleDispose=null } = {}) {
   let adapter, repository, app, panel, content, memoryContent, benmoContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, openingTicket = null, stylePromise, baseCss, sharedCssCache,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryReturnFocus,memoryEditFocus,
@@ -85,7 +85,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
   let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null;
   let interfaceDiagnosticTarget=null,interfaceCaptureControl=null,sampleHost=null,sampleOpening=false;
-  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel,sampleMode:diagnosticSample});
+  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel,sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original'});
   // Evidence must never prevent ordinary navigation, saving or cleanup.
   const interfaceDiagnostic=Object.fromEntries(['start','stop','mark','setSizeCondition','setClipCondition','setGridCondition','stage','inspect','subscribe','subscribeTimeline','subscribeGrid','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return (name==='subscribe'||name==='subscribeTimeline'||name==='subscribeGrid')?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
   const releaseInterfaceDiagnostic=interfaceDiagnostic.subscribe(value=>{if(value.status!=='recording')interfaceDiagnosticTarget=null;});
@@ -93,13 +93,13 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     try{interfaceDiagnosticTarget=repository.captureTarget();if(interfaceDiagnostic.start())return true;}catch{}
     interfaceDiagnosticTarget=null;return false;
   }
-  async function openTransitionSample(){
+  async function openTransitionSample({simpleMain=false}={}){
     if(disposed||diagnosticSample||sampleHost||sampleOpening)return false;
     sampleOpening=true;
     try{
       const fixture=createTransitionSampleFixture({assetFetch:request,theme:panel?.getAttribute('data-ui-theme')??appearance.inspect().theme});
       close();
-      const child=createMemoryHost({document:doc,getContext:()=>fixture.ctx,fetch:fixture.request,runtimeOptions:fixture.runtimeOptions,appearanceOptions:fixture.appearanceOptions,MutationObserver:Observer,diagnosticSample:true,onSampleDispose:()=>fixture.dispose(),onSampleExit:()=>{
+      const child=createMemoryHost({document:doc,getContext:()=>fixture.ctx,fetch:fixture.request,runtimeOptions:fixture.runtimeOptions,appearanceOptions:fixture.appearanceOptions,MutationObserver:Observer,diagnosticSample:true,diagnosticSimpleMain:simpleMain===true,onSampleDispose:()=>fixture.dispose(),onSampleExit:()=>{
         if(sampleHost!==child)return;sampleHost=null;child.dispose();if(!disposed)void open();
       }});
       sampleHost=child;await child.open();
@@ -505,7 +505,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       const view=benmoView;
       view.resume(undefined,{kind,checking:true});interfaceDiagnostic.stage('shown','benmo');
       try{const value=await benmoController.ensure();if(!valid()||view!==benmoView)return false;view.resume(value);syncAppearance();interfaceDiagnostic.stage('ready','benmo');return true;}
-      catch(error){if(valid()&&view===benmoView){view.resume();view.fail(error);}return false;}
+      catch(error){if(valid()&&view===benmoView){view.resume();view.fail(error);if(diagnosticSample)interfaceDiagnostic.stop('failed');}return false;}
     }
     const container=doc.createElement('div');container.className='benmo-mount';container.setAttribute('data-ui-theme',panel.getAttribute('data-ui-theme')??DEFAULT_THEME);benmoContent.replaceChildren(container);
     const prepare=async({refresh=false}={})=>{
@@ -513,13 +513,13 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(refresh?(!panel||settingsOpen||!benmoContent.contains(container)||benmoContent.hidden||!sameTarget(target,repository.captureTarget())):!valid())return null;
       return refresh?benmoController.load():benmoController.ensure();
     };
-    const view=await mountBenmoView({container,controller:benmoController,availability,isCurrent:valid,prepare,initialState:initialState??{},onClose:close,onOpenCleaning:openNarrativeCleaning,onNavigate:(area,snapshot)=>{
+    const view=await mountBenmoView({container,diagnosticSimpleMain:diagnosticSample&&diagnosticSimpleMain,controller:benmoController,availability,isCurrent:valid,prepare,initialState:initialState??{},onClose:close,onOpenCleaning:openNarrativeCleaning,onNavigate:(area,snapshot)=>{
       benmoNavigation=snapshot;
       if(area==='settings'){openSettings();return;}
       if(area==='memory')void returnFromSummary();else if(area==='time')void openTime();else if(area==='workshop')void openWorkshop();
     }});
     if(!view||!valid()){view?.dispose();return false;}
-    benmoView=view;syncAppearance();interfaceDiagnostic.stage('ready','benmo');return !view.failed();
+    benmoView=view;syncAppearance();if(diagnosticSample&&view.failed())interfaceDiagnostic.stop('failed');else interfaceDiagnostic.stage('ready','benmo');return !view.failed();
   }
   const openLatestSummary=()=>openBenmo({kind:'summary'});
   function narrativeSettingsAccess(target){
@@ -619,7 +619,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const controller=workshopController;
     view.resume(undefined,{kind,checking:true});
     try{const value=await controller.ensure();if(!valid()||view!==workshopView||controller!==workshopController)return false;view.resume(value);syncAppearance();if(diagnosticReady)interfaceDiagnostic.stage('ready','workshop');return true;}
-    catch(error){if(valid()&&view===workshopView&&controller===workshopController){view.resume();view.fail(error);}return false;}
+    catch(error){if(valid()&&view===workshopView&&controller===workshopController){view.resume();view.fail(error);if(diagnosticSample)interfaceDiagnostic.stop('failed');}return false;}
   }
   function refreshVisibleWorkshop(){
     if(!allowed('workshop')||!panel||settingsOpen||!runtime?.settings||!workshopView||!areaPages.workshop.visible())return;
@@ -646,9 +646,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const controller=createWorkshopController({repository,settings:runtime.settings,target,runtime:workshopRuntime,isReadOnly:()=>foregroundBrowsing,getCharacterName:binding=>getContext().characters?.find(c=>c.avatar===binding?.owner)?.name??'当前角色',ensureRegex:async()=>{await workshopReady();if(workshopRegexError)throw workshopRegexError;},onMemory:()=>void returnFromSummary(),onTime:()=>void openTime(),onSettings:openSettings,onBenmo:()=>void openBenmo(),onClose:close});
     workshopController=controller;
     const prepare=async({refresh=false}={})=>{await new Promise(afterPageFrame);if(refresh?(!panel||settingsOpen||!summaryContent.contains(container)||summaryContent.hidden||controller!==workshopController||!sameTarget(target,repository.captureTarget())):!valid())return null;return refresh?controller.load({refresh:true}):controller.ensure();};
-    const view=await mountWorkshopView({container,controller,availability,initialKind:kind??'prompt',prepare,isCurrent:valid});
+    const view=await mountWorkshopView({container,diagnosticSimpleMain:diagnosticSample&&diagnosticSimpleMain,controller,availability,initialKind:kind??'prompt',prepare,isCurrent:valid});
     if(!view||!valid()){view?.dispose();controller.dispose();return false;}
-    workshopView=view;syncAppearance();interfaceDiagnostic.stage('ready','workshop');return !view.failed();
+    workshopView=view;syncAppearance();if(diagnosticSample&&view.failed())interfaceDiagnostic.stop('failed');else interfaceDiagnostic.stage('ready','workshop');return !view.failed();
   }
   const openTracking=kind=>['item','npc'].includes(kind)?openBenmo({kind}):Promise.resolve(false);
   async function returnFromSettings(reason) {
@@ -993,7 +993,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       content.append(memoryContent, settingsContent,summaryContent,benmoContent);
       decoration=createPersistentDecoration({container:content});
       shadow.append(content); doc.body.append(panel);
-      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:openTransitionSample,sampleMode:diagnosticSample});
+      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:()=>openTransitionSample(),onSimpleSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true}),sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original'});
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
     installPanelStyles();syncAppearance();
@@ -1068,7 +1068,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   const observer = new Observer(installEntry);
   if(!diagnosticSample)observer.observe(doc.documentElement, { childList: true, subtree: true });
   return {
-    open, close, openTransitionSample,sampleReady:()=>diagnosticSample&&!!panel?.shadowRoot?.querySelector('.workshop')&&!panel.shadowRoot.querySelector('.workshop .lt-error'), openSettings, openTask,openBenmo,openLatestSummary,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,openTime,openSchedule,openWorkshop,openTracking,openCumulative:showCumulative,openCumulativeSettings,
+    open, close, openTransitionSample,sampleReady:()=>diagnosticSample&&!!workshopView&&!workshopView.failed(), openSettings, openTask,openBenmo,openLatestSummary,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,openTime,openSchedule,openWorkshop,openTracking,openCumulative:showCumulative,openCumulativeSettings,
     async interceptPrompt(...args){
       if(disposed)return;
       const request=++recallEntryRequest;let entryTarget;

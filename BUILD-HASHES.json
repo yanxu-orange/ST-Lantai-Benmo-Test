@@ -41,8 +41,8 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "bytes": 108675,
-    "sha256": "377f66bd6cf35ef5ca06c40b84f9342df8be845e630b5d4f9c312b4883e41475"
+    "bytes": 108826,
+    "sha256": "8a90592ca9c071e21ceb65aef39997a486b4939513a46c4f866c1b7dbfeb4c83"
   },
   {
     "path": "dist/app/book-themes/assets/PinyonScript-OFL.txt",
@@ -645,9 +645,14 @@
     "sha256": "20b6328a88abd18610a7dae1f981c80fda64e3fb8ad1374cb0204af4302e00f0"
   },
   {
+    "path": "dist/app/transition-sample-main.js",
+    "bytes": 242,
+    "sha256": "f9077bb6ea4ef8e7f233d647f4925e6bddd106167a456348b14ea3c2810c7381"
+  },
+  {
     "path": "dist/app/version.js",
     "bytes": 54,
-    "sha256": "8f6d96d069944e04b23fa8d967830650407d878521f72e3a792bc042f145cf1c"
+    "sha256": "6e3431bf463d15325dc21d2db44d34e0ced57be7c724b3982bea301cfe7ac247"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -666,8 +671,8 @@
   },
   {
     "path": "dist/app/workshop-view.js",
-    "bytes": 27036,
-    "sha256": "2e20bfce7073f6efe2c0de91d0184ef3c09eb18ce930e5d458a845f14eae93e6"
+    "bytes": 27198,
+    "sha256": "30d768d32343824d3c00d1a7d332598ab56ee716a2890066b31ef03aec81c900"
   },
   {
     "path": "dist/domain/background/round.js",
@@ -1291,8 +1296,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 94384,
-    "sha256": "48bdc2f01bf52f97867fec6fda744ca06f6c4cfd43bf89e100ab4c5cfe55c8e2"
+    "bytes": 94991,
+    "sha256": "5628aa8d99d7e60473c635ff87137774c9ae0986191f8edee79d2b803851fbe6"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1421,13 +1426,13 @@
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-capture-control.js",
-    "bytes": 7945,
-    "sha256": "64b73b45d73ddaf56a3e6b75aee5ecb141397bb75b6fd37ae72f3a2bec0babd6"
+    "bytes": 9026,
+    "sha256": "26add294a017fa20af41ea6028c979fb7175d89a112870911671f2155f91ec4d"
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-diagnostic.js",
-    "bytes": 29536,
-    "sha256": "c8035e9977d094306b476213e57442731802ed18013b4cc8cb11004de39322f7"
+    "bytes": 29822,
+    "sha256": "7f778f469715e13c900de8e0fd4a8674895ddce03782754efc890c15947c1351"
   },
   {
     "path": "dist/platform/sillytavern/vector-maintenance.js",
@@ -1552,6 +1557,6 @@
   {
     "path": "manifest.json",
     "bytes": 423,
-    "sha256": "276d92a70105c77e07e0b9962ff9956157542ed29a39b1272bab50fd96389098"
+    "sha256": "c0c96d88194dde27609b8e55306d6688093537732b8ded11ceba757d92524dd4"
   }
 ]

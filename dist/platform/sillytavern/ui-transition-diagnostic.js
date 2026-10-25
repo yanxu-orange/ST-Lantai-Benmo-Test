@@ -36,7 +36,9 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  requestFrame=fn=>doc.defaultView?.requestAnimationFrame?.(fn),cancelFrame=id=>doc.defaultView?.cancelAnimationFrame?.(id),
  setTimer=(fn,ms)=>setTimeout(fn,ms),clearTimer=id=>clearTimeout(id),
  MutationObserver:MO=doc.defaultView?.MutationObserver,ResizeObserver:RO=doc.defaultView?.ResizeObserver,
- getStyle=node=>doc.defaultView?.getComputedStyle?.(node),limits={},sampleMode=false}={}){
+ getStyle=node=>doc.defaultView?.getComputedStyle?.(node),limits={},sampleMode=false,sampleContent='original',gridEnabled=false}={}){
+ const contentCondition=sampleMode?(sampleContent==='simplified'?'simplified':'original'):null;
+ const gridActive=sampleMode&&gridEnabled===true;
  const caps={duration:limit(limits.duration,30000),frames:limit(limits.frames,2000),events:limit(limits.events,256),bytes:Math.max(sampleMode?32768:4096,limit(limits.bytes,1048576))};
  let active=false,disposed=false,epoch=0,status='idle',reason=null,mode='phase-style-and-attributes',anchor=null,startAt=null,endedAt=null;
  let frames=[],events=[],bytes=0,sequence=0,nav=0,frameId=null,timerId=null,mutation=null,resize=null,targets=[],ids=null,geometry=null,styles=null,nodeSerial=0;
@@ -116,7 +118,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  }
  function append(kind,row){
   if(!active)return null;
-  row.conditionEpoch=conditionEpoch;row.shrinkCssPx=sizeCondition;row.clipMode=clipCondition;row.gridMode=sampleMode?gridMode:null;row.gridInvalid=sampleMode?gridInvalid:null;row.gridVerified=sampleMode?gridVerified:null;
+  row.conditionEpoch=conditionEpoch;row.shrinkCssPx=sizeCondition;row.clipMode=clipCondition;row.sampleContent=contentCondition;row.gridMode=gridActive?gridMode:null;row.gridInvalid=gridActive?gridInvalid:null;row.gridVerified=gridActive?gridVerified:null;
   const list=kind==='frame'?frames:events;
   const size=JSON.stringify(row).length+32;
   list.push(row);rowSizes.set(row,size);bytes+=size;countReferences(row,1);
@@ -146,7 +148,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    const candidates=events.filter(row=>row.kind==='phase'&&row.phase==='requested'&&row.nav>lastMarkedNav);
    const expectedCount=nav-lastMarkedNav;
    const association=expectedCount===1&&candidates.length===1?'single-observed-transition':expectedCount>1?'multiple-transitions':'unknown';
-   const item={sessionId,conditionAtMark:{epoch:conditionEpoch,shrinkCssPx:sizeCondition,clipMode:clipCondition,gridMode:sampleMode?gridProbe.inspect().mode:null,gridInvalid:sampleMode?gridInvalid:null,gridVerified:sampleMode?gridVerified:null},ordinal:observations.length+1,label,markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false,stopReason:null,
+   const item={sessionId,conditionAtMark:{epoch:conditionEpoch,shrinkCssPx:sizeCondition,clipMode:clipCondition,sampleContent:contentCondition,gridMode:gridActive?gridProbe.inspect().mode:null,gridInvalid:gridActive?gridInvalid:null,gridVerified:gridActive?gridVerified:null},ordinal:observations.length+1,label,markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false,stopReason:null,
     transition:{association,fromNavExclusive:lastMarkedNav,toNavInclusive:nav,expectedCount,candidates:candidates.map(row=>({nav:row.nav,t:row.t,target:row.target})),missingRequests:Math.max(0,expectedCount-candidates.length)},
     coverage:{earliestFrameRelativeMs:frames[0]?.t??null,latestPreFrameRelativeMs:frames.at(-1)?.t??null,evicted:clone(evicted)},frames:clone(frames),events:clone(events)};
    const size=archiveSize(item);
@@ -186,7 +188,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
      refresh();const panel=getPanel(),content=panel?.shadowRoot?.querySelector('#lt-host-content'),win=doc.defaultView,viewport=win?.visualViewport;
      const layout=[layoutNode('host',panel),layoutNode('content',content),layoutNode('surface',targets[0]),layoutNode('header',targets[1]),layoutNode('main',targets[5]),layoutNode('footer',targets[6]),layoutNode('decoration',targets[7]),layoutNode('page',targets[0]?.parentNode)];
      const viewportData={innerWidth:precise(win?.innerWidth),innerHeight:precise(win?.innerHeight),devicePixelRatio:precise(win?.devicePixelRatio),width:precise(viewport?.width),height:precise(viewport?.height),offsetLeft:precise(viewport?.offsetLeft),offsetTop:precise(viewport?.offsetTop),scale:precise(viewport?.scale)};
-     if(sampleMode&&targets[0]===scheduledSurface&&(ready||verifyGrid))gridProbe.observe(area,targets[0],layout,{ready,viewport:viewportData});
+     if(gridActive&&targets[0]===scheduledSurface&&(ready||verifyGrid))gridProbe.observe(area,targets[0],layout,{ready,viewport:viewportData});
      const expected=clipCondition==='visible'?'visible':null,observed=layout[2].overflow;
      append('event',{sequence:++sequence,t,kind:'layout',nav,shrinkCssPx:sizeCondition,settling:'two-animation-frames-not-paint-proof',
       viewport:viewportData,
@@ -196,7 +198,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   });
  }
  function setGridCondition(value){
-  if(!active||!sampleMode||!['original','fixed'].includes(value))return false;
+  if(!active||!gridActive||!['original','fixed'].includes(value))return false;
   if(value===gridProbe.inspect().mode)return true;
   if(value==='fixed'&&(!gridProbe.inspect().ready||gridProbe.inspect().invalid))return false;
   conditionEpoch++;const changed=gridProbe.setMode(value);
@@ -314,7 +316,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   if(active)trim(time());
   const rows=[...frames,...events.filter(row=>row.kind!=='style'&&row.kind!=='geometry')];
   const earliest=rows.length?Math.min(...rows.map(row=>row.t)):null;
-  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v8',gridExperiment:sampleMode?(active?gridProbe.inspect():savedGrid):null,sample:sampleMode===true?'fixed-switch-v1':null,videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
+  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v9',sampleContent:contentCondition,gridExperiment:gridActive?(active?gridProbe.inspect():savedGrid):null,sample:sampleMode===true?'fixed-switch-v1':null,videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
    limits:{windowMs:caps.duration,frames:caps.frames,events:caps.events,bytes:caps.bytes,captureBytes:archiveCaps.bytes,observations:archiveCaps.observations},mode,observations,sizeExperiment:{target:'lt-host-content',anchor:'top',allowedShrinkCssPx:[0,1],currentShrinkCssPx:sizeCondition,conditionEpoch},clipExperiment:{target:'direct-business-surface-only',currentMode:clipCondition,shrinkCssPx:0},
    captureStorage:{estimatedBytes:archiveBytes,policy:'immutable-labeled-windows-stop-on-capacity',order:'observation-ordinal; rows-by-sequence',postWindowMs:2000},
    retention:{earliestRelativeMs:earliest,latestFrameRelativeMs:frames.at(-1)?.t??null,evicted,policy:'rolling-window-with-capacity-eviction; older-referenced-events-may-be-retained'},
