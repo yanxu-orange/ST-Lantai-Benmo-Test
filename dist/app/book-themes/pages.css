@@ -206,3 +206,6 @@
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .lt-header > :is([data-ss-action="back"],[data-action="back"],[data-time-action="back"],[data-api-action="back"],[data-recall-action="back"],[data-cu-action="back"],[data-management-action="back"],[data-settings-action="back"],[data-summary-action="back"],.ui-icon-button:has(>img[src$="/back.svg"])):enabled:hover { background: transparent; border-color: transparent; box-shadow: none; }
 
 .lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-time .time-state-tabs:has(> .ui-button:nth-child(4)) { grid-template-columns: repeat(4,minmax(0,1fr)); }
+
+/* Root plugin controls remain aligned; only their internal dividing rule is removed. */
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]).lt-settings .lt-settings-group[data-settings-section="plugin"] > .lt-settings-row + .lt-settings-row { border-top: 0; }

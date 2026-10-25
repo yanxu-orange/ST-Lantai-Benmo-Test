@@ -1,6 +1,6 @@
 /* Product appearance roles for the existing Snow Ermine workspace and headers.
-   The root remains 83px, children remain 64px, and approved artwork/crops stay
-   unchanged. Root underline navigation and native target geometry stay local. */
+   The root remains 83px, children remain 64px, and approved artwork/geometry stay
+   unchanged; the root focal position is reviewed separately. Root underline navigation and native target geometry stay local. */
 [data-ui-theme="snow-ermine"],
 :host([data-ui-theme="snow-ermine"]) {
   --lt-format-page-padding-inline: 16px;
@@ -12,7 +12,7 @@
   --lt-format-root-header-compact-min-height: 60px;
   --lt-format-root-header-padding: 4px var(--lt-format-page-padding-inline);
   --lt-format-root-header-image: url("./assets/snow-ermine-header.png");
-  --lt-format-root-header-position: 68% 100%;
+  --lt-format-root-header-position: 68% 80%;
   --lt-format-root-header-wash: linear-gradient(90deg, rgb(19 54 96 / 89%), rgb(24 68 112 / 62%) 51%, rgb(23 69 113 / 6%) 90%);
   --lt-format-root-title-size: 21px;
   --lt-format-root-title-weight: 700;

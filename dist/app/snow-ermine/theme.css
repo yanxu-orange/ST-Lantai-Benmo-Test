@@ -677,4 +677,4 @@
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-prompt-group{border-color:transparent;border-radius:var(--ui-shape-surface-radius);box-shadow:var(--ui-elevation-low-shadow)}
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-prompt-group>.time-group-heading{background:transparent;color:var(--ui-color-text-secondary)}
 
-.lantai[data-ui-theme="snow-ermine"] .ui-button--danger:enabled { color: var(--ui-color-danger-text); background: var(--ui-color-danger-background); border-color: var(--ui-color-danger-text); }
+.lantai[data-ui-theme="snow-ermine"] .ui-button--danger:enabled { color: var(--ui-color-danger-text); background: var(--ui-color-danger-background); border-color: var(--ui-color-border-subtle); }

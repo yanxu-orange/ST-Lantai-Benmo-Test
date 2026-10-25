@@ -145,4 +145,4 @@
 .lantai[data-ui-theme="spring"].lt-recall [data-recall-rule] > .lt-recall-heading:first-child { background: #f4f8f2; }
 .lantai[data-ui-theme="spring"].lt-recall .lt-recall-segment > .ui-button:enabled { background: transparent; color: var(--lt-format-segment-idle-ink); }
 
-.lantai[data-ui-theme="spring"]:is([data-memory-settings],.lt-recall) .ui-button--danger:enabled { color: var(--ui-color-danger-text); background: var(--ui-color-danger-background); border-color: var(--ui-color-danger-text); }
+.lantai[data-ui-theme="spring"]:is([data-memory-settings],.lt-recall) .ui-button--danger:enabled { color: var(--ui-color-danger-text); background: var(--ui-color-danger-background); border-color: var(--ui-color-border-subtle); }

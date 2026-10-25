@@ -308,3 +308,6 @@
   .lantai[data-ui-theme="spring"].lt-api-settings .ui-button[data-appearance-action]:is(:enabled,:hover:enabled) { background: ButtonFace; color: ButtonText; border-color: ButtonText; }
   .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) :is(.lt-status,.lt-error) { background: Canvas; color: CanvasText; border-color: ButtonText; }
 }
+
+/* Only the two plugin-root switches lose their internal separator. */
+.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group[data-settings-section="plugin"] > .lt-settings-row + .lt-settings-row { border-top: 0; }

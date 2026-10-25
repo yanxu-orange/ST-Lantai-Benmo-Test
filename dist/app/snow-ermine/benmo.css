@@ -31,7 +31,7 @@
 .lantai.benmo[data-ui-theme="snow-ermine"] .detail-field .detail-field-empty { color: var(--ui-color-text-meta); }
 .lantai.benmo[data-ui-theme="snow-ermine"] .ui-field > span { color: var(--ui-color-text-secondary); font-size: 12px; font-weight: 650; }
 .lantai.benmo[data-ui-theme="snow-ermine"] .detail-actions { position: static; }
-.lantai.benmo[data-ui-theme="snow-ermine"] [data-action="delete-record"]:enabled { background: var(--ui-color-danger-background); color: var(--ui-color-danger-text); border-color: var(--ui-color-danger-text); }
+.lantai.benmo[data-ui-theme="snow-ermine"] [data-action="delete-record"]:enabled { background: var(--ui-color-danger-background); color: var(--ui-color-danger-text); border-color: var(--ui-color-border-subtle); }
 .lantai.benmo[data-ui-theme="snow-ermine"] .benmo-summary-history > .record-open { padding: 10px 14px; border: 1px solid var(--ui-color-border-subtle); border-radius: 5px; background: var(--ui-color-surface-base); }
 .lantai.benmo[data-ui-theme="snow-ermine"] .empty { color: var(--ui-color-text-secondary); }
 

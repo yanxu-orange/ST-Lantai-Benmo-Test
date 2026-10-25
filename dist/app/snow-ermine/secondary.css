@@ -40,3 +40,6 @@
     box-shadow: none;
   }
 }
+
+/* Only the two plugin-root switches lose their internal separator. */
+.lantai[data-ui-theme="snow-ermine"].lt-settings .lt-settings-group[data-settings-section="plugin"] > .lt-settings-row + .lt-settings-row { border-top: 0; }

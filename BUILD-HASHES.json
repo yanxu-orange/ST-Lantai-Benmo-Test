@@ -66,8 +66,8 @@
   },
   {
     "path": "dist/app/book-themes/pages.css",
-    "bytes": 32130,
-    "sha256": "c5f19802b3ed27c29c4b71e837c7e2d868b163df6379806dac01ef15936d9f21"
+    "bytes": 32413,
+    "sha256": "f569f1e1d667010b88235a8ee4f3ac69ec4f559ae84079526bd593e35465bd1e"
   },
   {
     "path": "dist/app/book-themes/time-details.css",
@@ -336,8 +336,8 @@
   },
   {
     "path": "dist/app/snow-ermine/appearance-tokens.css",
-    "bytes": 2283,
-    "sha256": "5f0322c2dce4ddc298d6557543331486a1192acc277bc227fdfaf7e48a91ad0f"
+    "bytes": 2333,
+    "sha256": "3c69d7cae13516e5a4522917d4f82f98a2886a8aa43c46fd0628cf2389efeae0"
   },
   {
     "path": "dist/app/snow-ermine/assets/close-snow.svg",
@@ -361,8 +361,8 @@
   },
   {
     "path": "dist/app/snow-ermine/benmo.css",
-    "bytes": 6600,
-    "sha256": "4e5d0defc469672a2df824717dca5538e7303bdaad16de9cab9e836b607a7011"
+    "bytes": 6602,
+    "sha256": "ec6054ff1b340bedfdbf3bf5d540b7b310c80cfd2537d02f28b71462d83362bc"
   },
   {
     "path": "dist/app/snow-ermine/manifest.json",
@@ -376,8 +376,8 @@
   },
   {
     "path": "dist/app/snow-ermine/memory.css",
-    "bytes": 28358,
-    "sha256": "250eaaaed13cb5ee511b6cf0c17579d97bc02e8c35b8d35fdde812bdfac34dc4"
+    "bytes": 28360,
+    "sha256": "e1801fffe10081463eb09fddd2f8d2a5d0caa4ac0fcc53279a73b839639b3e1b"
   },
   {
     "path": "dist/app/snow-ermine/page-tokens.css",
@@ -386,8 +386,8 @@
   },
   {
     "path": "dist/app/snow-ermine/secondary.css",
-    "bytes": 1797,
-    "sha256": "63f42d35cc583560d69b8a4230d97082b4cf8214b73840112a6de399bedb9225"
+    "bytes": 2026,
+    "sha256": "5e2e6e9202bc4f48536df59b712ad90b45a09e104d824858dbddcc9fc8b16c68"
   },
   {
     "path": "dist/app/snow-ermine/segment-tokens.css",
@@ -401,8 +401,8 @@
   },
   {
     "path": "dist/app/snow-ermine/theme.css",
-    "bytes": 29100,
-    "sha256": "896621e8398737bf2e66ad46a9ab1fa9e1e04b390ce738f206378c52632a59a9"
+    "bytes": 29102,
+    "sha256": "335fe11ae490e33fd3a331582ab26855ea60118ab2571fdcb7894839fbb355cb"
   },
   {
     "path": "dist/app/snow-ermine/time.css",
@@ -501,18 +501,18 @@
   },
   {
     "path": "dist/app/spring/memory-tokens.css",
-    "bytes": 1822,
-    "sha256": "38f20b3b29a4841105b9bfa66fda73ceb66b617ce083b502251b66588e5ac356"
+    "bytes": 1817,
+    "sha256": "b5d093b976945e56b965191fc1301d7694c5e8f290fa1d17c93dc15060f4517b"
   },
   {
     "path": "dist/app/spring/memory.css",
-    "bytes": 18167,
-    "sha256": "dc642a403c97bd7b811dd91e3ce7415184a57c641ffda6262d7d643cfff4011a"
+    "bytes": 18169,
+    "sha256": "3b49204be6189276f3ce53b4423f2434fa6da150548d410433f98b365908fd70"
   },
   {
     "path": "dist/app/spring/page-tokens.css",
-    "bytes": 10215,
-    "sha256": "8510c7660df00162f7a5953d062ae7cdfc822f32b8ae622300c55660ac1390aa"
+    "bytes": 10217,
+    "sha256": "d6d7fc385797f7575b18d12cdab48a00604a7f626608579ccb1286d516277b68"
   },
   {
     "path": "dist/app/spring/segment-tokens.css",
@@ -521,8 +521,8 @@
   },
   {
     "path": "dist/app/spring/settings.css",
-    "bytes": 21822,
-    "sha256": "6372b60f3f6a683a201def4ac173fb06a6adcde844cb328e19c0f9a71d146988"
+    "bytes": 22046,
+    "sha256": "34515427a4a364e9c9153867fc52b365ab303a15453593f63e24b17f798c526e"
   },
   {
     "path": "dist/app/spring/switch-tokens.css",
@@ -531,8 +531,8 @@
   },
   {
     "path": "dist/app/spring/theme.css",
-    "bytes": 18758,
-    "sha256": "690563a2cefa2f77a6889f62adb6012c6c2410f14ff596359137cac3914ad267"
+    "bytes": 18762,
+    "sha256": "0beae9ae1ec333e4c0a8e720a87b36cda9cd7974c9567e4733489e516983b7cc"
   },
   {
     "path": "dist/app/spring/time.css",
@@ -571,8 +571,8 @@
   },
   {
     "path": "dist/app/styles/theme.js",
-    "bytes": 1857,
-    "sha256": "65f8b2e353e7f4e45abaa2d7c614e6915e6a37e965f6170bf9531a3d378511ab"
+    "bytes": 1848,
+    "sha256": "6f5aa6b60599fdd9f111b98f061300a7934abf5361946308e90cad1fa59c8533"
   },
   {
     "path": "dist/app/summary-controller.js",
@@ -647,7 +647,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "5111229035a28994f609158d8d3db2b31f27e7e1b9476798a0a85fcc167fc71b"
+    "sha256": "d42d2ead0373fe167a337d270050a782ae5c9d6b34695b16f126320a74a6ec3b"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1537,6 +1537,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "e998d5a0e916aba761d2407c661ab78506bfe263d251d00fc9a3dfbab2b0170e"
+    "sha256": "4257abf43cb08d8396d4269ceb389495864846126c0e92f36544f8456ea74660"
   }
 ]
