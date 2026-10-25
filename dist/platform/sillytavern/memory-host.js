@@ -86,7 +86,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   let interfaceDiagnosticTarget=null,interfaceCaptureControl=null;
   const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel});
   // Evidence must never prevent ordinary navigation, saving or cleanup.
-  const interfaceDiagnostic=Object.fromEntries(['start','stop','mark','stage','inspect','subscribe','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return name==='subscribe'?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
+  const interfaceDiagnostic=Object.fromEntries(['start','stop','mark','setSizeCondition','stage','inspect','subscribe','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return name==='subscribe'?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
   const releaseInterfaceDiagnostic=interfaceDiagnostic.subscribe(value=>{if(value.status!=='recording')interfaceDiagnosticTarget=null;});
   function startInterfaceDiagnostic(){
     try{interfaceDiagnosticTarget=repository.captureTarget();if(interfaceDiagnostic.start())return true;}catch{}
