@@ -77,7 +77,7 @@ export function cancelDisabledManagedTasks(runtime,policy){
 // Only this platform module touches the host document. Shadow DOM prevents
 // host skins from changing the approved UI and prevents our UI CSS leakage.
 export function createMemoryHost({ document: doc = globalThis.document, getContext = getSillyTavernContext, fetch: request = globalThis.fetch,
-  runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter,diagnosticSample=false,diagnosticSimpleMain=false,onSampleExit=null,onSampleDispose=null } = {}) {
+  runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter,diagnosticSample=false,diagnosticSimpleMain=false,diagnosticSkipWarm=false,onSampleExit=null,onSampleDispose=null } = {}) {
   let adapter, repository, app, panel, content, memoryContent, benmoContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, openingTicket = null, stylePromise, baseCss, sharedCssCache,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryReturnFocus,memoryEditFocus,
@@ -85,7 +85,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
   let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null;
   let interfaceDiagnosticTarget=null,interfaceCaptureControl=null,sampleHost=null,sampleOpening=false;
-  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel,sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original'});
+  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel,sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleWarmMode:diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
   // Evidence must never prevent ordinary navigation, saving or cleanup.
   const interfaceDiagnostic=Object.fromEntries(['start','stop','mark','setSizeCondition','setClipCondition','setGridCondition','stage','inspect','subscribe','subscribeTimeline','subscribeGrid','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return (name==='subscribe'||name==='subscribeTimeline'||name==='subscribeGrid')?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
   const releaseInterfaceDiagnostic=interfaceDiagnostic.subscribe(value=>{if(value.status!=='recording')interfaceDiagnosticTarget=null;});
@@ -93,13 +93,13 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     try{interfaceDiagnosticTarget=repository.captureTarget();if(interfaceDiagnostic.start())return true;}catch{}
     interfaceDiagnosticTarget=null;return false;
   }
-  async function openTransitionSample({simpleMain=false}={}){
+  async function openTransitionSample({simpleMain=false,skipWarm=false}={}){
     if(disposed||diagnosticSample||sampleHost||sampleOpening)return false;
     sampleOpening=true;
     try{
       const fixture=createTransitionSampleFixture({assetFetch:request,theme:panel?.getAttribute('data-ui-theme')??appearance.inspect().theme});
       close();
-      const child=createMemoryHost({document:doc,getContext:()=>fixture.ctx,fetch:fixture.request,runtimeOptions:fixture.runtimeOptions,appearanceOptions:fixture.appearanceOptions,MutationObserver:Observer,diagnosticSample:true,diagnosticSimpleMain:simpleMain===true,onSampleDispose:()=>fixture.dispose(),onSampleExit:()=>{
+      const child=createMemoryHost({document:doc,getContext:()=>fixture.ctx,fetch:fixture.request,runtimeOptions:fixture.runtimeOptions,appearanceOptions:fixture.appearanceOptions,MutationObserver:Observer,diagnosticSample:true,diagnosticSimpleMain:simpleMain===true,diagnosticSkipWarm:simpleMain===true&&skipWarm===true,onSampleDispose:()=>fixture.dispose(),onSampleExit:()=>{
         if(sampleHost!==child)return;sampleHost=null;child.dispose();if(!disposed)void open();
       }});
       sampleHost=child;await child.open();
@@ -502,8 +502,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=true;summaryContent.inert=false;benmoContent.hidden=false;benmoContent.inert=false;
     benmoTarget=target;
     if(benmoView){
-      const view=benmoView;
+      const view=benmoView,held=diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm&&!view.failed();
       view.resume(undefined,{kind,checking:true});interfaceDiagnostic.stage('shown','benmo');
+      if(held){if(!valid()||view!==benmoView)return false;syncAppearance();interfaceDiagnostic.stage('held','benmo');return true;}
       try{const value=await benmoController.ensure();if(!valid()||view!==benmoView)return false;view.resume(value);syncAppearance();interfaceDiagnostic.stage('ready','benmo');return true;}
       catch(error){if(valid()&&view===benmoView){view.resume();view.fail(error);if(diagnosticSample)interfaceDiagnostic.stop('failed');}return false;}
     }
@@ -638,6 +639,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(workshopTarget&&!sameTarget(workshopTarget,target))areaPages.workshop.unmount();
     if(workshopView){
       const view=workshopView;showAreaContainer(workshopContainer);interfaceDiagnostic.stage('shown','workshop');
+      if(diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm&&!view.failed()){view.resume(undefined,{kind,checking:true});if(!valid()||view!==workshopView)return false;syncAppearance();interfaceDiagnostic.stage('held','workshop');return true;}
       return revalidateWorkshop(view,{kind,valid,diagnosticReady:true});
     }
     // Only an unfinished mount is replaced. A confirmed view owns its drafts.
@@ -993,7 +995,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       content.append(memoryContent, settingsContent,summaryContent,benmoContent);
       decoration=createPersistentDecoration({container:content});
       shadow.append(content); doc.body.append(panel);
-      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:()=>openTransitionSample(),onSimpleSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true}),sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original'});
+      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:()=>openTransitionSample(),onSimpleSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true}),onHeldSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,skipWarm:true}),sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleWarmMode:diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
     installPanelStyles();syncAppearance();
