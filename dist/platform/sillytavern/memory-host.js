@@ -89,8 +89,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   let visibilitySampleReady=false,visibilitySampleArea=null;
   const visibilitySample=diagnosticSample&&diagnosticSimpleMain&&diagnosticVisibilityOnly;
   const filterHidden=visibilitySample&&diagnosticFilterHidden===true,hiddenFilter=createSampleHiddenFilter();
-  const mainClip=filterHidden&&diagnosticMainClip===true;
-  const innerScroll=mainClip&&diagnosticInnerScroll===true,innerScrollSetup=createTransitionSampleInnerScroll({getStyle:node=>doc.defaultView?.getComputedStyle?.(node)??globalThis.getComputedStyle?.(node)});
+  const innerScroll=diagnosticSample&&diagnosticSimpleMain&&diagnosticMainClip===true&&diagnosticInnerScroll===true;
+  const mainClip=innerScroll||filterHidden&&diagnosticMainClip===true;
+  const innerScrollSetup=createTransitionSampleInnerScroll({getStyle:node=>doc.defaultView?.getComputedStyle?.(node)??globalThis.getComputedStyle?.(node)});
   let interfaceDiagnosticTarget=null,interfaceCaptureControl=null,sampleHost=null,sampleOpening=false;
   const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel,sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleObserverMode:filterHidden?'owned-hidden-filter':'normal',sampleMainScrollMode:innerScroll?'inner':mainClip?'clip':'normal',sampleWarmMode:visibilitySample?'visibility-only':diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
   // Evidence must never prevent ordinary navigation, saving or cleanup.
@@ -537,7 +538,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(refresh?(!panel||settingsOpen||!benmoContent.contains(container)||benmoContent.hidden||!sameTarget(target,repository.captureTarget())):!valid())return null;
       return refresh?benmoController.load():benmoController.ensure();
     };
-    const view=await mountBenmoView({container,diagnosticSimpleMain:diagnosticSample&&diagnosticSimpleMain,controller:benmoController,availability,isCurrent:valid,prepare,initialState:initialState??{},onClose:close,onOpenCleaning:openNarrativeCleaning,onNavigate:(area,snapshot)=>{
+    const view=await mountBenmoView({container,diagnosticSimpleMain:diagnosticSample&&diagnosticSimpleMain,diagnosticInnerScroll:innerScroll&&!visibilitySample,onDiagnosticSurfaceRendered:surface=>{if(innerScroll&&!visibilitySample)innerScrollSetup.apply(surface);},controller:benmoController,availability,isCurrent:valid,prepare,initialState:initialState??{},onClose:close,onOpenCleaning:openNarrativeCleaning,onNavigate:(area,snapshot)=>{
       benmoNavigation=snapshot;
       if(area==='settings'){openSettings();return;}
       if(area==='memory')void returnFromSummary();else if(area==='time')void openTime();else if(area==='workshop')void openWorkshop();
@@ -671,7 +672,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const controller=createWorkshopController({repository,settings:runtime.settings,target,runtime:workshopRuntime,isReadOnly:()=>foregroundBrowsing,getCharacterName:binding=>getContext().characters?.find(c=>c.avatar===binding?.owner)?.name??'当前角色',ensureRegex:async()=>{await workshopReady();if(workshopRegexError)throw workshopRegexError;},onMemory:()=>void returnFromSummary(),onTime:()=>void openTime(),onSettings:openSettings,onBenmo:()=>void openBenmo(),onClose:close});
     workshopController=controller;
     const prepare=async({refresh=false}={})=>{await new Promise(afterPageFrame);if(refresh?(!panel||settingsOpen||!summaryContent.contains(container)||summaryContent.hidden||controller!==workshopController||!sameTarget(target,repository.captureTarget())):!valid())return null;return refresh?controller.load({refresh:true}):controller.ensure();};
-    const view=await mountWorkshopView({container,diagnosticSimpleMain:diagnosticSample&&diagnosticSimpleMain,controller,availability,initialKind:kind??'prompt',prepare,isCurrent:valid});
+    const view=await mountWorkshopView({container,diagnosticSimpleMain:diagnosticSample&&diagnosticSimpleMain,diagnosticInnerScroll:innerScroll&&!visibilitySample,onDiagnosticSurfaceRendered:surface=>{if(innerScroll&&!visibilitySample)innerScrollSetup.apply(surface);},controller,availability,initialKind:kind??'prompt',prepare,isCurrent:valid});
     if(!view||!valid()){view?.dispose();controller.dispose();return false;}
     workshopView=view;syncAppearance();if(diagnosticSample&&view.failed())interfaceDiagnostic.stop('failed');else interfaceDiagnostic.stage('ready','workshop');return !view.failed();
   }
@@ -1028,7 +1029,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       decoration=createPersistentDecoration({container:content});
       shadow.append(content); doc.body.append(panel);
       if(mainClip){const style=doc.createElement('style');style.setAttribute('data-transition-main-clip','');style.textContent='#lt-host-content .wk-mount > .lantai > .lt-main,#lt-host-content .benmo-mount > .lantai > .lt-main{overflow:clip!important;}';shadow.append(style);}
-      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:()=>openTransitionSample(),onSimpleSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true}),onHeldSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,skipWarm:true}),onVisibilitySample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true}),onInnerScrollSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true,mainClip:true,innerScroll:true}),onNoScrollSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true,mainClip:true}),onFilteredSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true}),sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleObserverMode:filterHidden?'owned-hidden-filter':'normal',sampleMainScrollMode:innerScroll?'inner':mainClip?'clip':'normal',sampleWarmMode:visibilitySample?'visibility-only':diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
+      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:()=>openTransitionSample(),onSimpleSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true}),onHeldSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,skipWarm:true}),onVisibilitySample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true}),onNormalInnerSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,mainClip:true,innerScroll:true}),onInnerScrollSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true,mainClip:true,innerScroll:true}),onNoScrollSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true,mainClip:true}),onFilteredSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true}),sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleObserverMode:filterHidden?'owned-hidden-filter':'normal',sampleMainScrollMode:innerScroll?'inner':mainClip?'clip':'normal',sampleWarmMode:visibilitySample?'visibility-only':diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
     installPanelStyles();syncAppearance();
@@ -1071,7 +1072,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(!valid())return;
       if(diagnosticSample){
         visibilitySampleReady=false;visibilitySampleArea=null;
-        startInterfaceDiagnostic();const workshopReady=await openWorkshop();
+        startInterfaceDiagnostic();const workshopReady=await openWorkshop();if(!workshopReady)interfaceDiagnostic.stop('failed');
         if(visibilitySample&&workshopReady){
           const benmoReady=await openBenmo();
           if(!panel||disposed)return;
@@ -1097,7 +1098,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       memoryReadProof=matchesMemoryRead(memoryProof)?memoryProof:null;
       if(memoryType==='cumulative'&&sameTarget(reopenTarget,repository.captureTarget())){if(['manual','auto'].includes(reopenPage))await showCumulative(reopenPage);else if(reopenPage==='settings'||reopenPage==='cleaning'){await openCumulativeSettings(cumulativeReturnPage,true);if(reopenPage==='cleaning')await openCumulativeCleaning();}}
       if(valid())syncAppearance();
-    } catch (error) { if (valid()&&currentPageRequest===pageRequest) errorView(error); }
+    } catch (error) { if(diagnosticSample&&valid())interfaceDiagnostic.stop('failed');if (valid()&&currentPageRequest===pageRequest) errorView(error); }
     finally {if(openingTicket===currentTicket){openingTicket=null;requestBenmoWarmup(false);}}
   }
   function installEntry() {

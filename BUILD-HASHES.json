@@ -41,8 +41,8 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "bytes": 108826,
-    "sha256": "8a90592ca9c071e21ceb65aef39997a486b4939513a46c4f866c1b7dbfeb4c83"
+    "bytes": 109322,
+    "sha256": "67737c18f2fe57b309f4e2248180576f201f656663b789c0d98e4c1d2638adb4"
   },
   {
     "path": "dist/app/book-themes/assets/PinyonScript-OFL.txt",
@@ -652,7 +652,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 55,
-    "sha256": "eab3b306ee8cacc118901663eee7c4a21b8e31f82b75efb34753b26009072cfa"
+    "sha256": "d98cccde9b594c9118657383219b95f81ac102647c022a951ad51db1bdceb84b"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -671,8 +671,8 @@
   },
   {
     "path": "dist/app/workshop-view.js",
-    "bytes": 27198,
-    "sha256": "30d768d32343824d3c00d1a7d332598ab56ee716a2890066b31ef03aec81c900"
+    "bytes": 27678,
+    "sha256": "2a044e69e5e420821d86579584ad39d8dbf177ee611992c674cb46b1620e3655"
   },
   {
     "path": "dist/domain/background/round.js",
@@ -1296,8 +1296,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 101455,
-    "sha256": "2c5d7dbc4359941c9620c9370d1cf0736f62c1ff2109b1e8ca7214407a67c81a"
+    "bytes": 102086,
+    "sha256": "485968a000ea3458aee87c54945f6b31caa85fdec92493d9c8f45056358b79bb"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1441,13 +1441,13 @@
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-capture-control.js",
-    "bytes": 15855,
-    "sha256": "a2db4f06f7ea3defedb88726cbe6271bd63241e6200c99014b2e668f44fbea50"
+    "bytes": 16699,
+    "sha256": "2542696a90d7596171879df93f7b8e02eb4624ae84711133aad9ba99a83c417a"
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-diagnostic.js",
-    "bytes": 36096,
-    "sha256": "aa7e76b41456668795851302a29cb8eeb3ae9fd1d59d2e2ed9aaa27e93ffd86f"
+    "bytes": 36206,
+    "sha256": "f999fe3453ae1fdf2e3943e430fb18ad823789b3b234dc2e7cabafb6afeabf0b"
   },
   {
     "path": "dist/platform/sillytavern/vector-maintenance.js",
@@ -1572,6 +1572,6 @@
   {
     "path": "manifest.json",
     "bytes": 424,
-    "sha256": "4a8c507d8abde42bdfd98295ef27e58e60e35ee55476c4ffa9c520ea247bc109"
+    "sha256": "0d717b108063019d2cc140cde338ca1f89d4ba3cdf5bd4b55322c1e5f0eb044b"
   }
 ]
