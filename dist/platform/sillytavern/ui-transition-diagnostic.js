@@ -40,13 +40,13 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  getStyle=node=>doc.defaultView?.getComputedStyle?.(node),limits={},sampleMode=false,sampleContent='original',sampleWarmMode='normal',sampleObserverMode='normal',sampleMainScrollMode='normal',gridEnabled=false}={}){
  const contentCondition=sampleMode?(sampleContent==='simplified'?'simplified':'original'):null;
  const warmCondition=contentCondition==='simplified'&&['skip-warm-revalidation','visibility-only'].includes(sampleWarmMode)?sampleWarmMode:'normal';
- const observerCondition=sampleMode&&warmCondition==='visibility-only'?(sampleObserverMode==='owned-hidden-filter'?'owned-hidden-filter':'normal'):sampleMode&&warmCondition==='normal'&&sampleMainScrollMode==='clip'?'normal':null;
- const mainScrollCondition=sampleMode&&contentCondition==='simplified'&&['normal','visibility-only'].includes(warmCondition)&&sampleMainScrollMode==='inner'?'inner':sampleMode&&['normal','visibility-only'].includes(warmCondition)&&sampleMainScrollMode==='clip'?'clip':observerCondition==='owned-hidden-filter'?'normal':null;
+ const observerCondition=sampleMode&&warmCondition==='visibility-only'?(sampleObserverMode==='owned-hidden-filter'?'owned-hidden-filter':'normal'):sampleMode&&warmCondition==='normal'&&['clip','hidden'].includes(sampleMainScrollMode)?'normal':null;
+ const mainScrollCondition=sampleMode&&contentCondition==='simplified'&&['normal','visibility-only'].includes(warmCondition)&&sampleMainScrollMode==='inner'?'inner':sampleMode&&['normal','visibility-only'].includes(warmCondition)&&sampleMainScrollMode==='clip'?'clip':sampleMode&&contentCondition==='original'&&warmCondition==='normal'&&sampleMainScrollMode==='hidden'?'hidden':observerCondition==='owned-hidden-filter'?'normal':null;
  const freshMainScroll=()=>({workshop:{status:'pending',reason:null,nav:null},benmo:{status:'pending',reason:null,nav:null}});
  let mainScrollPages=freshMainScroll(),innerScrollPages=freshMainScroll();
  let innerScrollNodes=new Map();
  const innerScrollProof=()=>({status:mainScrollCondition!=='inner'?'inactive':Object.values(innerScrollPages).some(p=>p.status==='invalid')?'invalid':Object.values(innerScrollPages).every(p=>['ready','scrolled'].includes(p.status))?(Object.values(innerScrollPages).some(p=>p.status==='scrolled')?'scrolled':'ready'):'pending',pages:clone(innerScrollPages)});
- const mainScrollProof=()=>({status:!['clip','inner'].includes(mainScrollCondition)?'inactive':Object.values(mainScrollPages).some(p=>p.status==='invalid')?'invalid':Object.values(mainScrollPages).every(p=>p.status==='applied')?'applied':'pending',pages:clone(mainScrollPages)});
+ const mainScrollProof=()=>({status:!['clip','inner','hidden'].includes(mainScrollCondition)?'inactive':Object.values(mainScrollPages).some(p=>p.status==='invalid')?'invalid':Object.values(mainScrollPages).every(p=>p.status==='applied')?'applied':'pending',pages:clone(mainScrollPages)});
  const freshObserverCounts=()=>({skippedBatches:0,skippedRecords:0,deliveredBatches:0,deliveredRecords:0});
  let observerCounts=freshObserverCounts();
  const gridActive=sampleMode&&gridEnabled===true;
@@ -83,8 +83,8 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   for(const listener of innerScrollSubscribers)safe(()=>listener(inspect()));return innerScrollProof();
  }
  function confirmMainScroll(layout,sameSurface){
-  if(!['clip','inner'].includes(mainScrollCondition)||!Object.hasOwn(mainScrollPages,area))return null;
-  if(mainScrollPages[area].status!=='invalid')mainScrollPages[area]={...(sameSurface?assessMainScroll(layout):{status:'pending',reason:'surface-changed'}),nav};
+  if(!['clip','inner','hidden'].includes(mainScrollCondition)||!Object.hasOwn(mainScrollPages,area))return null;
+  if(mainScrollPages[area].status!=='invalid')mainScrollPages[area]={...(sameSurface?assessMainScroll(layout,mainScrollCondition==='hidden'?'hidden':'clip'):{status:'pending',reason:'surface-changed'}),nav};
   publishMainScroll();return mainScrollProof();
  }
  const publishTimeline=()=>{for(const listener of timelineSubscribers)safe(()=>listener(inspect()));};
@@ -313,7 +313,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  function stage(phase,target='unknown'){
   if(!active||!PHASES.has(phase))return false;
   try{
-   refresh();if(phase==='requested'){nav++;if(mainScrollCondition==='inner'&&Object.hasOwn(innerScrollPages,target)){innerScrollPages[target]={status:'pending',reason:null,nav};for(const listener of innerScrollSubscribers)safe(()=>listener(inspect()));}if(['clip','inner'].includes(mainScrollCondition)&&Object.hasOwn(mainScrollPages,target)&&mainScrollPages[target].status!=='invalid'){mainScrollPages[target]={status:'pending',reason:null,nav};publishMainScroll();}}
+   refresh();if(phase==='requested'){nav++;if(mainScrollCondition==='inner'&&Object.hasOwn(innerScrollPages,target)){innerScrollPages[target]={status:'pending',reason:null,nav};for(const listener of innerScrollSubscribers)safe(()=>listener(inspect()));}if(['clip','inner','hidden'].includes(mainScrollCondition)&&Object.hasOwn(mainScrollPages,target)&&mainScrollPages[target].status!=='invalid'){mainScrollPages[target]={status:'pending',reason:null,nav};publishMainScroll();}}
    const event={sequence:++sequence,t:time(),kind:'phase',nav,phase,target:AREAS.has(target)?target:'unknown',area,route,nodes:sampleNodes()};
    append('event',event);
    let entry=navigationHistory.find(item=>item.nav===nav);
@@ -356,7 +356,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   if(active)trim(time());
   const rows=[...frames,...events.filter(row=>row.kind!=='style'&&row.kind!=='geometry')];
   const earliest=rows.length?Math.min(...rows.map(row=>row.t)):null;
-  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v19',innerScrollVerification:innerScrollProof(),sampleMainScrollMode:mainScrollCondition,mainScrollVerification:mainScrollProof(),sampleContent:contentCondition,sampleWarmMode:sampleMode?warmCondition:null,sampleObserverMode:observerCondition,observerDelivery:observerCondition===null?null:{...observerCounts},gridExperiment:gridActive?(active?gridProbe.inspect():savedGrid):null,sample:sampleMode===true?'fixed-switch-v1':null,videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
+  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v20',innerScrollVerification:innerScrollProof(),sampleMainScrollMode:mainScrollCondition,mainScrollVerification:mainScrollProof(),sampleContent:contentCondition,sampleWarmMode:sampleMode?warmCondition:null,sampleObserverMode:observerCondition,observerDelivery:observerCondition===null?null:{...observerCounts},gridExperiment:gridActive?(active?gridProbe.inspect():savedGrid):null,sample:sampleMode===true?'fixed-switch-v1':null,videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
    limits:{windowMs:caps.duration,frames:caps.frames,events:caps.events,bytes:caps.bytes,captureBytes:archiveCaps.bytes,observations:archiveCaps.observations},mode,observations,sizeExperiment:{target:'lt-host-content',anchor:'top',allowedShrinkCssPx:[0,1],currentShrinkCssPx:sizeCondition,conditionEpoch},clipExperiment:{target:'direct-business-surface-only',currentMode:clipCondition,shrinkCssPx:0},
    captureStorage:{estimatedBytes:archiveBytes,policy:'immutable-labeled-windows-stop-on-capacity',order:'observation-ordinal; rows-by-sequence',postWindowMs:2000},
    retention:{earliestRelativeMs:earliest,latestFrameRelativeMs:frames.at(-1)?.t??null,evicted,policy:'rolling-window-with-capacity-eviction; older-referenced-events-may-be-retained'},
