@@ -652,7 +652,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 55,
-    "sha256": "855d873928507760dc6898c90029c53cdae50e3efcb3fc80c3b7183d0b23c3d7"
+    "sha256": "eab3b306ee8cacc118901663eee7c4a21b8e31f82b75efb34753b26009072cfa"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1296,8 +1296,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 100649,
-    "sha256": "81b3a38dd547839e086150b567187168278161620d3f6ffa4d7ceb29dd726ce4"
+    "bytes": 101455,
+    "sha256": "2c5d7dbc4359941c9620c9370d1cf0736f62c1ff2109b1e8ca7214407a67c81a"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1430,19 +1430,24 @@
     "sha256": "6a0c5eb3f951511177262ef496d66ad8614ae2a97218ead7e5c7baa3eb79650b"
   },
   {
+    "path": "dist/platform/sillytavern/transition-sample-inner-scroll.js",
+    "bytes": 2934,
+    "sha256": "dd6f9403ff6dd78d7e887178f67d5d8be81b24c637f9f1816c0be3fc50998825"
+  },
+  {
     "path": "dist/platform/sillytavern/transition-sample-main-scroll.js",
     "bytes": 1239,
     "sha256": "ce286dba51dd9cab78b4763d2189a5f3d283c89db25a1a8620973fe46a3026d3"
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-capture-control.js",
-    "bytes": 13594,
-    "sha256": "686f49590c4b633ccd861a0e342d46bf68415972ea7527f3e0f7731b7c3b202d"
+    "bytes": 15855,
+    "sha256": "a2db4f06f7ea3defedb88726cbe6271bd63241e6200c99014b2e668f44fbea50"
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-diagnostic.js",
-    "bytes": 33326,
-    "sha256": "a5762cd63e8c427f34f793128bb7f7e318e4d03dc5729e5ca4cd42577c076b07"
+    "bytes": 36096,
+    "sha256": "aa7e76b41456668795851302a29cb8eeb3ae9fd1d59d2e2ed9aaa27e93ffd86f"
   },
   {
     "path": "dist/platform/sillytavern/vector-maintenance.js",
@@ -1567,6 +1572,6 @@
   {
     "path": "manifest.json",
     "bytes": 424,
-    "sha256": "62879e2c437932e8d1b7fc94826ed31014a0da22f7f2052315fe62a5dfcfdb1d"
+    "sha256": "4a8c507d8abde42bdfd98295ef27e58e60e35ee55476c4ffa9c520ea247bc109"
   }
 ]

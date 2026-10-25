@@ -1,3 +1,4 @@
+import {createTransitionSampleInnerScroll} from './transition-sample-inner-scroll.js';
 import {createSampleHiddenFilter} from './transition-sample-hidden-filter.js';
 import {createTransitionSampleFixture} from './transition-sample-fixture.js';
 import {bindGenerationDiagnostic,bindGenerationDiagnosticPanel,downloadGenerationDiagnostic} from './generation-diagnostic.js';
@@ -78,7 +79,7 @@ export function cancelDisabledManagedTasks(runtime,policy){
 // Only this platform module touches the host document. Shadow DOM prevents
 // host skins from changing the approved UI and prevents our UI CSS leakage.
 export function createMemoryHost({ document: doc = globalThis.document, getContext = getSillyTavernContext, fetch: request = globalThis.fetch,
-  runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter,diagnosticSample=false,diagnosticSimpleMain=false,diagnosticSkipWarm=false,diagnosticVisibilityOnly=false,diagnosticFilterHidden=false,diagnosticMainClip=false,onSampleExit=null,onSampleDispose=null } = {}) {
+  runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter,diagnosticSample=false,diagnosticSimpleMain=false,diagnosticSkipWarm=false,diagnosticVisibilityOnly=false,diagnosticFilterHidden=false,diagnosticMainClip=false,diagnosticInnerScroll=false,onSampleExit=null,onSampleDispose=null } = {}) {
   let adapter, repository, app, panel, content, memoryContent, benmoContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, openingTicket = null, stylePromise, baseCss, sharedCssCache,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryReturnFocus,memoryEditFocus,
@@ -89,22 +90,23 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   const visibilitySample=diagnosticSample&&diagnosticSimpleMain&&diagnosticVisibilityOnly;
   const filterHidden=visibilitySample&&diagnosticFilterHidden===true,hiddenFilter=createSampleHiddenFilter();
   const mainClip=filterHidden&&diagnosticMainClip===true;
+  const innerScroll=mainClip&&diagnosticInnerScroll===true,innerScrollSetup=createTransitionSampleInnerScroll({getStyle:node=>doc.defaultView?.getComputedStyle?.(node)??globalThis.getComputedStyle?.(node)});
   let interfaceDiagnosticTarget=null,interfaceCaptureControl=null,sampleHost=null,sampleOpening=false;
-  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel,sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleObserverMode:filterHidden?'owned-hidden-filter':'normal',sampleMainScrollMode:mainClip?'clip':'normal',sampleWarmMode:visibilitySample?'visibility-only':diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
+  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel,sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleObserverMode:filterHidden?'owned-hidden-filter':'normal',sampleMainScrollMode:innerScroll?'inner':mainClip?'clip':'normal',sampleWarmMode:visibilitySample?'visibility-only':diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
   // Evidence must never prevent ordinary navigation, saving or cleanup.
-  const interfaceDiagnostic=Object.fromEntries(['start','stop','mark','setSizeCondition','setClipCondition','setGridCondition','stage','observerBatch','inspect','subscribe','subscribeTimeline','subscribeGrid','subscribeObserver','subscribeMainScroll','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return (name==='subscribe'||name==='subscribeTimeline'||name==='subscribeGrid'||name==='subscribeObserver'||name==='subscribeMainScroll')?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
+  const interfaceDiagnostic=Object.fromEntries(['start','stop','mark','setSizeCondition','setClipCondition','setGridCondition','stage','observerBatch','inspect','subscribe','subscribeTimeline','subscribeGrid','subscribeObserver','subscribeMainScroll','subscribeInnerScroll','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return (name==='subscribe'||name==='subscribeTimeline'||name==='subscribeGrid'||name==='subscribeObserver'||name==='subscribeMainScroll'||name==='subscribeInnerScroll')?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
   const releaseInterfaceDiagnostic=interfaceDiagnostic.subscribe(value=>{if(value.status!=='recording')interfaceDiagnosticTarget=null;});
   function startInterfaceDiagnostic(){
     try{interfaceDiagnosticTarget=repository.captureTarget();if(interfaceDiagnostic.start())return true;}catch{}
     interfaceDiagnosticTarget=null;return false;
   }
-  async function openTransitionSample({simpleMain=false,skipWarm=false,visibilityOnly=false,filterHidden=false,mainClip=false}={}){
+  async function openTransitionSample({simpleMain=false,skipWarm=false,visibilityOnly=false,filterHidden=false,mainClip=false,innerScroll=false}={}){
     if(disposed||diagnosticSample||sampleHost||sampleOpening)return false;
     sampleOpening=true;
     try{
       const fixture=createTransitionSampleFixture({assetFetch:request,theme:panel?.getAttribute('data-ui-theme')??appearance.inspect().theme});
       close();
-      const child=createMemoryHost({document:doc,getContext:()=>fixture.ctx,fetch:fixture.request,runtimeOptions:fixture.runtimeOptions,appearanceOptions:fixture.appearanceOptions,MutationObserver:Observer,diagnosticSample:true,diagnosticSimpleMain:simpleMain===true,diagnosticSkipWarm:simpleMain===true&&skipWarm===true,diagnosticVisibilityOnly:simpleMain===true&&visibilityOnly===true,diagnosticFilterHidden:filterHidden===true,diagnosticMainClip:mainClip===true,onSampleDispose:()=>fixture.dispose(),onSampleExit:()=>{
+      const child=createMemoryHost({document:doc,getContext:()=>fixture.ctx,fetch:fixture.request,runtimeOptions:fixture.runtimeOptions,appearanceOptions:fixture.appearanceOptions,MutationObserver:Observer,diagnosticSample:true,diagnosticSimpleMain:simpleMain===true,diagnosticSkipWarm:simpleMain===true&&skipWarm===true,diagnosticVisibilityOnly:simpleMain===true&&visibilityOnly===true,diagnosticFilterHidden:filterHidden===true,diagnosticMainClip:mainClip===true,diagnosticInnerScroll:innerScroll===true,onSampleDispose:()=>fixture.dispose(),onSampleExit:()=>{
         if(sampleHost!==child)return;sampleHost=null;child.dispose();if(!disposed)void open();
       }});
       sampleHost=child;await child.open();
@@ -288,7 +290,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function close() {
     const child=sampleHost;sampleHost=null;child?.dispose();
     const wasOpen=!!panel;
-    interfaceDiagnostic.stop('panel-close');
+    interfaceDiagnostic.stop('panel-close');innerScrollSetup.dispose();
     if (closing) return;
     closing = true;
     let cleanupError;
@@ -941,6 +943,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       }
       if (bundle.style) { const bookMedia=theme===identity?'all':'not all';if(bundle.style.media!==bookMedia)bundle.style.media=bookMedia; }
     }
+    if(innerScroll&&visibilitySampleReady){for(const page of [summaryContent,benmoContent])innerScrollSetup.apply(page?.querySelector('.lantai'));}
     if (active && typeof globalThis.getComputedStyle === 'function') globalThis.UICompactGroupCandidate.sync(panel.shadowRoot);
     const visiblePage=[settingsContent,benmoContent,summaryContent,memoryContent].find(page=>page&&!page.hidden&&page.querySelector('.lantai'));
     const themeReady=theme==='spring'?!!springStyle:theme==='snow-ermine'?!!snowStyle:!!bookStylesByTheme.get(theme)?.style;
@@ -1025,7 +1028,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       decoration=createPersistentDecoration({container:content});
       shadow.append(content); doc.body.append(panel);
       if(mainClip){const style=doc.createElement('style');style.setAttribute('data-transition-main-clip','');style.textContent='#lt-host-content .wk-mount > .lantai > .lt-main,#lt-host-content .benmo-mount > .lantai > .lt-main{overflow:clip!important;}';shadow.append(style);}
-      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:()=>openTransitionSample(),onSimpleSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true}),onHeldSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,skipWarm:true}),onVisibilitySample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true}),onNoScrollSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true,mainClip:true}),onFilteredSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true}),sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleObserverMode:filterHidden?'owned-hidden-filter':'normal',sampleMainScrollMode:mainClip?'clip':'normal',sampleWarmMode:visibilitySample?'visibility-only':diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
+      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:()=>openTransitionSample(),onSimpleSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true}),onHeldSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,skipWarm:true}),onVisibilitySample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true}),onInnerScrollSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true,mainClip:true,innerScroll:true}),onNoScrollSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true,mainClip:true}),onFilteredSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true,filterHidden:true}),sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleObserverMode:filterHidden?'owned-hidden-filter':'normal',sampleMainScrollMode:innerScroll?'inner':mainClip?'clip':'normal',sampleWarmMode:visibilitySample?'visibility-only':diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
     installPanelStyles();syncAppearance();
