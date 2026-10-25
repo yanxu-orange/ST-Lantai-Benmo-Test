@@ -10,6 +10,12 @@ const VISIBILITY=new Set(['visible','hidden','collapse']);
 const ROUTES={home:'root',manage:'root',list:'list',detail:'detail',edit:'editor',settings:'settings','narrative-edit':'editor','narrative-settings':'settings','narrative-generate':'generate',schedules:'list',anniversaries:'list',holidays:'list','edit/schedule':'editor','edit/anniversary':'editor','edit/holiday':'editor',calendar:'settings',calibrate:'editor'};
 const safe=fn=>{try{return fn();}catch{return undefined;}};
 const number=(n,min=0,max=32768)=>typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max?Math.round(n*10)/10:null;
+let sessionSerial=0;
+function newSessionId(){
+ const bytes=new Uint8Array(4);
+ if(globalThis.crypto?.getRandomValues)globalThis.crypto.getRandomValues(bytes);else for(let i=0;i<bytes.length;i++)bytes[i]=Math.floor(Math.random()*256);
+ return 'S'+[...bytes].map(value=>value.toString(16).padStart(2,'0')).join('')+'-'+(++sessionSerial).toString(36);
+}
 const limit=(n,cap)=>Number.isSafeInteger(n)&&n>0?Math.min(n,cap):cap;
 
 function view(panel){
@@ -34,6 +40,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  let active=false,disposed=false,epoch=0,status='idle',reason=null,mode='phase-style-and-attributes',anchor=null,startAt=null,endedAt=null;
  let frames=[],events=[],bytes=0,sequence=0,nav=0,frameId=null,timerId=null,mutation=null,resize=null,targets=[],ids=null,geometry=null,styles=null,nodeSerial=0;
  let dirty=true,known=false,area='none',route='unknown',lastFrame=null,mutations=0,slowFrames=0,slowStyles=0,lastStyleKey='',releaseDownload=null,frameAvailable=null,geometryAvailable=null,mutationAvailable=null;
+ let sessionId=null,startAnchor=null,navigationHistory=[];
  let observations=[],archiveBytes=0,lastMarkedNav=0,evicted=null,styleTimes=[];
  const archiveCaps={bytes:Math.max(4096,limit(limits.captureBytes,8388608)),observations:limit(limits.observations,32)};
  let clipCondition=null,clipStyle=null,clipContent=null,previousClip=null;
@@ -42,8 +49,9 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  const clone=value=>JSON.parse(JSON.stringify(value));
  const archiveSize=value=>JSON.stringify(value).length*2+64;
  const rowSizes=new WeakMap(),eventIndex=new Map(),references=new Map();
- const subscribers=new Set();
- const inspect=()=>({status,reason,mode,hasData:anchor!==null,capturePending:pending.size>0,captured:observations.some(item=>item.complete),observationCount:observations.length,pendingCount:pending.size,clipCondition,sizeCondition,conditionEpoch});
+ const subscribers=new Set(),timelineSubscribers=new Set();
+ const inspect=()=>({sessionId,startAnchor:startAnchor?{...startAnchor}:null,navigationHistory:clone(navigationHistory),status,reason,mode,hasData:anchor!==null,capturePending:pending.size>0,captured:observations.some(item=>item.complete),observationCount:observations.length,pendingCount:pending.size,clipCondition,sizeCondition,conditionEpoch});
+ const publishTimeline=()=>{for(const listener of timelineSubscribers)safe(()=>listener(inspect()));};
  const publish=()=>{for(const listener of subscribers)safe(()=>listener(inspect()));};
  const time=()=>number(now()-startAt,0,Number.MAX_SAFE_INTEGER);
  function resetClipCondition(){
@@ -133,7 +141,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    const candidates=events.filter(row=>row.kind==='phase'&&row.phase==='requested'&&row.nav>lastMarkedNav);
    const expectedCount=nav-lastMarkedNav;
    const association=expectedCount===1&&candidates.length===1?'single-observed-transition':expectedCount>1?'multiple-transitions':'unknown';
-   const item={conditionAtMark:{epoch:conditionEpoch,shrinkCssPx:sizeCondition,clipMode:clipCondition},ordinal:observations.length+1,label,markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false,stopReason:null,
+   const item={sessionId,conditionAtMark:{epoch:conditionEpoch,shrinkCssPx:sizeCondition,clipMode:clipCondition},ordinal:observations.length+1,label,markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false,stopReason:null,
     transition:{association,fromNavExclusive:lastMarkedNav,toNavInclusive:nav,expectedCount,candidates:candidates.map(row=>({nav:row.nav,t:row.t,target:row.target})),missingRequests:Math.max(0,expectedCount-candidates.length)},
     coverage:{earliestFrameRelativeMs:frames[0]?.t??null,latestPreFrameRelativeMs:frames.at(-1)?.t??null,evicted:clone(evicted)},frames:clone(frames),events:clone(events)};
    const size=archiveSize(item);
@@ -249,8 +257,12 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   if(!active||!PHASES.has(phase))return false;
   try{
    refresh();if(phase==='requested')nav++;
-   append('event',{sequence:++sequence,t:time(),kind:'phase',nav,phase,target:AREAS.has(target)?target:'unknown',area,route,nodes:sampleNodes()});
-   if(active&&(phase==='shown'||phase==='ready')){sampleStyle();scheduleLayout();}return active;
+   const event={sequence:++sequence,t:time(),kind:'phase',nav,phase,target:AREAS.has(target)?target:'unknown',area,route,nodes:sampleNodes()};
+   append('event',event);
+   let entry=navigationHistory.find(item=>item.nav===nav);
+   if(!entry){entry={nav,stages:[],omittedStages:0};navigationHistory.push(entry);if(navigationHistory.length>2)navigationHistory.shift();}
+   entry.stages.push({phase,sequence:event.sequence,t:event.t});if(entry.stages.length>8){entry.stages.shift();entry.omittedStages++;}
+   if(active&&(phase==='shown'||phase==='ready')){sampleStyle();scheduleLayout();}publishTimeline();return active;
   }catch{stop('failed');return false;}
  }
  function tick(token){
@@ -271,22 +283,23 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  function start(){
   if(disposed||active||doc.visibilityState==='hidden')return false;
   cleanup();safe(()=>releaseDownload?.());releaseDownload=null;
-  frames=[];events=[];eventIndex.clear();references.clear();observations=[];archiveBytes=0;lastMarkedNav=0;conditionEpoch=0;layoutTimes=[];evicted={age:{frame:0,event:0},capacity:{frame:0,event:0},referencesExpired:0};styleTimes=[];bytes=sequence=nav=nodeSerial=mutations=slowFrames=slowStyles=0;lastFrame=null;lastStyleKey='';anchor=startAt=endedAt=reason=null;frameAvailable=geometryAvailable=mutationAvailable=null;mode='phase-style-and-attributes';
+  frames=[];events=[];eventIndex.clear();references.clear();observations=[];archiveBytes=0;lastMarkedNav=0;sessionId=null;startAnchor=null;navigationHistory=[];conditionEpoch=0;layoutTimes=[];evicted={age:{frame:0,event:0},capacity:{frame:0,event:0},referencesExpired:0};styleTimes=[];bytes=sequence=nav=nodeSerial=mutations=slowFrames=slowStyles=0;lastFrame=null;lastStyleKey='';anchor=startAt=endedAt=reason=null;frameAvailable=geometryAvailable=mutationAvailable=null;mode='phase-style-and-attributes';
   try{
    startAt=now();anchor=number(wall(),0,9007199254740991);if(!Number.isFinite(startAt)||anchor===null)throw new Error();
+   sessionId=newSessionId();
    ids=new WeakMap();geometry=new WeakMap();styles=new WeakMap();active=true;status='recording';const token=++epoch;
    geometryAvailable=typeof RO==='function';if(RO)resize=new RO(entries=>{if(!active||token!==epoch)return;try{for(const entry of entries){if(!targets.includes(entry.target))continue;const ref=append('event',{sequence:++sequence,t:time(),kind:'geometry',source:'resize-observer-content',node:nodeId(entry.target),width:number(entry.contentRect?.width),height:number(entry.contentRect?.height)});if(!active)return;if(ref!==null)geometry.set(entry.target,ref);}}catch{stop('failed');}});
    refresh();const shadow=getPanel()?.shadowRoot;if(!shadow)throw new Error();
    mutationAvailable=typeof MO==='function';if(MO){mutation=new MO(records=>{if(active&&token===epoch){dirty=true;mutations=Math.min(65535,mutations+records.length);}});mutation.observe(shadow.querySelector('#lt-host-content')??shadow,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','inert','class']});}
    doc.addEventListener('visibilitychange',visibility);
-   append('event',{sequence:++sequence,t:time(),kind:'start',area,route});frameId=requestFrame(()=>tick(token));frameAvailable=frameId!==undefined&&frameId!==null;publish();return true;
+   const startEvent={sequence:++sequence,t:time(),kind:'start',area,route};startAnchor={sequence:startEvent.sequence,t:startEvent.t};append('event',startEvent);frameId=requestFrame(()=>tick(token));frameAvailable=frameId!==undefined&&frameId!==null;publish();return true;
   }catch{if(active)stop('failed');else{cleanup();status='stopped';reason='failed';publish();}return false;}
  }
  function snapshot(){
   if(active)trim(time());
   const rows=[...frames,...events.filter(row=>row.kind!=='style'&&row.kind!=='geometry')];
   const earliest=rows.length?Math.min(...rows.map(row=>row.t)):null;
-  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v5',storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
+  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v6',videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
    limits:{windowMs:caps.duration,frames:caps.frames,events:caps.events,bytes:caps.bytes,captureBytes:archiveCaps.bytes,observations:archiveCaps.observations},mode,observations,sizeExperiment:{target:'lt-host-content',anchor:'top',allowedShrinkCssPx:[0,1],currentShrinkCssPx:sizeCondition,conditionEpoch},clipExperiment:{target:'direct-business-surface-only',currentMode:clipCondition,shrinkCssPx:0},
    captureStorage:{estimatedBytes:archiveBytes,policy:'immutable-labeled-windows-stop-on-capacity',order:'observation-ordinal; rows-by-sequence',postWindowMs:2000},
    retention:{earliestRelativeMs:earliest,latestFrameRelativeMs:frames.at(-1)?.t??null,evicted,policy:'rolling-window-with-capacity-eviction; older-referenced-events-may-be-retained'},
@@ -302,5 +315,5 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    try{anchorNode.href=url;anchorNode.download='lantai-ui-transition-diagnostic.json';anchorNode.hidden=true;doc.body.append(anchorNode);anchorNode.click();}finally{anchorNode.remove();}return true;
   })===true;
  }
- return Object.freeze({start,stop,mark,setSizeCondition,setClipCondition,stage,inspect,snapshot,download,subscribe(fn){subscribers.add(fn);return()=>subscribers.delete(fn);},dispose(){if(disposed)return;stop('dispose');cleanup();safe(()=>releaseDownload?.());releaseDownload=null;disposed=true;subscribers.clear();}});
+ return Object.freeze({start,stop,mark,setSizeCondition,setClipCondition,stage,inspect,snapshot,download,subscribeTimeline(fn){timelineSubscribers.add(fn);return()=>timelineSubscribers.delete(fn);},subscribe(fn){subscribers.add(fn);return()=>subscribers.delete(fn);},dispose(){if(disposed)return;stop('dispose');cleanup();safe(()=>releaseDownload?.());releaseDownload=null;disposed=true;subscribers.clear();timelineSubscribers.clear();}});
 }

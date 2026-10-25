@@ -7,10 +7,24 @@ export function mountUITransitionCaptureControl(shadow,{diagnostic,start=()=>dia
  mark.setAttribute('data-interface-capture-mark','');clear.setAttribute('data-interface-capture-clear','');download.setAttribute('data-interface-capture-export','');
  baseline.setAttribute('data-interface-capture-clip-original','');unclip.setAttribute('data-interface-capture-clip-visible','');
  baseline.textContent='原裁剪（0 px）';unclip.textContent='取消外层裁剪（0 px）';
- clear.textContent='没闪';bar.append(mark,clear,download,baseline,unclip);shadow.append(bar);
+ const timeline=doc.createElement('p');timeline.className='ui-field__support';timeline.setAttribute('data-interface-capture-timeline','');
+ clear.textContent='没闪';bar.append(mark,clear,download,baseline,unclip,timeline);shadow.append(bar);
  let disposed=false;
+ const numeric=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0?String(value):'?';
+ function updateTimeline(){
+  if(disposed)return;
+  const state=diagnostic.inspect(),session=typeof state.sessionId==='string'&&/^[A-Za-z0-9_-]{1,64}$/.test(state.sessionId)?state.sessionId:null;
+  const lines=session?[`${session} | start e${numeric(state.startAnchor?.sequence)} @${numeric(state.startAnchor?.t)}ms`]:[];
+  for(const navigation of (state.navigationHistory??[]).slice(-2)){
+   const stages=(navigation.stages??[]).slice(-8).map(stage=>`${['requested','shown','ready','reload'].includes(stage.phase)?stage.phase:'unknown'} e${numeric(stage.sequence)}@${numeric(stage.t)}ms`);
+   lines.push(`#${numeric(navigation.nav)} ${stages.join(' / ')}${navigation.omittedStages>0?` / omitted ${numeric(navigation.omittedStages)}`:''}`);
+  }
+  const text=lines.join('\n');if(timeline.textContent!==text)timeline.textContent=text;
+  if(timeline.hidden!==!text)timeline.hidden=!text;
+ }
  function update(){
   if(disposed)return;
+  updateTimeline();
   const state=diagnostic.inspect(),recording=state.status==='recording';
   bar.hidden=!state.hasData;mark.disabled=false;clear.hidden=!recording;
   baseline.hidden=unclip.hidden=!recording;
@@ -31,6 +45,6 @@ export function mountUITransitionCaptureControl(shadow,{diagnostic,start=()=>dia
  const clickBaseline=event=>setClip(event,'original'),clickUnclip=event=>setClip(event,'visible');
  function clickDownload(event){event.stopPropagation();if(!diagnostic.download())download.textContent='导出失败，重试';else update();}
  mark.addEventListener('click',clickMark);clear.addEventListener('click',clickClear);download.addEventListener('click',clickDownload);baseline.addEventListener('click',clickBaseline);unclip.addEventListener('click',clickUnclip);
- const unsubscribe=diagnostic.subscribe(update);update();
- return {dispose(){if(disposed)return;disposed=true;unsubscribe();mark.removeEventListener('click',clickMark);clear.removeEventListener('click',clickClear);download.removeEventListener('click',clickDownload);baseline.removeEventListener('click',clickBaseline);unclip.removeEventListener('click',clickUnclip);bar.remove();}};
+ const unsubscribe=diagnostic.subscribe(update),unsubscribeTimeline=diagnostic.subscribeTimeline?.(updateTimeline)??(()=>{});update();
+ return {dispose(){if(disposed)return;disposed=true;unsubscribe();unsubscribeTimeline();mark.removeEventListener('click',clickMark);clear.removeEventListener('click',clickClear);download.removeEventListener('click',clickDownload);baseline.removeEventListener('click',clickBaseline);unclip.removeEventListener('click',clickUnclip);bar.remove();}};
 }
