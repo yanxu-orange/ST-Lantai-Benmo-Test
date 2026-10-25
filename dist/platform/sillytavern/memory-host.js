@@ -1,5 +1,6 @@
 import {bindGenerationDiagnostic,bindGenerationDiagnosticPanel,downloadGenerationDiagnostic} from './generation-diagnostic.js';
 import {createUITransitionDiagnostic} from './ui-transition-diagnostic.js';
+import {mountUITransitionCaptureControl} from './ui-transition-capture-control.js';
 import {createWorkshopHistoryTicket} from './workshop-history.js';
 import {createNativeSummaryHider} from './native-summary-hide.js';
 import {createSummaryNarrativeActions} from '../../app/summary-controller.js';
@@ -82,10 +83,10 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
   let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null;
-  let interfaceDiagnosticTarget=null;
+  let interfaceDiagnosticTarget=null,interfaceCaptureControl=null;
   const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel});
   // Evidence must never prevent ordinary navigation, saving or cleanup.
-  const interfaceDiagnostic=Object.fromEntries(['start','stop','stage','inspect','subscribe','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return name==='subscribe'?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
+  const interfaceDiagnostic=Object.fromEntries(['start','stop','mark','stage','inspect','subscribe','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return name==='subscribe'?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
   const releaseInterfaceDiagnostic=interfaceDiagnostic.subscribe(value=>{if(value.status!=='recording')interfaceDiagnosticTarget=null;});
   function startInterfaceDiagnostic(){
     try{interfaceDiagnosticTarget=repository.captureTarget();if(interfaceDiagnostic.start())return true;}catch{}
@@ -287,7 +288,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       cleanup(()=>currentObserver?.disconnect());
       cleanup(()=>decoration?.dispose());decoration=null;
     } finally {
-      releasePanelDiagnostic?.();releasePanelDiagnostic=null;
+      releasePanelDiagnostic?.();releasePanelDiagnostic=null;interfaceCaptureControl?.dispose();interfaceCaptureControl=null;
       const currentPanel=panel;panel=null;content=memoryContent=benmoContent=settingsContent=summaryContent=null;
       cleanup(()=>currentPanel?.remove());cleanup(()=>entry?.focus());closing=false;
       requestBenmoWarmup(false);
@@ -955,6 +956,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       content.append(memoryContent, settingsContent,summaryContent,benmoContent);
       decoration=createPersistentDecoration({container:content});
       shadow.append(content); doc.body.append(panel);
+      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic});
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
     installPanelStyles();syncAppearance();

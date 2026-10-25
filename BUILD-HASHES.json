@@ -301,8 +301,8 @@
   },
   {
     "path": "dist/app/settings-root-view.js",
-    "bytes": 12539,
-    "sha256": "65f132aab0add1830c5cc043d10ba5ec32239746f374c27539ac2fb3f0c156c9"
+    "bytes": 12570,
+    "sha256": "177cc4591b345a063606e387333bee3e3595333072b0ee008815cb558e5047cb"
   },
   {
     "path": "dist/app/shared-ui/appearance-format.css",
@@ -646,8 +646,8 @@
   },
   {
     "path": "dist/app/version.js",
-    "bytes": 50,
-    "sha256": "a780da5d200553a42495b3fcf7abc34628fb2e1ecbf03b74cfc8df6b5d9ac2e3"
+    "bytes": 54,
+    "sha256": "d9dc70fa48b1872489056eab47ffff95db91f8a035af3aede53726b05ee91a94"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1286,13 +1286,13 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.css",
-    "bytes": 2259,
-    "sha256": "7f6819e3448ad8cdb17e438a90a8012ac109f68a14b28f0d8ef99d3a3fdfe04a"
+    "bytes": 2757,
+    "sha256": "31994b00c44b9e3f4f27f82652c753e03a04dd4e822aae46a77d031ad879ab5d"
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 90803,
-    "sha256": "da987a418b6840f3fe0218483f6cd98f9b0f4301fb01b98cca92220f97654473"
+    "bytes": 91122,
+    "sha256": "b9c1e77f004dd1bdccb4c9e9039d1e7d310e12ccb2188b848fdff9b3b09d570d"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1410,9 +1410,14 @@
     "sha256": "ba3a34887b2f503cbecfa3efaf65bb5c1510c992aa93d307f48bfbb531352c43"
   },
   {
+    "path": "dist/platform/sillytavern/ui-transition-capture-control.js",
+    "bytes": 1767,
+    "sha256": "b65dad51530ef0dfcf656702955add4588779765ce314b2194817165ff8c19ee"
+  },
+  {
     "path": "dist/platform/sillytavern/ui-transition-diagnostic.js",
-    "bytes": 12964,
-    "sha256": "8a6f8cb8cde08475c3fb9d547097c53f2a9fa988d93450f1266374c406a3cefb"
+    "bytes": 16125,
+    "sha256": "ca3f3464fa253f3dc7d6be614d1f3b6769800e0695dee3b25628cfaa5f63c789"
   },
   {
     "path": "dist/platform/sillytavern/vector-maintenance.js",
@@ -1536,7 +1541,7 @@
   },
   {
     "path": "manifest.json",
-    "bytes": 419,
-    "sha256": "8ea42d224ab3ab7cef76fa60694c2cc6624e5fa44b080112b2874e2f1c60e6fb"
+    "bytes": 423,
+    "sha256": "b92fe9b6cac7583e9dca8cf15d10308a8cf5f1b687eae6d390484b8869eb5401"
   }
 ]

@@ -2,7 +2,7 @@
 // class/dataset values, identities, URLs, errors or event/DOM objects enter rows.
 const AREAS=new Set(['memory','time','benmo','workshop','settings','none','unknown']);
 const PHASES=new Set(['requested','shown','ready','reload']);
-const REASONS=new Set(['manual','timeout','panel-close','chat-change','document-hidden','dispose','frame-cap','event-cap','byte-cap','cost-limit','failed','unknown']);
+const REASONS=new Set(['manual','timeout','panel-close','chat-change','document-hidden','dispose','frame-cap','event-cap','byte-cap','cost-limit','failed','captured','unknown']);
 const ROLES=['surface','header','title','close','icon','main','footer','decoration'];
 const DISPLAY=new Set(['none','block','inline','inline-block','flex','inline-flex','grid','inline-grid','contents']);
 const VISIBILITY=new Set(['visible','hidden','collapse']);
@@ -32,11 +32,13 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  const caps={duration:limit(limits.duration,30000),frames:limit(limits.frames,2000),events:limit(limits.events,256),bytes:Math.max(4096,limit(limits.bytes,1048576))};
  let active=false,disposed=false,epoch=0,status='idle',reason=null,mode='phase-style-and-attributes',anchor=null,startAt=null,endedAt=null;
  let frames=[],events=[],bytes=0,sequence=0,nav=0,frameId=null,timerId=null,mutation=null,resize=null,targets=[],ids=null,geometry=null,styles=null,nodeSerial=0;
- let dirty=true,known=false,area='none',route='unknown',lastFrame=null,mutations=0,slowFrames=0,slowStyles=0,styleChecks=0,lastStyleKey='',releaseDownload=null,frameAvailable=null,geometryAvailable=null,mutationAvailable=null;
+ let dirty=true,known=false,area='none',route='unknown',lastFrame=null,mutations=0,slowFrames=0,slowStyles=0,lastStyleKey='',releaseDownload=null,frameAvailable=null,geometryAvailable=null,mutationAvailable=null;
+ let capture=null,evicted=null,styleTimes=[];
+ const rowSizes=new WeakMap(),eventIndex=new Map(),references=new Map();
  const subscribers=new Set();
- const inspect=()=>({status,reason,mode,hasData:anchor!==null});
+ const inspect=()=>({status,reason,mode,hasData:anchor!==null,capturePending:active&&capture!==null,captured:capture?.complete===true});
  const publish=()=>{for(const listener of subscribers)safe(()=>listener(inspect()));};
- const time=()=>number(now()-startAt,0,120000);
+ const time=()=>number(now()-startAt,0,Number.MAX_SAFE_INTEGER);
  function cleanup(){
   if(frameId!==null)safe(()=>cancelFrame(frameId));if(timerId!==null)safe(()=>clearTimer(timerId));frameId=timerId=null;
   safe(()=>mutation?.disconnect());safe(()=>resize?.disconnect());mutation=resize=null;
@@ -44,15 +46,57 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  }
  function stop(value='manual'){
   if(!active)return false;
-  endedAt=safe(time)??null;active=false;epoch++;reason=REASONS.has(value)?value:'unknown';status='stopped';cleanup();publish();return true;
+  endedAt=safe(time)??null;if(capture){capture.finishedRelativeMs=endedAt;capture.complete=value==='captured';}active=false;epoch++;reason=REASONS.has(value)?value:'unknown';status='stopped';cleanup();publish();return true;
+ }
+ // Capacity applies to the retained window, not to the session lifetime.
+ // An expired referenced sample becomes explicitly unknown, never a dangling ID.
+ function countReferences(row,delta){
+  for(const node of row.nodes??[])if(node.length===12)for(const column of [10,11])if(node[column]!==null){const ref=node[column],count=(references.get(ref)??0)+delta;if(count>0)references.set(ref,count);else references.delete(ref);}
+ }
+ function drop(kind,index,cause){
+  const list=kind==='frame'?frames:events,row=list.splice(index,1)[0];
+  bytes-=rowSizes.get(row)??0;countReferences(row,-1);evicted[cause][kind]++;
+  if(kind==='event'){
+   eventIndex.delete(row.sequence);
+   if(row.kind==='style'||row.kind==='geometry'){
+    for(const retained of [...frames,...events])for(const node of retained.nodes??[]){
+     if(node.length!==12)continue;
+     for(const column of [10,11])if(node[column]===row.sequence){node[column]=null;evicted.referencesExpired++;}
+    }
+   }
+   references.delete(row.sequence);
+  }
+ }
+ function trim(t){
+  const cutoff=Math.max(0,(capture?.markedRelativeMs??t)-caps.duration);
+  while(frames.length&&frames[0].t<cutoff)drop('frame',0,'age');
+  // Keep older style/size samples when retained rows still refer to them.
+  for(let i=events.length-1;i>=0;i--)if(events[i].t<cutoff&&!['style','geometry'].includes(events[i].kind))drop('event',i,'age');
+  for(let i=events.length-1;i>=0;i--)if(events[i].t<cutoff&&!references.has(events[i].sequence))drop('event',i,'age');
+  while(frames.length>caps.frames)drop('frame',0,'capacity');
+  while(events.length>caps.events)drop('event',0,'capacity');
+  while(bytes>caps.bytes-3072&&(frames.length||events.length)){
+   if(!events.length||(frames.length&&frames[0].sequence<events[0].sequence))drop('frame',0,'capacity');else drop('event',0,'capacity');
+  }
  }
  function append(kind,row){
   if(!active)return null;
-  const list=kind==='frame'?frames:events,cap=kind==='frame'?caps.frames:caps.events;
-  if(list.length>=cap){stop(kind==='frame'?'frame-cap':'event-cap');return null;}
-  const size=JSON.stringify(row).length+25; // Includes conservative reserve for post-serialization numeric cost.
-  if(bytes+size>caps.bytes-2048){stop('byte-cap');return null;}
-  list.push(row);bytes+=size;return row.sequence;
+  const list=kind==='frame'?frames:events;
+  const size=JSON.stringify(row).length+32;
+  list.push(row);rowSizes.set(row,size);bytes+=size;countReferences(row,1);
+  if(kind==='event')eventIndex.set(row.sequence,row);
+  trim(row.t);
+  return kind==='event'&&eventIndex.has(row.sequence)?row.sequence:null;
+ }
+ function mark(){
+  if(!active||capture)return false;
+  try{
+   const t=time();if(t===null)return false;
+   trim(t);capture={markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false};
+   append('event',{sequence:++sequence,t,kind:'user-mark',area,route,nav});
+   const token=epoch;timerId=setTimer(()=>{if(active&&token===epoch)stop('captured');},2000);
+   publish();return true;
+  }catch{stop('failed');return false;}
  }
  function nodeId(node){if(!node)return null;if(!ids.has(node))ids.set(node,++nodeSerial);return ids.get(node);}
  function refresh(){
@@ -65,14 +109,15 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   let hidden=false,inert=false,ancestor=node,depth=0;
   while(ancestor&&depth++<32){hidden=hidden||ancestor.hidden===true;inert=inert||ancestor.inert===true;ancestor=ancestor.parentNode??ancestor.host??null;}
   return [ROLES[index],nodeId(node),true,typeof node.isConnected==='boolean'?node.isConnected:null,typeof node.hidden==='boolean'?node.hidden:null,typeof node.inert==='boolean'?node.inert:null,hidden,inert,
-   index===4&&typeof node.complete==='boolean'?node.complete:null,index===4?number(node.naturalWidth):null,styles.get(node)??null,geometry.get(node)??null];
+   index===4&&typeof node.complete==='boolean'?node.complete:null,index===4?number(node.naturalWidth):null,eventIndex.has(styles.get(node))?styles.get(node):null,eventIndex.has(geometry.get(node))?geometry.get(node):null];
  }
  function sampleNodes(){return ROLES.map((_,i)=>state(targets[i],i));}
  function downgrade(){if(mode==='attributes-only')return;mode='attributes-only';publish();}
  function sampleStyle(){
   const key=`${nav}:${nodeId(targets[0])}`;
-  if(mode==='attributes-only'||key===lastStyleKey||styleChecks>=64)return;
-  lastStyleKey=key;styleChecks++;
+  styleTimes=styleTimes.filter(t=>t>=time()-caps.duration);
+  if(mode==='attributes-only'||key===lastStyleKey||styleTimes.length>=64)return;
+  lastStyleKey=key;styleTimes.push(time());
   const started=now(),samples=[];
   for(const index of [0,1,5,6]){
    const node=targets[index],css=node?safe(()=>getStyle(node)):null;
@@ -96,9 +141,9 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  function tick(token){
   frameId=null;if(!active||token!==epoch)return;
   try{
-   const started=now(),t=time();if(t===null){stop('failed');return;}if(t>=caps.duration){stop('timeout');return;}
+   const started=now(),t=time();if(t===null){stop('failed');return;}
    if(dirty)refresh();const nodes=sampleNodes();
-   const row={sequence:++sequence,t,nav,area,route,mode:'attributes',dt:lastFrame===null?null:number(t-lastFrame,0,120000),cost:null,mutations:number(mutations,0,65535),nodes};
+   const row={sequence:++sequence,t,nav,area,route,mode:'attributes',dt:lastFrame===null?null:number(t-lastFrame,0,Number.MAX_SAFE_INTEGER),cost:null,mutations:number(mutations,0,65535),nodes};
    append('frame',row);const cost=row.cost=number(now()-started,0,120000);
    if(!active)return;
    lastFrame=t;mutations=0;
@@ -111,22 +156,26 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  function start(){
   if(disposed||active||doc.visibilityState==='hidden')return false;
   cleanup();safe(()=>releaseDownload?.());releaseDownload=null;
-  frames=[];events=[];bytes=sequence=nav=nodeSerial=mutations=styleChecks=slowFrames=slowStyles=0;lastFrame=null;lastStyleKey='';anchor=startAt=endedAt=reason=null;frameAvailable=geometryAvailable=mutationAvailable=null;mode='phase-style-and-attributes';
+  frames=[];events=[];eventIndex.clear();references.clear();capture=null;evicted={age:{frame:0,event:0},capacity:{frame:0,event:0},referencesExpired:0};styleTimes=[];bytes=sequence=nav=nodeSerial=mutations=slowFrames=slowStyles=0;lastFrame=null;lastStyleKey='';anchor=startAt=endedAt=reason=null;frameAvailable=geometryAvailable=mutationAvailable=null;mode='phase-style-and-attributes';
   try{
    startAt=now();anchor=number(wall(),0,9007199254740991);if(!Number.isFinite(startAt)||anchor===null)throw new Error();
    ids=new WeakMap();geometry=new WeakMap();styles=new WeakMap();active=true;status='recording';const token=++epoch;
    geometryAvailable=typeof RO==='function';if(RO)resize=new RO(entries=>{if(!active||token!==epoch)return;try{for(const entry of entries){if(!targets.includes(entry.target))continue;const ref=append('event',{sequence:++sequence,t:time(),kind:'geometry',source:'resize-observer-content',node:nodeId(entry.target),width:number(entry.contentRect?.width),height:number(entry.contentRect?.height)});if(!active)return;if(ref!==null)geometry.set(entry.target,ref);}}catch{stop('failed');}});
    refresh();const shadow=getPanel()?.shadowRoot;if(!shadow)throw new Error();
-   mutationAvailable=typeof MO==='function';if(MO){mutation=new MO(records=>{if(active&&token===epoch){dirty=true;mutations=Math.min(65535,mutations+records.length);}});mutation.observe(shadow,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','inert','class']});}
-   doc.addEventListener('visibilitychange',visibility);timerId=setTimer(()=>{if(active&&token===epoch)stop('timeout');},caps.duration);
+   mutationAvailable=typeof MO==='function';if(MO){mutation=new MO(records=>{if(active&&token===epoch){dirty=true;mutations=Math.min(65535,mutations+records.length);}});mutation.observe(shadow.querySelector('#lt-host-content')??shadow,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','inert','class']});}
+   doc.addEventListener('visibilitychange',visibility);
    append('event',{sequence:++sequence,t:time(),kind:'start',area,route});frameId=requestFrame(()=>tick(token));frameAvailable=frameId!==undefined&&frameId!==null;publish();return true;
   }catch{if(active)stop('failed');else{cleanup();status='stopped';reason='failed';publish();}return false;}
  }
  function snapshot(){
-  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v1',storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
-   limits:{durationMs:caps.duration,frames:caps.frames,events:caps.events,bytes:caps.bytes},mode,
+  if(active)trim(time());
+  const rows=[...frames,...events.filter(row=>row.kind!=='style'&&row.kind!=='geometry')];
+  const earliest=rows.length?Math.min(...rows.map(row=>row.t)):null;
+  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v2',storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
+   limits:{windowMs:caps.duration,frames:caps.frames,events:caps.events,bytes:caps.bytes},mode,capture,
+   retention:{earliestRelativeMs:earliest,latestFrameRelativeMs:frames.at(-1)?.t??null,evicted,policy:'rolling-window-with-capacity-eviction; older-referenced-events-may-be-retained'},
    nodeColumns:['role','id','present','connected','ownHidden','ownInert','treeHidden','treeInert','imageComplete','imageNaturalWidth','styleEvent','geometryEvent'],
-   sampling:{frameCallbackAvailable:frameAvailable,geometryObserverAvailable:geometryAvailable,mutationObserverAvailable:mutationAvailable,targetFreshness:mutationAvailable===false?'host-phase-refresh-only-internal-replacements-may-be-stale':'host-phase-or-observed-mutation-refresh',costScope:'row-collection-and-serialization-excludes-observer-callbacks',frames:'attributes-no-style-or-rect',styles:'up-to-four-nodes-per-phase-checkpoint-max64',geometry:'asynchronous-content-size',missing:'null-is-unknown; references-point-to-timestamped-events',screenPixelsObserved:false},frames,events}));
+   sampling:{frameCallbackAvailable:frameAvailable,geometryObserverAvailable:geometryAvailable,mutationObserverAvailable:mutationAvailable,targetFreshness:mutationAvailable===false?'host-phase-refresh-only-internal-replacements-may-be-stale':'host-phase-or-observed-mutation-refresh',costScope:'row-collection-and-serialization-excludes-observer-callbacks',frames:'attributes-no-style-or-rect',styles:'up-to-four-nodes-per-phase-checkpoint-max64-per-window',geometry:'asynchronous-content-size',missing:'null-is-unknown; references-point-to-retained-timestamped-events; capacity-expired-references-are-cleared-and-counted',screenPixelsObserved:false},frames,events}));
  }
  function download(urlApi=doc.defaultView?.URL??globalThis.URL,BlobType=doc.defaultView?.Blob??globalThis.Blob){
   if(anchor===null)return false;
@@ -137,5 +186,5 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    try{anchorNode.href=url;anchorNode.download='lantai-ui-transition-diagnostic.json';anchorNode.hidden=true;doc.body.append(anchorNode);anchorNode.click();}finally{anchorNode.remove();}return true;
   })===true;
  }
- return Object.freeze({start,stop,stage,inspect,snapshot,download,subscribe(fn){subscribers.add(fn);return()=>subscribers.delete(fn);},dispose(){if(disposed)return;stop('dispose');cleanup();safe(()=>releaseDownload?.());releaseDownload=null;disposed=true;subscribers.clear();}});
+ return Object.freeze({start,stop,mark,stage,inspect,snapshot,download,subscribe(fn){subscribers.add(fn);return()=>subscribers.delete(fn);},dispose(){if(disposed)return;stop('dispose');cleanup();safe(()=>releaseDownload?.());releaseDownload=null;disposed=true;subscribers.clear();}});
 }

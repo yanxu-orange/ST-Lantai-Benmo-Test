@@ -18,7 +18,7 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
   const appearanceFields=`<label class="ui-field"><span class="ui-field__label">界面皮肤</span><select class="ui-input" data-settings-theme>${THEMES.map(theme=>`<option value="${theme.id}">${theme.label}</option>`).join('')}</select></label><p class="lt-status" data-appearance-status hidden></p><button type="button" class="ui-button ui-button--secondary" data-settings-action="appearance-read" hidden>重新读取外观</button>`;
   const identity=`<div class="lt-settings-brand"><div>${brand}<span>兰台本末</span><span class="lt-meta">v${esc(APP_VERSION)}</span></div><p class="lt-meta">剧情记忆与故事时间</p></div>`;
   const diagnostics=onGenerationDiagnostic?'<button type="button" class="ui-button ui-button--secondary" data-settings-action="generation-diagnostic">导出生成诊断</button><p class="lt-meta">记录仅在本机内存中，刷新后清空；点击导出 JSON，不自动上传。</p><p class="lt-status" data-generation-diagnostic-status role="status"></p>':'';
-  const interfaceTools=interfaceDiagnostic?'<button type="button" class="ui-button ui-button--secondary" data-settings-action="interface-record">记录界面诊断（最多30秒）</button><button type="button" class="ui-button ui-button--secondary" data-settings-action="interface-export" hidden>导出界面诊断</button><p class="lt-meta">仅记录界面状态，不采集文字内容；刷新清空。</p><p class="lt-status" data-interface-diagnostic-status role="status"></p>':'';
+  const interfaceTools=interfaceDiagnostic?'<button type="button" class="ui-button ui-button--secondary" data-settings-action="interface-record">记录界面诊断</button><button type="button" class="ui-button ui-button--secondary" data-settings-action="interface-export" hidden>导出界面诊断</button><p class="lt-meta">仅记录界面状态，不采集文字内容；刷新清空。</p><p class="lt-status" data-interface-diagnostic-status role="status"></p>':'';
   const group=(name,role,number,content)=>`<section class="lt-settings-group lt-settings-section" data-settings-section="${role}" data-settings-material="${role}"><h2 data-section-number="${number}">${name}</h2>${content}</section>`;
   return group('插件设置','plugin','01',toggles)+group('功能服务','services','02',services)+group('外观设计','appearance','03',appearanceFields)+group('关于兰台','about','04',(book?identity.replace('<p class="lt-meta">剧情记忆与故事时间</p>',''):identity)+diagnostics+interfaceTools);
  }
@@ -52,10 +52,10 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
   try{
    const state=interfaceDiagnostic.inspect(),record=container.querySelector('[data-settings-action=interface-record]'),exportButton=container.querySelector('[data-settings-action=interface-export]'),status=container.querySelector('[data-interface-diagnostic-status]');
    const recording=state.status==='recording';
-   if(record){record.disabled=recording;record.textContent=recording?'正在记录界面诊断':state.hasData?'重新记录界面诊断（最多30秒）':'记录界面诊断（最多30秒）';}
+   if(record){record.disabled=recording;record.textContent=recording?'正在记录界面诊断':state.hasData?'重新记录界面诊断':'记录界面诊断';}
    if(exportButton){exportButton.hidden=!recording&&!state.hasData;exportButton.textContent=recording?'停止并导出界面诊断':'导出界面诊断';}
-   const reasons={timeout:'已到30秒，记录已停止。','panel-close':'界面已关闭，记录已停止。','chat-change':'聊天状态已变化，记录已停止。','document-hidden':'页面进入后台，记录已停止。','frame-cap':'达到记录上限，已停止。','event-cap':'达到记录上限，已停止。','byte-cap':'达到记录上限，已停止。','cost-limit':'采样开销持续偏高，已停止。',failed:'记录未完成，已停止。'};
-   if(status)status.textContent=recording?(state.mode==='attributes-only'?'记录中，已减少采样；最多30秒后停止。':'记录中，最多30秒后自动停止。'):state.hasData?(reasons[state.reason]??'已停止，可导出。'):'';
+   const reasons={captured:'现场已保留，可导出。','panel-close':'界面已关闭，记录已停止。','chat-change':'聊天状态已变化，记录已停止。','document-hidden':'页面进入后台，记录已停止。','frame-cap':'达到记录上限，已停止。','event-cap':'达到记录上限，已停止。','byte-cap':'达到记录上限，已停止。','cost-limit':'采样开销持续偏高，已停止。',failed:'记录未完成，已停止。'};
+   if(status)status.textContent=recording?(state.capturePending?'正在保留标记后的现场…':state.mode==='attributes-only'?'滚动记录中，已减少采样；闪烁后点击悬浮按钮。':'滚动记录中；闪烁后点击“刚才闪了”。'):state.hasData?(reasons[state.reason]??'已停止，可导出。'):'';
   }catch{}
  }
  container.addEventListener('click',e=>{

@@ -22,3 +22,8 @@
 #lt-host-content .lantai[data-host-paint-delegated] > .lt-header::before,
 #lt-host-content .lantai[data-host-paint-delegated] > .lt-header::after { content:none !important; }
 
+
+
+/* Temporary recording controls share the existing button recipe. */
+[data-interface-capture] { position:absolute; z-index:2; right:max(var(--ui-space-control),env(safe-area-inset-right)); bottom:calc(max(var(--ui-space-group),env(safe-area-inset-bottom)) + 2 * var(--ui-density-control-height)); display:flex; flex-wrap:wrap; gap:var(--ui-space-control); max-width:calc(100% - 2 * var(--ui-space-control)); }
+[data-interface-capture][hidden], [data-interface-capture] [hidden] { display:none; }
