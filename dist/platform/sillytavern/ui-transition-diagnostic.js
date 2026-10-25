@@ -38,7 +38,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  MutationObserver:MO=doc.defaultView?.MutationObserver,ResizeObserver:RO=doc.defaultView?.ResizeObserver,
  getStyle=node=>doc.defaultView?.getComputedStyle?.(node),limits={},sampleMode=false,sampleContent='original',sampleWarmMode='normal',gridEnabled=false}={}){
  const contentCondition=sampleMode?(sampleContent==='simplified'?'simplified':'original'):null;
- const warmCondition=contentCondition==='simplified'&&sampleWarmMode==='skip-warm-revalidation'?'skip-warm-revalidation':'normal';
+ const warmCondition=contentCondition==='simplified'&&['skip-warm-revalidation','visibility-only'].includes(sampleWarmMode)?sampleWarmMode:'normal';
  const gridActive=sampleMode&&gridEnabled===true;
  const caps={duration:limit(limits.duration,30000),frames:limit(limits.frames,2000),events:limit(limits.events,256),bytes:Math.max(sampleMode?32768:4096,limit(limits.bytes,1048576))};
  let active=false,disposed=false,epoch=0,status='idle',reason=null,mode='phase-style-and-attributes',anchor=null,startAt=null,endedAt=null;
@@ -317,7 +317,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   if(active)trim(time());
   const rows=[...frames,...events.filter(row=>row.kind!=='style'&&row.kind!=='geometry')];
   const earliest=rows.length?Math.min(...rows.map(row=>row.t)):null;
-  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v10',sampleContent:contentCondition,sampleWarmMode:sampleMode?warmCondition:null,gridExperiment:gridActive?(active?gridProbe.inspect():savedGrid):null,sample:sampleMode===true?'fixed-switch-v1':null,videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
+  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v11',sampleContent:contentCondition,sampleWarmMode:sampleMode?warmCondition:null,gridExperiment:gridActive?(active?gridProbe.inspect():savedGrid):null,sample:sampleMode===true?'fixed-switch-v1':null,videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
    limits:{windowMs:caps.duration,frames:caps.frames,events:caps.events,bytes:caps.bytes,captureBytes:archiveCaps.bytes,observations:archiveCaps.observations},mode,observations,sizeExperiment:{target:'lt-host-content',anchor:'top',allowedShrinkCssPx:[0,1],currentShrinkCssPx:sizeCondition,conditionEpoch},clipExperiment:{target:'direct-business-surface-only',currentMode:clipCondition,shrinkCssPx:0},
    captureStorage:{estimatedBytes:archiveBytes,policy:'immutable-labeled-windows-stop-on-capacity',order:'observation-ordinal; rows-by-sequence',postWindowMs:2000},
    retention:{earliestRelativeMs:earliest,latestFrameRelativeMs:frames.at(-1)?.t??null,evicted,policy:'rolling-window-with-capacity-eviction; older-referenced-events-may-be-retained'},

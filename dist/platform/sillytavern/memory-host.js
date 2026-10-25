@@ -77,15 +77,17 @@ export function cancelDisabledManagedTasks(runtime,policy){
 // Only this platform module touches the host document. Shadow DOM prevents
 // host skins from changing the approved UI and prevents our UI CSS leakage.
 export function createMemoryHost({ document: doc = globalThis.document, getContext = getSillyTavernContext, fetch: request = globalThis.fetch,
-  runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter,diagnosticSample=false,diagnosticSimpleMain=false,diagnosticSkipWarm=false,onSampleExit=null,onSampleDispose=null } = {}) {
+  runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter,diagnosticSample=false,diagnosticSimpleMain=false,diagnosticSkipWarm=false,diagnosticVisibilityOnly=false,onSampleExit=null,onSampleDispose=null } = {}) {
   let adapter, repository, app, panel, content, memoryContent, benmoContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, openingTicket = null, stylePromise, baseCss, sharedCssCache,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
   let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null;
+  let visibilitySampleReady=false,visibilitySampleArea=null;
+  const visibilitySample=diagnosticSample&&diagnosticSimpleMain&&diagnosticVisibilityOnly;
   let interfaceDiagnosticTarget=null,interfaceCaptureControl=null,sampleHost=null,sampleOpening=false;
-  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel,sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleWarmMode:diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
+  const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel,sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleWarmMode:visibilitySample?'visibility-only':diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
   // Evidence must never prevent ordinary navigation, saving or cleanup.
   const interfaceDiagnostic=Object.fromEntries(['start','stop','mark','setSizeCondition','setClipCondition','setGridCondition','stage','inspect','subscribe','subscribeTimeline','subscribeGrid','download','dispose'].map(name=>[name,(...args)=>{try{return diagnosticRecorder[name](...args);}catch{return (name==='subscribe'||name==='subscribeTimeline'||name==='subscribeGrid')?()=>{}:name==='inspect'?{status:'stopped',reason:'failed',mode:'attributes-only',hasData:false}:false;}}]));
   const releaseInterfaceDiagnostic=interfaceDiagnostic.subscribe(value=>{if(value.status!=='recording')interfaceDiagnosticTarget=null;});
@@ -93,13 +95,13 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     try{interfaceDiagnosticTarget=repository.captureTarget();if(interfaceDiagnostic.start())return true;}catch{}
     interfaceDiagnosticTarget=null;return false;
   }
-  async function openTransitionSample({simpleMain=false,skipWarm=false}={}){
+  async function openTransitionSample({simpleMain=false,skipWarm=false,visibilityOnly=false}={}){
     if(disposed||diagnosticSample||sampleHost||sampleOpening)return false;
     sampleOpening=true;
     try{
       const fixture=createTransitionSampleFixture({assetFetch:request,theme:panel?.getAttribute('data-ui-theme')??appearance.inspect().theme});
       close();
-      const child=createMemoryHost({document:doc,getContext:()=>fixture.ctx,fetch:fixture.request,runtimeOptions:fixture.runtimeOptions,appearanceOptions:fixture.appearanceOptions,MutationObserver:Observer,diagnosticSample:true,diagnosticSimpleMain:simpleMain===true,diagnosticSkipWarm:simpleMain===true&&skipWarm===true,onSampleDispose:()=>fixture.dispose(),onSampleExit:()=>{
+      const child=createMemoryHost({document:doc,getContext:()=>fixture.ctx,fetch:fixture.request,runtimeOptions:fixture.runtimeOptions,appearanceOptions:fixture.appearanceOptions,MutationObserver:Observer,diagnosticSample:true,diagnosticSimpleMain:simpleMain===true,diagnosticSkipWarm:simpleMain===true&&skipWarm===true,diagnosticVisibilityOnly:simpleMain===true&&visibilityOnly===true,onSampleDispose:()=>fixture.dispose(),onSampleExit:()=>{
         if(sampleHost!==child)return;sampleHost=null;child.dispose();if(!disposed)void open();
       }});
       sampleHost=child;await child.open();
@@ -489,6 +491,19 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(app&&!memoryContent.hidden)void app.refreshAvailability();
     if(areaPages.time.visible())timeView?.refresh?.();
     if(areaPages.workshop.visible())workshopView?.refreshAvailability?.();
+  }
+  function showVisibilitySample(area){
+    if(!visibilitySample||!visibilitySampleReady||disposed||!panel||visibilitySampleArea===area)return false;
+    if(workshopView?.failed()||benmoView?.failed()){visibilitySampleReady=false;interfaceDiagnostic.stop('failed');return false;}
+    interfaceDiagnostic.stage('requested',area);
+    const workshop=area==='workshop';
+    summaryContent.hidden=!workshop;summaryContent.inert=!workshop;
+    workshopContainer.inert=!workshop;
+    benmoContent.hidden=workshop;benmoContent.inert=workshop;
+    const benmoMount=benmoContent.querySelector('.benmo-mount');benmoMount.inert=workshop;
+    visibilitySampleArea=area;
+    interfaceDiagnostic.stage('shown',area);syncAppearance();interfaceDiagnostic.stage('held',area);
+    return true;
   }
   async function openBenmo({kind}={}){
     if(!allowed('benmo')||!benmoController||!panel||settingsOpen)return false;
@@ -961,6 +976,14 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         const guard=event=>{
           if(event.target?.closest?.('[data-interface-capture]'))return;
           const control=event.target?.closest?.('button,a,input,select,textarea,summary');
+          if(visibilitySample&&control?.dataset?.action!=='close'){
+            event.preventDefault();event.stopImmediatePropagation?.();event.stopPropagation();
+            if(event.type==='click'&&control?.tagName==='BUTTON'&&control.closest?.('.lt-footer')){
+              const area=control.dataset?.action==='benmo'?'benmo':control.dataset?.action==='area'&&control.dataset?.id==='workshop'?'workshop':null;
+              if(area)showVisibilitySample(area);
+            }
+            return;
+          }
           if(event.type==='click'&&control?.tagName==='BUTTON'&&(['workshop','benmo','home','close'].includes(control.dataset?.action)||control.dataset?.action==='area'&&['workshop','benmo'].includes(control.dataset?.id)))return;
           if(control||event.type==='submit'){event.preventDefault();event.stopImmediatePropagation?.();event.stopPropagation();}
         };
@@ -995,7 +1018,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       content.append(memoryContent, settingsContent,summaryContent,benmoContent);
       decoration=createPersistentDecoration({container:content});
       shadow.append(content); doc.body.append(panel);
-      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:()=>openTransitionSample(),onSimpleSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true}),onHeldSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,skipWarm:true}),sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleWarmMode:diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
+      interfaceCaptureControl=mountUITransitionCaptureControl(shadow,{diagnostic:interfaceDiagnostic,start:startInterfaceDiagnostic,onSample:diagnosticSample?null:()=>openTransitionSample(),onSimpleSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true}),onHeldSample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,skipWarm:true}),onVisibilitySample:diagnosticSample?null:()=>openTransitionSample({simpleMain:true,visibilityOnly:true}),sampleMode:diagnosticSample,sampleContent:diagnosticSimpleMain?'simplified':'original',sampleWarmMode:visibilitySample?'visibility-only':diagnosticSample&&diagnosticSimpleMain&&diagnosticSkipWarm?'skip-warm-revalidation':'normal'});
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
     installPanelStyles();syncAppearance();
@@ -1025,7 +1048,21 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if (!valid()) return;
       await controls.ensure();
       if(!valid())return;
-      if(diagnosticSample){startInterfaceDiagnostic();await openWorkshop();syncAppearance();return;}
+      if(diagnosticSample){
+        visibilitySampleReady=false;visibilitySampleArea=null;
+        startInterfaceDiagnostic();const workshopReady=await openWorkshop();
+        if(visibilitySample&&workshopReady){
+          const benmoReady=await openBenmo();
+          if(!panel||disposed)return;
+          if(benmoReady&&!workshopView?.failed()&&!benmoView?.failed()){
+            // One-time preparation only. Measured footer clicks never resume either view.
+            workshopView.resume(undefined,{checking:true});benmoView.resume(undefined,{checking:true});
+            workshopContainer.inert=true;benmoContent.querySelector('.benmo-mount').inert=false;
+            visibilitySampleReady=true;visibilitySampleArea='benmo';
+          }else interfaceDiagnostic.stop('failed');
+        }
+        syncAppearance();return;
+      }
       if(!allowed('memory')){if(allowed('time'))await openTime();else if(allowed('workshop'))await openWorkshop();else if(allowed('benmo'))await openBenmo();else openSettings();syncAppearance();return;}
       if(!allowed(memoryType))memoryType=allowed('event')?'event':'cumulative';
       const memoryProof=captureMemoryRead();
@@ -1070,7 +1107,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   const observer = new Observer(installEntry);
   if(!diagnosticSample)observer.observe(doc.documentElement, { childList: true, subtree: true });
   return {
-    open, close, openTransitionSample,sampleReady:()=>diagnosticSample&&!!workshopView&&!workshopView.failed(), openSettings, openTask,openBenmo,openLatestSummary,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,openTime,openSchedule,openWorkshop,openTracking,openCumulative:showCumulative,openCumulativeSettings,
+    open, close, openTransitionSample,sampleReady:()=>diagnosticSample&&!!workshopView&&!workshopView.failed()&&(!visibilitySample||visibilitySampleReady), openSettings, openTask,openBenmo,openLatestSummary,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,openTime,openSchedule,openWorkshop,openTracking,openCumulative:showCumulative,openCumulativeSettings,
     async interceptPrompt(...args){
       if(disposed)return;
       const request=++recallEntryRequest;let entryTarget;
