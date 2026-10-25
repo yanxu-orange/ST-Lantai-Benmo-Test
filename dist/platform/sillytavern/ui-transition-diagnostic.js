@@ -2,7 +2,7 @@
 // class/dataset values, identities, URLs, errors or event/DOM objects enter rows.
 const AREAS=new Set(['memory','time','benmo','workshop','settings','none','unknown']);
 const PHASES=new Set(['requested','shown','ready','reload']);
-const REASONS=new Set(['manual','timeout','panel-close','chat-change','document-hidden','dispose','frame-cap','event-cap','byte-cap','cost-limit','failed','captured','unknown']);
+const REASONS=new Set(['manual','timeout','panel-close','chat-change','document-hidden','dispose','frame-cap','event-cap','byte-cap','cost-limit','failed','captured','capture-cap','unknown']);
 const ROLES=['surface','header','title','close','icon','main','footer','decoration'];
 const DISPLAY=new Set(['none','block','inline','inline-block','flex','inline-flex','grid','inline-grid','contents']);
 const VISIBILITY=new Set(['visible','hidden','collapse']);
@@ -33,20 +33,26 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  let active=false,disposed=false,epoch=0,status='idle',reason=null,mode='phase-style-and-attributes',anchor=null,startAt=null,endedAt=null;
  let frames=[],events=[],bytes=0,sequence=0,nav=0,frameId=null,timerId=null,mutation=null,resize=null,targets=[],ids=null,geometry=null,styles=null,nodeSerial=0;
  let dirty=true,known=false,area='none',route='unknown',lastFrame=null,mutations=0,slowFrames=0,slowStyles=0,lastStyleKey='',releaseDownload=null,frameAvailable=null,geometryAvailable=null,mutationAvailable=null;
- let capture=null,evicted=null,styleTimes=[];
+ let observations=[],archiveBytes=0,lastMarkedNav=0,evicted=null,styleTimes=[];
+ const archiveCaps={bytes:Math.max(4096,limit(limits.captureBytes,8388608)),observations:limit(limits.observations,32)};
+ const pending=new Map();
+ const clone=value=>JSON.parse(JSON.stringify(value));
+ const archiveSize=value=>JSON.stringify(value).length*2+64;
  const rowSizes=new WeakMap(),eventIndex=new Map(),references=new Map();
  const subscribers=new Set();
- const inspect=()=>({status,reason,mode,hasData:anchor!==null,capturePending:active&&capture!==null,captured:capture?.complete===true});
+ const inspect=()=>({status,reason,mode,hasData:anchor!==null,capturePending:pending.size>0,captured:observations.some(item=>item.complete),observationCount:observations.length,pendingCount:pending.size});
  const publish=()=>{for(const listener of subscribers)safe(()=>listener(inspect()));};
  const time=()=>number(now()-startAt,0,Number.MAX_SAFE_INTEGER);
  function cleanup(){
   if(frameId!==null)safe(()=>cancelFrame(frameId));if(timerId!==null)safe(()=>clearTimer(timerId));frameId=timerId=null;
+  for(const timer of pending.values())safe(()=>clearTimer(timer));pending.clear();
   safe(()=>mutation?.disconnect());safe(()=>resize?.disconnect());mutation=resize=null;
   safe(()=>doc.removeEventListener('visibilitychange',visibility));targets=[];ids=geometry=styles=null;dirty=true;
  }
  function stop(value='manual'){
   if(!active)return false;
-  endedAt=safe(time)??null;if(capture){capture.finishedRelativeMs=endedAt;capture.complete=value==='captured';}active=false;epoch++;reason=REASONS.has(value)?value:'unknown';status='stopped';cleanup();publish();return true;
+  value=REASONS.has(value)?value:'unknown';
+  endedAt=safe(time)??null;for(const item of observations)if(item.finishedRelativeMs===null){item.finishedRelativeMs=endedAt;item.complete=value!=='capture-cap'&&endedAt!==null&&endedAt>=item.markedRelativeMs+2000;item.stopReason=value;}active=false;epoch++;reason=REASONS.has(value)?value:'unknown';status='stopped';cleanup();publish();return true;
  }
  // Capacity applies to the retained window, not to the session lifetime.
  // An expired referenced sample becomes explicitly unknown, never a dangling ID.
@@ -68,7 +74,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   }
  }
  function trim(t){
-  const cutoff=Math.max(0,(capture?.markedRelativeMs??t)-caps.duration);
+  const cutoff=Math.max(0,t-caps.duration);
   while(frames.length&&frames[0].t<cutoff)drop('frame',0,'age');
   // Keep older style/size samples when retained rows still refer to them.
   for(let i=events.length-1;i>=0;i--)if(events[i].t<cutoff&&!['style','geometry'].includes(events[i].kind))drop('event',i,'age');
@@ -85,17 +91,46 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   const size=JSON.stringify(row).length+32;
   list.push(row);rowSizes.set(row,size);bytes+=size;countReferences(row,1);
   if(kind==='event')eventIndex.set(row.sequence,row);
+  archiveRow(kind,row);
   trim(row.t);
   return kind==='event'&&eventIndex.has(row.sequence)?row.sequence:null;
  }
- function mark(){
-  if(!active||capture)return false;
+ // Each observation owns an immutable pre-window and independently collects its
+ // post-window. Rolling eviction therefore cannot erase a labeled observation.
+ function archiveRow(kind,row){
+  const recipients=observations.filter(item=>item.finishedRelativeMs===null&&row.t<=item.markedRelativeMs+2000);
+  if(!recipients.length)return;
+  const size=archiveSize(row);
+  if(archiveBytes+size*recipients.length>archiveCaps.bytes){stop('capture-cap');return;}
+  for(const item of recipients)item[kind==='frame'?'frames':'events'].push(clone(row));
+  archiveBytes+=size*recipients.length;
+ }
+ function finalizeCost(kind,row){
+  for(const item of observations){const saved=item[kind==='frame'?'frames':'events'].at(-1);if(saved?.sequence===row.sequence)saved.cost=row.cost;}
+ }
+ function mark(label='flicker'){
+  if(!active||!['flicker','no-flicker'].includes(label))return false;
   try{
-   const t=time();if(t===null)return false;
-   trim(t);capture={markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false};
-   append('event',{sequence:++sequence,t,kind:'user-mark',area,route,nav});
-   const token=epoch;timerId=setTimer(()=>{if(active&&token===epoch)stop('captured');},2000);
-   publish();return true;
+   const t=time();if(t===null)return false;trim(t);refresh();
+   // The interval is evidence, not a claim that the last transition caused it.
+   const candidates=events.filter(row=>row.kind==='phase'&&row.phase==='requested'&&row.nav>lastMarkedNav);
+   const expectedCount=nav-lastMarkedNav;
+   const association=expectedCount===1&&candidates.length===1?'single-observed-transition':expectedCount>1?'multiple-transitions':'unknown';
+   const item={ordinal:observations.length+1,label,markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false,stopReason:null,
+    transition:{association,fromNavExclusive:lastMarkedNav,toNavInclusive:nav,expectedCount,candidates:candidates.map(row=>({nav:row.nav,t:row.t,target:row.target})),missingRequests:Math.max(0,expectedCount-candidates.length)},
+    coverage:{earliestFrameRelativeMs:frames[0]?.t??null,latestPreFrameRelativeMs:frames.at(-1)?.t??null,evicted:clone(evicted)},frames:clone(frames),events:clone(events)};
+   const size=archiveSize(item);
+   if(observations.length>=archiveCaps.observations||archiveBytes+size>archiveCaps.bytes){stop('capture-cap');return false;}
+   observations.push(item);archiveBytes+=size;lastMarkedNav=nav;
+   append('event',{sequence:++sequence,t,kind:'user-mark',ordinal:item.ordinal,label,area,route,nav});
+   if(!active)return true;
+   const token=epoch;
+   const timer=setTimer(()=>{
+    if(!active||token!==epoch||item.finishedRelativeMs!==null)return;
+    item.finishedRelativeMs=time();item.complete=item.finishedRelativeMs>=item.markedRelativeMs+2000;
+    safe(()=>clearTimer(pending.get(item.ordinal)));pending.delete(item.ordinal);publish();
+   },2000);
+   pending.set(item.ordinal,timer);publish();return true;
   }catch{stop('failed');return false;}
  }
  function nodeId(node){if(!node)return null;if(!ids.has(node))ids.set(node,++nodeSerial);return ids.get(node);}
@@ -126,7 +161,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    samples.push([ROLES[index],nodeId(node),display,visibility,opacity]);
   }
   const row={sequence:++sequence,t:time(),kind:'style',nav,mode:'bounded-phase-style',cost:null,nodes:samples};
-  const ref=append('event',row);const cost=row.cost=number(now()-started,0,120000);
+  const ref=append('event',row);const cost=row.cost=number(now()-started,0,120000);finalizeCost('event',row);
   if(!active)return;if(ref!==null)for(const index of [0,1,5,6])if(targets[index])styles.set(targets[index],ref);
   slowStyles=cost!==null&&cost>6?slowStyles+1:0;if(slowStyles>=3)downgrade();
  }
@@ -144,7 +179,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    const started=now(),t=time();if(t===null){stop('failed');return;}
    if(dirty)refresh();const nodes=sampleNodes();
    const row={sequence:++sequence,t,nav,area,route,mode:'attributes',dt:lastFrame===null?null:number(t-lastFrame,0,Number.MAX_SAFE_INTEGER),cost:null,mutations:number(mutations,0,65535),nodes};
-   append('frame',row);const cost=row.cost=number(now()-started,0,120000);
+   append('frame',row);const cost=row.cost=number(now()-started,0,120000);finalizeCost('frame',row);
    if(!active)return;
    lastFrame=t;mutations=0;
    slowFrames=cost!==null&&cost>3?slowFrames+1:0;
@@ -156,7 +191,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  function start(){
   if(disposed||active||doc.visibilityState==='hidden')return false;
   cleanup();safe(()=>releaseDownload?.());releaseDownload=null;
-  frames=[];events=[];eventIndex.clear();references.clear();capture=null;evicted={age:{frame:0,event:0},capacity:{frame:0,event:0},referencesExpired:0};styleTimes=[];bytes=sequence=nav=nodeSerial=mutations=slowFrames=slowStyles=0;lastFrame=null;lastStyleKey='';anchor=startAt=endedAt=reason=null;frameAvailable=geometryAvailable=mutationAvailable=null;mode='phase-style-and-attributes';
+  frames=[];events=[];eventIndex.clear();references.clear();observations=[];archiveBytes=0;lastMarkedNav=0;evicted={age:{frame:0,event:0},capacity:{frame:0,event:0},referencesExpired:0};styleTimes=[];bytes=sequence=nav=nodeSerial=mutations=slowFrames=slowStyles=0;lastFrame=null;lastStyleKey='';anchor=startAt=endedAt=reason=null;frameAvailable=geometryAvailable=mutationAvailable=null;mode='phase-style-and-attributes';
   try{
    startAt=now();anchor=number(wall(),0,9007199254740991);if(!Number.isFinite(startAt)||anchor===null)throw new Error();
    ids=new WeakMap();geometry=new WeakMap();styles=new WeakMap();active=true;status='recording';const token=++epoch;
@@ -171,8 +206,9 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   if(active)trim(time());
   const rows=[...frames,...events.filter(row=>row.kind!=='style'&&row.kind!=='geometry')];
   const earliest=rows.length?Math.min(...rows.map(row=>row.t)):null;
-  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v2',storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
-   limits:{windowMs:caps.duration,frames:caps.frames,events:caps.events,bytes:caps.bytes},mode,capture,
+  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v3',storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
+   limits:{windowMs:caps.duration,frames:caps.frames,events:caps.events,bytes:caps.bytes,captureBytes:archiveCaps.bytes,observations:archiveCaps.observations},mode,observations,
+   captureStorage:{estimatedBytes:archiveBytes,policy:'immutable-labeled-windows-stop-on-capacity',order:'observation-ordinal; rows-by-sequence',postWindowMs:2000},
    retention:{earliestRelativeMs:earliest,latestFrameRelativeMs:frames.at(-1)?.t??null,evicted,policy:'rolling-window-with-capacity-eviction; older-referenced-events-may-be-retained'},
    nodeColumns:['role','id','present','connected','ownHidden','ownInert','treeHidden','treeInert','imageComplete','imageNaturalWidth','styleEvent','geometryEvent'],
    sampling:{frameCallbackAvailable:frameAvailable,geometryObserverAvailable:geometryAvailable,mutationObserverAvailable:mutationAvailable,targetFreshness:mutationAvailable===false?'host-phase-refresh-only-internal-replacements-may-be-stale':'host-phase-or-observed-mutation-refresh',costScope:'row-collection-and-serialization-excludes-observer-callbacks',frames:'attributes-no-style-or-rect',styles:'up-to-four-nodes-per-phase-checkpoint-max64-per-window',geometry:'asynchronous-content-size',missing:'null-is-unknown; references-point-to-retained-timestamped-events; capacity-expired-references-are-cleared-and-counted',screenPixelsObserved:false},frames,events}));

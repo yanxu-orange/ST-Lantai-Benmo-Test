@@ -54,8 +54,8 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
    const recording=state.status==='recording';
    if(record){record.disabled=recording;record.textContent=recording?'正在记录界面诊断':state.hasData?'重新记录界面诊断':'记录界面诊断';}
    if(exportButton){exportButton.hidden=!recording&&!state.hasData;exportButton.textContent=recording?'停止并导出界面诊断':'导出界面诊断';}
-   const reasons={captured:'现场已保留，可导出。','panel-close':'界面已关闭，记录已停止。','chat-change':'聊天状态已变化，记录已停止。','document-hidden':'页面进入后台，记录已停止。','frame-cap':'达到记录上限，已停止。','event-cap':'达到记录上限，已停止。','byte-cap':'达到记录上限，已停止。','cost-limit':'采样开销持续偏高，已停止。',failed:'记录未完成，已停止。'};
-   if(status)status.textContent=recording?(state.capturePending?'正在保留标记后的现场…':state.mode==='attributes-only'?'滚动记录中，已减少采样；闪烁后点击悬浮按钮。':'滚动记录中；闪烁后点击“刚才闪了”。'):state.hasData?(reasons[state.reason]??'已停止，可导出。'):'';
+   const reasons={'capture-cap':'记录已满，请导出后重新记录。',captured:'现场已保留，可导出。','panel-close':'界面已关闭，记录已停止。','chat-change':'聊天状态已变化，记录已停止。','document-hidden':'页面进入后台，记录已停止。','frame-cap':'达到记录上限，已停止。','event-cap':'达到记录上限，已停止。','byte-cap':'达到记录上限，已停止。','cost-limit':'采样开销持续偏高，已停止。',failed:'记录未完成，已停止。'};
+   if(status)status.textContent=recording?(state.mode==='attributes-only'?'连续记录中，已减少采样；切区后点击“闪了”或“没闪”。':'连续记录中；切区后点击“闪了”或“没闪”。'):state.hasData?(reasons[state.reason]??'已停止，可导出。'):'';
   }catch{}
  }
  container.addEventListener('click',e=>{
