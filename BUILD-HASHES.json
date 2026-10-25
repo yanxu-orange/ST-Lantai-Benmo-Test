@@ -647,7 +647,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 54,
-    "sha256": "b00c99f0296f3fad669e0409141de5aa500308496f1df713e04b9abbe48dec74"
+    "sha256": "2b9309861a14e22ae08fc9987e5e5730e57ddb497c1e9f9386c6b20ad3b77688"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1291,8 +1291,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 91141,
-    "sha256": "3101b2aa458c78af5e73b1ad4cdd23b5adce9f614ac2da6c42734c18299d5646"
+    "bytes": 91160,
+    "sha256": "f429493abb6d8ad793e4105b5d3bda5b7e56dd3ca407610c96901c5410acc596"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1411,13 +1411,13 @@
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-capture-control.js",
-    "bytes": 3314,
-    "sha256": "e0fa801aaccd6c599c4aeb8b67c9eb1b475e1bf49e998be2ea999a50183853fe"
+    "bytes": 3417,
+    "sha256": "f52fd81314751fd89c86e8716ccc0ab3cb2008d309a852ac0c2336b97b5aab89"
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-diagnostic.js",
-    "bytes": 23365,
-    "sha256": "791a75d085f8e6c4cd58874c7b8e9ad81b80a669d1a726642e47a40516cc2506"
+    "bytes": 25739,
+    "sha256": "a7bc218c34139264aa630e20b088b43bb3abc5cfe64a26e211d18422f7d8164e"
   },
   {
     "path": "dist/platform/sillytavern/vector-maintenance.js",
@@ -1542,6 +1542,6 @@
   {
     "path": "manifest.json",
     "bytes": 423,
-    "sha256": "a03d1012b9420f603cbe5999ede53b34511a59f68e4ebcc21228a2c0f263e7e6"
+    "sha256": "0aeaa7188be32b3dba2c65cef73bb08190211d0986a90b63d9d20b2659e23290"
   }
 ]
