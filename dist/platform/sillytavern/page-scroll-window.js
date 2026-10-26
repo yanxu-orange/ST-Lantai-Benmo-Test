@@ -2,7 +2,7 @@
 // Keep CSS outside observed business content; existing views own scroll positions.
 export function createPageScrollWindow({document:doc,getShadow,onChange=()=>{},requestFrame=fn=>doc.defaultView?.requestAnimationFrame?.(fn),cancelFrame=id=>doc.defaultView?.cancelAnimationFrame?.(id)}={}){
  let style=null,frame=null,token=0,active=false,disposed=false,windows=0,restores=0,lastReason='idle';
- const snapshot=()=>({active,windows,restores,lastReason});
+ const snapshot=()=>({active,windows,restores,lastReason,generation:token});
  const notify=()=>{try{onChange(snapshot());}catch{}};
  function restore(reason='cancel'){
   token++;if(frame!==null){try{cancelFrame(frame);}catch{}frame=null;}
