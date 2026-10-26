@@ -37,13 +37,15 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  requestFrame=fn=>doc.defaultView?.requestAnimationFrame?.(fn),cancelFrame=id=>doc.defaultView?.cancelAnimationFrame?.(id),
  setTimer=(fn,ms)=>setTimeout(fn,ms),clearTimer=id=>clearTimeout(id),
  MutationObserver:MO=doc.defaultView?.MutationObserver,ResizeObserver:RO=doc.defaultView?.ResizeObserver,
- getStyle=node=>doc.defaultView?.getComputedStyle?.(node),limits={},sampleMode=false,sampleContent='original',sampleWarmMode='normal',sampleObserverMode='normal',sampleMainScrollMode='normal',gridEnabled=false}={}){
+ getStyle=node=>doc.defaultView?.getComputedStyle?.(node),limits={},sampleMode=false,sampleContent='original',sampleWarmMode='normal',sampleObserverMode='normal',sampleMainScrollMode='normal',sampleScrollbarMode=null,gridEnabled=false}={}){
  const contentCondition=sampleMode?(sampleContent==='simplified'?'simplified':'original'):null;
  const warmCondition=contentCondition==='simplified'&&['skip-warm-revalidation','visibility-only'].includes(sampleWarmMode)?sampleWarmMode:'normal';
  const observerCondition=sampleMode&&warmCondition==='visibility-only'?(sampleObserverMode==='owned-hidden-filter'?'owned-hidden-filter':'normal'):sampleMode&&warmCondition==='normal'&&['clip','hidden'].includes(sampleMainScrollMode)?'normal':null;
  const mainScrollCondition=sampleMode&&contentCondition==='simplified'&&['normal','visibility-only'].includes(warmCondition)&&sampleMainScrollMode==='inner'?'inner':sampleMode&&['normal','visibility-only'].includes(warmCondition)&&sampleMainScrollMode==='clip'?'clip':sampleMode&&contentCondition==='original'&&warmCondition==='normal'&&sampleMainScrollMode==='hidden'?'hidden':observerCondition==='owned-hidden-filter'?'normal':null;
+ const scrollbarCondition=sampleMode&&contentCondition==='original'&&warmCondition==='normal'&&sampleMainScrollMode==='normal'&&sampleScrollbarMode==='none'?'none':null;
  const freshMainScroll=()=>({workshop:{status:'pending',reason:null,nav:null},benmo:{status:'pending',reason:null,nav:null}});
- let mainScrollPages=freshMainScroll(),innerScrollPages=freshMainScroll();
+ let mainScrollPages=freshMainScroll(),innerScrollPages=freshMainScroll(),scrollbarPages=freshMainScroll();
+ const scrollbarProof=()=>({status:scrollbarCondition===null?'inactive':Object.values(scrollbarPages).some(p=>p.status==='invalid')?'invalid':Object.values(scrollbarPages).every(p=>p.status==='applied')?'applied':'pending',pages:clone(scrollbarPages)});
  let innerScrollNodes=new Map();
  const innerScrollProof=()=>({status:mainScrollCondition!=='inner'?'inactive':Object.values(innerScrollPages).some(p=>p.status==='invalid')?'invalid':Object.values(innerScrollPages).every(p=>['ready','scrolled'].includes(p.status))?(Object.values(innerScrollPages).some(p=>p.status==='scrolled')?'scrolled':'ready'):'pending',pages:clone(innerScrollPages)});
  const mainScrollProof=()=>({status:!['clip','inner','hidden'].includes(mainScrollCondition)?'inactive':Object.values(mainScrollPages).some(p=>p.status==='invalid')?'invalid':Object.values(mainScrollPages).every(p=>p.status==='applied')?'applied':'pending',pages:clone(mainScrollPages)});
@@ -63,11 +65,11 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  const clone=value=>JSON.parse(JSON.stringify(value));
  const archiveSize=value=>JSON.stringify(value).length*2+64;
  const rowSizes=new WeakMap(),eventIndex=new Map(),references=new Map();
- const subscribers=new Set(),timelineSubscribers=new Set(),gridSubscribers=new Set(),observerSubscribers=new Set(),mainScrollSubscribers=new Set(),innerScrollSubscribers=new Set();
+ const subscribers=new Set(),timelineSubscribers=new Set(),gridSubscribers=new Set(),observerSubscribers=new Set(),mainScrollSubscribers=new Set(),innerScrollSubscribers=new Set(),scrollbarSubscribers=new Set();
  let savedGrid=null,gridMode='original',gridInvalid=false,gridVerified=false;
  const gridProbe=createTransitionGridProbe({getStyle,onChange(detail){const state=gridProbe.inspect();gridMode=state.mode;gridInvalid=state.invalid;gridVerified=state.mode==='fixed'&&!state.invalid&&state.pending.length===0;if(!active)return;append('event',{sequence:++sequence,t:time(),kind:'grid-probe',nav,detail});for(const listener of gridSubscribers)safe(()=>listener(inspect()));}});
  const inspectGrid=()=>!active&&savedGrid?savedGrid:gridProbe.inspect();
- const inspect=()=>({innerScrollVerification:innerScrollProof(),sampleMainScrollMode:mainScrollCondition,mainScrollVerification:mainScrollProof(),mainScrollStatus:mainScrollProof().status,sampleObserverMode:observerCondition,observerDelivery:observerCondition===null?null:{...observerCounts},sessionId,startAnchor:startAnchor?{...startAnchor}:null,navigationHistory:clone(navigationHistory),status,reason,mode,hasData:anchor!==null,capturePending:pending.size>0,captured:observations.some(item=>item.complete),observationCount:observations.length,pendingCount:pending.size,clipCondition,sizeCondition,conditionEpoch,gridCondition:inspectGrid().mode,gridReady:inspectGrid().ready,gridInvalid:inspectGrid().invalid,gridPending:[...inspectGrid().pending]});
+ const inspect=()=>({sampleScrollbarMode:scrollbarCondition,scrollbarVerification:scrollbarProof(),innerScrollVerification:innerScrollProof(),sampleMainScrollMode:mainScrollCondition,mainScrollVerification:mainScrollProof(),mainScrollStatus:mainScrollProof().status,sampleObserverMode:observerCondition,observerDelivery:observerCondition===null?null:{...observerCounts},sessionId,startAnchor:startAnchor?{...startAnchor}:null,navigationHistory:clone(navigationHistory),status,reason,mode,hasData:anchor!==null,capturePending:pending.size>0,captured:observations.some(item=>item.complete),observationCount:observations.length,pendingCount:pending.size,clipCondition,sizeCondition,conditionEpoch,gridCondition:inspectGrid().mode,gridReady:inspectGrid().ready,gridInvalid:inspectGrid().invalid,gridPending:[...inspectGrid().pending]});
  const publishMainScroll=()=>{for(const listener of mainScrollSubscribers)safe(()=>listener(inspect()));};
  function confirmInnerScroll(row,node,sameSurface){
   if(mainScrollCondition!=='inner'||!Object.hasOwn(innerScrollPages,area))return null;
@@ -81,6 +83,22 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   }
   innerScrollPages[area]={status,reason,nav,scrollTop:row.scrollTop};if(sameSurface)innerScrollNodes.set(area,{node,top:row.scrollTop,scrolled:status==='scrolled'});
   for(const listener of innerScrollSubscribers)safe(()=>listener(inspect()));return innerScrollProof();
+ }
+ function confirmScrollbar(row,sameSurface){
+  if(scrollbarCondition===null||!Object.hasOwn(scrollbarPages,area))return null;
+  const supports=safe(()=>doc.defaultView?.CSS?.supports?.('scrollbar-width','none'));
+  const supported=typeof supports==='boolean'?supports:null,computed=row?.scrollbarWidth??null;
+  let status='pending',reason='unknown-support';
+  if(!sameSurface)reason='surface-changed';
+  else if(supported===false){status='invalid';reason='unsupported';}
+  else if(supported===true){
+   if(!computed||!row?.overflow?.x||!row?.overflow?.y)reason='unknown-style';
+   else if(computed!=='none'){status='invalid';reason='scrollbar-not-none';}
+   else if(row.overflow.x!=='auto'||row.overflow.y!=='auto'){status='invalid';reason='overflow-not-auto';}
+   else{status='applied';reason=null;}
+  }
+  if(scrollbarPages[area].status!=='invalid')scrollbarPages[area]={status,reason,nav,supported,computed,overflow:row?.overflow??null};
+  for(const listener of scrollbarSubscribers)safe(()=>listener(inspect()));return scrollbarProof();
  }
  function confirmMainScroll(layout,sameSurface){
   if(!['clip','inner','hidden'].includes(mainScrollCondition)||!Object.hasOwn(mainScrollPages,area))return null;
@@ -149,7 +167,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  }
  function append(kind,row){
   if(!active)return null;
-  row.conditionEpoch=conditionEpoch;row.shrinkCssPx=sizeCondition;row.clipMode=clipCondition;row.sampleContent=contentCondition;row.sampleWarmMode=sampleMode?warmCondition:null;row.sampleObserverMode=observerCondition;row.sampleMainScrollMode=mainScrollCondition;row.gridMode=gridActive?gridMode:null;row.gridInvalid=gridActive?gridInvalid:null;row.gridVerified=gridActive?gridVerified:null;
+  row.conditionEpoch=conditionEpoch;row.shrinkCssPx=sizeCondition;row.clipMode=clipCondition;row.sampleContent=contentCondition;row.sampleWarmMode=sampleMode?warmCondition:null;row.sampleObserverMode=observerCondition;row.sampleMainScrollMode=mainScrollCondition;row.sampleScrollbarMode=scrollbarCondition;row.gridMode=gridActive?gridMode:null;row.gridInvalid=gridActive?gridInvalid:null;row.gridVerified=gridActive?gridVerified:null;
   const list=kind==='frame'?frames:events;
   const size=JSON.stringify(row).length+32;
   list.push(row);rowSizes.set(row,size);bytes+=size;countReferences(row,1);
@@ -179,7 +197,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    const candidates=events.filter(row=>row.kind==='phase'&&row.phase==='requested'&&row.nav>lastMarkedNav);
    const expectedCount=nav-lastMarkedNav;
    const association=expectedCount===1&&candidates.length===1?'single-observed-transition':expectedCount>1?'multiple-transitions':'unknown';
-   const item={sessionId,conditionAtMark:{epoch:conditionEpoch,shrinkCssPx:sizeCondition,clipMode:clipCondition,sampleContent:contentCondition,sampleWarmMode:sampleMode?warmCondition:null,sampleObserverMode:observerCondition,sampleMainScrollMode:mainScrollCondition,gridMode:gridActive?gridProbe.inspect().mode:null,gridInvalid:gridActive?gridInvalid:null,gridVerified:gridActive?gridVerified:null},ordinal:observations.length+1,label,markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false,stopReason:null,
+   const item={sessionId,conditionAtMark:{epoch:conditionEpoch,shrinkCssPx:sizeCondition,clipMode:clipCondition,sampleContent:contentCondition,sampleWarmMode:sampleMode?warmCondition:null,sampleObserverMode:observerCondition,sampleMainScrollMode:mainScrollCondition,sampleScrollbarMode:scrollbarCondition,gridMode:gridActive?gridProbe.inspect().mode:null,gridInvalid:gridActive?gridInvalid:null,gridVerified:gridActive?gridVerified:null},ordinal:observations.length+1,label,markedRelativeMs:t,requestedBeforeMs:caps.duration,requestedAfterMs:2000,finishedRelativeMs:null,complete:false,stopReason:null,
     transition:{association,fromNavExclusive:lastMarkedNav,toNavInclusive:nav,expectedCount,candidates:candidates.map(row=>({nav:row.nav,t:row.t,target:row.target})),missingRequests:Math.max(0,expectedCount-candidates.length)},
     coverage:{earliestFrameRelativeMs:frames[0]?.t??null,latestPreFrameRelativeMs:frames.at(-1)?.t??null,evicted:clone(evicted)},frames:clone(frames),events:clone(events)};
    const size=archiveSize(item);
@@ -203,7 +221,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   const bounds=node?safe(()=>node.getBoundingClientRect?.()):null;
   const css=node&&['surface','main','inner','decoration','page'].includes(role)?safe(()=>getStyle(node)):null;
   const overflow=css?{x:OVERFLOW.has(css.overflowX)?css.overflowX:null,y:OVERFLOW.has(css.overflowY)?css.overflowY:null}:null;
-  return {role,overflow,rect:bounds?Object.fromEntries(['x','y','top','right','bottom','left','width','height'].map(key=>[key,precise(bounds[key])])):null,
+  return {role,overflow,...(scrollbarCondition!==null&&role==='main'?{scrollbarWidth:['auto','thin','none'].includes(css?.scrollbarWidth)?css.scrollbarWidth:null}:{}),rect:bounds?Object.fromEntries(['x','y','top','right','bottom','left','width','height'].map(key=>[key,precise(bounds[key])])):null,
    clientWidth:precise(node?.clientWidth),clientHeight:precise(node?.clientHeight),scrollWidth:precise(node?.scrollWidth),scrollHeight:precise(node?.scrollHeight),scrollTop:precise(node?.scrollTop)};
  }
  function scheduleLayout(ready=false,verifyGrid=false){
@@ -224,9 +242,10 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
      const viewportData={innerWidth:precise(win?.innerWidth),innerHeight:precise(win?.innerHeight),devicePixelRatio:precise(win?.devicePixelRatio),width:precise(viewport?.width),height:precise(viewport?.height),offsetLeft:precise(viewport?.offsetLeft),offsetTop:precise(viewport?.offsetTop),scale:precise(viewport?.scale)};
      if(gridActive&&targets[0]===scheduledSurface&&(ready||verifyGrid))gridProbe.observe(area,targets[0],layout,{ready,viewport:viewportData});
      const mainScrollVerification=confirmMainScroll(layout,targets[0]===scheduledSurface);
+     const scrollbarVerification=confirmScrollbar(layout.find(row=>row.role==='main'),targets[0]===scheduledSurface);
      const expected=clipCondition==='visible'?'visible':null,observed=layout[2].overflow;
      append('event',{sequence:++sequence,t,kind:'layout',nav,shrinkCssPx:sizeCondition,settling:'two-animation-frames-not-paint-proof',
-      viewport:viewportData,mainScrollVerification,innerScrollVerification,
+      viewport:viewportData,mainScrollVerification,innerScrollVerification,scrollbarVerification,
       clipVerification:{rule:clipCondition==='visible'?'force-visible':clipCondition==='original'?'no-override':'inactive',expectedSurfaceOverflow:expected,surfaceMatches:expected&&observed?.x&&observed?.y?observed.x===expected&&observed.y===expected:null},layout});
     }catch{stop('failed');}
    });
@@ -313,7 +332,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  function stage(phase,target='unknown'){
   if(!active||!PHASES.has(phase))return false;
   try{
-   refresh();if(phase==='requested'){nav++;if(mainScrollCondition==='inner'&&Object.hasOwn(innerScrollPages,target)){innerScrollPages[target]={status:'pending',reason:null,nav};for(const listener of innerScrollSubscribers)safe(()=>listener(inspect()));}if(['clip','inner','hidden'].includes(mainScrollCondition)&&Object.hasOwn(mainScrollPages,target)&&mainScrollPages[target].status!=='invalid'){mainScrollPages[target]={status:'pending',reason:null,nav};publishMainScroll();}}
+   refresh();if(phase==='requested'){nav++;if(scrollbarCondition!==null&&Object.hasOwn(scrollbarPages,target)&&scrollbarPages[target].status!=='invalid'){scrollbarPages[target]={status:'pending',reason:null,nav};for(const listener of scrollbarSubscribers)safe(()=>listener(inspect()));}if(mainScrollCondition==='inner'&&Object.hasOwn(innerScrollPages,target)){innerScrollPages[target]={status:'pending',reason:null,nav};for(const listener of innerScrollSubscribers)safe(()=>listener(inspect()));}if(['clip','inner','hidden'].includes(mainScrollCondition)&&Object.hasOwn(mainScrollPages,target)&&mainScrollPages[target].status!=='invalid'){mainScrollPages[target]={status:'pending',reason:null,nav};publishMainScroll();}}
    const event={sequence:++sequence,t:time(),kind:'phase',nav,phase,target:AREAS.has(target)?target:'unknown',area,route,nodes:sampleNodes()};
    append('event',event);
    let entry=navigationHistory.find(item=>item.nav===nav);
@@ -340,7 +359,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
  function start(){
   if(disposed||active||doc.visibilityState==='hidden')return false;
   cleanup();savedGrid=null;safe(()=>releaseDownload?.());releaseDownload=null;
-  observerCounts=freshObserverCounts();mainScrollPages=freshMainScroll();innerScrollPages=freshMainScroll();innerScrollNodes=new Map();frames=[];events=[];eventIndex.clear();references.clear();observations=[];archiveBytes=0;lastMarkedNav=0;sessionId=null;startAnchor=null;navigationHistory=[];conditionEpoch=0;layoutTimes=[];evicted={age:{frame:0,event:0},capacity:{frame:0,event:0},referencesExpired:0};styleTimes=[];bytes=sequence=nav=nodeSerial=mutations=slowFrames=slowStyles=0;lastFrame=null;lastStyleKey='';anchor=startAt=endedAt=reason=null;frameAvailable=geometryAvailable=mutationAvailable=null;mode='phase-style-and-attributes';
+  observerCounts=freshObserverCounts();scrollbarPages=freshMainScroll();mainScrollPages=freshMainScroll();innerScrollPages=freshMainScroll();innerScrollNodes=new Map();frames=[];events=[];eventIndex.clear();references.clear();observations=[];archiveBytes=0;lastMarkedNav=0;sessionId=null;startAnchor=null;navigationHistory=[];conditionEpoch=0;layoutTimes=[];evicted={age:{frame:0,event:0},capacity:{frame:0,event:0},referencesExpired:0};styleTimes=[];bytes=sequence=nav=nodeSerial=mutations=slowFrames=slowStyles=0;lastFrame=null;lastStyleKey='';anchor=startAt=endedAt=reason=null;frameAvailable=geometryAvailable=mutationAvailable=null;mode='phase-style-and-attributes';
   try{
    startAt=now();anchor=number(wall(),0,9007199254740991);if(!Number.isFinite(startAt)||anchor===null)throw new Error();
    sessionId=newSessionId();
@@ -356,7 +375,7 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
   if(active)trim(time());
   const rows=[...frames,...events.filter(row=>row.kind!=='style'&&row.kind!=='geometry')];
   const earliest=rows.length?Math.min(...rows.map(row=>row.t)):null;
-  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v20',innerScrollVerification:innerScrollProof(),sampleMainScrollMode:mainScrollCondition,mainScrollVerification:mainScrollProof(),sampleContent:contentCondition,sampleWarmMode:sampleMode?warmCondition:null,sampleObserverMode:observerCondition,observerDelivery:observerCondition===null?null:{...observerCounts},gridExperiment:gridActive?(active?gridProbe.inspect():savedGrid):null,sample:sampleMode===true?'fixed-switch-v1':null,videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
+  return JSON.parse(JSON.stringify({schema:'lantai-ui-transition-v21',sampleScrollbarMode:scrollbarCondition,scrollbarVerification:scrollbarProof(),innerScrollVerification:innerScrollProof(),sampleMainScrollMode:mainScrollCondition,mainScrollVerification:mainScrollProof(),sampleContent:contentCondition,sampleWarmMode:sampleMode?warmCondition:null,sampleObserverMode:observerCondition,observerDelivery:observerCondition===null?null:{...observerCounts},gridExperiment:gridActive?(active?gridProbe.inspect():savedGrid):null,sample:sampleMode===true?'fixed-switch-v1':null,videoAlignment:{sessionId,startAnchor,navigationHistory,meaning:'event-times-not-paint-times; same-frame-stages-not-visually-separable',maxNavigations:2,maxStagesPerNavigation:8},storage:'memory-only-cleared-on-refresh',status,stopReason:reason,startedUnixMs:anchor,startedPerformanceMs:number(startAt,0,9007199254740991),endedRelativeMs:endedAt,
    limits:{windowMs:caps.duration,frames:caps.frames,events:caps.events,bytes:caps.bytes,captureBytes:archiveCaps.bytes,observations:archiveCaps.observations},mode,observations,sizeExperiment:{target:'lt-host-content',anchor:'top',allowedShrinkCssPx:[0,1],currentShrinkCssPx:sizeCondition,conditionEpoch},clipExperiment:{target:'direct-business-surface-only',currentMode:clipCondition,shrinkCssPx:0},
    captureStorage:{estimatedBytes:archiveBytes,policy:'immutable-labeled-windows-stop-on-capacity',order:'observation-ordinal; rows-by-sequence',postWindowMs:2000},
    retention:{earliestRelativeMs:earliest,latestFrameRelativeMs:frames.at(-1)?.t??null,evicted,policy:'rolling-window-with-capacity-eviction; older-referenced-events-may-be-retained'},
@@ -372,5 +391,5 @@ export function createUITransitionDiagnostic({document:doc,getPanel,now=()=>doc.
    try{anchorNode.href=url;anchorNode.download='lantai-ui-transition-diagnostic.json';anchorNode.hidden=true;doc.body.append(anchorNode);anchorNode.click();}finally{anchorNode.remove();}return true;
   })===true;
  }
- return Object.freeze({start,stop,mark,setGridCondition,setSizeCondition,setClipCondition,stage,observerBatch,inspect,snapshot,download,subscribeInnerScroll(fn){innerScrollSubscribers.add(fn);return()=>innerScrollSubscribers.delete(fn);},subscribeMainScroll(fn){mainScrollSubscribers.add(fn);return()=>mainScrollSubscribers.delete(fn);},subscribeObserver(fn){observerSubscribers.add(fn);return()=>observerSubscribers.delete(fn);},subscribeGrid(fn){gridSubscribers.add(fn);return()=>gridSubscribers.delete(fn);},subscribeTimeline(fn){timelineSubscribers.add(fn);return()=>timelineSubscribers.delete(fn);},subscribe(fn){subscribers.add(fn);return()=>subscribers.delete(fn);},dispose(){if(disposed)return;stop('dispose');cleanup();safe(()=>releaseDownload?.());releaseDownload=null;disposed=true;subscribers.clear();timelineSubscribers.clear();gridSubscribers.clear();observerSubscribers.clear();mainScrollSubscribers.clear();innerScrollSubscribers.clear();innerScrollNodes.clear();}});
+ return Object.freeze({subscribeScrollbar(fn){scrollbarSubscribers.add(fn);return()=>scrollbarSubscribers.delete(fn);},start,stop,mark,setGridCondition,setSizeCondition,setClipCondition,stage,observerBatch,inspect,snapshot,download,subscribeInnerScroll(fn){innerScrollSubscribers.add(fn);return()=>innerScrollSubscribers.delete(fn);},subscribeMainScroll(fn){mainScrollSubscribers.add(fn);return()=>mainScrollSubscribers.delete(fn);},subscribeObserver(fn){observerSubscribers.add(fn);return()=>observerSubscribers.delete(fn);},subscribeGrid(fn){gridSubscribers.add(fn);return()=>gridSubscribers.delete(fn);},subscribeTimeline(fn){timelineSubscribers.add(fn);return()=>timelineSubscribers.delete(fn);},subscribe(fn){subscribers.add(fn);return()=>subscribers.delete(fn);},dispose(){if(disposed)return;stop('dispose');cleanup();safe(()=>releaseDownload?.());releaseDownload=null;disposed=true;subscribers.clear();timelineSubscribers.clear();gridSubscribers.clear();observerSubscribers.clear();mainScrollSubscribers.clear();innerScrollSubscribers.clear();scrollbarSubscribers.clear();innerScrollNodes.clear();}});
 }
