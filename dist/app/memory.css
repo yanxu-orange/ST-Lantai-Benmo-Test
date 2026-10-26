@@ -1,5 +1,5 @@
 .lantai, .lantai *, .lantai *::before, .lantai *::after { box-sizing: border-box; }
-.lantai { display:grid; grid-template-rows:auto minmax(0,1fr) auto; width:min(100%,430px); height:min(100%,850px); margin-inline:auto; min-height:0; color:var(--ui-color-text-primary); background:var(--ui-color-workspace); font-family:var(--ui-type-ui-family); font-size:var(--ui-type-ui-body-size); font-weight:var(--ui-type-ui-body-weight); line-height:var(--ui-type-ui-body-line); }
+.lantai { display:grid; grid-template-rows:auto minmax(0,1fr) auto; width:min(100%,430px); height:var(--lt-panel-height,min(100%,850px)); margin-inline:auto; min-height:0; color:var(--ui-color-text-primary); background:var(--ui-color-workspace); font-family:var(--ui-type-ui-family); font-size:var(--ui-type-ui-body-size); font-weight:var(--ui-type-ui-body-weight); line-height:var(--ui-type-ui-body-line); }
 .lantai [hidden] { display:none; }
 .lt-header { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; padding:var(--ui-space-control) var(--ui-space-group); border-bottom:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle); gap:var(--ui-space-control); }
 .lt-header h1 { text-align:center; }
