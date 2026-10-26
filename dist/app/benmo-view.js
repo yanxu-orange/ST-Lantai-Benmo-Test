@@ -23,7 +23,7 @@ const aliases = value => [...new Set((Array.isArray(value) ? value : String(valu
 
 /** The Benmo surface owns only navigation/drafts. The controller owns source
  * eligibility, runtime jobs, feature policy and acknowledged persistence. */
-export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, onOpenCleaning = null, isCurrent = () => true, prepare, initialState = {}} = {}) {
+export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, onOpenCleaning = null, isCurrent = () => true, prepare, initialState = {}, onMountCommit = () => {}} = {}) {
   initialState ??= {};
   const lifetime = new AbortController();
   const revalidationActions = new Set(['save','delete-narrative','delete-record','toggle-excluded','restore-excluded','new','generate','generate-narrative','preview-narrative','save-narrative-budget','start-narrative','continue-narrative','retry-narrative','skip-narrative','pause-narrative','confirm-narrative-review','regenerate-narrative','manual-summary','start-backfill']);
@@ -1006,12 +1006,12 @@ export async function mountBenmoView({container: app, controller, availability =
     dispose?.();
   }
   const readValue = refresh => prepare ? prepare({refresh}) : refresh ? controller.load({refresh: true}) : controller.ensure ? controller.ensure() : controller.load();
-  render();
+  onMountCommit(); render();
   const loadingRoot = app.children?.[0], loadingMarkup = renderedMarkup;
   try { apply(await readValue(false)); }
   catch (failure) { loadFailed = true; error = failure.message || '读取未完成，请重试'; }
   if (!isCurrent()) { disposed = true; lifetime.abort(); stopSummaryVisibility(); clearTimeout(redirectTimer); if (loadingRoot) { if (app.children?.[0] === loadingRoot) loadingRoot.remove(); } else if (app.innerHTML === loadingMarkup) app.innerHTML = ''; return null; }
-  initializing = false; loading = false; subscribe(); render();
+  initializing = false; loading = false; subscribe(); onMountCommit(); render();
   return {
     back() { if (!dialog && !acting) back(); },
     blocking() { return acting || dirty() || !!dialog; },

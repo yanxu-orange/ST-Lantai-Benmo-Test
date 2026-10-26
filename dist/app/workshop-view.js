@@ -3,7 +3,7 @@ import {replaceSurfaceMarkup} from './stable-surface.js';
 import {DEFAULT_WORKSHOP_SYNC_REQUIREMENTS} from '../domain/workshop/model.js';
 import {mainNavigation,rootTitle} from './navigation.js';
 import {surfaceTheme} from './styles/theme.js';
-export async function mountWorkshopView({container:app,controller,initialKind='prompt',availability=()=>({memory:true,time:true,workshop:true,prompt:true,collect:true,sync:true}),prepare,isCurrent=()=>true}) {
+export async function mountWorkshopView({container:app,controller,initialKind='prompt',availability=()=>({memory:true,time:true,workshop:true,prompt:true,collect:true,sync:true}),prepare,isCurrent=()=>true,onMountCommit=()=>{}}) {
 const lifetime=new AbortController();let acting=false,disposed=false,suspended=false,loading=true,loadFailed=false,initializing=true,revalidating=false,lastError='';
 const toggleIntents=new Map();let toggleVersion=0,readVersion=0;
 let initial={modules:[],results:{}},modules=initial.modules,results=initial.results;
@@ -128,11 +128,11 @@ app.addEventListener('keydown',event=>{
  if(event.key==='Escape'){if(state.dialog.pending){event.preventDefault();event.stopPropagation();return;}event.preventDefault();event.stopPropagation();state.dialog=null;render();return;}
  if(event.key==='Tab'){const buttons=[...app.querySelectorAll('.wk-dialog button')];if(!buttons.length)return;event.preventDefault();const index=buttons.indexOf(app.getRootNode().activeElement);buttons[(index+(event.shiftKey?-1:1)+buttons.length)%buttons.length].focus();}
 },{signal:lifetime.signal});
-render();
+onMountCommit();render();
 const loadingRoot=app.children?.[0],loadingMarkup=renderedMarkup;
 try{apply(await readValue(false));}catch(error){loadFailed=true;lastError=error.message||'读取未完成，请重试';}
 if(!isCurrent()){disposed=true;lifetime.abort();clearTimeout(toastTimer);if(loadingRoot){if(app.children?.[0]===loadingRoot)loadingRoot.remove();}else if(app.innerHTML===loadingMarkup)app.innerHTML='';return null;}
-initializing=false;loading=false;render();
+initializing=false;loading=false;onMountCommit();render();
 return {refreshAvailability(){try{initial.writeBlocked=controller.snapshot().writeBlocked;}catch{initial.writeBlocked=true;}if(availabilityKey()!==renderedAvailability){remember();readDraft();render();}else syncWriteControls();},invalidate(message){readDraft();lastError=message;render();},dispose(){disposed=true;lifetime.abort();clearTimeout(toastTimer);app.innerHTML='';},back(){if(acting)return;leave(()=>state.route==='root'?controller.memory():go(['result-editor','directory'].includes(state.route)?'results':'root'));},blocking(){return acting||toggleIntents.size>0||dirty()||!!state.dialog;},suspend(){if(disposed||suspended)return;readVersion++;remember();readDraft();suspended=true;app.inert=true;},loading(){if(disposed)return;remember();readDraft();loading=true;loadFailed=false;lastError='';suspended=false;app.inert=false;render();},fail(error){if(disposed)return;loading=false;loadFailed=true;lastError=error?.message||'读取未完成，请重试';suspended=false;app.inert=false;render();},failed(){return loadFailed;},resume(value,{kind,checking=false}={}){
  if(disposed)return;readVersion++;remember();readDraft();restoreWriteControls();revalidating=checking;
  const priorKind=state.kind,priorRoute=state.route,wasUnavailable=loading||loadFailed;
