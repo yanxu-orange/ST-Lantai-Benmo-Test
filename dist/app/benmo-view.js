@@ -24,10 +24,10 @@ const aliases = value => [...new Set((Array.isArray(value) ? value : String(valu
 
 /** The Benmo surface owns only navigation/drafts. The controller owns source
  * eligibility, runtime jobs, feature policy and acknowledged persistence. */
-export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, onOpenCleaning = null, isCurrent = () => true, prepare, initialState = {}, diagnosticSimpleMain = false, diagnosticInnerScroll = false, onDiagnosticSurfaceRendered = null} = {}) {
+export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, onOpenCleaning = null, isCurrent = () => true, prepare, initialState = {}, diagnosticSimpleMain = false, diagnosticInnerScroll = false, diagnosticScrollWindow = false, onDiagnosticSurfaceRendered = null} = {}) {
   const innerScrollSample = diagnosticSimpleMain === true && diagnosticInnerScroll === true;
   function scrollOwner() { const main = app.querySelector('.lt-main'); return innerScrollSample ? [...(main?.children ?? [])].find(node => node.matches?.('div[data-transition-simple-main]')) ?? null : main; }
-  function prepareDiagnosticSurface() { if (innerScrollSample) try { onDiagnosticSurfaceRendered?.(app.querySelector('.lantai')); } catch {} }
+  function prepareDiagnosticSurface() { if (innerScrollSample || diagnosticScrollWindow) try { onDiagnosticSurfaceRendered?.(app.querySelector('.lantai')); } catch {} }
   initialState ??= {};
   const lifetime = new AbortController();
   const revalidationActions = new Set(['save','delete-narrative','delete-record','toggle-excluded','restore-excluded','new','generate','generate-narrative','preview-narrative','save-narrative-budget','start-narrative','continue-narrative','retry-narrative','skip-narrative','pause-narrative','confirm-narrative-review','regenerate-narrative','manual-summary','start-backfill']);

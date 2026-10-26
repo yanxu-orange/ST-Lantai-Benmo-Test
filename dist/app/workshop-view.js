@@ -4,10 +4,10 @@ import {replaceSurfaceMarkup} from './stable-surface.js';
 import {DEFAULT_WORKSHOP_SYNC_REQUIREMENTS} from '../domain/workshop/model.js';
 import {mainNavigation,rootTitle} from './navigation.js';
 import {surfaceTheme} from './styles/theme.js';
-export async function mountWorkshopView({container:app,controller,initialKind='prompt',availability=()=>({memory:true,time:true,workshop:true,prompt:true,collect:true,sync:true}),prepare,isCurrent=()=>true,diagnosticSimpleMain=false,diagnosticInnerScroll=false,onDiagnosticSurfaceRendered=null}) {
+export async function mountWorkshopView({container:app,controller,initialKind='prompt',availability=()=>({memory:true,time:true,workshop:true,prompt:true,collect:true,sync:true}),prepare,isCurrent=()=>true,diagnosticSimpleMain=false,diagnosticInnerScroll=false,diagnosticScrollWindow=false,onDiagnosticSurfaceRendered=null}) {
 const innerScrollSample=diagnosticSimpleMain===true&&diagnosticInnerScroll===true;
 function scrollOwner(){const main=app.querySelector('.lt-main');return innerScrollSample?[...(main?.children??[])].find(node=>node.matches?.('div[data-transition-simple-main]'))??null:main;}
-function prepareDiagnosticSurface(){if(innerScrollSample)try{onDiagnosticSurfaceRendered?.(app.querySelector('.lantai'));}catch{}}
+function prepareDiagnosticSurface(){if(innerScrollSample||diagnosticScrollWindow)try{onDiagnosticSurfaceRendered?.(app.querySelector('.lantai'));}catch{}}
 const lifetime=new AbortController();let acting=false,disposed=false,suspended=false,loading=true,loadFailed=false,initializing=true,revalidating=false,lastError='';
 const toggleIntents=new Map();let toggleVersion=0,readVersion=0;
 let initial={modules:[],results:{}},modules=initial.modules,results=initial.results;
