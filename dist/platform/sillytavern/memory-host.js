@@ -1,6 +1,6 @@
 import {createPageCommitOrder,createPageCommitOrderExport} from './page-commit-order.js';
 import {APP_VERSION} from '../../app/version.js';
-import {createPageScrollWindow} from './page-scroll-window.js';
+import {createPanelHeightExperiment} from './panel-height-experiment.js';
 import {bindGenerationDiagnostic,bindGenerationDiagnosticPanel,downloadGenerationDiagnostic} from './generation-diagnostic.js';
 import {createUITransitionDiagnostic} from './ui-transition-diagnostic.js';
 import {createWorkshopHistoryTicket} from './workshop-history.js';
@@ -87,7 +87,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null;
   const commitOrder=createPageCommitOrder();
   const commitOrderExport=createPageCommitOrderExport({document:doc,trace:commitOrder,version:APP_VERSION});
-  const pageScrollWindow=createPageScrollWindow({document:doc,getShadow:()=>panel?.shadowRoot,onChange:commitOrder.window});
+  // Height A/B: both conditions use native scrolling, without temporary overflow windows.
+  const pageScrollWindow={begin(){},restore(){},dispose(){}};
+  const panelHeightExperiment=createPanelHeightExperiment({document:doc,getShadow:()=>panel?.shadowRoot});
   let interfaceDiagnosticTarget=null;
   const diagnosticRecorder=createUITransitionDiagnostic({document:doc,getPanel:()=>panel});
   // Evidence must never prevent ordinary navigation, saving or cleanup.
@@ -681,6 +683,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function generationEpoch() { try { return runtime.getGenerationSettings('event').epoch; } catch { return null; } }
   function openSettings() {
     if (settingsOpen || !panel || !runtime) return;
+    panelHeightExperiment.capture();
     pageScrollWindow.restore('leave-area');
     commitOrder.freeze('settings');interfaceDiagnostic.stage('requested','settings');
     settingsOpen=true;
@@ -700,7 +703,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function mountSettingsRoot(focusAction=null){
     if(!panel||closing||replacingPage)return;
     settingsRootView?.dispose();apiView?.dispose();apiView=null;
-    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,availability,focusAction,onCommitOrderExport:()=>commitOrderExport.export(),onGenerationDiagnostic:()=>downloadGenerationDiagnostic(doc),interfaceDiagnostic:{inspect:interfaceDiagnostic.inspect,subscribe:interfaceDiagnostic.subscribe,start:startInterfaceDiagnostic,stop:()=>interfaceDiagnostic.stop('manual'),download:interfaceDiagnostic.download},onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onTaskApi:openTaskApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
+    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,availability,focusAction,heightExperiment:panelHeightExperiment,onGenerationDiagnostic:()=>downloadGenerationDiagnostic(doc),interfaceDiagnostic:{inspect:interfaceDiagnostic.inspect,subscribe:interfaceDiagnostic.subscribe,start:startInterfaceDiagnostic,stop:()=>interfaceDiagnostic.stop('manual'),download:interfaceDiagnostic.download},onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onTaskApi:openTaskApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
     syncAppearance();interfaceDiagnostic.stage('shown','settings');
   }
   function openApiSettings(){
@@ -968,7 +971,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       benmoContent=doc.createElement('div');benmoContent.className='lt-host-page';benmoContent.hidden=true;
       content.append(memoryContent, settingsContent,summaryContent,benmoContent);
       decoration=createPersistentDecoration({container:content});
-      shadow.append(content); doc.body.append(panel);
+      shadow.append(content); doc.body.append(panel);panelHeightExperiment.apply();
     }
     mountWorkshopLoading(memoryContent,{titleText:'兰台本末',messageText:'正在准备兰台…',onBack:close,onClose:close,onRetry:()=>void open()});
     installPanelStyles();syncAppearance();
@@ -1080,7 +1083,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>({status:'retained',reason:'native-visibility',removed:0}),
     dispose() {
-      if(disposed)return;disposed = true;pageScrollWindow.dispose();commitOrderExport.dispose();commitOrder.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      if(disposed)return;disposed = true;panelHeightExperiment.dispose();pageScrollWindow.dispose();commitOrderExport.dispose();commitOrder.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;if(closeError)throw closeError;
     },

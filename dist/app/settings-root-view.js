@@ -7,7 +7,7 @@ import {APP_VERSION} from './version.js';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon=(name,label,action)=>`<button type="button" class="ui-icon-button ui-button--tertiary" data-settings-action="${action}" aria-label="${label}"><img class="lt-icon" src="${new URL(`./icons/${name}.svg`,import.meta.url)}" alt=""></button>`;
 const brand=`<svg class="lt-brand-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 6a4 4 0 1 1 8 0c0 2-2 3-2 5v1h3a4 4 0 0 1 4 4v3H3v-3a4 4 0 0 1 4-4h3v-1c0-2-2-3-2-5Zm-5 15h18v2H3Z"/></svg>`;
-export function mountSettingsRootView(container,{controls,appearance,settings,onSchedule,availability=()=>controls.inspect().policy,onApi,onTaskApi,onNavigate,onClose,onGenerationDiagnostic,onCommitOrderExport=null,interfaceDiagnostic=null,focusAction=null}={}){
+export function mountSettingsRootView(container,{controls,appearance,settings,onSchedule,availability=()=>controls.inspect().policy,onApi,onTaskApi,onNavigate,onClose,onGenerationDiagnostic,onCommitOrderExport=null,heightExperiment=null,interfaceDiagnostic=null,focusAction=null}={}){
  const lifetime=new AbortController();let route='root',disposed=false,renderedBook=false,pendingThemeFocus=false,scheduleView=null;
  const row=(label,key,scope='control')=>`<div class="lt-settings-row"><span>${label}</span><button type="button" class="ui-switch" role="switch" aria-label="${label}" data-${scope}="${key}" aria-checked="false"><span class="ui-switch__track"><span class="ui-switch__knob"></span></span></button></div>`;
  const entry=(label,action)=>`<button type="button" class="lt-settings-entry" data-settings-action="${action}"><span>${label}</span><span aria-hidden="true">›</span></button>`;
@@ -19,9 +19,10 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
   const identity=`<div class="lt-settings-brand"><div>${brand}<span>兰台本末</span><span class="lt-meta">v${esc(APP_VERSION)}</span></div><p class="lt-meta">剧情记忆与故事时间</p></div>`;
   const diagnostics=onGenerationDiagnostic?'<button type="button" class="ui-button ui-button--secondary" data-settings-action="generation-diagnostic">导出生成诊断</button><p class="lt-meta">诊断记录刷新后清空。</p><p class="lt-status" data-generation-diagnostic-status role="status"></p>':'';
   const interfaceTools=interfaceDiagnostic?'<button type="button" class="ui-button ui-button--secondary" data-settings-action="interface-record">记录界面诊断（最多30秒）</button><button type="button" class="ui-button ui-button--secondary" data-settings-action="interface-export" hidden>导出界面诊断</button><p class="lt-meta">仅记录界面状态，不采集文字内容；刷新清空。</p><p class="lt-status" data-interface-diagnostic-status role="status"></p>':'';
+  const heightTools=heightExperiment?`<label class="ui-field"><span class="ui-field__label">面板高度对照</span><select class="ui-input" data-panel-height>${[0,1,24].map(value=>`<option value="${value}" ${heightExperiment.inspect().reduction===value?'selected':''}>${value===0?'原高度':`降低 ${value} CSS px`}</option>`).join('')}</select></label><button type="button" class="ui-button ui-button--secondary" data-settings-action="height-measure">查看上个页面高度</button><p class="lt-status" data-height-status role="status">两组均使用原生滚动，暂关滚动已停用。刷新后回到原高度。</p>`:'';
   const commitTools=onCommitOrderExport?'<button type="button" class="ui-button ui-button--secondary" data-settings-action="commit-order-export">导出切区顺序记录</button><div data-commit-order-result hidden><p class="lt-status" data-commit-order-status role="status"></p><details data-commit-order-copy><summary>复制记录文本</summary><textarea class="lt-textarea" rows="6" readonly aria-label="切区顺序记录" data-commit-order-text></textarea></details></div>':'';
   const group=(name,role,number,content)=>`<section class="lt-settings-group lt-settings-section" data-settings-section="${role}" data-settings-material="${role}"><h2 data-section-number="${number}">${name}</h2>${content}</section>`;
-  return group('插件设置','plugin','01',toggles)+group('功能服务','services','02',services)+group('外观设计','appearance','03',appearanceFields)+group('关于兰台','about','04',(book?identity.replace('<p class="lt-meta">剧情记忆与故事时间</p>',''):identity)+diagnostics+interfaceTools+commitTools);
+  return group('插件设置','plugin','01',toggles)+group('功能服务','services','02',services)+group('外观设计','appearance','03',appearanceFields)+group('关于兰台','about','04',(book?identity.replace('<p class="lt-meta">剧情记忆与故事时间</p>',''):identity)+diagnostics+interfaceTools+commitTools+heightTools);
  }
  function render(focus=null,focusMain=true){
   if(disposed)return;scheduleView?.dispose();scheduleView=null;const state=controls.inspect();
@@ -64,6 +65,11 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
   const button=e.target.closest('[data-settings-action]');if(!button||button.disabled)return;
   pendingThemeFocus=false;
   const action=button.dataset.settingsAction;
+  if(action==='height-measure'){
+   const result=heightExperiment?.measure(),status=container.querySelector('[data-height-status]');
+   if(result&&status)status.textContent=`上个页面：${result.area}；当时配置：${result.reduction===0?'原高度':`降低 ${result.reduction} CSS px`}；实测高度：${result.height==null?'无法读取':`${result.height.toFixed(2)} CSS px`}；box-sizing：${result.boxSizing??'未知'}。`;
+   return;
+  }
   if(action==='commit-order-export'){
    try{const result=onCommitOrderExport?.();if(result){const box=container.querySelector('[data-commit-order-result]'),text=container.querySelector('[data-commit-order-text]'),status=container.querySelector('[data-commit-order-status]');box.hidden=false;text.value=result.text;status.textContent=result.downloadStarted?'已发起下载；若未保存，可展开复制文本。':'下载未成功，请展开复制文本。';if(!result.downloadStarted)container.querySelector('[data-commit-order-copy]').open=true;}}catch{}return;
   }
@@ -78,6 +84,11 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
   else if(action==='appearance-read')void appearance.read();else if(action==='retry')void controls.refresh();else if(action!=='settings')onNavigate?.(action);
  },{signal:lifetime.signal});
  container.addEventListener('change',e=>{
+  if(e.target.matches?.('[data-panel-height]')){
+   const value=Number(e.target.value);if(heightExperiment?.set(value)){
+    const status=container.querySelector('[data-height-status]');if(status)status.textContent=`已应用${value===0?'原高度':`降低 ${value} CSS px`}；两组均使用原生滚动。`;
+   }return;
+  }
   if(!e.target.matches?.('[data-settings-theme]')||e.target.disabled)return;
   // Capture intent before saving disables/blurs the native select. A preview
   // can replace its DOM while disabled; restore only after readiness returns.
