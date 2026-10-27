@@ -13,6 +13,7 @@ export const BASE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../settings-root-view.css'),
   entry('shared','../summary-view.css'),
   entry('shared','../summary-settings.css'),
+  entry('shared','../shared-ui/prompt-list.css'),
   entry('shared','../recall-view.css'),
   entry('shared','../time-view.css'),
   entry('shared','../workshop-view.css'),

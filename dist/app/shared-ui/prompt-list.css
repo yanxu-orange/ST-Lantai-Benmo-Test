@@ -1,0 +1,11 @@
+/* Opt-in flat prompt editors; existing summary owners keep their own surface. */
+.ui-prompt-list { display:grid; gap:var(--ui-space-control); min-width:0; }
+.ui-prompt-item { min-width:0; margin:0; border:0; background:transparent; }
+.ui-prompt-item > summary { cursor:pointer; display:flex; align-items:center; gap:var(--ui-space-control); min-block-size:var(--ui-interaction-target-min); padding-block:var(--ui-space-control); list-style:none; font-family:var(--ui-type-ui-family); font-size:var(--ui-type-ui-body-size); font-weight:var(--ui-type-ui-body-weight); }
+.ui-prompt-item > summary::-webkit-details-marker { display:none; }
+.ui-prompt-item > summary::marker { content:''; }
+.ui-prompt-label { min-width:0; flex:1; overflow-wrap:anywhere; }
+.ui-prompt-chevron { width:var(--ui-space-row); height:var(--ui-space-row); flex:none; color:var(--ui-color-text-secondary); transform:rotate(-90deg); }
+.ui-prompt-item[open] > summary .ui-prompt-chevron { transform:none; }
+.ui-prompt-item > summary:focus-visible { outline:var(--ui-focus-ring-width) solid var(--ui-color-focus-ring); outline-offset:calc(-1 * var(--ui-focus-ring-width)); }
+.ui-prompt-body { display:grid; gap:var(--ui-space-row); min-width:0; padding-block:var(--ui-space-control); }
