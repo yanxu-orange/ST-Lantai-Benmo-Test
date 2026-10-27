@@ -301,8 +301,8 @@
   },
   {
     "path": "dist/app/settings-root-view.js",
-    "bytes": 14393,
-    "sha256": "310024d3d4cb423637ecd049e13d32b36a4f71121a8f85f5798e133a94eeb9d2"
+    "bytes": 14417,
+    "sha256": "915cfdddb71eccc47776673358bd34462a99164eeec1a5e383b30a98a5f3b6b8"
   },
   {
     "path": "dist/app/shared-ui/appearance-format.css",
@@ -647,7 +647,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "592d92db735c0924f02d322283c3a0f8fd4ab0a085bae6ea817eba03775b9880"
+    "sha256": "f1e6e26a622da0542dc040faab15b0699759840353a2bd72a100131f137af2a1"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1542,6 +1542,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "5b3183f1dbea9979b9b492667eaaabde9ddd50dd2da8fc1e396214af78d25730"
+    "sha256": "17c32905c3a73380102ac86c81115e58a39056beab6093550fa72f5d4254b1e0"
   }
 ]
