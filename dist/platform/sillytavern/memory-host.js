@@ -28,6 +28,8 @@ import {createTrackingRuntime} from './tracking-runtime.js';
 import {createScheduleRuntime} from './schedule-runtime.js';
 import {createTimeController} from '../../app/time-controller.js';
 import {mountTimeView} from '../../app/time-view.js';
+import {createWorldDynamicsController} from '../../app/world-dynamics-controller.js';
+import {createWorldbookReader} from './worldbook-reader.js';
 import {createTimePromptRuntime} from './time-prompts.js';
 import {createTimeRuntime} from './time-runtime.js';
 import { createSillyTavernMemoryAdapter } from './memory-adapter.js';
@@ -112,7 +114,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     let localCurrent=false;try{localCurrent=!!local?.target&&sameTarget(local.target,repository.captureTarget());}catch{/* Preparing a new chat. */}
     return {...global?.policy,...Object.fromEntries(['summary','item','npc','self','outline','benmo'].map(key=>[key,master&&local?.policy?.[key]===true])),memory:!!controls?.allowed('memory'),settings:true,transient:global?.status!=='ready'||!localCurrent};
   };
-  let hostReloadSequence=0,timeRuntime,timePrompts,timeController,timeView,timeTarget,timeContainer,memoryReadProof=null;
+  let hostReloadSequence=0,timeRuntime,timePrompts,timeController,timeView,timeTarget,timeContainer,memoryReadProof=null,worldController=null,worldTarget=null;
   let sourceDeletionRuntime,sourceDeletionNotices,narrativeRuntime,latestRuntime,latestDisplay,workshopBackgroundDisplay;
   let benmoController,benmoView,benmoSubscription,benmoTarget,benmoNavigation=null,benmoPolicyKey='';
   let benmoWarmupRequested=false,benmoWarmupScheduled=false;
@@ -232,6 +234,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     // Confirmed batch policy controls source hiding independently of recall.
     // ST remains responsible for its subsequent preset/budget assembly.
     unsubscribe = adapter.subscribe(kind => {
+      if(worldController){let same=false;try{same=sameTarget(worldTarget,repository.captureTarget());}catch{/* A switched chat may not have a prepared root yet. */}if(!same){worldController.dispose();worldController=null;worldTarget=null;}}
       if(interfaceDiagnosticTarget){try{if(!sameTarget(interfaceDiagnosticTarget,repository.captureTarget()))interfaceDiagnostic.stop('chat-change');else if(kind==='reload')interfaceDiagnostic.stage('reload');}catch{interfaceDiagnostic.stop('chat-change');}}
       const sequence=++hostReloadSequence;
       if(controls){controls.invalidate();void controls.ensure().then(()=>{if(disposed||sequence!==hostReloadSequence)return;if(panel)syncControls();requestBenmoWarmup();});}
@@ -385,7 +388,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(before&&!before.event&&next.event)runtime.summaryService?.resumeAutoConfirm();
     if(before&&!before.cumulative&&next.cumulative)runtime.cumulativeService?.resumeAutoConfirm();
     cumulativeRuntime?.setEnabled(next.cumulative);latestRuntime?.setEnabled(next.enabled);
-    if(!next.enabled)trackingRuntime?.clear();
+    if(!next.enabled)trackingRuntime?.clear();if(!next.enabled||!next.time)worldController?.cancel();
     if(!before||['enabled','item','npc'].some(key=>before[key]!==next[key]))trackingRuntime?.controlsChanged?.();
     if(!before||['enabled','time','schedule'].some(key=>before[key]!==next[key]))scheduleRuntime?.controlsChanged?.();
     if(!before||['enabled','self','outline'].some(key=>before[key]!==next[key]))narrativeRuntime?.controlsChanged?.();
@@ -575,7 +578,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(timeController&&timeTarget?.chatId===target.chatId&&timeTarget?.rootId===target.rootId&&!sameTarget(timeTarget,target)){timeController.rebindTarget(target);timeTarget=target;}
     if(!timeController||!sameTarget(timeTarget,target)){
       areaPages.time.unmount();timeController?.dispose();timeTarget=target;
-      timeController=createTimeController({repository,settings:runtime.settings,dateRuntime:timeRuntime,captureSource:t=>adapter.captureTimeSource?.(t)??adapter.captureChatSource?.(t)??adapter.captureSummarySource(t),matchesSource:typeof (adapter.matchesTimeSource??adapter.matchesChatSource)==='function'?(t,s)=>(adapter.matchesTimeSource??adapter.matchesChatSource)(t,s):null,onMemory:()=>void returnFromSummary(),onWorkshop:()=>void openWorkshop(),onBenmo:()=>void openBenmo(),onSettings:openSettings,onClose:close});
+      if(!worldController||!sameTarget(worldTarget,target)){worldController?.dispose();worldTarget=structuredClone(target);worldController=createWorldDynamicsController({repository,settings:runtime.settings,provider:runtime.provider,getContext,captureSource:t=>adapter.captureSummarySource(t),books:createWorldbookReader({getContext,...runtimeOptions.worldbookOptions}),allowed:()=>allowed('time'),onTime:()=>timeController?.open('home'),onManage:()=>timeController?.open('manage')});}
+      const world=worldController;
+      timeController=createTimeController({world,repository,settings:runtime.settings,dateRuntime:timeRuntime,captureSource:t=>adapter.captureTimeSource?.(t)??adapter.captureChatSource?.(t)??adapter.captureSummarySource(t),matchesSource:typeof (adapter.matchesTimeSource??adapter.matchesChatSource)==='function'?(t,s)=>(adapter.matchesTimeSource??adapter.matchesChatSource)(t,s):null,onMemory:()=>void returnFromSummary(),onWorkshop:()=>void openWorkshop(),onBenmo:()=>void openBenmo(),onSettings:openSettings,onClose:close});
     }
     memoryContent.hidden=true;memoryContent.inert=true;
     if(!timeContainer){timeContainer=doc.createElement('div');timeContainer.className='time-mount lt-host-page';}
@@ -1069,7 +1074,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>({status:'retained',reason:'native-visibility',removed:0}),
     dispose() {
-      if(disposed)return;disposed = true;panelHeightPreference.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      if(disposed)return;disposed = true;panelHeightPreference.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();timeController?.dispose();worldController?.dispose();worldController=null;worldTarget=null;let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;if(closeError)throw closeError;
     },

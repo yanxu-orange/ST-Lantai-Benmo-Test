@@ -71,8 +71,8 @@
   },
   {
     "path": "dist/app/book-themes/time-details.css",
-    "bytes": 18909,
-    "sha256": "0600b3be034f0d0a67060aa95d87f58d028a4da4ff05572fe9b9b66ee18ff969"
+    "bytes": 19342,
+    "sha256": "9a6a679136a2e5bc6fba040c81f1003046d09b7beea205374444bca0875f6e8a"
   },
   {
     "path": "dist/app/book-themes/tokens.css",
@@ -306,8 +306,8 @@
   },
   {
     "path": "dist/app/shared-ui/appearance-format.css",
-    "bytes": 9311,
-    "sha256": "bf54a16d96ca64c066bd848c84541eb76fb6f383b01ce6f658326dbbe8996f24"
+    "bytes": 10130,
+    "sha256": "ddc4d17f6546a8ec32cb75a566b8f0fd4349c199f9e0e6707f0635bcf75cbab0"
   },
   {
     "path": "dist/app/shared-ui/candidate.web.css",
@@ -406,8 +406,8 @@
   },
   {
     "path": "dist/app/snow-ermine/time.css",
-    "bytes": 13313,
-    "sha256": "0f3a15616bf29ed629723770f8824c3d2579ff7202ccbde65cf7f1bccb7d22a1"
+    "bytes": 13995,
+    "sha256": "6abd213445be0d90788130d66b49154c9308e795de9bf9a9b3b8c0ec74e98a76"
   },
   {
     "path": "dist/app/source-deletion-dialog.js",
@@ -521,8 +521,8 @@
   },
   {
     "path": "dist/app/spring/settings.css",
-    "bytes": 22046,
-    "sha256": "34515427a4a364e9c9153867fc52b365ab303a15453593f63e24b17f798c526e"
+    "bytes": 22239,
+    "sha256": "ae71a2a334be70f83a5e1cf4191c44d4638eb288c7a619677d1edb3c48ac27df"
   },
   {
     "path": "dist/app/spring/switch-tokens.css",
@@ -536,8 +536,8 @@
   },
   {
     "path": "dist/app/spring/time.css",
-    "bytes": 19830,
-    "sha256": "704b21eed9a76bbba661ab24ecde40d5ae361e570ace1f2e186f2742f2a0539e"
+    "bytes": 20447,
+    "sha256": "8b43ce315f3ad357891e38cd66b1bce461228d3650ba5eb7360fa666b822ec38"
   },
   {
     "path": "dist/app/spring/workshop.css",
@@ -611,8 +611,8 @@
   },
   {
     "path": "dist/app/task-api-settings-session.js",
-    "bytes": 7812,
-    "sha256": "348dc34d11732d90b44e20ae6e83771561b1364ddf9676e2217c92783fe548eb"
+    "bytes": 7846,
+    "sha256": "c3a50e9699aabca550c6385ebd43d263104614b3752d0943e2a29accf4359010"
   },
   {
     "path": "dist/app/task-api-settings-view.js",
@@ -621,18 +621,18 @@
   },
   {
     "path": "dist/app/time-controller.js",
-    "bytes": 28661,
-    "sha256": "f8b64ee8f3b5ed5e9b6ae3bf023b1288b7f83d65c619ca93aa741bb979ed3c74"
+    "bytes": 29026,
+    "sha256": "32b20cb5da237e2ab7cb8f4590986e34b38f79617919b490e2ee14b01337b309"
   },
   {
     "path": "dist/app/time-view.css",
-    "bytes": 10794,
-    "sha256": "6674bd6b0e5736c044386a4aa535ac41d968a8c2957b604242a6c94703b75d57"
+    "bytes": 11290,
+    "sha256": "dcc5c0be4b5d557a92060937b8aecfd8ac2a72f7bf9e50a61c49a811cfa0be3d"
   },
   {
     "path": "dist/app/time-view.js",
-    "bytes": 41330,
-    "sha256": "9ef05d93017fc104ce499bef313fe262f75d4c3f9351ad4f90b7466289ba2aef"
+    "bytes": 42575,
+    "sha256": "b56735f4b42f78c196f32d18402e99ca36b1c5ab4f6812212d4adac43f6f7c0d"
   },
   {
     "path": "dist/app/tracking-controller.js",
@@ -647,7 +647,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "f1e6e26a622da0542dc040faab15b0699759840353a2bd72a100131f137af2a1"
+    "sha256": "eff51e5e8c0acad3d6958f7ce58ab83119c08cb4df249f260b9b3648a681c3cf"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -668,6 +668,16 @@
     "path": "dist/app/workshop-view.js",
     "bytes": 27117,
     "sha256": "fd70169caf73b4b6c6f6b3745f345a4de7b099e95dd06485417b055904b8bccc"
+  },
+  {
+    "path": "dist/app/world-dynamics-controller.js",
+    "bytes": 13214,
+    "sha256": "04a542e10431935b85cbb59e018c5a8551c2ab459f0041992bbdc7473a93fd8d"
+  },
+  {
+    "path": "dist/app/world-dynamics-view.js",
+    "bytes": 18679,
+    "sha256": "4ec6cecdea128b22c434c1a1554297b957fae56f18a6660110e6608a416e8312"
   },
   {
     "path": "dist/domain/background/round.js",
@@ -771,8 +781,8 @@
   },
   {
     "path": "dist/domain/memory/model.js",
-    "bytes": 9746,
-    "sha256": "712bbbf06e9b2db50267f49145ed0a3ae0888be7f5bd3969553bcb30559b6616"
+    "bytes": 10038,
+    "sha256": "c7c49f188cd40f2e2d40e27dfaaa522609acaace8f193bed24e424eac7da2dc1"
   },
   {
     "path": "dist/domain/memory/query.js",
@@ -781,8 +791,8 @@
   },
   {
     "path": "dist/domain/memory/repository.js",
-    "bytes": 63267,
-    "sha256": "49c5454b3447f52af8e5d404b927bbeccdda6bf21ea6c1cff89a31192b0ed84d"
+    "bytes": 64513,
+    "sha256": "7e49563e8cd60a9f8f0cb74dc336ca3d37b74a7aa5ccfc69ca673c3a2f26dd4f"
   },
   {
     "path": "dist/domain/memory/results-persistence.js",
@@ -1190,6 +1200,31 @@
     "sha256": "1dc371b4b25cb82fd2f8c0d9620710101ffb0f7ac27d35c0b3dfc207cc197a24"
   },
   {
+    "path": "dist/domain/world-dynamics/data.js",
+    "bytes": 6495,
+    "sha256": "8343c0be71757163227d4fc121fd6874e69c3e7249f94ab1fc255c43b802e1f7"
+  },
+  {
+    "path": "dist/domain/world-dynamics/output.js",
+    "bytes": 3918,
+    "sha256": "874fc6a700b786d93c7b2d7b3d1ee9890e03b301debfb276d864041ac7aa842d"
+  },
+  {
+    "path": "dist/domain/world-dynamics/preset-source.js",
+    "bytes": 17546,
+    "sha256": "7c58534f8ad1490031df97aa4834adeeb9294ccdbd2fa04c2039888722fa5fed"
+  },
+  {
+    "path": "dist/domain/world-dynamics/prompts.js",
+    "bytes": 4018,
+    "sha256": "d2be5dd141f10373ad73ba9c8224aed31febba0592ae374bb47129a86ad3f257"
+  },
+  {
+    "path": "dist/domain/world-dynamics/tasks.js",
+    "bytes": 3070,
+    "sha256": "4f26f2db0b76914c12639b9025eac0d4d5b7028f2e407ef9f143f010295e588c"
+  },
+  {
     "path": "dist/index.js",
     "bytes": 1243,
     "sha256": "29c01d974a2e4a9f0b5998f8bb4e22a15d7cb6bdc426d84fa91b563062fd2027"
@@ -1291,8 +1326,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 91177,
-    "sha256": "32bd4587f017121a4144a2280175cdfafa49319d909e35a6d8b3ecc19b1701c0"
+    "bytes": 92250,
+    "sha256": "fce1e5e12a5e10f36bd2b989ae36374b71f4cac6a640d85405497aa6a5bd4578"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1465,14 +1500,19 @@
     "sha256": "07be78e53cebbc087346a47d6f6c7dd05c144b3fec966a70bf29b6a10e6a15df"
   },
   {
+    "path": "dist/platform/sillytavern/worldbook-reader.js",
+    "bytes": 1907,
+    "sha256": "ca421a6ac293465c540476bf30996cfee8e33dfd02dcaf2aa9f5bbc8bcfe1824"
+  },
+  {
     "path": "dist/probe/runtime-probe.js",
     "bytes": 4956,
     "sha256": "8fee52e9a7326f411e05276e61b8b6871c2b7f5069cee9c3bd1ec6df4e4f6488"
   },
   {
     "path": "dist/shared/ai/provider.js",
-    "bytes": 13685,
-    "sha256": "c34b6253f5b945205d07538984bef188b63caff9c8f98122b5363a531cf0ffc8"
+    "bytes": 13750,
+    "sha256": "1aa3949132d3c2467068c521be8ab6ae6eac6ba755fc4cdb2d95d75cc4be6a8c"
   },
   {
     "path": "dist/shared/ai/recall-provider.js",
@@ -1506,8 +1546,8 @@
   },
   {
     "path": "dist/shared/settings/model.js",
-    "bytes": 22788,
-    "sha256": "f644109d289be2c81ea3e78b8815e9d7e6635fdf721f30eb0c478c7d054ef247"
+    "bytes": 22938,
+    "sha256": "4a39913add77849d09213c9c8b121dc3fdea50745c8aed1a84b9f64d5c751efb"
   },
   {
     "path": "dist/shared/settings/repository.js",
@@ -1542,6 +1582,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "17c32905c3a73380102ac86c81115e58a39056beab6093550fa72f5d4254b1e0"
+    "sha256": "7e127b0cb56ac432dded1116c197c97a45aa81719ef46cd659bf6cba5f6851d7"
   }
 ]

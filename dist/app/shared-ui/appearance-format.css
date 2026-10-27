@@ -62,3 +62,8 @@
 .lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-recall .lt-recall-section { padding-block: 8px; gap: 11px; }
 .lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-recall .lt-recall-grid { gap: 11px; }
 .lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"]).lt-recall :is(.lt-recall-detail-body,.lt-recall-memory-body,.lt-recall-item-title > span) { font-family: var(--ui-type-reading-family); font-size: .8125rem; line-height: 1.85; }
+/* Single-text editors use the available workspace like the shared workshop /
+   Benmo editor. Short viewports scroll; native vertical resizing stays usable. */
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"],[data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-main--editor { display: flex; flex-direction: column; gap: var(--ui-space-row); }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"],[data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-main--editor > .ui-field { display: grid; flex: 1 0 auto; grid-template-rows: auto minmax(15rem,1fr); }
+.lantai:is([data-ui-theme="spring"],[data-ui-theme="snow-ermine"],[data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) .ui-main--editor > .ui-field > textarea { block-size: 100%; resize: vertical; }

@@ -126,6 +126,9 @@
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-management-row:hover:enabled { background: var(--ui-color-surface-subtle); }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-management-row small { font-size: 12px; }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-entry-actions .ui-button { padding: 9px 10px; border: 1px solid var(--ui-color-border-default); border-radius: 4px; background: var(--ui-color-surface-subtle); color: var(--ui-color-action-tertiary-text); font-size: 13px; }
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-entry-actions > .ui-button--primary:enabled { background: var(--ui-color-action-primary-background); color: var(--ui-color-action-primary-text); border-color: var(--ui-color-selected-border); }
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-entry-actions > .ui-button--primary:hover:enabled { background: var(--ui-color-action-primary-background); border-color: var(--ui-color-border-strong); }
+.lantai[data-ui-theme="snow-ermine"].lt-time .time-entry-actions > .ui-button--primary:disabled { background: var(--ui-color-disabled-background); color: var(--ui-color-text-disabled); border-color: var(--ui-color-border-subtle); }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-state-tabs { padding: 3px; gap: 4px; border: 0; border-radius: var(--lt-format-time-segment-radius); background: var(--ui-color-surface-subtle); }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-state-tabs > .ui-button { padding-inline: 5px; border: 1px solid transparent; border-radius: var(--lt-format-time-segment-control-radius); background: transparent; color: var(--ui-color-text-meta); }
 .lantai[data-ui-theme="snow-ermine"].lt-time .time-state-tabs > .ui-button[aria-pressed="true"]:enabled { background: var(--ui-color-selected-background); border-color: var(--ui-color-selected-border); color: var(--ui-color-selected-text); font-weight: 700; }

@@ -152,6 +152,9 @@
 .lantai[data-ui-theme="spring"].lt-time .time-management-row small { color: var(--ui-color-text-meta); font-size: 12px; }
 .lantai[data-ui-theme="spring"].lt-time .time-entry-actions .ui-button { padding: 9px 10px; border-color: var(--lt-format-time-entry-border); background: var(--lt-format-page-paper); color: var(--lt-format-time-entry-ink); font-size: 13px; }
 .lantai[data-ui-theme="spring"].lt-time .time-entry-actions .ui-button:hover:enabled { background: var(--lt-format-time-entry-hover-background); }
+.lantai[data-ui-theme="spring"].lt-time .time-entry-actions > .ui-button--primary:enabled { background: var(--lt-format-time-save-background); color: var(--lt-format-time-save-ink); border-color: var(--lt-format-time-save-border); }
+.lantai[data-ui-theme="spring"].lt-time .time-entry-actions > .ui-button--primary:hover:enabled { background: var(--lt-format-time-save-hover-background); }
+.lantai[data-ui-theme="spring"].lt-time .time-entry-actions > .ui-button--primary:disabled { background: var(--ui-color-disabled-background); color: var(--ui-color-text-disabled); border-color: var(--ui-color-border-subtle); }
 .lantai[data-ui-theme="spring"].lt-time .time-state-tabs { gap: 5px; padding: 4px; border: 0; border-radius: var(--lt-format-time-segment-radius); background: var(--lt-format-time-segment-background); }
 .lantai[data-ui-theme="spring"].lt-time .time-state-tabs > .ui-button { border: 0; border-radius: var(--lt-format-time-segment-control-radius); background: transparent; color: var(--lt-format-time-segment-ink); }
 .lantai[data-ui-theme="spring"].lt-time .time-state-tabs > .ui-button[aria-pressed="true"] { background: var(--lt-format-time-segment-selected-background); color: var(--lt-format-time-segment-selected-ink); font-weight: 700; }

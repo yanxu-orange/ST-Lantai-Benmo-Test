@@ -11,6 +11,7 @@ import {rebaseSummaryPositions,effectiveBatchPositions} from '../summary/source-
 import {assertChatControls,defaultChatControls} from '../controls/model.js';
 import {workshopOf,assertWorkshop} from '../workshop/model.js';
 import {timeOf,assertTime} from '../time/data.js';
+import {worldDynamicsOf,assertWorldDynamics} from '../world-dynamics/data.js';
 import {importSummaryCandidates} from '../time/summary-candidates.js';
 import { assertRoot, validateEvent, validateEventForSave, activeEvents } from './model.js';
 import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence,normalizedSummarySettingsEvidence} from '../summary/data.js';
@@ -235,6 +236,19 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         if(equal(root.controls??defaultChatControls(),candidate))return {status:'unchanged',selection:freeze({target:frozen,controls:candidate})};
         await commit(frozen,root,{...root,revision:root.revision+1,controls:candidate},guard);
         return {status:'committed',selection:freeze({target:frozen,controls:candidate})};
+      });
+    },
+    async captureWorldDynamics(target){const frozen=copy(target),root=await read(frozen);return freeze({target:frozen,worldDynamics:worldDynamicsOf(root),time:timeOf(root)});},
+    updateWorldDynamics(target,{apply,isCurrent=()=>true}={}){
+      if(typeof apply!=='function')throw new Error('世界动态缺少更新函数');const frozen=copy(target);
+      return enqueue(async()=>{
+        const root=await read(frozen),before=worldDynamicsOf(root);
+        const guard=stored=>{requireTarget(frozen);if(isCurrent()!==true||!equal(worldDynamicsOf(stored),before))throw new Error('世界动态任务来源已变化');return true;};
+        guard(root);const candidate=assertWorldDynamics(apply(copy(before)));candidate.revision=before.revision;
+        if(equal(candidate,before))return {status:'unchanged',selection:{target:frozen,worldDynamics:before},root};
+        candidate.revision++;
+        const saved=await commit(frozen,root,{...root,revision:root.revision+1,worldDynamics:candidate},guard,{requireConfirmation:true});
+        return {status:'committed',selection:freeze({target:frozen,worldDynamics:worldDynamicsOf(saved)}),root:saved};
       });
     },
     async captureTime(target,readView){const frozen=copy(target),root=await panelRead(frozen,readView);return freeze({target:frozen,time:timeOf(root)});},

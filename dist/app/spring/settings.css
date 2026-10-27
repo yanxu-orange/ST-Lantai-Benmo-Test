@@ -59,6 +59,7 @@
   --lt-settings-heading-icon: #c9aa73;
   --lt-settings-heading-shape: url("./assets/settings-clock.svg");
 }
+.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group[data-settings-section="services"],
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:has([data-control="prompt"]),
 .lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="workshop"] {
   --lt-settings-heading-bg: var(--lt-format-settings-group-prompt-background);
@@ -68,6 +69,7 @@
   --lt-settings-heading-shape: url("./assets/settings-spark.svg");
 }
 .lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="summary"] { --lt-settings-heading-shape: url("./assets/settings-book.svg"); }
+.lantai[data-ui-theme="spring"].lt-settings .lt-settings-group[data-settings-section="about"],
 .lantai[data-ui-theme="spring"].lt-task-api-settings .lt-settings-group[data-task-api-group="latest"] {
   --lt-settings-heading-bg: var(--lt-format-settings-group-info-background);
   --lt-settings-heading-ink: var(--lt-format-settings-group-info-ink);

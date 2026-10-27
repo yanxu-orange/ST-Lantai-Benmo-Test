@@ -4,6 +4,7 @@ export function aiTaskGroup(task) {
   if (task.startsWith('event.summary.') || ['memory.indexes', 'memory.merge'].includes(task) || task.startsWith('cumulative.')) return 'summary';
   if (task.startsWith('narrative.')) return 'narrative';
   if (task === 'workshop.round') return 'workshop';
+  if (task === 'worldDynamics.generate') return 'worldDynamics';
   if (task.startsWith('latest.') || task === 'background.round' || task === 'tracking.update') return 'latest';
   return undefined;
 }

@@ -4,6 +4,7 @@ import {assertTracking,inheritTracking} from '../tracking/data.js';
 import {assertChatControls} from '../controls/model.js';
 import {assertWorkshop,inheritWorkshop} from '../workshop/model.js';
 import {assertTime,inheritTime} from '../time/data.js';
+import {assertWorldDynamics,inheritWorldDynamics} from '../world-dynamics/data.js';
 import {emptySummary,assertSummary,summaryOf} from '../summary/data.js';
 import {effectiveBatchPositions,effectiveBatchRanges} from '../summary/source-positions.js';
 import {assertCumulative,inheritCumulative} from '../cumulative/data.js';
@@ -26,6 +27,7 @@ export function assertRoot(root, target) {
   if(Object.hasOwn(root,'narrative'))root.narrative=assertNarrative(root.narrative);
   if(Object.hasOwn(root,'tracking'))root.tracking=assertTracking(root.tracking);
   if(Object.hasOwn(root,'time'))root.time=assertTime(root.time);
+  if(Object.hasOwn(root,'worldDynamics'))root.worldDynamics=assertWorldDynamics(root.worldDynamics);
   if(Object.hasOwn(root,'controls'))assertChatControls(root.controls);
   if(Object.hasOwn(root,'workshop'))root.workshop=assertWorkshop(root.workshop);
   const normalized=root;
@@ -82,7 +84,7 @@ export function inheritMemoryRoot(root,rootId,floor,{timeMessages=null}={}) {
   summary.preferences.manual.startFloor=Math.min(summary.preferences.manual.startFloor,floor);
   summary.preferences.manual.endFloor=null;
   summary.preferences.auto.startFloor=Math.min(summary.preferences.auto.startFloor,floor);
-  return {...emptyRoot(rootId),events:selected,summary,...(Object.hasOwn(root,'controls')?{controls:assertChatControls(root.controls)}:{}),...(Object.hasOwn(root,'workshop')?{workshop:inheritWorkshop(root.workshop,floor)}:{}),...(Object.hasOwn(root,'cumulative')?{cumulative:inheritCumulative(root.cumulative,floor)}:{}),...(Object.hasOwn(root,'latest')?{latest:inheritLatest(root.latest,floor)}:{}),...(Object.hasOwn(root,'narrative')?{narrative:inheritNarrative(root.narrative,floor)}:{}),...(Object.hasOwn(root,'tracking')?{tracking:inheritTracking(root.tracking,floor)}:{}),...(Object.hasOwn(root,'time')?{time:inheritTime(root.time,{messages:timeMessages,floor,retainedSummaryBatchIds:summary.batches.map(batch=>batch.id)})}:{})};
+  return {...emptyRoot(rootId),events:selected,summary,...(Object.hasOwn(root,'worldDynamics')?{worldDynamics:inheritWorldDynamics(root.worldDynamics,floor)}:{}),...(Object.hasOwn(root,'controls')?{controls:assertChatControls(root.controls)}:{}),...(Object.hasOwn(root,'workshop')?{workshop:inheritWorkshop(root.workshop,floor)}:{}),...(Object.hasOwn(root,'cumulative')?{cumulative:inheritCumulative(root.cumulative,floor)}:{}),...(Object.hasOwn(root,'latest')?{latest:inheritLatest(root.latest,floor)}:{}),...(Object.hasOwn(root,'narrative')?{narrative:inheritNarrative(root.narrative,floor)}:{}),...(Object.hasOwn(root,'tracking')?{tracking:inheritTracking(root.tracking,floor)}:{}),...(Object.hasOwn(root,'time')?{time:inheritTime(root.time,{messages:timeMessages,floor,retainedSummaryBatchIds:summary.batches.map(batch=>batch.id)})}:{})};
 }
 function branchPositionedEvents(events,summary) {
   if(!summary.sourcePositions)return events;

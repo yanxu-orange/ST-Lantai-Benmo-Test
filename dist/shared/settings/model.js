@@ -34,10 +34,10 @@ function exact(value, keys) {
 const text = (value, empty = false) => typeof value === 'string' && value.trim() === value && (empty || !!value);
 export const AI_TASK_GROUPS = Object.freeze(['event', 'cumulative', 'narrative', 'latest']);
 export const API_CAPABILITIES = Object.freeze(['text', 'embedding', 'rerank']);
-export const TASK_ROUTING_GROUPS = Object.freeze(['summary', 'narrative', 'latest', 'workshop', 'embedding', 'rerank']);
+export const TASK_ROUTING_GROUPS = Object.freeze(['summary', 'narrative', 'latest', 'workshop', 'worldDynamics', 'embedding', 'rerank']);
 export const presetCapability = preset => preset?.capability ?? 'text';
 export function assertTaskRouting(value) {
-  exact(value, TASK_ROUTING_GROUPS.filter(group=>group!=='workshop'||Object.hasOwn(value??{},'workshop')));
+  exact(value, TASK_ROUTING_GROUPS.filter(group=>!['workshop','worldDynamics'].includes(group)||Object.hasOwn(value??{},group)));
   for (const [group, route] of Object.entries(value)) {
     exact(route, ['source', 'presetId', 'model',...(Object.hasOwn(route??{},'modelSource')?['modelSource']:[])]);
     if(Object.hasOwn(route,'modelSource')&&(route.modelSource!=='task'||route.source!=='plugin'))invalid();
@@ -257,13 +257,13 @@ function legacyTaskRoute(ai, group) {
 }
 // Read projection only. Legacy selections remain stored until an explicit save.
 export function taskRoutingView(ai) {
-  if (ai.taskRouting) return frozenSettingsCopy({ routes: {...ai.taskRouting,workshop:ai.taskRouting.workshop??ai.taskRouting.latest}, unresolvedSummary: false, legacySummaryRoutes: null });
+  if (ai.taskRouting) return frozenSettingsCopy({ routes: {...ai.taskRouting,workshop:ai.taskRouting.workshop??ai.taskRouting.latest,worldDynamics:ai.taskRouting.worldDynamics??{source:'none',presetId:null,model:''}}, unresolvedSummary: false, legacySummaryRoutes: null });
   const event = legacyTaskRoute(ai, 'event'), cumulative = legacyTaskRoute(ai, 'cumulative');
   const effective = route => ({...route,model:route.source==='plugin'?(route.model||(ai.presets.find(item=>item.id===route.presetId)?.model??'')):'',followsPreset:route.source==='plugin'&&route.model===''});
   const unresolvedSummary = !equalSettings(effective(event), effective(cumulative));
   const summary = unresolvedSummary ? null : event;
   const unassigned = () => ({ source: 'none', presetId: null, model: '' });
-  return frozenSettingsCopy({ routes: { summary, narrative: legacyTaskRoute(ai, 'narrative'), latest: legacyTaskRoute(ai, 'latest'), workshop: legacyTaskRoute(ai, 'latest'), embedding: unassigned(), rerank: unassigned() },
+  return frozenSettingsCopy({ routes: { summary, narrative: legacyTaskRoute(ai, 'narrative'), latest: legacyTaskRoute(ai, 'latest'), workshop: legacyTaskRoute(ai, 'latest'), worldDynamics:unassigned(), embedding: unassigned(), rerank: unassigned() },
     unresolvedSummary, legacySummaryRoutes: { event, cumulative } });
 }
 export function aiConfig(root, epoch, taskGroup) {
