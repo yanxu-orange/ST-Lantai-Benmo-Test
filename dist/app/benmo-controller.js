@@ -2,7 +2,7 @@ import {sameTarget} from '../domain/memory/repository.js';
 import {TRACKING_FIELDS} from '../domain/tracking/model.js';
 const BENMO_FEATURES=['summary','item','npc','self','outline'];
 const copy=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-export function createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime,repository,adapter,getControls,isReadOnly=()=>false,loadBudgetMs=5000,onPublication=()=>{}}={}) {
+export function createBenmoController({latestRuntime,trackingRuntime,narrativeRuntime,repository,adapter,getControls,isReadOnly=()=>false,loadBudgetMs=5000}={}) {
   // Page reads have their own lifetime; abandoning one never cancels a paid task or host write.
   let loadAttempt=0,cancelWait=null;
   let summaryCache=null,trackingCache=null,narrativeCache=null;
@@ -38,8 +38,7 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
   };
   // Domain notifications already carry a snapshot for this synchronous publication.
   // Latest notifications carry inspect state instead, so its library stays a fresh read.
-  const observePublication=source=>{try{onPublication(source,!loading);}catch{}};
-  const offLatest=latestRuntime.subscribe(()=>{observePublication('latest');if(!loading)publish({cached:true,summaryChanged:true});}),offTracking=trackingRuntime.subscribe(tracking=>{observePublication('tracking');if(!loading)publish({tracking,cached:true});}),offNarrative=narrativeRuntime?.subscribe(narrative=>{observePublication('narrative');if(!loading)publish({narrative,cached:true});});
+  const offLatest=latestRuntime.subscribe(()=>{if(!loading)publish({cached:true,summaryChanged:true});}),offTracking=trackingRuntime.subscribe(tracking=>{if(!loading)publish({tracking,cached:true});}),offNarrative=narrativeRuntime?.subscribe(narrative=>{if(!loading)publish({narrative,cached:true});});
   async function load(){
     if(disposed)throw new Error('本末已关闭');if(loading)return loading;
     let loadTarget;const ticket=sequence,attempt=++loadAttempt;const check=()=>{if(disposed||ticket!==sequence||attempt!==loadAttempt||loadTarget&&!sameTarget(loadTarget,repository.captureTarget()))throw Object.assign(new Error('页面读取已结束，请重新读取'),{code:'PANEL_LOAD_CANCELLED'});};status='loading';error='';publish({cached:true});

@@ -36,8 +36,8 @@
   },
   {
     "path": "dist/app/benmo-view.css",
-    "bytes": 8575,
-    "sha256": "42904cb2917008e1f989830eee97390938107d002c9776609ed99bb18d65d54a"
+    "bytes": 8536,
+    "sha256": "7b3f1d93d0fbc82cab8a55d468bce95e427f4ccb361469001e319e8749bd6c9d"
   },
   {
     "path": "dist/app/benmo-view.js",
@@ -221,8 +221,8 @@
   },
   {
     "path": "dist/app/memory.css",
-    "bytes": 17039,
-    "sha256": "d125357070c02c77c031a9192694cc5b8a71c6a1e0e52802ce8f4162361e6609"
+    "bytes": 17062,
+    "sha256": "f2c16381fd31ab372cdfb8ed6eb2132e34a8e96c7e08a6d6133a75cb6c7f83c7"
   },
   {
     "path": "dist/app/navigation.js",
@@ -301,8 +301,8 @@
   },
   {
     "path": "dist/app/settings-root-view.js",
-    "bytes": 12483,
-    "sha256": "49eae391adef2a019ffb136d358496a6dc61bdf67328a2beb8cdb00538e8218b"
+    "bytes": 14393,
+    "sha256": "310024d3d4cb423637ecd049e13d32b36a4f71121a8f85f5798e133a94eeb9d2"
   },
   {
     "path": "dist/app/shared-ui/appearance-format.css",
@@ -647,7 +647,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "d42d2ead0373fe167a337d270050a782ae5c9d6b34695b16f126320a74a6ec3b"
+    "sha256": "592d92db735c0924f02d322283c3a0f8fd4ab0a085bae6ea817eba03775b9880"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -661,8 +661,8 @@
   },
   {
     "path": "dist/app/workshop-view.css",
-    "bytes": 8462,
-    "sha256": "65337b4751df5e7395c42df360ddd6a1381c0a3c3468253566b642a87dd9142b"
+    "bytes": 8417,
+    "sha256": "8ac57551b327ab0d57c9169c5e91c802845be30e304ed6d6e8b158db00b4b809"
   },
   {
     "path": "dist/app/workshop-view.js",
@@ -1291,13 +1291,13 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 90803,
-    "sha256": "da987a418b6840f3fe0218483f6cd98f9b0f4301fb01b98cca92220f97654473"
+    "bytes": 91177,
+    "sha256": "32bd4587f017121a4144a2280175cdfafa49319d909e35a6d8b3ecc19b1701c0"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
-    "bytes": 3399,
-    "sha256": "4126af8bc1b9921bb7c41877c54b40f7683ad410c2dbdc6d7037768998222573"
+    "bytes": 3422,
+    "sha256": "3ded0b79248a3e7b9e9a1c42b8ca301279ace0e250cc73683350928d03fb9ffe"
   },
   {
     "path": "dist/platform/sillytavern/narrative-preparation.js",
@@ -1313,6 +1313,11 @@
     "path": "dist/platform/sillytavern/native-summary-hide.js",
     "bytes": 2448,
     "sha256": "676e59782e0190c6fbdf8ffafca8f976f06732f3a66076e757998ad66f820373"
+  },
+  {
+    "path": "dist/platform/sillytavern/panel-height-preference.js",
+    "bytes": 1646,
+    "sha256": "8211ab784dd4273b11a62cc32c0dc28615cd4dc44537fb28c6f34823303541d1"
   },
   {
     "path": "dist/platform/sillytavern/pending-settings-saves.js",
@@ -1537,6 +1542,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "4257abf43cb08d8396d4269ceb389495864846126c0e92f36544f8456ea74660"
+    "sha256": "5b3183f1dbea9979b9b492667eaaabde9ddd50dd2da8fc1e396214af78d25730"
   }
 ]

@@ -23,7 +23,7 @@ const aliases = value => [...new Set((Array.isArray(value) ? value : String(valu
 
 /** The Benmo surface owns only navigation/drafts. The controller owns source
  * eligibility, runtime jobs, feature policy and acknowledged persistence. */
-export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, onOpenCleaning = null, isCurrent = () => true, prepare, initialState = {}, onMountCommit = () => {}, onRenderCommit = () => {}} = {}) {
+export async function mountBenmoView({container: app, controller, availability = () => ({}), onNavigate = () => {}, onClose = () => {}, onOpenCleaning = null, isCurrent = () => true, prepare, initialState = {}} = {}) {
   initialState ??= {};
   const lifetime = new AbortController();
   const revalidationActions = new Set(['save','delete-narrative','delete-record','toggle-excluded','restore-excluded','new','generate','generate-narrative','preview-narrative','save-narrative-budget','start-narrative','continue-narrative','retry-narrative','skip-narrative','pause-narrative','confirm-narrative-review','regenerate-narrative','manual-summary','start-backfill']);
@@ -642,10 +642,8 @@ export async function mountBenmoView({container: app, controller, availability =
     const subpage = state.route !== 'list';
     const markup = `<section class="lantai ${state.route === 'narrative-generate' ? 'lt-summary-workspace' : 'workshop'} benmo ui-workspace ui-graphic-controls" data-ui-theme="${surfaceTheme(app)}" data-benmo-route="${state.route}" data-benmo-tab="${state.tab}" data-benmo-kind="${state.kind}">${subpage ? `<header class="lt-header ui-header ${state.route === 'narrative-generate' ? 'ui-header--centered' : 'subpage-header'}">${icon(draft && returnRoute === 'detail' ? '返回记录详情' : `返回${state.tab === 'records' ? KINDS[state.kind] : TABS[state.tab]}`, 'back', 'back')}<h1 class="ui-page-title">${pageTitle()}</h1>${icon('关闭兰台', 'close', 'close')}</header>` : `<header class="lt-header lt-header--root ui-header"><div class="lt-root-top">${rootTitle('benmo')}${icon('关闭兰台', 'close', 'close')}</div><nav class="ui-tablist" aria-label="本末分区">${enabledTabs().map(id => selectButton(id, TABS[id], state.tab, 'tab')).join('')}</nav></header>`}<main class="lt-main ui-main${state.route === 'narrative-generate' ? ' lt-summary-main ui-main--summary' : ''}" tabindex="-1">${state.route === 'narrative-generate' ? `<div data-narrative-errors ${error || value.error ? '' : 'hidden'}>${narrativeErrors()}</div>` : narrativeErrors()}${loading ? '<p class="wk-empty" role="status" aria-live="polite">正在读取本末记录…</p>' : loadFailed ? '' : content()}</main><footer class="lt-footer${state.route === 'narrative-generate' ? ' ui-action-footer' : ''}">${state.route === 'narrative-generate' ? narrativeFooter() : draft ? formActions() : mainNavigation({policy: policy(), current: 'benmo', actions: {memory: 'area', time: 'area', workshop: 'area', benmo: 'area', settings: 'area'}, attributes: Object.fromEntries(['memory', 'time', 'workshop', 'benmo', 'settings'].map(area => [area, `data-id="${area}"`]))})}</footer>${dialog ? `<div class="wk-dialog" role="dialog" aria-modal="true" aria-label="确认操作"><div class="wk-dialog-box"><p>${esc(dialog.pending ? '正在处理，请稍候…' : dialog.text)}</p>${(dialog.details ?? []).map(item => `<section class="section"><label class="ui-field"><span>后台新内容</span><textarea class="lt-textarea" rows="3" readonly aria-label="后台${esc(item.label)}">${esc(item.latest)}</textarea></label><label class="ui-field"><span>你的草稿</span><textarea class="lt-textarea" rows="3" readonly aria-label="草稿${esc(item.label)}">${esc(item.local)}</textarea></label></section>`).join('')}<div class="wk-dialog-actions">${button(dialog.cancelLabel ?? '取消', 'cancel-dialog', dialog.pending ? 'disabled' : '')}${button(dialog.pending ? '处理中…' : dialog.confirmLabel ?? '确认', 'confirm-dialog', dialog.pending ? 'disabled aria-busy="true"' : '', dialog.confirmTone ?? 'primary')}</div></div></div>` : ''}</section>`;
   // Repeated runtime receipts must not replace an unchanged surface.
-  const beforeMain=app.querySelector('.lt-main'),markupChanged=markup !== renderedMarkup || surfacePatched;
-  if (markupChanged) { replaceSurfaceMarkup(app, markup, renderedMarkup); renderedMarkup = markup; surfacePatched = false; }
+  if (markup !== renderedMarkup || surfacePatched) { replaceSurfaceMarkup(app, markup, renderedMarkup); renderedMarkup = markup; surfacePatched = false; }
     const main = app.querySelector('.lt-main');
-    try { onRenderCommit(markupChanged,beforeMain!==main); } catch {}
     if (main) main.scrollTop = state.scrolls[context()] ?? 0;
     if (dialog) {
       for (const node of app.querySelectorAll('.lt-header,.lt-main,.lt-footer')) node.inert = true;
@@ -1008,12 +1006,12 @@ export async function mountBenmoView({container: app, controller, availability =
     dispose?.();
   }
   const readValue = refresh => prepare ? prepare({refresh}) : refresh ? controller.load({refresh: true}) : controller.ensure ? controller.ensure() : controller.load();
-  onMountCommit(); render();
+  render();
   const loadingRoot = app.children?.[0], loadingMarkup = renderedMarkup;
   try { apply(await readValue(false)); }
   catch (failure) { loadFailed = true; error = failure.message || '读取未完成，请重试'; }
   if (!isCurrent()) { disposed = true; lifetime.abort(); stopSummaryVisibility(); clearTimeout(redirectTimer); if (loadingRoot) { if (app.children?.[0] === loadingRoot) loadingRoot.remove(); } else if (app.innerHTML === loadingMarkup) app.innerHTML = ''; return null; }
-  initializing = false; loading = false; subscribe(); onMountCommit(); render();
+  initializing = false; loading = false; subscribe(); render();
   return {
     back() { if (!dialog && !acting) back(); },
     blocking() { return acting || dirty() || !!dialog; },
