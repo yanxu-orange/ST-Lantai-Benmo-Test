@@ -1,0 +1,34 @@
+import {sameTarget} from '../../domain/memory/repository.js';
+import {featureGate} from '../../domain/controls/gate.js';
+import {worldDynamicsOf} from '../../domain/world-dynamics/data.js';
+import {worldPreferences} from '../../domain/world-dynamics/preferences.js';
+import {projectWorldOutcomes} from '../../domain/world-dynamics/projection.js';
+import {timeOf} from '../../domain/time/data.js';
+import {pendingProjection} from './latest-source-metadata.js';
+const copy=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+// This projection owns no writes and never depends on summary availability.
+export function createWorldDisplayRuntime({adapter,repository,history,dateRuntime,getContext,getControls,getTheme=()=> 'spring',scheduleStart=fn=>setTimeout(fn,0)}={}){
+ const gate=featureGate(getControls,'time'),listeners=new Set(),releases=[];
+ let started=false,observedDate=null,observedTheme=getTheme(),dateBlocked=false;
+ let disposed=false,serial=0,pending=null,queued=false,authority=null,noticed=null,state={status:'empty',target:null};
+ const emit=value=>{state=value;for(const fn of listeners)try{fn(copy(state));}catch{}};
+ const source=target=>{const raw=adapter.captureChatSource(target),chat=getContext().chat;const row=raw.messages.filter(item=>item.role==='assistant'&&!item.system&&chat[item.floor]&&typeof chat[item.floor].mes==='string'&&chat[item.floor].mes.trim()&&chat[item.floor].is_system!==true&&!pendingProjection(chat[item.floor])&&!(Array.isArray(chat[item.floor].swipes)&&chat[item.floor].swipes.length&&typeof chat[item.floor].swipes[chat[item.floor].swipe_id??0]!=='string')).at(-1);return row?{floor:row.floor,identity:row.identity,objectTicket:row.objectTicket,revision:row.revision,swipeId:row.swipeId??null}:null;};
+ function isCurrent(value){try{if(disposed||value.ticket!==serial||!gate.allowed()||!sameTarget(value.target,repository.captureTarget()))return false;const root=adapter.peekConfirmed(value.target);return equal(worldDynamicsOf(root),authority?.worldDynamics)&&equal(timeOf(root),authority?.time)&&equal(source(value.target),value.reply)&&getContext().chat[value.reply.floor]?.mes===authority?.sourceText&&(value.mode==='regex'||getTheme()===value.theme);}catch{return false;}}
+ function invalidate(){serial++;authority=null;emit({status:'empty',target:null});}
+ function request(){if(disposed)return Promise.resolve(copy(state));queued=true;if(!started)return Promise.resolve(copy(state));if(pending)return pending;const job=(async()=>{await Promise.resolve();while(queued&&!disposed){queued=false;const ticket=serial;try{
+  if(!gate.allowed()||dateBlocked){if(state.status!=='empty')invalidate();continue;}await adapter.prepare();if(disposed||ticket!==serial)continue;const target=repository.captureTarget();
+  const peek=adapter.peekConfirmed(target);if(!worldPreferences(worldDynamicsOf(peek)).enabled||!worldPreferences(worldDynamicsOf(peek)).display){authority=null;emit({status:'empty',target:copy(target)});continue;}
+  const maintained=await history.request();if(disposed||ticket!==serial||maintained.status!=='ready')continue;
+  const selected=await repository.captureWorldDynamics(target);if(disposed||ticket!==serial||!sameTarget(target,repository.captureTarget()))continue;
+  const latest=adapter.peekConfirmed(target);if(!equal(worldDynamicsOf(latest),selected.worldDynamics)||!equal(timeOf(latest),selected.time)){queued=true;continue;}
+  const prefs=worldPreferences(selected.worldDynamics),reply=source(target),projection=prefs.enabled&&prefs.display?projectWorldOutcomes(selected.worldDynamics,selected.time):{entries:[]};
+  if(!reply||!projection.entries.length){authority={worldDynamics:copy(selected.worldDynamics),time:copy(selected.time)};emit({status:'empty',target:copy(target)});continue;}
+  authority={worldDynamics:copy(selected.worldDynamics),time:copy(selected.time),sourceText:getContext().chat[reply.floor]?.mes};const next={status:'ready',ticket,target:copy(target),reply,entries:projection.entries,date:copy(selected.time.currentDate),theme:getTheme(),mode:prefs.displayMode??'builtin'};if(isCurrent(next))emit(next);else queued=true;
+ }catch{if(!disposed&&ticket===serial){authority=null;emit({status:'empty',target:null});}}}return copy(state);})();pending=job;const clear=()=>{if(pending===job){pending=null;if(queued&&!disposed)void request();}};job.then(clear,clear);return job;}
+ const context=getContext(),events=context?.eventSource;
+ for(const name of ['CHAT_CHANGED','CHAT_CREATED','MESSAGE_SENT','MESSAGE_RECEIVED','MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_DELETED','MESSAGE_SWIPED','CHARACTER_MESSAGE_RENDERED','USER_MESSAGE_RENDERED']){const event=context?.eventTypes?.[name];if(event&&events?.on){const fn=()=>{if(!['MESSAGE_SENT','USER_MESSAGE_RENDERED','CHARACTER_MESSAGE_RENDERED'].includes(name)||!isCurrent(state))invalidate();void request();};events.on(event,fn);releases.push(()=>(events.off??events.removeListener)?.call(events,event,fn));}}
+ const settingsEvent=context?.eventTypes?.SETTINGS_UPDATED;if(settingsEvent&&events?.on){const fn=()=>{if(state.mode==='regex')void request();};events.on(settingsEvent,fn);releases.push(()=>(events.off??events.removeListener)?.call(events,settingsEvent,fn));}
+ if(dateRuntime?.subscribe)releases.push(dateRuntime.subscribe(value=>{const blocked=['failed','needs-calibration','cancelled','no-calendar','disabled'].includes(value.status),next=JSON.stringify([value.date??null,blocked]);if(next!==observedDate){observedDate=next;dateBlocked=blocked;invalidate();void request();}}));
+ scheduleStart(()=>{if(!disposed){started=true;void request();}});
+ return {request,isCurrent,inspect:()=>copy(state),subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},domainChanged(selection){if(!authority){if(!equal(noticed,selection)){noticed=copy(selection);void request();}return;}if(!equal(selection.worldDynamics,authority.worldDynamics)){try{const prefs=worldPreferences(selection.worldDynamics);if(state.status==='ready'&&prefs.enabled&&prefs.display&&(prefs.displayMode??'builtin')===state.mode&&equal(timeOf(adapter.peekConfirmed(state.target)),authority.time)&&equal(projectWorldOutcomes(selection.worldDynamics,authority.time).entries,state.entries)&&equal(source(state.target),state.reply)&&getContext().chat[state.reply.floor]?.mes===authority.sourceText){authority.worldDynamics=copy(selection.worldDynamics);void request();return;}}catch{}invalidate();void request();}},controlsChanged(){invalidate();void request();},themeChanged(){const next=getTheme();if(next!==observedTheme){observedTheme=next;if(state.mode!=='regex'){invalidate();void request();}}},dispose(){disposed=true;serial++;queued=false;authority=null;noticed=null;state={status:'empty',target:null};listeners.clear();for(const release of releases)release();}};
+}

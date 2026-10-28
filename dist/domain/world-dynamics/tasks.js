@@ -25,6 +25,18 @@ export function modularWorldConfig(config){
  const split=splitWorldTasks(config.sections);
  return split?{config:{...structuredClone(config),...split},error:''}:{config:structuredClone(config),error:'旧任务或设计文本无法确定分区边界，原文已保留。请核对任务区的七个标题、完结区及设计区 Phase / Step 标题后重新读取；不会替换为默认文本。'};
 }
+export function worldDesignText(config,{enabledOnly=false}={}){
+ const migrated=modularWorldConfig(config);if(migrated.error)throw new Error(migrated.error);const c=migrated.config;
+ return c.commonDesign.before+Object.keys(WORLD_TASKS).filter(key=>!enabledOnly||taskEnabled(c,key)).map(key=>c.taskModules[key].design).join('')+c.commonDesign.after;
+}
+export function withWorldDesign(config,text){
+ const migrated=modularWorldConfig(config);if(migrated.error)throw new Error(migrated.error);const c=migrated.config;
+ const tasks=Object.values(WORLD_TASKS).map(name=>`[${name}]\n`).join('\n')+'\n[完结区]';
+ const split=splitWorldTasks({tasks,design:text});if(!split)throw new Error('设计原文的 Phase / Step 边界无法确定，请核对后再保存或预览；原文已保留。');
+ c.sections.design=text;c.commonDesign=split.commonDesign;
+ for(const key of Object.keys(WORLD_TASKS))c.taskModules[key].design=split.taskModules[key].design;
+ return c;
+}
 export function selectedWorldVersions(domain,config){
  const selected=[];
  for(const kind of [...Object.keys(WORLD_TASKS),'aftermath']){

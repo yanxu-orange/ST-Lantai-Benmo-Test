@@ -1,4 +1,4 @@
-// Latest summaries and workshop cards share one floor transaction. Collection
+// Latest summaries, workshop cards and world briefings share one floor transaction. Collection
 // updates only wrappers/controls; every async body calculation settles before
 // the synchronous body commit and the one optional public Helper rescan.
 const coordinators = new WeakMap();
@@ -65,11 +65,11 @@ export function commitDisplayBodies(updates, snapshot, doc) {
   return { refresh, checks };
 }
 
-export function createFloorDisplayCoordinator({ document: doc = globalThis.document, runtime, formatter,
+export function createFloorDisplayCoordinator({ document: doc = globalThis.document, runtime, formatter, getTarget,
   MutationObserver: Observer = globalThis.MutationObserver } = {}) {
   let scheduled = false, stopped = false, unsubscribe = null, observer = null;
   const participants = new Set(), groups = new WeakMap(), cleanups = new Map();
-  const targetKey = () => JSON.stringify(runtime.inspect?.().target ?? null);
+  const targetKey = () => {try{return JSON.stringify(getTarget?getTarget():runtime.inspect?.().target??null);}catch{return JSON.stringify(null);}};
   const ownership = plan => plan.message.isConnected !== false && floorOf(plan.message) === plan.floor
     && targetKey() === plan.target && (!plan.ownsChat || plan.ownsChat());
   function requestCleanup(plan) {
@@ -135,7 +135,7 @@ export function createFloorDisplayCoordinator({ document: doc = globalThis.docum
     scheduled = true; queueMicrotask(render);
   }
   const touchesChat = record => {
-    if (record.target?.closest?.('.lantai-latest-summary') || record.target?.closest?.('.lantai-workshop-results')) return false;
+    if (record.target?.closest?.('.lantai-latest-summary') || record.target?.closest?.('.lantai-workshop-results') || record.target?.closest?.('.lantai-world-briefing')) return false;
     return !!record.target?.closest?.('#chat') || [...(record.addedNodes ?? []), ...(record.removedNodes ?? [])]
       .some(node => node.id === 'chat' || node.querySelector?.('#chat'));
   };
@@ -148,6 +148,7 @@ export function createFloorDisplayCoordinator({ document: doc = globalThis.docum
   }
   return {
     requestCleanup,
+    requestRefresh:schedule,
     useFormatter(value) { if (!formatter && value) { formatter = value; schedule(); } },
     register(collect) {
       participants.add(collect); start(); schedule();

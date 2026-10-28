@@ -8,4 +8,16 @@
 .ui-prompt-chevron { width:var(--ui-space-row); height:var(--ui-space-row); flex:none; color:var(--ui-color-text-secondary); transform:rotate(-90deg); }
 .ui-prompt-item[open] > summary .ui-prompt-chevron { transform:none; }
 .ui-prompt-item > summary:focus-visible { outline:var(--ui-focus-ring-width) solid var(--ui-color-focus-ring); outline-offset:calc(-1 * var(--ui-focus-ring-width)); }
-.ui-prompt-body { display:grid; gap:var(--ui-space-row); min-width:0; padding-block:var(--ui-space-control); }
+.ui-prompt-body:not([hidden]) { display:grid; gap:var(--ui-space-row); min-width:0; padding-block:var(--ui-space-control); }
+
+/* Non-disclosing peer row, including a switch that reveals its own body. */
+.ui-prompt-row { display:flex; align-items:center; gap:var(--ui-space-control); min-block-size:var(--ui-interaction-target-min); padding-block:var(--ui-space-control); font-family:var(--ui-type-ui-family); font-size:var(--ui-type-ui-body-size); font-weight:var(--ui-type-ui-body-weight); }
+
+/* Parameterized single-choice options use ordinary vertical rows. */
+.ui-stacked-choices { display:grid; gap:var(--ui-space-control); min-width:0; margin:0; padding:0; border:0; }
+.ui-stacked-choices .ui-choice { padding-inline:0; flex:none; white-space:nowrap; }
+.ui-choice-option { display:flex; flex-wrap:wrap; align-items:center; gap:var(--ui-space-control); min-width:0; }
+.ui-inline-number:not([hidden]) { display:flex; align-items:center; gap:var(--ui-space-inline); min-width:0; }
+.ui-inline-number > .ui-input { inline-size:9ch; min-inline-size:0; max-inline-size:100%; }
+/* Pointer selection uses the radio; keyboard navigation retains its focus ring. */
+.lantai .ui-stacked-choices .ui-choice:focus-within:not(:has(:focus-visible)) { outline:none; }

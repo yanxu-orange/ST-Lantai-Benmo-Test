@@ -1,3 +1,4 @@
+import {rollbackWorldTail} from '../world-dynamics/history.js';
 import {mergeLocationAliases} from './location-aliases.js';
 import {normalizeResultSources} from './results-persistence.js';
 import {rollbackNarrativeTail, invalidateNarrativeRollback} from '../narrative/rollback.js';
@@ -492,7 +493,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
       const frozen=copy(target),evidence=copy(deletions),key=JSON.stringify([frozen,evidence.map(item=>[item.before.epoch,item.after.epoch,item.removedFloors])]);
       // Receipts cover every changed domain, including merge tombstones. An
       // unknown successful save can be adopted without deleting or undoing twice.
-      const receipt=raw=>{const root=comparisonRoot(raw,'summary','narrative','tracking');return {summary:summaryOf(root),events:copy(root.events),deletedMergeIds:copy(root.deletedMergeIds??[]),narrative:root.narrative===undefined?undefined:assertNarrative(root.narrative),tracking:root.tracking===undefined?undefined:assertTracking(root.tracking)};};
+      const receipt=raw=>{const root=comparisonRoot(raw,'summary','narrative','tracking');return {summary:summaryOf(root),events:copy(root.events),deletedMergeIds:copy(root.deletedMergeIds??[]),narrative:root.narrative===undefined?undefined:assertNarrative(root.narrative),tracking:root.tracking===undefined?undefined:assertTracking(root.tracking),worldDynamics:root.worldDynamics===undefined?undefined:worldDynamicsOf(root)};};
       return enqueue(async()=>{
         const recovery=sourceDeletionReceipts.get(key);
         if(recovery){
@@ -545,6 +546,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
               delete nextSummary.sourcePositions;if(Object.keys(sourcePositions).length)nextSummary.sourcePositions=sourcePositions;
               next={...next,summary:nextSummary};
             }
+            if(next.worldDynamics){const world=rollbackWorldTail(next.worldDynamics,deletion);if(!equal(world,next.worldDynamics)){next={...next,worldDynamics:{...world,revision:next.worldDynamics.revision+1}};rollbackOutcomes.push({kind:'worldDynamics',status:'restored'});}}
             if(next.narrative){const result=rollbackNarrativeTail(next.narrative,deletion);next={...next,narrative:assertNarrative(result.domain)};rollbackOutcomes.push(...result.outcomes);}
             if(next.tracking){const result=rollbackTrackingTail(next.tracking,deletion.before,deletion.after);next={...next,tracking:assertTracking(result.tracking)};if(result.rolledBack)rollbackOutcomes.push({kind:'tracking',status:'restored'});if(result.unavailable)rollbackOutcomes.push({kind:'tracking',status:'unavailable',rebuildFrom:result.fromFloor??0,error:`追踪历史不足，无法回退；请从第 ${result.fromFloor??0} 楼重新生成`});}
           }else{if(next.narrative?.rollback)next={...next,narrative:invalidateNarrativeRollback(copy(next.narrative))};if(next.tracking?.tailHistory)next={...next,tracking:invalidateTrackingTailHistory(next.tracking)};}

@@ -1,7 +1,7 @@
-const TAIL_SELECTORS = ['.lantai-latest-summary', '.lantai-workshop-results'];
+const TAIL_SELECTORS = ['.lantai-latest-summary', '.lantai-workshop-results', '.lantai-world-briefing'];
 
-// Both displays share one floor-tail contract: host content, latest summary,
-// then workshop results. Only move our nodes, and do nothing once the ordered
+// All displays share one floor-tail contract: host content, latest summary,
+// then workshop results and world briefing. Only move our nodes, and do nothing once the ordered
 // suffix is present so their MutationObservers cannot keep moving each other.
 export function placeFloorBackgroundDisplay(parent, box) {
   if (box.parentNode !== parent) parent.append(box);

@@ -84,3 +84,7 @@ export const BOOK_THEME_STYLE_ENTRIES=Object.freeze({
   'paper-letter':PAPER_LETTER_STYLE_ENTRIES,
   'purple-glow':PURPLE_GLOW_STYLE_ENTRIES,
 });
+
+// Embedded briefings share theme tokens/components without workspace or host placement.
+export const BRIEFING_BASE_STYLE_ENTRIES=Object.freeze([entry('supplier','../../vendor/plugin-ui-system/web.css'),entry('shared','../lantai-theme.css'),entry('shared','../shared-ui/candidate.web.css'),entry('shared','../shared-ui/briefing.css')]);
+export const BRIEFING_THEME_STYLE_ENTRIES=Object.freeze({spring:Object.freeze([entry('shared','../spring/theme.css')]),'snow-ermine':Object.freeze([entry('shared','../snow-ermine/theme.css')]),'paper-letter':Object.freeze([entry('shared','../book-themes/tokens.css')]),'purple-glow':Object.freeze([entry('shared','../book-themes/tokens.css')])});

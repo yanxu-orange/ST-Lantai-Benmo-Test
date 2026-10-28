@@ -102,7 +102,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   if(state.invalidated||state.saving||!current())return;
   if(world&&['world','world-console'].includes(route)){navigation++;stack.length=0;state.route='world';state.draft=null;state.error='';notify();void world.ensure().then(ready=>{if(ready&&route==='world-console'&&state.route==='world')world.openConsole();});return;}
   if(!writer?.inspect().saving)resetWriter();
-  if(['home','manage'].includes(route)){navigation++;stack.length=0;state.route=route;state.draft=null;state.pendingCalendar=null;state.error='';notify();return;}
+  if(['home','manage'].includes(route)){if(route==='manage'&&world)void world.ensure().then(()=>notify());navigation++;stack.length=0;state.route=route;state.draft=null;state.pendingCalendar=null;state.error='';notify();return;}
   const cal=calendar();
   if(route==='calibrate'||route.startsWith('reminders/')){try{config=settings.captureTimeReminders();state.reminders=copy(config.reminders);}catch(error){fail(error);return;}}
   if(route==='calendar')navigate(route,{...(cal?copy(cal.definition):{id:id(),type:'modern',name:'现代历法'}),importStart:cal?.definition.importedYears?.[0]?.sourceYear??2025,importEnd:cal?.definition.importedYears?.at(-1)?.sourceYear??2026});

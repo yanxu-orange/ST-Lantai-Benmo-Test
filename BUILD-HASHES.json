@@ -66,8 +66,8 @@
   },
   {
     "path": "dist/app/book-themes/pages.css",
-    "bytes": 32413,
-    "sha256": "f569f1e1d667010b88235a8ee4f3ac69ec4f559ae84079526bd593e35465bd1e"
+    "bytes": 32605,
+    "sha256": "92b1c768f9de6795641cab0996c37f745c1dbab80cb36220c3e8e80c588ea434"
   },
   {
     "path": "dist/app/book-themes/time-details.css",
@@ -310,6 +310,11 @@
     "sha256": "ddc4d17f6546a8ec32cb75a566b8f0fd4349c199f9e0e6707f0635bcf75cbab0"
   },
   {
+    "path": "dist/app/shared-ui/briefing.css",
+    "bytes": 2965,
+    "sha256": "758abe9411cdc719c280d9cf04d241afb95b4537600b467bc903a445fa3071ac"
+  },
+  {
     "path": "dist/app/shared-ui/candidate.web.css",
     "bytes": 31495,
     "sha256": "c97d6ee035087132d4712d25207884b863a8e1445f5a82eac5a84782d6248a5a"
@@ -326,8 +331,8 @@
   },
   {
     "path": "dist/app/shared-ui/prompt-list.css",
-    "bytes": 1255,
-    "sha256": "3879ee96998586609ff8d3dd741dbe63612bf8608663dc4c973c596e37cdbf3f"
+    "bytes": 2423,
+    "sha256": "fce9e7f47fce25dd42f1ae96519386ab7ebbcc708164a2d4174c743e3246340c"
   },
   {
     "path": "dist/app/shared-ui/summary-preview.js",
@@ -571,8 +576,8 @@
   },
   {
     "path": "dist/app/styles/style-entries.js",
-    "bytes": 3960,
-    "sha256": "885849061ade2c89dc999c66a3ac0d849a33289410cf32ffadb93c96c42d0433"
+    "bytes": 4645,
+    "sha256": "0d1a522ba3fe523fb5ca9d43d67bbc404f30ef2987e70edfddada1ae741b1150"
   },
   {
     "path": "dist/app/styles/theme.js",
@@ -626,8 +631,8 @@
   },
   {
     "path": "dist/app/time-controller.js",
-    "bytes": 29026,
-    "sha256": "32b20cb5da237e2ab7cb8f4590986e34b38f79617919b490e2ee14b01337b309"
+    "bytes": 29092,
+    "sha256": "420bcfee6f493fb2108bdc7eec802a78cfe9b92288c08d0721f50be0a564d0ff"
   },
   {
     "path": "dist/app/time-view.css",
@@ -636,8 +641,8 @@
   },
   {
     "path": "dist/app/time-view.js",
-    "bytes": 42575,
-    "sha256": "b56735f4b42f78c196f32d18402e99ca36b1c5ab4f6812212d4adac43f6f7c0d"
+    "bytes": 44533,
+    "sha256": "00f9d76a12d2b62308bfe6755a26b831c59ea94e3f738aca8d088fc14632c14f"
   },
   {
     "path": "dist/app/tracking-controller.js",
@@ -652,7 +657,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "f7e442b3af41a946d79bbecbfbb324d262f7d671b122891909ca11f59ff2f051"
+    "sha256": "2a514da17880552a0999a97e518c06f68623ffad922ad3236b11c9b4163ff2d2"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -676,13 +681,13 @@
   },
   {
     "path": "dist/app/world-dynamics-controller.js",
-    "bytes": 13148,
-    "sha256": "b05203d8c1b6f6aaf980274b2f1a9446c0aaa8a7df6bfba932178cbf85b8a87c"
+    "bytes": 18901,
+    "sha256": "d954180030f2eaca3d03006341d2ff67b8cca4781f866e81b5693387adcf10f3"
   },
   {
     "path": "dist/app/world-dynamics-view.js",
-    "bytes": 18330,
-    "sha256": "d087a4be0e42378d919cc08bfb2f3b5909692b42fb0ffdc62b9a57f955f303d1"
+    "bytes": 22675,
+    "sha256": "b8d1071ebd235a45c4213a81191b1a08edaf8fde000980762ff8a9c4b24b5b27"
   },
   {
     "path": "dist/domain/background/round.js",
@@ -796,8 +801,8 @@
   },
   {
     "path": "dist/domain/memory/repository.js",
-    "bytes": 64513,
-    "sha256": "7e49563e8cd60a9f8f0cb74dc336ca3d37b74a7aa5ccfc69ca673c3a2f26dd4f"
+    "bytes": 64931,
+    "sha256": "d475355ea57564656b86aaf801f6efa5618a65e77ca97788589af2631c0731fc"
   },
   {
     "path": "dist/domain/memory/results-persistence.js",
@@ -1206,13 +1211,33 @@
   },
   {
     "path": "dist/domain/world-dynamics/data.js",
-    "bytes": 6495,
-    "sha256": "8343c0be71757163227d4fc121fd6874e69c3e7249f94ab1fc255c43b802e1f7"
+    "bytes": 7227,
+    "sha256": "98fe71921bcad5cb282df1a961d8ef14079ff7d593d4373a8b7f172a92dec398"
+  },
+  {
+    "path": "dist/domain/world-dynamics/display-text.js",
+    "bytes": 1340,
+    "sha256": "b2e42837e84065b50cd27ab6a4d77ca784b699a12c19b455bb2344f3aa0af7f3"
+  },
+  {
+    "path": "dist/domain/world-dynamics/history.js",
+    "bytes": 1398,
+    "sha256": "316581b3bb3bed090df3f100f3ffa00008dbbdc2db51c57e960cbbe9fcf7265b"
+  },
+  {
+    "path": "dist/domain/world-dynamics/materials.js",
+    "bytes": 4145,
+    "sha256": "7a53a2821aefb96d0cd85853d1f4b0773d76257e502ff4f1d53bcb9c418b3006"
   },
   {
     "path": "dist/domain/world-dynamics/output.js",
-    "bytes": 3918,
-    "sha256": "874fc6a700b786d93c7b2d7b3d1ee9890e03b301debfb276d864041ac7aa842d"
+    "bytes": 4212,
+    "sha256": "5cda8d0d13eb862dd58cae3d1d4aac1b9fdfb0314b9c6cc7bcfeff97ef916880"
+  },
+  {
+    "path": "dist/domain/world-dynamics/preferences.js",
+    "bytes": 1026,
+    "sha256": "044930fa493b8f95c13a249f2f00417f94ef2bd7089e7312b68cfaf30556d124"
   },
   {
     "path": "dist/domain/world-dynamics/preset-source.js",
@@ -1220,14 +1245,19 @@
     "sha256": "7c58534f8ad1490031df97aa4834adeeb9294ccdbd2fa04c2039888722fa5fed"
   },
   {
+    "path": "dist/domain/world-dynamics/projection.js",
+    "bytes": 1994,
+    "sha256": "bbcdab0f053ffe5ae7fdb3d0c6a7c9d897583386a7e7b38bf0f98569c8e66595"
+  },
+  {
     "path": "dist/domain/world-dynamics/prompts.js",
-    "bytes": 4018,
-    "sha256": "d2be5dd141f10373ad73ba9c8224aed31febba0592ae374bb47129a86ad3f257"
+    "bytes": 4085,
+    "sha256": "0fc7d236d55998b37992fc6143f565592968c1b75cf776241ace45cb39a93ef9"
   },
   {
     "path": "dist/domain/world-dynamics/tasks.js",
-    "bytes": 3070,
-    "sha256": "4f26f2db0b76914c12639b9025eac0d4d5b7028f2e407ef9f143f010295e588c"
+    "bytes": 4033,
+    "sha256": "a1e4efea9b0181dc3286e91c9118fe187da7b99e7d99211abe7ddf19dc645452"
   },
   {
     "path": "dist/index.js",
@@ -1276,13 +1306,13 @@
   },
   {
     "path": "dist/platform/sillytavern/floor-background-display-order.js",
-    "bytes": 829,
-    "sha256": "e9895975d3a051a14f637cb1c5cd545d77029218d0932a645442b22fd5bef099"
+    "bytes": 873,
+    "sha256": "9ec274a28f004c580a20ce86aa1b8db1844de12e3b2a0d7383cb91dd17a14b95"
   },
   {
     "path": "dist/platform/sillytavern/floor-display-coordinator.js",
-    "bytes": 9138,
-    "sha256": "a46c4542c3ce7fc6fed465e5334d5bb2645c237c5bda9f9be1626e7ca58f1a6b"
+    "bytes": 9319,
+    "sha256": "1ded0e4bed68e0453e6ad1418923c432e3f98efd8f19d35d032c53577b5e5dcf"
   },
   {
     "path": "dist/platform/sillytavern/generation-diagnostic.js",
@@ -1331,8 +1361,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 92250,
-    "sha256": "fce1e5e12a5e10f36bd2b989ae36374b71f4cac6a640d85405497aa6a5bd4578"
+    "bytes": 96776,
+    "sha256": "779d6e63d5fb446eea53b51547a12e6fa19b22c5256a36d7a8861aa76572b42c"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1440,6 +1470,11 @@
     "sha256": "dd592e1d59d4eb570345e48d23f8f93af7530f6b16aa9899679714998aba57c5"
   },
   {
+    "path": "dist/platform/sillytavern/task-waiting-notice.js",
+    "bytes": 2335,
+    "sha256": "d2186d8d5501e657273528f9158e929f4cad40cb0bbb25135f587d0e99772997"
+  },
+  {
     "path": "dist/platform/sillytavern/time-prompts.js",
     "bytes": 4496,
     "sha256": "5cfa39bd61eac547c7e9594aca0e255be80d122535d1ae193b754bdf3820e2b7"
@@ -1503,6 +1538,31 @@
     "path": "dist/platform/sillytavern/workshop-send-context.js",
     "bytes": 4405,
     "sha256": "07be78e53cebbc087346a47d6f6c7dd05c144b3fec966a70bf29b6a10e6a15df"
+  },
+  {
+    "path": "dist/platform/sillytavern/world-dynamics-auto.js",
+    "bytes": 7059,
+    "sha256": "dfccdadd9ad2057f863d082553d1d666d555e4f5d19b7d01fe5febff4ae5d3b4"
+  },
+  {
+    "path": "dist/platform/sillytavern/world-dynamics-display-runtime.js",
+    "bytes": 6807,
+    "sha256": "974c112584941f90e48673925b2de2f1940b7dfe9a84fe6a69a2310c8b86a0a7"
+  },
+  {
+    "path": "dist/platform/sillytavern/world-dynamics-display.js",
+    "bytes": 9760,
+    "sha256": "546704dbea3dc839af6db7481e0b04d8a3def2b76be696452da8bef595579378"
+  },
+  {
+    "path": "dist/platform/sillytavern/world-dynamics-prompts.js",
+    "bytes": 3961,
+    "sha256": "6ec7667f780ed56fc67a58b9e318bb9f3f597cb43e6f05df1462204dba39ab83"
+  },
+  {
+    "path": "dist/platform/sillytavern/world-dynamics-runtime.js",
+    "bytes": 4496,
+    "sha256": "3e1702a98ae938895fa93b3534758b8c4790661bba88efd5fb8f385f4a79b976"
   },
   {
     "path": "dist/platform/sillytavern/worldbook-reader.js",
@@ -1587,6 +1647,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "d004d708d1ce5dc51ec54aae061a26010881c12b73dc2457bff48496ad43a6f7"
+    "sha256": "7bbd1e8cebb21be29bb6d0d84eb45e3ff32117b6db9edf0bde2cb137fb64391b"
   }
 ]

@@ -11,9 +11,13 @@ export function validateWorldEntry(entry,definition,currentDate){
  if(entry.kind==='weather'){const lines=entry.text.split('\n').map(v=>v.trim()).filter(Boolean).filter(line=>!line.startsWith('地点：'));if(lines.length!==7)fail();for(let i=0;i<lines.length;i++){const match=lines[i].match(/^(.+?)：\s*(\S[\s\S]*)$/);if(!match)fail();const day=dates(match[1],cal);if(day.length!==1||cal.ordinal(day[0])!==cal.ordinal(currentDate)+i||!match[2].trim())fail();}}
  return entry;
 }
+function splitWorldDesign(output){
+ if(typeof output!=='string'||!output.trim())fail();const text=output.trim().replace(/^```(?:text|xml)?\s*\n([\s\S]*?)\n```$/,'$1'),designs=[...text.matchAll(/<LTdesign>([\s\S]*?)<\/LTdesign>/g)];
+ if(designs.length>1||designs.some(m=>/<\/?LTdesign\b/.test(m[1])))fail();const body=text.replace(/<LTdesign>[\s\S]*?<\/LTdesign>/g,'');if(/<\/?LTdesign\b/.test(body))fail();return {text:body,design:designs[0]?.[1].trim()};
+}
+export function extractWorldDesign(output){return splitWorldDesign(output).design;}
 export function parseWorldOutput(output,{calendar,date,config}={}){
- if(typeof output!=='string'||!output.trim())fail();let text=output.trim().replace(/^```(?:text|xml)?\s*\n([\s\S]*?)\n```$/,'$1');
- const designs=[...text.matchAll(/<LTdesign>([\s\S]*?)<\/LTdesign>/g)];if(designs.length>1)fail();text=text.replace(/<LTdesign>[\s\S]*?<\/LTdesign>/g,'');
+ let {text}=splitWorldDesign(output);
  const entries=[],seen=new Set(),prefix={world:'world',region:'region',weather:'weather',activity:'activity',character:'character',opinion:'opinion',plot:'plot',aftermath:'aftermath'};
  text=text.replace(/<LT(world\d+|region\d+|weather|activity\d+|character\d+|opinion\d+|plot\d+|aftermath\d+)>([\s\S]*?)<\/LT\1>/g,(_,tag,body)=>{if(seen.has(tag))fail();seen.add(tag);const kind=prefix[tag.replace(/\d+$/,'')],entry={id:'LT'+tag,kind,text:body.trim()};if(!taskEnabled(config,kind))fail();validateWorldEntry(entry,calendar,date);entries.push(entry);return '';});
  for(const kind of ['world','region','activity','opinion'])if(taskEnabled(config,kind)&&(!seen.has(kind+'1')||!seen.has(kind+'2')||entries.filter(e=>e.kind===kind).length!==2))fail();

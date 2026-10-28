@@ -1,0 +1,22 @@
+/* Embedded, read-only briefing roles. Themes supply all visual values. */
+:host{display:block;min-inline-size:0;max-inline-size:100%;color:var(--ui-color-text-primary);font-family:var(--ui-type-ui-family)}
+.ui-briefing{margin-block-start:var(--ui-space-group);background:var(--ui-color-surface-base);border:var(--ui-border-default-width) solid var(--ui-color-border-default);border-radius:var(--ui-shape-overlay-radius);overflow:hidden}
+.ui-briefing>summary{display:flex;align-items:center;justify-content:space-between;gap:var(--ui-space-control);padding:var(--ui-space-control) var(--ui-space-group);min-block-size:var(--ui-interaction-target-min);cursor:pointer;background:var(--ui-color-surface-subtle);font-weight:var(--ui-type-ui-section-title-weight)}
+.ui-briefing>summary::after{content:'⌄';color:var(--ui-color-text-meta)}
+.ui-briefing[open]>summary::after{content:'⌃'}
+.ui-briefing-date{font-size:var(--ui-type-ui-meta-size);font-weight:400;color:var(--ui-color-text-meta)}
+.ui-briefing-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--ui-space-inline);padding:var(--ui-space-control);border-block-end:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle)}
+.ui-briefing-tabs .ui-button{min-inline-size:0;inline-size:100%;padding-inline:var(--ui-space-inline);white-space:nowrap}
+.ui-briefing-tabs [aria-selected=true]{background:var(--ui-color-selected-background);color:var(--ui-color-selected-text);border-color:var(--ui-color-selected-border)}
+.ui-briefing-article{padding:var(--ui-space-group);overflow-wrap:anywhere;min-inline-size:0}
+.ui-briefing-title{margin:0;font-family:var(--ui-type-reading-family);font-size:var(--ui-type-ui-section-title-size);font-weight:var(--ui-type-ui-section-title-weight);line-height:var(--ui-type-ui-section-title-line);white-space:pre-line}
+.ui-briefing-meta{margin-block:var(--ui-space-inline);font-size:var(--ui-type-ui-meta-size);color:var(--ui-color-text-meta);white-space:pre-line}
+.ui-briefing-body{margin-block:var(--ui-space-control) 0;font-family:var(--ui-type-reading-family);font-size:var(--ui-type-reading-body-size);line-height:var(--ui-type-reading-body-line);white-space:pre-wrap;overflow-wrap:anywhere}
+.ui-briefing-pager{display:flex;align-items:center;justify-content:space-between;gap:var(--ui-space-control);padding:var(--ui-space-control) var(--ui-space-group);border-block-start:var(--ui-border-subtle-width) solid var(--ui-color-border-subtle)}
+.ui-briefing-count{font-size:var(--ui-type-ui-meta-size);color:var(--ui-color-text-meta);font-variant-numeric:tabular-nums}
+.ui-briefing [hidden]{display:none!important}
+
+.ui-briefing-tabs[data-count="1"]{grid-template-columns:minmax(0,1fr)}
+.ui-briefing-tabs[data-count="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ui-briefing-tabs:is([data-count="3"],[data-count="6"]){grid-template-columns:repeat(3,minmax(0,1fr))}
+.ui-briefing-tabs[data-count="5"]{grid-template-columns:repeat(5,minmax(0,1fr))}
