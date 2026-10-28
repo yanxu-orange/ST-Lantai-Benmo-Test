@@ -1,3 +1,10 @@
+/* Settings text role is shared by opt-in setting controls; existing values stay unchanged. */
+.lantai[data-ui-theme="spring"] {
+  --ui-settings-label-size: 14px;
+  --ui-settings-label-weight: 500;
+  --ui-settings-label-line: 1.45;
+  --ui-settings-label-ink: var(--lt-format-settings-row-ink);
+}
 /* Settings port from lantai_spring_settings_round1(1).html, with the approved
    API action/selection corrections. Only paint and layout are transferred:
    production controls, persistence, credentials and API operations stay intact.
@@ -112,9 +119,9 @@
   padding: 7px 1px;
   gap: 12px;
   color: var(--lt-format-settings-row-ink);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.45;
+  font-size: var(--ui-settings-label-size);
+  font-weight: var(--ui-settings-label-weight);
+  line-height: var(--ui-settings-label-line);
 }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group > :is(.lt-settings-row,.lt-settings-entry) + :is(.lt-settings-row,.lt-settings-entry) { border-top: 1px solid var(--lt-format-settings-row-divider); }
 .lantai[data-ui-theme="spring"].lt-settings .lt-settings-group:not(:has([data-control="enabled"])) .lt-settings-row { min-height: 53px; padding-block: 4px; }
@@ -272,10 +279,11 @@
 .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) [hidden] { display: none; }
 
 @media (max-width: 370px) {
+  .lantai[data-ui-theme="spring"] { --ui-settings-label-size: 13px; }
   .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-api-settings) .lt-main { padding: 12px 11px 23px; }
   .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group { padding-inline: 11px; }
   .lantai[data-ui-theme="spring"]:is(.lt-settings,.lt-task-api-settings) .lt-settings-group > h2 { margin-inline: -11px; padding: 9px 12px; }
-  .lantai[data-ui-theme="spring"].lt-settings :is(.lt-settings-row,.lt-settings-entry) { min-height: 52px; font-size: 13px; }
+  .lantai[data-ui-theme="spring"].lt-settings :is(.lt-settings-row,.lt-settings-entry) { min-height: 52px; font-size: var(--ui-settings-label-size); }
   .lantai[data-ui-theme="spring"].lt-api-settings :is(.lt-editor,.lt-appearance-settings) { padding: 12px; }
   .lantai[data-ui-theme="spring"].lt-api-settings [data-api-action="toggle-key"] { padding-inline: 7px; }
 }

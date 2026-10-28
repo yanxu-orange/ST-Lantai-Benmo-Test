@@ -1,0 +1,23 @@
+/* Opt-in settings roles, independent of a settings page or business feature. */
+.lantai {
+  --ui-settings-label-family: var(--ui-type-ui-family);
+  --ui-settings-label-size: var(--ui-type-ui-body-size);
+  --ui-settings-label-weight: var(--ui-type-ui-body-weight);
+  --ui-settings-label-line: var(--ui-type-ui-body-line);
+  --ui-settings-label-ink: var(--ui-color-text-primary);
+}
+.lantai:is([data-ui-theme="paper-letter"],[data-ui-theme="purple-glow"]) {
+  --ui-settings-label-family: var(--lt-book-field-family);
+  --ui-settings-label-size: var(--lt-book-field-size);
+  --ui-settings-label-weight: var(--lt-book-field-weight);
+  --ui-settings-label-line: var(--lt-book-field-line);
+}
+.ui-settings-list { display:grid; min-inline-size:0; gap:var(--ui-space-control); padding:var(--ui-space-row) var(--ui-space-group); }
+.ui-settings-row,.ui-settings-entry { display:flex; align-items:center; justify-content:space-between; gap:var(--ui-space-control); min-inline-size:0; min-block-size:var(--ui-interaction-target-min); padding:0; }
+.ui-settings-label { min-inline-size:0; margin:0; color:var(--ui-settings-label-ink); font-family:var(--ui-settings-label-family); font-size:var(--ui-settings-label-size); font-weight:var(--ui-settings-label-weight); line-height:var(--ui-settings-label-line); overflow-wrap:anywhere; }
+.ui-settings-entry { inline-size:100%; border:0; border-radius:0; background:transparent; box-shadow:none; color:var(--ui-color-text-primary); font:inherit; text-align:start; cursor:pointer; }
+.ui-settings-entry>span:last-child { color:var(--ui-color-text-meta); }
+.ui-settings-entry:focus-visible { outline:var(--ui-focus-ring-width) solid var(--ui-color-focus-ring); outline-offset:var(--ui-focus-ring-offset); }
+.ui-settings-field { display:grid; min-inline-size:0; gap:var(--ui-space-control); margin:0; padding:var(--ui-space-control) 0; border:0; }
+.ui-settings-field>.ui-settings-label { padding:0; }
+.ui-settings-field>.ui-input { inline-size:100%; min-inline-size:0; }

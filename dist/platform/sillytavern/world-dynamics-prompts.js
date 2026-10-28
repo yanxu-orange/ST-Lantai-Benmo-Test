@@ -20,7 +20,7 @@ export function createWorldPromptRuntime({repository,history,dateRuntime,getCont
    const domain=selection.worldDynamics,preferences=worldPreferences(domain);if(!preferences.enabled)return;
    const projected=projectWorldOutcomes(domain,selection.time);if(!projected.text)return;
    const candidate={serial:ticket,target,gate:permission,domain,time:selection.time,source};if(!valid(candidate))return;
-   const text=WORLD_CONTEXT_INTRO+'\n\n'+projected.text;getContext().setExtensionPrompt(WORLD_PROMPT_KEY,text,1,preferences.depth,false,0);
+   const intro=preferences.injectionPrompt??WORLD_CONTEXT_INTRO,text=(intro?intro+'\n\n':'')+projected.text;getContext().setExtensionPrompt(WORLD_PROMPT_KEY,text,1,preferences.depth,false,0);
    if(!valid(candidate)){if(ticket===serial)clear();return;}proof=candidate;status={status:'injected',text,depth:preferences.depth};
   }catch{if(!disposed&&ticket===serial)clear();}
  }

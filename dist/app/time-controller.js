@@ -1,3 +1,4 @@
+import {worldPreferences,WORLD_CONTEXT_INTRO} from '../domain/world-dynamics/preferences.js';
 import {adoptScheduleCandidate,ignoreScheduleCandidate,markScheduleManual} from '../domain/time/schedule.js';
 import {recognizeRecentDate} from '../domain/time/tracker.js';
 import {normalizeChronology,toUnifiedYear} from '../domain/time/chronology.js';
@@ -103,6 +104,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   if(world&&['world','world-console'].includes(route)){navigation++;stack.length=0;state.route='world';state.draft=null;state.error='';notify();void world.ensure().then(ready=>{if(ready&&route==='world-console'&&state.route==='world')world.openConsole();});return;}
   if(!writer?.inspect().saving)resetWriter();
   if(['home','manage'].includes(route)){if(route==='manage'&&world)void world.ensure().then(()=>notify());navigation++;stack.length=0;state.route=route;state.draft=null;state.pendingCalendar=null;state.error='';notify();return;}
+  if(route==='world-settings'){const ws=world?.inspect();if(ws?.status!=='ready')return fail(new Error('请重新读取世界动态'));const preferences=worldPreferences(ws.domain);navigate(route,{...preferences,injectionPrompt:preferences.injectionPrompt??WORLD_CONTEXT_INTRO,displayMode:preferences.displayMode??'builtin'});state.editorOriginal=copy(world.capturePreferences());return;}
   const cal=calendar();
   if(route==='calibrate'||route.startsWith('reminders/')){try{config=settings.captureTimeReminders();state.reminders=copy(config.reminders);}catch(error){fail(error);return;}}
   if(route==='calendar')navigate(route,{...(cal?copy(cal.definition):{id:id(),type:'modern',name:'现代历法'}),importStart:cal?.definition.importedYears?.[0]?.sourceYear??2025,importEnd:cal?.definition.importedYears?.at(-1)?.sourceYear??2026});
@@ -137,6 +139,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
  async function save({confirmCalendar=false}={}){
   if(state.invalidated||!current())return false;
   const route=state.route,editor=state.draft,draft=copy(state.draft);if(!draft)return false;
+  if(route==='world-settings'){const expected=copy(state.editorOriginal),routeVersion=navigation;return explicit(async()=>{const ok=await world.savePreferences({injectionPrompt:draft.injectionPrompt,depth:draft.depth,display:draft.display,displayMode:draft.displayMode},expected,()=>current()&&navigation===routeVersion&&state.draft===editor);if(!ok)throw new Error(world.inspect().error||'世界动态设置未能保存');});}
   if(route==='calendar'){
    try{
     if(!equal(state.time.calendars,state.editorTime.calendars)||state.time.activeCalendarId!==state.editorTime.activeCalendarId)throw new Error('历法配置已变化，请重新打开');
@@ -231,7 +234,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   jump(date){try{state.cursor=calendar().validate(date);notify();}catch{}},
   day(day){if(state.cursor){state.cursor={...state.cursor,day};notify();}},month(delta){const cal=calendar();if(!cal||!state.cursor)return;const next=cal.shiftMonths(state.cursor,delta);if(next){state.cursor=next;notify();}},today(){if(state.time.currentDate?.day!=null){state.cursor=copy(state.time.currentDate);notify();}},
   filter(value){state.filter=value;notify();},query(value){state.query=value;notify();},setScroll(route,value){state.scroll[route]=value;},setOpen(key,value){state.opened[key]=value;},
-  memory(){if(!requestDiscard(onMemory))onMemory();},settings(){if(!requestDiscard(onSettings))onSettings();},close(){if(!requestDiscard(onClose))onClose();},suspend(){visible=false;},resume(){visible=true;notify();},
+  memory(){if(!requestDiscard(onMemory))onMemory();},settings(){if(!requestDiscard(onSettings))onSettings();},close(){const close=()=>{if(state.route==='world-settings')navigation++;onClose();};if(!requestDiscard(close))close();},suspend(){visible=false;},resume(){visible=true;notify();},
   workshop(){if(!requestDiscard(onWorkshop))onWorkshop();},
   benmo(){if(!requestDiscard(onBenmo))onBenmo();},
   dispose(){disposed=true;ticket++;resetWriter();unsubscribeDate?.();listeners.clear();}

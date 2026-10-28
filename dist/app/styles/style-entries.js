@@ -11,6 +11,7 @@ export const BASE_STYLE_ENTRIES=Object.freeze([
   entry('pc','./pc.css'),
   entry('shared','../api-settings.css'),
   entry('shared','../settings-root-view.css'),
+  entry('shared','../shared-ui/settings-rows.css'),
   entry('shared','../summary-view.css'),
   entry('shared','../summary-settings.css'),
   entry('shared','../shared-ui/prompt-list.css'),

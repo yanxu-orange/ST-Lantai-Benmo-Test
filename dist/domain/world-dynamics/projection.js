@@ -2,7 +2,7 @@ import {createCalendar} from '../time/calendar.js';
 import {selectedWorldVersions} from './tasks.js';
 import {worldFields} from './output.js';
 import {WORLD_KINDS,worldCalendar} from './data.js';
-export const WORLD_CONTEXT_INTRO='以下是可能随正文改变的世界发展安排，供续写参考；不直接代表已经发生的事实或角色已知信息。';
+export {WORLD_CONTEXT_INTRO} from './preferences.js';
 const dates=(text,cal)=>[...text.matchAll(/(\d{1,4})(?:年|[-/])(\d{1,2})(?:月|[-/])(\d{1,2})日?/g)].map(m=>cal.validate({calendarId:cal.definition.id,year:+m[1],month:+m[2],day:+m[3]}));
 export function projectWorldOutcomes(domain,time){
  const definition=time?.calendars?.find(row=>row.id===time.activeCalendarId);if(!definition||time.currentDate?.day==null)return {entries:[],text:''};

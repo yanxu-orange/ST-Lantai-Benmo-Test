@@ -9,8 +9,37 @@ export function defaultWorldConfig(){
  const themes=[...sections.tasks.matchAll(/地区动态主题库：([^\n]+)\n([\s\S]*?)(?=地区动态主题库：|\[天气环境\])/g)].map((m,i)=>({id:`theme-${i}`,name:m[1].trim(),content:m[2].trim(),enabled:true}));
  sections.tasks=sections.tasks.replace(/地区动态主题库：政治主题[\s\S]*?(?=\[天气环境\])/,'{{regionThemes}}\n\n');
  sections.tasks=sections.tasks.replace(/灵感库：用户填写的条目名称[\s\S]*$/,'{{plotIdeas}}');
- sections.tasks+='\n\n[完结区]\n普通事件（世界、地区、活动、舆论）结束后，值得保留的影响输出为LTaftermath1、LTaftermath2独立标签，最多2条；字段为事件、完结日期、影响、有效至。无影响输出“完结区：无”。只保留一句话影响与截止日期；新内容替换最早完结的事件，截止日期成为昨天时删除。天气、人物和长期剧情不参与长尾影响判断。\n日期统一用本历法数字“年/月/日”完整表达。人物不足3名按实际人数，没有人物输出“角色动态：无”。除LTdesign与正式标签和明确空区标记外，不输出其他文字。';
- sections.design+='\n\n检查普通事件完结后是否值得留下影响，已有影响是否需要调整或移除；遵守完结区上限。';
+ sections.rules+='\n\n- 日期与输出：日期使用本历法完整的数字年月日；正式成品按各任务规定的标签或空区标记输出，不附加其他文字。';
+ sections.tasks=sections.tasks.replace('格式要求：\n\n<LTcharacter1>','格式要求：\n\n没有可用角色时，输出“角色动态：无”。\n\n<LTcharacter1>');
+ sections.tasks+=`
+
+[完结区]
+
+任务：依据“当前日期”“上一版世界动态”与“本轮剧情资料”，维护当前有效的长尾影响，最多2条。
+
+要求：
+
+- 仅判断世界动向、地区动态、活动机遇、舆论动态中已完结的事件；天气环境、角色动态和长期剧情不参与。
+- 事件结束后，值得留下具体影响才保留；没有价值则不留，不凑数。
+- 未被本轮剧情改变且未过期的旧影响保留；被改变则调整或提前移除。有效至日期成为昨天时移除。
+- 新影响加入时，现有影响不足2条则直接加入；已满2条才替换完结日期最早的一条。
+- 每条用一句话写明具体影响，并提供完整的完结日期和有效至日期。
+
+格式要求：
+
+每条影响使用独立标签，按输出顺序编号为LTaftermath1、LTaftermath2；只有1条时只输出LTaftermath1。没有任何有效影响时，输出“完结区：无”。
+
+<LTaftermath1>
+
+事件：已完结事件名称
+完结日期：完整年月日
+影响：一句话简述事件结束后仍然存在的具体影响。
+有效至：完整年月日
+
+</LTaftermath1>`;
+ sections.design=sections.design.replace('Phase 3｜构思各区内容','Step 3：回读[完结区]：哪些已完结的普通事件值得留下什么具体影响，持续至何日？已有影响应保留、调整还是移除？加入新影响时是否需要替换？\n\nPhase 3｜构思各区内容')
+  .replace('舆论动态、长期剧情库的顺序检查','舆论动态、长期剧情库、完结区的顺序检查')
+  +'\n织野，现在，认真阅读资料，然后从<LTdesign>开始创作吧。';
  sections.materials=markWorldMaterials(sections.materials);
  return modularWorldConfig({sections,materialEnabled:defaultMaterialEnabled(),themes,ideas:[],worldRefs:[],characterRefs:[],extraPeople:'',extra:'',notes:'',readStory:true,initialScope:'all',initialCount:100}).config;
 }
