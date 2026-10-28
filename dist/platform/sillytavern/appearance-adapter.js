@@ -6,15 +6,16 @@ import { DEFAULT_THEME, isTheme } from '../../app/styles/theme.js';
 // generation, recall, cumulative or credential authority in lantai_benmo.
 export const APPEARANCE_KEY = 'lantai_benmo_appearance';
 const defaults = () => ({ schema: 1, revision: 0, theme: DEFAULT_THEME });
-const fingerprint = value => value === undefined ? 'absent' : JSON.stringify([value.schema, value.revision, value.theme]);
+const fingerprint = value => value === undefined ? 'absent' : JSON.stringify([value.schema,value.revision,value.theme,value.roundRecordMode??null,Object.entries(value.workshopModes??{}).sort(([a],[b])=>a.localeCompare(b))]);
 const failure = code => Object.assign(new Error(code), { code });
 export function assertAppearance(value) {
   if (!value || Object.getPrototypeOf(value) !== Object.prototype
-    || Object.keys(value).length !== 3 || !['schema','revision','theme'].every(key => Object.hasOwn(value,key))
+    || Object.keys(value).some(key=>!['schema','revision','theme','roundRecordMode','workshopModes'].includes(key)) || !['schema','revision','theme'].every(key => Object.hasOwn(value,key))
     || value.schema !== 1 || !Number.isSafeInteger(value.revision) || value.revision < 0 || !isTheme(value.theme)) {
     throw failure('APPEARANCE_INVALID');
   }
-  return Object.freeze({ schema: 1, revision: value.revision, theme: value.theme });
+  if(Object.hasOwn(value,'roundRecordMode')&&!['builtin','regex'].includes(value.roundRecordMode)||Object.hasOwn(value,'workshopModes')&&(!value.workshopModes||Object.getPrototypeOf(value.workshopModes)!==Object.prototype||Object.entries(value.workshopModes).some(([key,mode])=>!key||!['builtin','regex'].includes(mode))))throw failure('APPEARANCE_INVALID');
+  return Object.freeze({schema:1,revision:value.revision,theme:value.theme,...(Object.hasOwn(value,'roundRecordMode')?{roundRecordMode:value.roundRecordMode}:{}),...(Object.hasOwn(value,'workshopModes')?{workshopModes:Object.freeze({...value.workshopModes})}:{})});
 }
 export function createAppearanceAdapter({ getContext = getSillyTavernContext, fetchImpl = globalThis.fetch,
   saveHost, loadHostModule = () => import('/script.js'), readServerNamespace } = {}) {
@@ -82,7 +83,7 @@ export function createAppearanceAdapter({ getContext = getSillyTavernContext, fe
       if(disposed||!confirmed)return false;
       try{const current=local();return fingerprint(expected)===fingerprint(confirmed.root)&&current.fingerprint===confirmed.fingerprint&&current.epoch===confirmed.epoch;}catch{return false;}
     },
-    async save(theme, expected, { isCurrent = () => true } = {}) {
+    async save(theme, expected, { isCurrent = () => true,roundRecordMode,workshopModes } = {}) {
       if (!isTheme(theme)) throw failure('APPEARANCE_INVALID');
       let ticket = local();
       if (!confirmed) throw failure('APPEARANCE_UNCONFIRMED');
@@ -91,8 +92,9 @@ export function createAppearanceAdapter({ getContext = getSillyTavernContext, fe
       const save = await saver(); unchanged(ticket);
       if (!guard()) throw failure('APPEARANCE_CONFLICT');
       unchanged(ticket);
-      if (theme === ticket.root.theme) return confirmed.root;
-      const next = assertAppearance({ schema: 1, revision: ticket.root.revision + 1, theme });
+      const draft=assertAppearance({...ticket.root,theme,...(roundRecordMode===undefined?{}:{roundRecordMode}),...(workshopModes===undefined?{}:{workshopModes})});
+      if(fingerprint(draft)===fingerprint(ticket.root))return confirmed.root;
+      const next=assertAppearance({...draft,revision:ticket.root.revision+1});
       const previous = ticket.raw;
       install(next, next, ticket);
       ticket = local();

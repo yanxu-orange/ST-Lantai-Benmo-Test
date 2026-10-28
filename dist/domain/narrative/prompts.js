@@ -1,5 +1,5 @@
 export const NARRATIVE_IDENTITIES = Object.freeze({
-  self: '你是【角色名】，是这个世界的男主角，请依据下面的故事资料和已有自述，为此刻的自己更新一份简短自述。',
+  self: '你是【角色名】，是这个世界的主角，请依据下面的故事资料和已有自述，为此刻的自己更新一份简短自述。',
   outline: '你是一名连载小说的故事编辑，擅长梳理主线、重要支线和关键转折。请阅读下面的故事资料，更新故事大纲，让读者能够理解故事如何发展到当前。',
 });
 export const NARRATIVE_REQUIREMENTS = Object.freeze({

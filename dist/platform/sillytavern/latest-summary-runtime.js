@@ -468,7 +468,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     return result;
   }
   function floorInfo(floor){return floorInfos([floor]).get(floor)??null;}
-  function workshopFloorInfos(floors){
+  function workshopFloorInfos(floors,{includeIdle=false}={}){
     const result=new Map();
     try{
       if(!target||!current(target)||!allowed()||!workshopState&&!trackingState&&!scheduleState)return result;
@@ -487,14 +487,14 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           const valid=record&&!snapshot.rawMessages.some(item=>invalidatedFloors.has(item.floor))&&matchesStoredLatestSource(snapshot,pair);
           return {id:module.id,kind:'workshop',name:module.name,body:valid?resultText(record):'',...(workshopFloorStates[row.replyId]?.[module.id]??{status:'idle',error:''})};
         });
-        tasks.push(...(trackingRuntime?.floorTasks(trackingDisplay,source,floor,row.replyId,trackingFloorStates[row.replyId]??{})??[]));
-        tasks.push(...(scheduleRuntime?.floorTasks(scheduleDisplay,source,floor,row.replyId,scheduleFloorStates[row.replyId]??{})??[]));
+        tasks.push(...(trackingRuntime?.floorTasks(trackingDisplay,source,floor,row.replyId,trackingFloorStates[row.replyId]??{},{includeIdle})??[]));
+        tasks.push(...(scheduleRuntime?.floorTasks(scheduleDisplay,source,floor,row.replyId,scheduleFloorStates[row.replyId]??{},{includeIdle})??[]));
         if(tasks.length)result.set(floor,{floor,replyId:row.replyId,tasks,batchRunning:[...displayBatches.values()].some(batch=>batch.floor===floor&&batch.ticket===serial)});
       }
     }catch{/* Changing chat ownership cannot authorize a display. */}
     return result;
   }
-  function workshopFloorInfo(floor){return workshopFloorInfos([floor]).get(floor)??null;}
+  function workshopFloorInfo(floor,options={}){return workshopFloorInfos([floor],options).get(floor)??null;}
   const sameVersions=(left,right)=>left.length===right.length&&left.every((row,index)=>['replyId','floor','swipeId','text'].every(key=>row[key]===right[index][key]));
   function library(readView,verifiedSource){
     let rules=[];try{rules=settings?.captureEventGeneration?settings.captureEventGeneration().generation.summaryCleaning.rules:getGenerationSettings().summaryCleaning.rules;}catch{/* Saved facts do not require a model. */}
@@ -718,7 +718,9 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   }
   // Never generate on initial load, enabling, edits, or selecting old swipes.
   if(autoInitialize)void refresh().catch(()=>{});
-  return {inspect,read,savePreferences,clear,subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},defaultPrompt:DEFAULT_LATEST_PROMPT,
+  function captureFloorDisplayProof(floor){const chat=getContext()?.chat,message=chat?.[floor];if(!target||!current(target)||!message||message.is_user||message.is_system||!message.extra?.[WORKSHOP_REPLY_KEY])return null;return {floor,chat,message,text:message.mes,name:message.name,type:message.extra?.type,swipe:message.swipe_id,replyId:message.extra[WORKSHOP_REPLY_KEY],epoch:displayEpoch,target:copy(target)};}
+  function matchesFloorDisplayProof(proof,{ignoreEpoch=false}={}){try{const chat=getContext()?.chat,message=chat?.[proof?.floor];return !!proof&&!disposed&&current(proof.target)&&chat===proof.chat&&message===proof.message&&message.mes===proof.text&&message.name===proof.name&&message.extra?.type===proof.type&&message.swipe_id===proof.swipe&&message.extra?.[WORKSHOP_REPLY_KEY]===proof.replyId&&!message.is_user&&!message.is_system&&(ignoreEpoch||displayEpoch===proof.epoch);}catch{return false;}}
+  return {captureFloorDisplayProof,matchesFloorDisplayProof,inspect,read,savePreferences,clear,subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},defaultPrompt:DEFAULT_LATEST_PROMPT,
     observeVisibility(options){
       const off=adapter.observeSourceVisibility?.(change=>{if(disposed)return;if(change?.visibilityChanged!==false)cancel();else publish();},options)??(()=>{});
       const stop=()=>{off();visibilityReleases.delete(stop);};visibilityReleases.add(stop);return stop;

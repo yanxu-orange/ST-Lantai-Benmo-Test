@@ -16,8 +16,8 @@
   },
   {
     "path": "dist/app/appearance-session.js",
-    "bytes": 3327,
-    "sha256": "946cae001c830e45c7162b1af501f0f4778074c43a111bcd06b8406c2d2ca4a7"
+    "bytes": 4137,
+    "sha256": "5c6ea43d62af739ed1ae36400c2191d7084e1f5244580178425793acf01c5408"
   },
   {
     "path": "dist/app/assets/workshop-hide.regex.json",
@@ -301,8 +301,8 @@
   },
   {
     "path": "dist/app/settings-root-view.js",
-    "bytes": 14417,
-    "sha256": "915cfdddb71eccc47776673358bd34462a99164eeec1a5e383b30a98a5f3b6b8"
+    "bytes": 15158,
+    "sha256": "7742ee8eb5c2a20dc35c8b6047b04ff3a34aedc5ba4aabfa4221ffc030903126"
   },
   {
     "path": "dist/app/shared-ui/appearance-format.css",
@@ -311,8 +311,8 @@
   },
   {
     "path": "dist/app/shared-ui/briefing.css",
-    "bytes": 2965,
-    "sha256": "758abe9411cdc719c280d9cf04d241afb95b4537600b467bc903a445fa3071ac"
+    "bytes": 4250,
+    "sha256": "eb9f45dde41f015b970ef4128b0b134dadce278058b27179ea0409db42a04cfa"
   },
   {
     "path": "dist/app/shared-ui/candidate.web.css",
@@ -333,6 +333,21 @@
     "path": "dist/app/shared-ui/prompt-list.css",
     "bytes": 2400,
     "sha256": "9ec9c313da705d9d5c05f893fffb08abce43c601662db1f8ba24eb8a03e986ff"
+  },
+  {
+    "path": "dist/app/shared-ui/readonly-reader.js",
+    "bytes": 2388,
+    "sha256": "28856bf419a4a88391103ade7a9ac425023480914f5f68576f12433b9ca7f072"
+  },
+  {
+    "path": "dist/app/shared-ui/select-menu.css",
+    "bytes": 2720,
+    "sha256": "3a4d10bb92aa9220b02292a5c811af53bddc2894638958a7f546e27e08212b55"
+  },
+  {
+    "path": "dist/app/shared-ui/select-menu.js",
+    "bytes": 12803,
+    "sha256": "d0c35313b44268188275478c5911fe0b7c02979ea3d32e70e4e04e4a4c32176d"
   },
   {
     "path": "dist/app/shared-ui/settings-rows.css",
@@ -581,8 +596,8 @@
   },
   {
     "path": "dist/app/styles/style-entries.js",
-    "bytes": 4697,
-    "sha256": "a019483e1972799071bcda0334ab16bf65840387b4b5a8361d7703b6ef2fb4d7"
+    "bytes": 4794,
+    "sha256": "4688b8af1adc7a9bb007f90634c69ef0b4514e954c779c584b3ae09c03922074"
   },
   {
     "path": "dist/app/styles/theme.js",
@@ -641,13 +656,13 @@
   },
   {
     "path": "dist/app/time-view.css",
-    "bytes": 11290,
-    "sha256": "dcc5c0be4b5d557a92060937b8aecfd8ac2a72f7bf9e50a61c49a811cfa0be3d"
+    "bytes": 11187,
+    "sha256": "18808b05129d6e54f1e31fff1e836eb40033405c8fc6b50491abe63a336480ef"
   },
   {
     "path": "dist/app/time-view.js",
-    "bytes": 45323,
-    "sha256": "73f1bf5e6c4aec50ea2ca095699adaebd74341908ab6cec38686e4275a0d994b"
+    "bytes": 48142,
+    "sha256": "21f2fec5a3747d75bf46242f7df6116238d627ed2e00ec991b53b638adbb031c"
   },
   {
     "path": "dist/app/tracking-controller.js",
@@ -662,12 +677,12 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "52ee3377630bdc33fff7d467307c023fb3312da52a6cef046b653ae6d837cb9f"
+    "sha256": "6cf1e2016b64dacb1e64028767ad4d758388db60f200346d2cb9e40176840262"
   },
   {
     "path": "dist/app/workshop-controller.js",
-    "bytes": 17279,
-    "sha256": "ca67d63b71d62e3b97952be4b3b079b691d7e3d1b9f7a976e8d289f1ecbe06be"
+    "bytes": 17794,
+    "sha256": "4862fbb2df49d603fb7119fb923c36ec583af54efdc09a285d9bceaa09ef36c8"
   },
   {
     "path": "dist/app/workshop-loading-view.js",
@@ -681,8 +696,8 @@
   },
   {
     "path": "dist/app/workshop-view.js",
-    "bytes": 27117,
-    "sha256": "fd70169caf73b4b6c6f6b3745f345a4de7b099e95dd06485417b055904b8bccc"
+    "bytes": 28652,
+    "sha256": "9ab4fbcab92dcdeb71c725d3a526b41161a4ba3407d46fe13d4da04527368909"
   },
   {
     "path": "dist/app/world-dynamics-controller.js",
@@ -831,13 +846,13 @@
   },
   {
     "path": "dist/domain/narrative/prompts.js",
-    "bytes": 7108,
-    "sha256": "6fd50182adee34c784637ab75a46ce6d25171ed3cb7f199a5c97d913c19a34d2"
+    "bytes": 7105,
+    "sha256": "a5b8c2d52b4233edbc00fa6584fa928c95f52716e40ae8067e3850986be7b492"
   },
   {
     "path": "dist/domain/narrative/requests.js",
-    "bytes": 14911,
-    "sha256": "1ad4268b7ca3e2648d26b3f9c454da62c4085645b370077df18af1dc284d2d5a"
+    "bytes": 14908,
+    "sha256": "ad0d612e81dd933ee8add413a3396cbd1c297c83af26bc76653d4d97e55df7ec"
   },
   {
     "path": "dist/domain/narrative/rollback-proof.js",
@@ -1241,8 +1256,8 @@
   },
   {
     "path": "dist/domain/world-dynamics/preferences.js",
-    "bytes": 1410,
-    "sha256": "751493416af2b7195df3a13671c740d8dcabdbb50fe1c92db040f68d57085e11"
+    "bytes": 1749,
+    "sha256": "965b2b7ecd95e7fa5e77b731071878c426f6840d983d3e3cc0130d8bf46dc60f"
   },
   {
     "path": "dist/domain/world-dynamics/preset-source.js",
@@ -1281,8 +1296,8 @@
   },
   {
     "path": "dist/platform/sillytavern/appearance-adapter.js",
-    "bytes": 6490,
-    "sha256": "615aab03d8446ef3961e84f854229abc854c459491d55b3b555182c98b1c044b"
+    "bytes": 7403,
+    "sha256": "4239cbf44d039879a7eada523a442b5f63b8705c31ae01f5c6ff60c7791c6660"
   },
   {
     "path": "dist/platform/sillytavern/character-card.js",
@@ -1311,13 +1326,13 @@
   },
   {
     "path": "dist/platform/sillytavern/floor-background-display-order.js",
-    "bytes": 873,
-    "sha256": "9ec274a28f004c580a20ce86aa1b8db1844de12e3b2a0d7383cb91dd17a14b95"
+    "bytes": 1179,
+    "sha256": "b2193fea3ced4bc9b46aa8f372a08097a5eee5aa90ee58132fcecb9466659401"
   },
   {
     "path": "dist/platform/sillytavern/floor-display-coordinator.js",
-    "bytes": 9319,
-    "sha256": "1ded0e4bed68e0453e6ad1418923c432e3f98efd8f19d35d032c53577b5e5dcf"
+    "bytes": 9371,
+    "sha256": "8313ae3310bfff58488ac38e183b73a794d08aac0110cee20d8f8135aaf03192"
   },
   {
     "path": "dist/platform/sillytavern/generation-diagnostic.js",
@@ -1331,13 +1346,13 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-display.js",
-    "bytes": 6129,
-    "sha256": "533424445250be40575c8b48451aa7b8d9fd59637abca05f6848846a45fd6cef"
+    "bytes": 6165,
+    "sha256": "f4996a839472ca5bd7c08a3ff5f1d2111dd2b309a1d677c8435ac8620752493a"
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "bytes": 74901,
-    "sha256": "29b41998aeba81bafe6f99eb53ae3bc0c7690be9c1564b1c9813d1fd7bfe2fad"
+    "bytes": 75933,
+    "sha256": "51eb65837f0ee277413431320fbe294bdb0283e7822d0442374e5c299196d4e8"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -1366,8 +1381,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 96776,
-    "sha256": "779d6e63d5fb446eea53b51547a12e6fa19b22c5256a36d7a8861aa76572b42c"
+    "bytes": 98237,
+    "sha256": "adc3218bb2b60bfc47ee46a024a3e069e094875506638fef4c1210c1118caf9c"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1435,9 +1450,19 @@
     "sha256": "3c3986547c2616dbf0f5e92ff6b7e296d0d49fa90c3a1f31411318c4672b69f5"
   },
   {
+    "path": "dist/platform/sillytavern/round-record-data.js",
+    "bytes": 1814,
+    "sha256": "3e3cea83385d218a9e3e3c6214715f5ca895161d46ed44795d8cf6cfa79b59da"
+  },
+  {
+    "path": "dist/platform/sillytavern/round-record-display.js",
+    "bytes": 15230,
+    "sha256": "97ca13e893e91ae4ad36c413429eaaaa058b24e50a4dfcdd9d6bcd3096deabc6"
+  },
+  {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
-    "bytes": 7537,
-    "sha256": "8b29169e235bdc6b9bdd0628f530bb9c3dfd1df3df403654c3f4bf0d3ab7a986"
+    "bytes": 7688,
+    "sha256": "f99ef60dd157ddb25ef0422786d76c1b3df4a4e8294aec08122ea1e364e28d66"
   },
   {
     "path": "dist/platform/sillytavern/secret-references.js",
@@ -1491,8 +1516,8 @@
   },
   {
     "path": "dist/platform/sillytavern/tracking-runtime.js",
-    "bytes": 22258,
-    "sha256": "6bf720acd63d926578a39fd8d91adc6c70b0cf9f5f7eb5849e0c06e0e28d8186"
+    "bytes": 22631,
+    "sha256": "edb68dca74a077cb969b3d3c13e0f070a0f856eaf8e693d80e29158e9b8369a5"
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-diagnostic.js",
@@ -1511,13 +1536,13 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-background-display.js",
-    "bytes": 7562,
-    "sha256": "5218582f25dda1ec554cd29be7ca9c1c7e87693dc39b6b1de36763e769852f50"
+    "bytes": 7858,
+    "sha256": "16bd4fddd9f23c997132edf58f43ae5d2215836032292455fb4c016468ac3e5c"
   },
   {
     "path": "dist/platform/sillytavern/workshop-display-formatter.js",
-    "bytes": 8066,
-    "sha256": "4c8b44e1f7af5994ecd724c3aef5ea200e8e2a29efa521f7692d81b59beb43c0"
+    "bytes": 8379,
+    "sha256": "6ed46e7212add2a6c2adbc3024fe7ffe4b34fc1dc6d63d5b95904e6034438317"
   },
   {
     "path": "dist/platform/sillytavern/workshop-history.js",
@@ -1652,6 +1677,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "3b394fb339e1e92064deb7727f847c0adcb626ee667851f5332cbbba48b4efdc"
+    "sha256": "4914e01dd6ffe3160ce0cb0f9019af7f82b408b11d059d8d476c19a31f709896"
   }
 ]

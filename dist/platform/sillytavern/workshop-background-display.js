@@ -7,7 +7,7 @@ const bodyKey = info => JSON.stringify(info.tasks.map(task => [taskKey(task), ta
 const text = (node, value) => { if (node.textContent !== value) node.textContent = value; };
 const busy = info => info.batchRunning === true || info.tasks.some(task => task.status === 'running');
 // Results are independent floor-tail nodes, never rewritten into story mes.
-export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.document, runtime, formatter, coordinator, onOpenSchedule,
+export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.document, runtime, formatter, coordinator, onOpenSchedule,getMode=()=>null,getModuleMode=()=>null,
   MutationObserver: Observer = globalThis.MutationObserver } = {}) {
   let disposed = false;
   const rendered = new WeakMap(), mounted = new Set();
@@ -25,8 +25,9 @@ export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.docu
     const plans = [], batch = runtime.workshopFloorInfos?.(floors);
     for (const box of mounted) if (box.isConnected === false) release(box);
     for (const message of messages) {
-      const floor = floorOf(message), info = Number.isSafeInteger(floor) && floor >= 0
+      const floor = floorOf(message), original = Number.isSafeInteger(floor) && floor >= 0
         ? batch ? batch.get(floor) : runtime.workshopFloorInfo(floor) : null;
+      const info=original?{...original,tasks:original.tasks.filter(task=>task.kind==='workshop'?getModuleMode(task.id)==null:getMode()==null)}:null;
       let box = message.querySelector('.lantai-workshop-results');
       if (!info?.tasks?.length) { if (box) release(box); continue; }
       const parent = message.querySelector('.mes_block') ?? message;
@@ -80,7 +81,7 @@ export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.docu
       }
       const content = bodyKey(info);
       plans.push({ ...state, ownsChat: () => !state.snapshot?.ownsChat || state.snapshot.ownsChat(), bind: snapshot => { state.snapshot ??= snapshot; }, content, busy: busy(info),
-        current: () => { const now = runtime.workshopFloorInfo(floor); return current() && !!now && !busy(now) && bodyKey(now) === content; },
+        current: () => { const now = runtime.workshopFloorInfo(floor); return current() && !!now && !busy(now) && bodyKey({...now,tasks:now.tasks.filter(task=>task.kind==='workshop'?getModuleMode(task.id)==null:getMode()==null)}) === content; },
         prepare: snapshot => Promise.all(info.tasks.filter(task => task.kind === 'workshop')
           .map(task => prepareDisplayBody(state.entries.get(taskKey(task)), task.body ?? '', snapshot))),
         commit(updates, snapshot) { state.snapshot = snapshot; return commitDisplayBodies(updates, snapshot, doc); },

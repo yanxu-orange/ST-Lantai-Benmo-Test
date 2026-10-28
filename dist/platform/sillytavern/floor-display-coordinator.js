@@ -135,7 +135,7 @@ export function createFloorDisplayCoordinator({ document: doc = globalThis.docum
     scheduled = true; queueMicrotask(render);
   }
   const touchesChat = record => {
-    if (record.target?.closest?.('.lantai-latest-summary') || record.target?.closest?.('.lantai-workshop-results') || record.target?.closest?.('.lantai-world-briefing')) return false;
+    if (record.target?.closest?.('.lantai-latest-summary') || record.target?.closest?.('.lantai-workshop-results') || record.target?.closest?.('.lantai-world-briefing') || record.target?.closest?.('.lantai-round-record')) return false;
     return !!record.target?.closest?.('#chat') || [...(record.addedNodes ?? []), ...(record.removedNodes ?? [])]
       .some(node => node.id === 'chat' || node.querySelector?.('#chat'));
   };

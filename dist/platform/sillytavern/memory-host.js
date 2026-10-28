@@ -1,3 +1,5 @@
+import {mountSelectMenus} from '../../app/shared-ui/select-menu.js';
+import {mountRoundRecordDisplay} from './round-record-display.js';
 import {createWorldDisplayRuntime} from './world-dynamics-display-runtime.js';
 import {mountWorldDynamicsDisplay} from './world-dynamics-display.js';
 import {createWorldAutoRuntime} from './world-dynamics-auto.js';
@@ -90,7 +92,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
-  let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null;
+  let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null,selectMenus=null;
   // Native scrolling remains unchanged; height is a browser-local presentation preference.
   const panelHeightPreference=createPanelHeightPreference({document:doc,getShadow:()=>panel?.shadowRoot});
   let interfaceDiagnosticTarget=null;
@@ -123,7 +125,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   let worldDisplayRuntime,worldDisplay;
   const briefingStyleCache=new Map();
   let hostReloadSequence=0,worldHistory,worldPrompts,worldAuto,worldWaiting,worldAutoSettingsRelease,worldWaitSerial=0,timeRuntime,timePrompts,timeController,timeView,timeTarget,timeContainer,memoryReadProof=null,worldController=null,worldTarget=null;
-  let sourceDeletionRuntime,sourceDeletionNotices,narrativeRuntime,latestRuntime,latestDisplay,workshopBackgroundDisplay;
+  let sourceDeletionRuntime,sourceDeletionNotices,narrativeRuntime,latestRuntime,latestDisplay,workshopBackgroundDisplay,roundRecordDisplay;
   let benmoController,benmoView,benmoSubscription,benmoTarget,benmoNavigation=null,benmoPolicyKey='';
   let benmoWarmupRequested=false,benmoWarmupScheduled=false;
   let workshopRegex,workshopRegexError=null,workshopRuntime,workshopController,workshopView,workshopTarget,workshopContainer,trackingRuntime,scheduleRuntime;
@@ -303,6 +305,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       for (const bundle of bookStylesByTheme.values()) bundle.style=null;
       cleanup(()=>currentObserver?.disconnect());
       cleanup(()=>decoration?.dispose());decoration=null;
+      cleanup(()=>selectMenus?.dispose());selectMenus=null;
     } finally {
       releasePanelDiagnostic?.();releasePanelDiagnostic=null;
       const currentPanel=panel;panel=null;content=memoryContent=benmoContent=settingsContent=summaryContent=null;
@@ -357,8 +360,9 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         const displayCoordinator=createFloorDisplayCoordinator({document:doc,runtime:latestRuntime,getTarget:()=>repository.captureTarget(),MutationObserver:Observer,formatter:createWorkshopDisplayFormatter({getContext})});
         worldDisplayRuntime=createWorldDisplayRuntime({adapter,repository,history:worldHistory,dateRuntime:timeRuntime,getContext,getControls:()=>controls,getTheme:()=>appearance.inspect().previewTheme??appearance.inspect().theme,scheduleStart:afterPageFrame});
         worldDisplay=mountWorldDynamicsDisplay({document:doc,runtime:worldDisplayRuntime,coordinator:displayCoordinator,styles:briefingStyles});
-        latestDisplay=mountLatestSummaryDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator});
-        workshopBackgroundDisplay=mountWorkshopBackgroundDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator,onOpenSchedule:()=>void openSchedule()});
+        latestDisplay=mountLatestSummaryDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator,getMode:()=>appearance.inspect().roundRecordMode});
+        workshopBackgroundDisplay=mountWorkshopBackgroundDisplay({document:doc,runtime:latestRuntime,MutationObserver:Observer,coordinator:displayCoordinator,onOpenSchedule:()=>void openSchedule(),getMode:()=>appearance.inspect().roundRecordMode,getModuleMode:id=>Object.hasOwn(appearance.inspect().workshopModes??{},id)?appearance.inspect().workshopModes[id]:null});
+        roundRecordDisplay=mountRoundRecordDisplay({document:doc,runtime:latestRuntime,coordinator:displayCoordinator,appearance,styles:briefingStyles,onOpenSchedule:receipt=>void openRoundDestination('schedule',receipt),onOpenTracking:(kind,receipt)=>void openRoundDestination(kind,receipt)});
         cumulativeRuntime=createCumulativeRuntime({repository,settings:runtime.settings,getContext});
         const seen=new Set();
         const noticeController={subscribeNotices(listener){return runtime.cumulativeService.subscribe(state=>{
@@ -613,6 +617,14 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     const controller=timeController,valid=()=>panel&&serial===ticket&&request===pageRequest&&controller===timeController&&sameTarget(target,repository.captureTarget());
     afterPageFrame(()=>{if(valid())void controller.ensure().then(ready=>{if(ready&&valid()){if(candidates)controller.openCandidates();else if(route)controller.open(route);interfaceDiagnostic.stage('ready','time');}});});return true;
   }
+  async function openRoundDestination(kind,receipt){
+    const valid=()=>!disposed&&!settingsOpen&&receipt.sourceCurrent()&&JSON.stringify(repository.captureTarget())===receipt.target;
+    if(!receipt.current()||!valid())return false;
+    if(!panel){const opening=open(),owner=ticket;await opening;if(ticket!==owner)return false;}
+    if(!valid()||benmoView?.blocking()||workshopView?.blocking()||timeController?.inspect().draft||app?.session?.state?.route==='editor')return false;
+    if(!allowed(kind==='schedule'?'time':kind==='item'?'item':'npc'))return false;
+    return kind==='schedule'?openSchedule():openBenmo({kind});
+  }
   async function openSchedule({candidates=false,fromSettings=false}={}){
     if(disposed||settingsOpen&&!fromSettings)return false;
     if(!panel){const opening=open(),openingTicket=ticket;await opening;if(ticket!==openingTicket)return false;}
@@ -648,7 +660,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     // Only an unfinished mount is replaced. A confirmed view owns its drafts.
     workshopController?.dispose();workshopTarget=target;
     const container=doc.createElement('div');container.className='wk-mount';workshopContainer=container;showAreaContainer(container);
-    const controller=createWorkshopController({repository,settings:runtime.settings,target,runtime:workshopRuntime,isReadOnly:()=>foregroundBrowsing,getCharacterName:binding=>getContext().characters?.find(c=>c.avatar===binding?.owner)?.name??'当前角色',ensureRegex:async()=>{await workshopReady();if(workshopRegexError)throw workshopRegexError;},onMemory:()=>void returnFromSummary(),onTime:()=>void openTime(),onSettings:openSettings,onBenmo:()=>void openBenmo(),onClose:close});
+    const controller=createWorkshopController({repository,settings:runtime.settings,target,runtime:workshopRuntime,appearance,isReadOnly:()=>foregroundBrowsing,getCharacterName:binding=>getContext().characters?.find(c=>c.avatar===binding?.owner)?.name??'当前角色',ensureRegex:async()=>{await workshopReady();if(workshopRegexError)throw workshopRegexError;},onMemory:()=>void returnFromSummary(),onTime:()=>void openTime(),onSettings:openSettings,onBenmo:()=>void openBenmo(),onClose:close});
     workshopController=controller;
     const prepare=async({refresh=false}={})=>{await new Promise(afterPageFrame);if(refresh?(!panel||settingsOpen||!summaryContent.contains(container)||summaryContent.hidden||controller!==workshopController||!sameTarget(target,repository.captureTarget())):!valid())return null;return refresh?controller.load({refresh:true}):controller.ensure();};
     const view=await mountWorkshopView({container,controller,availability,initialKind:kind??'prompt',prepare,isCurrent:valid});
@@ -963,6 +975,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', '兰台本末');
       const shadow = panel.attachShadow({ mode: 'open' });
       releasePanelDiagnostic=bindGenerationDiagnosticPanel(shadow);
+      selectMenus=mountSelectMenus(shadow);
       const shellStyle=doc.createElement('style');shellStyle.setAttribute('data-host-shell','');shellStyle.textContent=MEMORY_SHELL_CSS;shadow.prepend(shellStyle);
       let composing = false;
       shadow.addEventListener('compositionstart', () => { composing = true; });
@@ -1107,7 +1120,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>({status:'retained',reason:'native-visibility',removed:0}),
     dispose() {
-      if(disposed)return;disposed = true;panelHeightPreference.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();worldDisplay?.dispose();worldDisplayRuntime?.dispose();briefingStyleCache.clear();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();worldHistory?.dispose();worldAuto?.dispose();worldAutoSettingsRelease?.();worldWaiting?.dispose();worldPrompts?.dispose();timeController?.dispose();worldController?.dispose();worldController=null;worldTarget=null;let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      if(disposed)return;disposed = true;panelHeightPreference.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();worldDisplay?.dispose();worldDisplayRuntime?.dispose();briefingStyleCache.clear();roundRecordDisplay?.dispose();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();worldHistory?.dispose();worldAuto?.dispose();worldAutoSettingsRelease?.();worldWaiting?.dispose();worldPrompts?.dispose();timeController?.dispose();worldController?.dispose();worldController=null;worldTarget=null;let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;if(closeError)throw closeError;
     },

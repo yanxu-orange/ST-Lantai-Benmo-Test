@@ -19,7 +19,7 @@ export function createAppearanceSession({ adapter, prepareTheme = async () => {}
     pending = Promise.resolve().then(action).then(async root => {
       await prepareTheme(root.theme);
       if (disposed) return false;
-      baseline = root; state = { status: 'ready', theme: root.theme, error: null, confirmationRequired: false, message: status === 'saving' ? '外观已保存。' : '' }; return true;
+      baseline = root; state = { status: 'ready', theme: root.theme,roundRecordMode:root.roundRecordMode??null,workshopModes:root.workshopModes??{}, error: null, confirmationRequired: false, message: status === 'saving' ? '外观已保存。' : '' }; return true;
     }).catch(error => { if (!disposed) fail(error); return false; }).finally(() => { pending = null; if (!disposed) notify(); });
     notify();
     return pending;
@@ -43,6 +43,8 @@ export function createAppearanceSession({ adapter, prepareTheme = async () => {}
         return adapter.save(theme, baseline, { isCurrent: () => !disposed && canSave() });
       }, 'saving');
     },
+    selectRoundRecordMode(mode){if(!['builtin','regex'].includes(mode)||!baseline||state.status!=='ready'||disposed||pending)return Promise.resolve(false);return run(()=>adapter.save(state.theme,baseline,{roundRecordMode:mode,isCurrent:()=>!disposed&&canSave()}),'saving');},
+    selectWorkshopMode(id,mode,{original=null,isCurrent=()=>true}={}){if(!id||!['builtin','regex'].includes(mode)||!baseline||state.status!=='ready'||disposed||pending||(Object.hasOwn(state.workshopModes??{},id)?state.workshopModes[id]:null)!==original)return Promise.resolve(false);return run(()=>adapter.save(state.theme,baseline,{workshopModes:{...(baseline.workshopModes??{}),[id]:mode},isCurrent:()=>!disposed&&canSave()&&isCurrent()}),'saving');},
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     dispose() { disposed = true; state = { ...state, previewTheme: null }; adapter.dispose(); listeners.clear(); },
   });

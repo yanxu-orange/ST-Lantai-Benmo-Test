@@ -90,14 +90,15 @@ export function createScheduleRuntime({repository,settings,getControls,captureSo
     const time=pruneScheduleSources(captured.time,raw,{invalidatedFloors});
     return {...captured,...scheduleState(time),sourceSignature:JSON.stringify(raw)};
   }
-  function floorTasks(captured,raw,_floor,replyId,status={}){
+  function floorTasks(captured,raw,_floor,replyId,status={},{includeIdle=false}={}){
     if(!captured)return [];
     const receipts=captured.receipts.filter(row=>captured.activeIds.has(row.id)&&row.sourceSnapshot.replyId===replyId&&matchesStoredLatestSource(row.sourceSnapshot,raw));
     const active=allowed();
     const counts=receipts.length?receipts.reduce((counts,row)=>Object.fromEntries(Object.keys(counts).map(key=>[key,counts[key]+row.counts[key]])),{added:0,updated:0,candidates:0}):null;
     const hasChanges=!!counts&&Object.values(counts).some(count=>count>0);
-    if(!hasChanges&&(!active||!['running','failed','cancelled'].includes(status.status)))return [];
-    return [{id:TASK_ID,kind:'schedule',name:'日程与纪念日',body:hasChanges?`本轮新增 ${counts.added} 条，更新 ${counts.updated} 条，候选 ${counts.candidates} 条。`:'',status:active?status.status??'ready':'ready',error:active?status.error??'':'',canRetry:active,openSchedule:hasChanges}];
+    const pending=['running','failed','cancelled'].includes(status.status);
+    if(!hasChanges&&(!active||!pending&&!(includeIdle&&!receipts.length&&(!status.status||status.status==='idle'))))return [];
+    return [{id:TASK_ID,kind:'schedule',name:'日程与纪念日',body:hasChanges?`本轮新增 ${counts.added} 条，更新 ${counts.updated} 条，候选 ${counts.candidates} 条。`:'',status:active?status.status??(receipts.length?'ready':'idle'):'ready',error:active?status.error??'':'',canRetry:active,openSchedule:hasChanges}];
   }
   function cancel(){serial++;}
   return {allowed,captureAutomaticProof,prepareBackground,filterBackgroundPlan,filterCurrentBackgroundPlan,saveBackgroundResult,reconcile,backgroundState,displayState,floorTasks,cancel,reset:cancel,

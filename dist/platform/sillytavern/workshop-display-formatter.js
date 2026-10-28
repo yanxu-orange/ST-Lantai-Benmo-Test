@@ -51,13 +51,17 @@ export function createWorkshopDisplayFormatter({getContext,getHelper=()=>globalT
           &&chat.slice(floor+1).filter(row=>!row.is_system).length===depth&&rules()===ruleKey;}catch{return false;}
       };
       return {key,helper,isCurrent,ownsChat,
-        async format(raw,{scope}={}){
+        async format(raw,{scope,directHtml}={}){
           try{
             const lib=await library();if(!isCurrent()||typeof lib.DOMPurify?.sanitize!=='function')return null;
             const regexed=helper.formatAsTavernRegexedString(raw,source,'display',{depth,character_name:name});
             // Blank display replacements also keep the original readable here.
-            if(typeof regexed!=='string'||!regexed.trim()||(regexed===raw&&!hasHtml(raw))||!isCurrent())return null;
-            const markdown=helper.builtin.renderMarkdown(regexed);
+            if(typeof regexed!=='string'||!regexed.trim()||!isCurrent())return null;
+            // Only the caller's original workshop body can supply direct HTML.
+            // Packet replacements retain their existing sanitization policy.
+            const direct=regexed===raw&&typeof directHtml==='string'&&hasHtml(directHtml);
+            if(regexed===raw&&!direct&&!hasHtml(raw))return null;
+            const markdown=helper.builtin.renderMarkdown(direct?directHtml:regexed);
             if(typeof markdown!=='string'||!isCurrent())return null;
             // Encode AFTER Markdown: style text in fenced HTML is escaped and
             // must remain byte-for-byte code for the Helper to consume later.
@@ -71,7 +75,7 @@ export function createWorkshopDisplayFormatter({getContext,getHelper=()=>globalT
             // Same instance/hooks as host messageFormatting, no second regex or
             // Markdown pass. Raw style is forbidden; only encoded CSS survives.
             let html=lib.DOMPurify.sanitize(encoded,{RETURN_DOM:false,RETURN_DOM_FRAGMENT:false,RETURN_TRUSTED_TYPE:false,
-              MESSAGE_SANITIZE:true,ADD_TAGS:needsStyles?['custom-style']:[],FORBID_TAGS:needsStyles?['style']:['style','custom-style'],KEEP_CONTENT:false});
+              MESSAGE_SANITIZE:true,ADD_TAGS:needsStyles?['custom-style']:[],FORBID_TAGS:needsStyles?['style']:['style','custom-style'],KEEP_CONTENT:direct});
             if(typeof html!=='string'||!html.trim())return null;
             const styles=[];
             if(needsStyles)html=html.replace(/<custom-style(?:\s[^>]*)?>([\s\S]*?)<\/custom-style>/gi,(_,encodedCss)=>{

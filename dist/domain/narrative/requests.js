@@ -84,7 +84,7 @@ function identity(ticket, combined = false) {
   if (ticket.kind === 'outline') return '你是一名连载小说的故事编辑，擅长梳理主线、重要支线和关键转折。请结合刚才读到的故事与下面的信息，更新故事大纲，让读者能够理解故事如何发展到当前。';
   const names = characterNames(ticket);
   const hasCard = nonemptyMaterial({field: 'card', value: ticket.materials.background.initialCharacter});
-  return `现在，请进入${names}的身份。你是${names}，是这个世界的男主角。${hasCard ? '刚才的人物设定中包含你的身份，' : ''}故事中记录了你的经历。请结合这些经历和下面的信息，为此刻的自己更新一份简短自述。`;
+  return `现在，请进入${names}的身份。你是${names}，是这个世界的主角。${hasCard ? '刚才的人物设定中包含你的身份，' : ''}故事中记录了你的经历。请结合这些经历和下面的信息，为此刻的自己更新一份简短自述。`;
 }
 function outputPart(tickets, schema, combined = false) {
   const self = tickets.find(ticket => ticket.kind === 'self');

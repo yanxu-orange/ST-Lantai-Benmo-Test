@@ -2,7 +2,7 @@ import {createWorkshopExamples,reviseWorkshopExamples} from '../domain/workshop/
 import {allocateCaptureTag,validateModule,workshopEditableModule} from '../domain/workshop/model.js';
 import {visibleResults,resultText,editResult,deleteResult} from '../domain/workshop/results.js';
 import {sameTarget} from '../domain/memory/repository.js';
-export function createWorkshopController({repository,settings,target,runtime,ensureRegex,getCharacterName,onProgress,onMemory,onTime,onSettings,onBenmo,onClose,isReadOnly=()=>false}={}) {
+export function createWorkshopController({repository,settings,target,runtime,appearance,ensureRegex,getCharacterName,onProgress,onMemory,onTime,onSettings,onBenmo,onClose,isReadOnly=()=>false}={}) {
   let disposed=false,globalSnapshot,chatSnapshot,binding,readView,displaySource,busy=0,warning='',writeFailure=null,tail=Promise.resolve(),generation=0,operationGeneration=0;
   const enabledIntents=new Map(),toggleTasks=new Map(),deleting=new Set(),saving=new Set();
   let readOnly=false;
@@ -12,6 +12,7 @@ export function createWorkshopController({repository,settings,target,runtime,ens
   async function loadNow({refresh=false}={}){
     if(!current())throw new Error('聊天已变化，请重新打开工坊');
     readView=undefined;displaySource=null;
+    if(appearance)await appearance.ensure();
     warning='';onProgress?.('正在读取工坊设置…');
     if(refresh||!settings.ensure)await settings.read();else await settings.ensure();
     if(!current())throw new Error('工坊已关闭或聊天已变化');
@@ -116,7 +117,7 @@ export function createWorkshopController({repository,settings,target,runtime,ens
     }
     const modules=[...visible.values()].sort((a,b)=>Number(!!b.example)-Number(!!a.example)).map(module=>({...workshopEditableModule(module),kind:module.lifecycle,generationSource:module.lifecycle==='prompt'?'story':module.generationSource??'story',...(enabledIntents.has(module.id)?{enabled:enabledIntents.get(module.id)}:{})}));
     const results=Object.fromEntries(modules.map(module=>[module.id,(module.lifecycle==='sync'?visibleResults(chatSnapshot.workshop.results,module.id).slice(-3).reverse():visibleResults(chatSnapshot.workshop.results,module.id)).map(row=>({...row,text:resultText(row),edited:row.manualValue!==null}))]));
-    return {modules,results,warning,pendingIds:[...toggleTasks.keys()],deletingIds:[...deleting],writeBlocked:!!writeFailure||readOnly||browsing(),characterName:getCharacterName?.(binding)??'当前角色',canUseCharacter:binding?.kind==='character'};
+    return {modules,results,displayModes:appearance?.inspect().workshopModes??{},displayModesWritable:!appearance||appearance.inspect().status==='ready',warning,pendingIds:[...toggleTasks.keys()],deletingIds:[...deleting],writeBlocked:!!writeFailure||readOnly||browsing(),characterName:getCharacterName?.(binding)??'当前角色',canUseCharacter:binding?.kind==='character'};
   }
   async function commitGlobal(value,options={}){
     const result=await settings.saveWorkshop(value,{...options,expectedEpoch:globalSnapshot.epoch,isCurrent:current});
@@ -201,7 +202,7 @@ export function createWorkshopController({repository,settings,target,runtime,ens
   function saveModule(value){
     if(readOnly||browsing())throw readOnlyError();
     if(!current()||writeFailure||deleting.has(value.id)||saving.has(value.id))throw writeFailure??new Error('模块当前无法保存，请重新读取');
-    const draft=structuredClone(value);draft.id??=crypto.randomUUID();
+    const draft=structuredClone(value);delete draft.displayMode;draft.id??=crypto.randomUUID();
     prepareModule(draft); // Validate and freeze the input before entering the queue.
     saving.add(draft.id);
     return exclusive(async()=>{
@@ -218,7 +219,7 @@ export function createWorkshopController({repository,settings,target,runtime,ens
       }
     }).finally(()=>{saving.delete(draft.id);});
   }
-  return {load,ensure,snapshot,saveModule,rebindTarget(next){if(next.chatId!==target.chatId||next.rootId!==target.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){generation++;enabledIntents.clear();writeFailure=new Error('聊天已重新读取，请重新读取工坊');}target=structuredClone(next);},
+  return {load,ensure,snapshot,saveModule,async saveDisplayMode(id,mode,{original=null}={}){if(!current()||readOnly||browsing())throw readOnlyError();if(!appearance||!await appearance.selectWorkshopMode(id,mode,{original,isCurrent:current}))throw new Error(appearance?.inspect().message||'外观设置已变化，请重新读取');return snapshot();},rebindTarget(next){if(next.chatId!==target.chatId||next.rootId!==target.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){generation++;enabledIntents.clear();writeFailure=new Error('聊天已重新读取，请重新读取工坊');}target=structuredClone(next);},
     toggle,
     deleteModule(id){if(readOnly||browsing())return Promise.reject(readOnlyError());if(deleting.has(id))return Promise.reject(new Error('正在删除模块'));deleting.add(id);enabledIntents.delete(id);return exclusive(async()=>{const module=[...globalSnapshot.workshop.modules,...chatSnapshot.workshop.modules].find(row=>row.id===id);if(!module)throw new Error('模块已不存在');if(module){const store=structuredClone(module.scope==='chat'?chatSnapshot.workshop:globalSnapshot.workshop);store.modules=store.modules.filter(row=>row.id!==id);if(module.scope==='chat')await commitChat(store);else await commitGlobal(store);}deleting.delete(id);}).catch(error=>{if(error.code==='WORKSHOP_READ_ONLY')deleting.delete(id);throw error;});},
     editResult(id,text){return exclusive(()=>commitChat({...chatSnapshot.workshop,results:editResult(chatSnapshot.workshop.results,id,text)}));},

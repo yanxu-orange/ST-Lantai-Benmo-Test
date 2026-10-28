@@ -15,7 +15,7 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
   const book=['paper-letter','purple-glow'].includes(surfaceTheme(container));
   const toggles=row('启用兰台','enabled')+row('在当前聊天中使用','chat');
   const services=entry('功能管理','features')+entry('连接方案','api')+entry('任务 API','task-api');
-  const appearanceFields=`<label class="ui-field"><span class="ui-field__label">界面皮肤</span><select class="ui-input" data-settings-theme>${THEMES.map(theme=>`<option value="${theme.id}">${theme.label}</option>`).join('')}</select></label><p class="lt-status" data-appearance-status hidden></p><button type="button" class="ui-button ui-button--secondary" data-settings-action="appearance-read" hidden>重新读取外观</button>`;
+  const appearanceFields=`<label class="ui-field"><span class="ui-field__label">界面皮肤</span><select class="ui-input" data-settings-theme>${THEMES.map(theme=>`<option value="${theme.id}">${theme.label}</option>`).join('')}</select></label><fieldset class="ui-stacked-choices"><legend class="ui-field__label">本轮记录显示</legend>${[['builtin','兰台内置'],['regex','自定义正则']].map(([mode,label])=>`<label class="ui-choice ui-choice--control-only ui-hit-owner"><input type="radio" name="round-record-mode" data-round-record-mode value="${mode}"><span>${label}</span></label>`).join('')}</fieldset><p class="lt-status" data-appearance-status hidden></p><button type="button" class="ui-button ui-button--secondary" data-settings-action="appearance-read" hidden>重新读取外观</button>`;
   const identity=`<div class="lt-settings-brand"><div>${brand}<span>兰台本末</span><span class="lt-meta">v${esc(APP_VERSION)}</span></div><p class="lt-meta">剧情记忆与故事时间</p></div>`;
   const diagnostics=onGenerationDiagnostic?'<button type="button" class="ui-button ui-button--secondary" data-settings-action="generation-diagnostic">导出生成诊断</button><p class="lt-status" data-generation-diagnostic-status role="status"></p>':'';
   const interfaceTools=interfaceDiagnostic?'<button type="button" class="ui-button ui-button--secondary" data-settings-action="interface-record">记录界面诊断（最多30秒）</button><button type="button" class="ui-button ui-button--secondary" data-settings-action="interface-export" hidden>导出界面诊断</button><p class="lt-status" data-interface-diagnostic-status role="status"></p>':'';
@@ -49,6 +49,7 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
   if(select){select.value=a.previewTheme??a.theme;select.disabled=a.status!=='ready'||!!state.busy||state.status==='loading';}
   if(pendingThemeFocus&&route==='root'&&select&&!select.disabled){pendingThemeFocus=false;select.focus?.({preventScroll:true});}
   else if(['error','unconfirmed'].includes(a.status))pendingThemeFocus=false;
+  for(const radio of container.querySelectorAll('[data-round-record-mode]')){radio.checked=a.roundRecordMode===radio.value;radio.disabled=a.status!=='ready';}
   const message=container.querySelector('[data-appearance-status]');if(message){message.textContent=a.error?a.message:'';message.hidden=!message.textContent;}
   const appearanceRead=container.querySelector('[data-settings-action=appearance-read]');if(appearanceRead)appearanceRead.hidden=!a.error;
   const nav=container.querySelector('.lt-footer');if(nav)nav.innerHTML=mainNavigation({policy:availability(),current:'settings',attribute:'data-settings-action'});
@@ -65,6 +66,7 @@ export function mountSettingsRootView(container,{controls,appearance,settings,on
    if(status)status.textContent=recording?(state.mode==='attributes-only'?'记录中，已减少采样；最多30秒后停止。':'记录中，最多30秒后自动停止。'):state.hasData?(reasons[state.reason]??'已停止，可导出。'):'';
   }catch{}
  }
+ container.addEventListener('change',event=>{if(event.target.matches?.('[data-round-record-mode]')&&event.target.checked)void appearance.selectRoundRecordMode(event.target.value);},{signal:lifetime.signal});
  container.addEventListener('click',e=>{
   const toggle=e.target.closest('[data-control]');if(toggle&&!toggle.disabled){void controls.toggle(toggle.dataset.control);return;}
   const button=e.target.closest('[data-settings-action]');if(!button||button.disabled)return;

@@ -12,6 +12,7 @@ export const BASE_STYLE_ENTRIES=Object.freeze([
   entry('shared','../api-settings.css'),
   entry('shared','../settings-root-view.css'),
   entry('shared','../shared-ui/settings-rows.css'),
+  entry('shared','../shared-ui/select-menu.css'),
   entry('shared','../summary-view.css'),
   entry('shared','../summary-settings.css'),
   entry('shared','../shared-ui/prompt-list.css'),
@@ -87,5 +88,5 @@ export const BOOK_THEME_STYLE_ENTRIES=Object.freeze({
 });
 
 // Embedded briefings share theme tokens/components without workspace or host placement.
-export const BRIEFING_BASE_STYLE_ENTRIES=Object.freeze([entry('supplier','../../vendor/plugin-ui-system/web.css'),entry('shared','../lantai-theme.css'),entry('shared','../shared-ui/candidate.web.css'),entry('shared','../shared-ui/briefing.css')]);
+export const BRIEFING_BASE_STYLE_ENTRIES=Object.freeze([entry('supplier','../../vendor/plugin-ui-system/web.css'),entry('shared','../lantai-theme.css'),entry('shared','../shared-ui/candidate.web.css'),entry('shared','../shared-ui/briefing.css'),entry('shared','../shared-ui/select-menu.css')]);
 export const BRIEFING_THEME_STYLE_ENTRIES=Object.freeze({spring:Object.freeze([entry('shared','../spring/theme.css')]),'snow-ermine':Object.freeze([entry('shared','../snow-ermine/theme.css')]),'paper-letter':Object.freeze([entry('shared','../book-themes/tokens.css')]),'purple-glow':Object.freeze([entry('shared','../book-themes/tokens.css')])});

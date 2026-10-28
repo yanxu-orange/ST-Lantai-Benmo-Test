@@ -151,13 +151,14 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
     let key=projected.baseKey;while(key&&!activeIds.has(key)){activeIds.add(key);key=byId.get(key)?.baseKey;}
     return {...captured,tracking:domain,projected,activeIds};
   }
-  function floorTasks(captured,raw,floor,replyId,status={}){
+  function floorTasks(captured,raw,floor,replyId,status={},{includeIdle=false}={}){
     if(!captured?.enabled||!gate.allowed())return [];
     const domain={...captured.tracking,preferences:effectivePreferences()},version=domain.snapshots.find(row=>row.sourceSnapshot.replyId===replyId&&captured.activeIds?.has(row.id)&&matchesStoredLatestSource(row.sourceSnapshot,{...raw,messages:raw.messages.filter(message=>message.floor===row.sourceSnapshot.assistantFloor||message.floor===row.sourceSnapshot.userFloor)}));
-    if(!version&&!['running','failed','cancelled'].includes(status.status))return [];
     if(!domain.preferences.itemsEnabled&&!domain.preferences.npcsEnabled)return [];
+    if(!version&&!['running','failed','cancelled'].includes(status.status)&&!(includeIdle&&(!status.status||status.status==='idle')))return [];
     const counts=version?['items','npcs'].filter(key=>domain.preferences[`${key}Enabled`]).map(key=>`${key==='items'?'物品':'NPC'} ${version.changes[key].length} 条`).join('、'):'';
-    return [{id:'tracking',name:'物品与 NPC 追踪',body:version?`本轮更新：${counts}。当前资料可在本末查看。`:'',status:status.status??'ready',error:status.error??''}];
+    const updatedCounts={item:domain.preferences.itemsEnabled?(version?.changes.items.length??0):0,npc:domain.preferences.npcsEnabled?(version?.changes.npcs.length??0):0};
+    return [{id:'tracking',kind:'tracking',updatedCounts,openKinds:Object.keys(updatedCounts).filter(kind=>updatedCounts[kind]>0),name:'物品与 NPC 追踪',body:version?`本轮更新：${counts}。当前资料可在本末查看。`:'',status:status.status??(version?'ready':'idle'),error:status.error??''}];
   }
 
   async function intercept(messages,_size,_abort,type='normal'){

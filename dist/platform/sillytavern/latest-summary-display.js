@@ -7,7 +7,7 @@ const busy = info => info.batchRunning === true || info.status === 'running';
 // Independent floor-tail UI. Source mes/mes_text and saved summaries are never
 // rewritten; only the rendered body participates in display formatting.
 export function mountLatestSummaryDisplay({
-  document: doc = globalThis.document, runtime, formatter, coordinator,
+  document: doc = globalThis.document, runtime, formatter, coordinator,getMode=()=>null,
   MutationObserver: Observer = globalThis.MutationObserver,
 } = {}) {
   let disposed = false;
@@ -26,7 +26,7 @@ export function mountLatestSummaryDisplay({
     for (const message of messages) {
       const floor = floorOf(message);
       const info = Number.isSafeInteger(floor) && floor >= 0
-        ? infoByFloor ? infoByFloor.get(floor) : runtime.floorInfo(floor) : null;
+        ? getMode()==null?(infoByFloor?infoByFloor.get(floor):runtime.floorInfo(floor)):null : null;
       let box = message.querySelector('.lantai-latest-summary');
       if (!info) { if (box) release(box); continue; }
       const parent = message.querySelector('.mes_block') ?? message;
