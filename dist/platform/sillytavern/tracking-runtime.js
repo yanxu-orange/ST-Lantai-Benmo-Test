@@ -64,10 +64,11 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
       return addTrackingRecord(domain,{kind,...patch},{makeId:()=>value.id});
     },{category:kind==='item'?'items':'npcs'});
   }
-  async function prepareBackground(t,source,{automatic=false,taskId,rules=[],identities={}}={}){
+  async function prepareBackground(t,source,{automatic=false,taskId,categories,rules=[],identities={}}={}){
     if(pendingExclusions||!gate.allowed()||taskId&&taskId!=='tracking')return null;
     const preparedEpoch=exclusionEpoch,captured=await repository.captureTracking(t),domain=captured.tracking;
     const activePreferences=effectivePreferences();
+    if(categories)for(const kind of ['items','npcs'])activePreferences[`${kind}Enabled`]&&=categories.includes(kind);
     if(preparedEpoch!==exclusionEpoch||pendingExclusions||!current(t)||!gate.allowed()||!activePreferences.itemsEnabled&&!activePreferences.npcsEnabled)return null;
     const raw=captureSource(t);
     if(automatic&&domain.snapshots.some(row=>row.sourceSnapshot.replyId===source.replyId&&matchesStoredLatestSource(row.sourceSnapshot,raw)))return null;
@@ -124,6 +125,7 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
         // categories whose captured control epochs still match.
         await tail.catch(()=>{});return saveBackgroundResult(plan,text,{isCurrent,attempt:attempt+1});
       }
+      if(error?.code==='COMMIT_UNCONFIRMED')error.trackingReceipt={snapshotId:next.snapshots.find(row=>row.sourceSnapshot.replyId===ticket.source.replyId)?.id,failedKinds:enabled.filter(kind=>applied.errors[kind])};
       throw error;
     }
     if(commitValid())adopt(plan.target,saved.selection);

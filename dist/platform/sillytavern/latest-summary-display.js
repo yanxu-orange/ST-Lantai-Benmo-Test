@@ -58,7 +58,7 @@ export function mountLatestSummaryDisplay({
       }
       const actionStatus = info.status === 'running' ? '正在生成…' : info.error || (!info.body ? '尚未生成' : '');
       text(state.status, [info.stale ? '正文已编辑，可按需更新摘要' : '', actionStatus].filter(Boolean).join(' · '));
-      text(state.retry, info.body ? '重新生成' : info.status === 'failed' ? '重试' : '生成摘要');
+      text(state.retry, info.retryLabel ?? (info.body ? '重新生成' : info.status === 'failed' ? '重试' : '生成摘要'));
       state.retry.disabled = info.status === 'running';
       const raw = info.body ?? '';
       plans.push({ ...state, ownsChat: () => !state.snapshot?.ownsChat || state.snapshot.ownsChat(), bind: snapshot => { state.snapshot ??= snapshot; }, content: raw, busy: busy(info),

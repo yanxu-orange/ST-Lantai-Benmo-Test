@@ -41,8 +41,8 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "bytes": 109306,
-    "sha256": "81080067488ba709276b7bf2ccc271cedbe85883ff376486efd05afa8a1188db"
+    "bytes": 109360,
+    "sha256": "0f0137b8d315d1e53f5f3ee1311f5bf12fb749982dfa8c35a72709a4dd6b4a31"
   },
   {
     "path": "dist/app/book-themes/assets/PinyonScript-OFL.txt",
@@ -677,7 +677,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "6cf1e2016b64dacb1e64028767ad4d758388db60f200346d2cb9e40176840262"
+    "sha256": "cdc3a9207dc3901f082aefcb3e0368b04bd0196b1be3d96eefe9096cbf08f7e2"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1346,13 +1346,13 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-display.js",
-    "bytes": 6165,
-    "sha256": "f4996a839472ca5bd7c08a3ff5f1d2111dd2b309a1d677c8435ac8620752493a"
+    "bytes": 6186,
+    "sha256": "17d7b4348b9391d40092c6990a7508fb36df20c5310f7e453e7e16493467505d"
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "bytes": 75933,
-    "sha256": "51eb65837f0ee277413431320fbe294bdb0283e7822d0442374e5c299196d4e8"
+    "bytes": 80458,
+    "sha256": "61e7c4b1cffe9577094b27f945290f6fc2014ffe95c1fe7be26073e1ed22198f"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -1456,8 +1456,8 @@
   },
   {
     "path": "dist/platform/sillytavern/round-record-display.js",
-    "bytes": 15230,
-    "sha256": "97ca13e893e91ae4ad36c413429eaaaa058b24e50a4dfcdd9d6bcd3096deabc6"
+    "bytes": 15247,
+    "sha256": "f60f9a0d46ab9d80cf43f3a99739d518cdacfcae76489f6d68ee50b4434b0f03"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
@@ -1516,8 +1516,8 @@
   },
   {
     "path": "dist/platform/sillytavern/tracking-runtime.js",
-    "bytes": 22631,
-    "sha256": "edb68dca74a077cb969b3d3c13e0f070a0f856eaf8e693d80e29158e9b8369a5"
+    "bytes": 22976,
+    "sha256": "0819129a2fa064f0e9b274389199ed2200a9543d2f1634c264ff7e98d729684e"
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-diagnostic.js",
@@ -1536,8 +1536,8 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-background-display.js",
-    "bytes": 7858,
-    "sha256": "16bd4fddd9f23c997132edf58f43ae5d2215836032292455fb4c016468ac3e5c"
+    "bytes": 7879,
+    "sha256": "4875035d272a5997d022932b901c63f2470657b5cc3463f5a4b801b64b9fc68b"
   },
   {
     "path": "dist/platform/sillytavern/workshop-display-formatter.js",
@@ -1677,6 +1677,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "4914e01dd6ffe3160ce0cb0f9019af7f82b408b11d059d8d476c19a31f709896"
+    "sha256": "7fa269ce5f60ee78759ebaea0747bc7e99c4f90eb8dffb86963f4033dd237400"
   }
 ]

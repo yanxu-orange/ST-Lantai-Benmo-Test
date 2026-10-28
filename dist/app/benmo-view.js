@@ -215,7 +215,7 @@ export async function mountBenmoView({container: app, controller, availability =
     if (row.nativeHidden) return `<p class="meta">第${esc(row.floor)}楼 · 已隐藏</p>`;
     if (row.id && row.body) return summaryCard(row);
     const running = summaryRunning(row), disabled = running ? 'disabled aria-busy="true"' : '';
-    return `<article class="card summary-card"><header class="summary-card-header"><span class="meta">第 ${esc(row.floor)} 楼</span><div class="summary-card-actions">${controller.manualSummary ? textEntry('手动补录', 'manual-summary', `data-id="${esc(row.floor)}" ${disabled}`) : ''}${textEntry('生成', 'generate', `data-id="${esc(row.floor)}" ${disabled}`)}</div></header>${running ? '<p class="meta" role="status">生成中</p>' : ''}${row.error ? `<p class="lt-error" role="alert">${esc(row.error)}</p>` : ''}</article>`;
+    return `<article class="card summary-card"><header class="summary-card-header"><span class="meta">第 ${esc(row.floor)} 楼</span><div class="summary-card-actions">${controller.manualSummary ? textEntry('手动补录', 'manual-summary', `data-id="${esc(row.floor)}" ${disabled}`) : ''}${textEntry(row.retryLabel ?? '生成', 'generate', `data-id="${esc(row.floor)}" ${disabled}`)}</div></header>${running ? '<p class="meta" role="status">生成中</p>' : ''}${row.error ? `<p class="lt-error" role="alert">${esc(row.error)}</p>` : ''}</article>`;
   }
   function summaryCard(row) {
     const expanded = state.expanded.has(row.id), bodyId = `benmo-summary-body-${row.id}`;
@@ -223,7 +223,7 @@ export async function mountBenmoView({container: app, controller, availability =
     const action = (label, accessibleLabel, name, file, attrs) => bookTheme()
       ? `<button type="button" class="benmo-text-entry" aria-label="${esc(accessibleLabel)}" data-action="${name}" ${attrs}>${label}</button>`
       : icon(accessibleLabel, name, file, attrs);
-    return `<article class="card summary-card"><header class="summary-card-header"><span class="meta">第 ${esc(row.floor)} 楼</span><div class="summary-card-actions">${action('编辑', '编辑摘要', 'edit-summary', 'edit', `data-id="${esc(row.id)}"`)}${action('重试', '重新生成摘要', 'generate', 'refresh', `data-id="${esc(row.floor)}" ${running ? 'disabled aria-busy="true"' : blocked() ? 'disabled' : ''}`)}</div></header><p id="${esc(bodyId)}" class="reading ${expanded ? '' : 'summary-collapsed'}">${esc(row.body)}</p>${row.error ? `<p class="lt-error" role="alert">${esc(row.error)}</p>` : ''}${textEntry(expanded ? '收起' : '展开全文', 'expand', `data-id="${esc(row.id)}" aria-expanded="${expanded}" aria-controls="${esc(bodyId)}"`)}</article>`;
+    return `<article class="card summary-card"><header class="summary-card-header"><span class="meta">第 ${esc(row.floor)} 楼</span><div class="summary-card-actions">${action('编辑', '编辑摘要', 'edit-summary', 'edit', `data-id="${esc(row.id)}"`)}${action(row.retryLabel ?? '重试', row.retryLabel ?? '重新生成摘要', 'generate', 'refresh', `data-id="${esc(row.floor)}" ${running ? 'disabled aria-busy="true"' : blocked() ? 'disabled' : ''}`)}</div></header><p id="${esc(bodyId)}" class="reading ${expanded ? '' : 'summary-collapsed'}">${esc(row.body)}</p>${row.error ? `<p class="lt-error" role="alert">${esc(row.error)}</p>` : ''}${textEntry(expanded ? '收起' : '展开全文', 'expand', `data-id="${esc(row.id)}" aria-expanded="${expanded}" aria-controls="${esc(bodyId)}"`)}</article>`;
   }
   function summaryView() {
     const current = summaryCurrentRows(), history = summaryHistoryRecords(), count = current.filter(row => row.id && row.body && !row.nativeHidden).length;

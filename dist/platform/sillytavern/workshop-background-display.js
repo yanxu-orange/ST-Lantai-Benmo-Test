@@ -74,7 +74,7 @@ export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.docu
         }
         text(entry.heading, task.name);
         text(entry.status, task.status === 'running' ? '正在生成…' : task.error || (!task.body ? '尚未生成' : ''));
-        text(entry.retry, task.body ? '重新生成' : task.status === 'failed' ? '重试' : '生成'); entry.retry.disabled = task.status === 'running'||task.canRetry===false;entry.retry.hidden=task.canRetry===false;
+        text(entry.retry, task.retryLabel ?? (task.body ? '重新生成' : task.status === 'failed' ? '重试' : '生成')); entry.retry.disabled = task.status === 'running'||task.canRetry===false;entry.retry.hidden=task.canRetry===false;
         if(entry.manage)entry.manage.hidden=task.openSchedule!==true||typeof onOpenSchedule!=='function';
         // Tracking remains plain text and never enters the Helper formatter.
         if (task.kind !== 'workshop') { text(entry.body, task.body ?? ''); entry.body.hidden = !task.body; }
