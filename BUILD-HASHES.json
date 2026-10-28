@@ -31,8 +31,8 @@
   },
   {
     "path": "dist/app/benmo-controller.js",
-    "bytes": 17476,
-    "sha256": "d2a59d700bab367667a7123af4dfae9ec79ec3405986fffc826c19040ab2788a"
+    "bytes": 17590,
+    "sha256": "b392c3a4e6b567912a33fc68980db3f1333b9341833fc450f6a117ebce3e7205"
   },
   {
     "path": "dist/app/benmo-view.css",
@@ -41,8 +41,8 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "bytes": 108491,
-    "sha256": "5865737b9e47b3a4c8f87d4989c61142f46708fe8bc051c1015e3fa7b6004b1e"
+    "bytes": 109306,
+    "sha256": "81080067488ba709276b7bf2ccc271cedbe85883ff376486efd05afa8a1188db"
   },
   {
     "path": "dist/app/book-themes/assets/PinyonScript-OFL.txt",
@@ -662,7 +662,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "094d92bbf4dabeacf84dc408dfb28542e3a47ddb238a008df2f90619a77e2954"
+    "sha256": "52ee3377630bdc33fff7d467307c023fb3312da52a6cef046b653ae6d837cb9f"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1166,8 +1166,8 @@
   },
   {
     "path": "dist/domain/tracking/recall.js",
-    "bytes": 6031,
-    "sha256": "c7ce316dcee7f0b8295b244bab3de4099f688e1c95a04fdc4fa1154f268a6e3b"
+    "bytes": 6101,
+    "sha256": "cf7ac05accd10222dc173395219c8c571051c8dd8ded3d7ed4d28ca127d75682"
   },
   {
     "path": "dist/domain/tracking/requests.js",
@@ -1491,8 +1491,8 @@
   },
   {
     "path": "dist/platform/sillytavern/tracking-runtime.js",
-    "bytes": 19384,
-    "sha256": "ba3a34887b2f503cbecfa3efaf65bb5c1510c992aa93d307f48bfbb531352c43"
+    "bytes": 22258,
+    "sha256": "6bf720acd63d926578a39fd8d91adc6c70b0cf9f5f7eb5849e0c06e0e28d8186"
   },
   {
     "path": "dist/platform/sillytavern/ui-transition-diagnostic.js",
@@ -1616,13 +1616,13 @@
   },
   {
     "path": "dist/shared/settings/model.js",
-    "bytes": 22938,
-    "sha256": "4a39913add77849d09213c9c8b121dc3fdea50745c8aed1a84b9f64d5c751efb"
+    "bytes": 23181,
+    "sha256": "ed5a1a7fd3f68032b257a9ac58f06538c7505882274174daafca9e61db67296d"
   },
   {
     "path": "dist/shared/settings/repository.js",
-    "bytes": 13423,
-    "sha256": "17a6d93a60f8681dec389fc1f05188ad430f7568eb60d848ea8054e7eeb0f4f4"
+    "bytes": 13935,
+    "sha256": "71fa1af4241105bfdaa80904e8dd917d7918892be60fdb4640070f882190f21e"
   },
   {
     "path": "dist/shared/settings/summary-prompts.js",
@@ -1652,6 +1652,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "a92febed2013ba6f53fb45cf10280f0b0ad2a3e11fad1a8066889164b14f34e2"
+    "sha256": "3b394fb339e1e92064deb7727f847c0adcb626ee667851f5332cbbba48b4efdc"
   }
 ]

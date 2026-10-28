@@ -111,7 +111,7 @@ export async function mountBenmoView({container: app, controller, availability =
     for (const [key, raw] of new FormData(form)) {
       const text = String(raw), custom = customInputs.get(key);
       if (custom) custom[0][custom[1]] = text;
-      else if (state.route === 'tracking-settings' && ['prompt', 'exclusionNames'].includes(key)) draft[key] = text;
+      else if (state.route === 'tracking-settings' && ['prompt', 'exclusionNames', 'injectionDepth'].includes(key)) draft[key] = text;
       else if (state.route === 'summary-settings' && ['recentFloors', 'prompt'].includes(key)) draft[key] = text;
       else if (state.kind === 'summary' && key === 'body') draft.body = text;
       else if (state.kind !== 'summary' && key === 'mode') draft.pinned = text === 'resident';
@@ -277,7 +277,7 @@ export async function mountBenmoView({container: app, controller, availability =
       const label = row?.name || excluded.labels?.[id]?.[0] || id;
       return `<div class="section"><p class="reading meta">${esc(label)}${row ? '' : ' · 当前记录已不在列表中'}</p><div class="actions">${button('恢复追踪', 'restore-excluded', `data-id="${esc(id)}" aria-label="恢复${esc(label)}的追踪"`)}</div></div>`;
     }).join('');
-    return `<form id="benmo-edit-form" class="section">${springHeading(`${KINDS[state.kind]}要求`)}<section class="card"><label class="ui-field"><span>${KINDS[state.kind]}要求</span><textarea class="lt-textarea lt-prompt-editor" name="prompt" rows="10" maxlength="20000" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-tracking-prompt')}</div></section>${springHeading('名称排除名单')}<section class="card"><label class="ui-field"><span>名称排除名单 · 仅当前聊天</span><textarea class="lt-textarea" name="exclusionNames" rows="5" aria-describedby="tracking-exclusion-help" placeholder="一行一个名称或别名">${esc(draft.exclusionNames)}</textarea></label><p class="meta" id="tracking-exclusion-help">每行一个名称或别名，完整匹配。</p><p class="meta">排除后停止自动追踪与召回，已有资料保留；恢复只影响后续，不回补历史。</p></section>${paused ? `<section class="card"><h2>已暂停的记录</h2><p class="meta">恢复立即生效；名称排除名单仍独立生效。</p>${paused}</section>` : ''}</form>`;
+    return `<form id="benmo-edit-form" class="section">${springHeading(`${KINDS[state.kind]}要求`)}<section class="card"><label class="ui-field"><span>${KINDS[state.kind]}要求</span><textarea class="lt-textarea lt-prompt-editor" name="prompt" rows="10" maxlength="20000" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-tracking-prompt')}</div></section><label class="ui-field"><span>注入深度</span><input class="ui-input" type="number" name="injectionDepth" value="${esc(draft.injectionDepth)}" min="0" max="10000" step="1" required></label>${springHeading('名称排除名单')}<section class="card"><label class="ui-field"><span>名称排除名单 · 仅当前聊天</span><textarea class="lt-textarea" name="exclusionNames" rows="5" aria-describedby="tracking-exclusion-help" placeholder="一行一个名称或别名">${esc(draft.exclusionNames)}</textarea></label><p class="meta" id="tracking-exclusion-help">每行一个名称或别名，完整匹配。</p><p class="meta">排除后停止自动追踪与召回，已有资料保留；恢复只影响后续，不回补历史。</p></section>${paused ? `<section class="card"><h2>已暂停的记录</h2><p class="meta">恢复立即生效；名称排除名单仍独立生效。</p>${paused}</section>` : ''}</form>`;
   }
   function trackingList() {
     const rows = records();
@@ -677,7 +677,7 @@ export async function mountBenmoView({container: app, controller, availability =
   }
   function startEdit(record, destination, route = 'edit') {
     remember(); epoch++; returnRoute = destination; original = record ? clone(record) : null;
-    draft = route === 'tracking-settings' ? {prompt: value.tracking?.prompts?.[state.kind] ?? controller.defaultTrackingPrompts?.[state.kind] ?? '', exclusionNames: (value.tracking?.exclusions?.[state.kind]?.names ?? []).join('\n')}
+    draft = route === 'tracking-settings' ? {injectionDepth:String(value.tracking?.injectionDepths?.[state.kind]??9999),prompt: value.tracking?.prompts?.[state.kind] ?? controller.defaultTrackingPrompts?.[state.kind] ?? '', exclusionNames: (value.tracking?.exclusions?.[state.kind]?.names ?? []).join('\n')}
       : route === 'summary-settings' ? {recentFloors: String(value.summary?.preferences?.recentFloors ?? 6), prompt: value.summary?.preferences?.prompt ?? controller.defaultPrompt ?? ''}
       : state.kind === 'summary' ? {id: record.id, floor: record.floor, body: record.body ?? ''} : makeDraft(record);
     baseline = clone(draft); state.route = route; error = ''; state.scrolls[context()] = 0; render();
@@ -692,6 +692,10 @@ export async function mountBenmoView({container: app, controller, availability =
       // if saving the chat-local names subsequently fails.
       if (!disposed && epoch === operationEpoch && baseline) baseline.prompt = submitted.prompt;
     }
+    if(submitted.injectionDepth!==before.injectionDepth){
+      next=await controller.saveTrackingDepth(kind,Number(submitted.injectionDepth),{original:Number(before.injectionDepth)});
+      if(!disposed&&epoch===operationEpoch&&baseline)baseline.injectionDepth=submitted.injectionDepth;
+    }
     if (submitted.exclusionNames !== before.exclusionNames) {
       next = await controller.saveExclusionNames(kind, submitted.exclusionNames.split(/\r?\n/).map(name => name.trim()).filter(Boolean), {original: before.exclusionNames.split('\n').filter(Boolean)});
       if (!disposed && epoch === operationEpoch && baseline) baseline.exclusionNames = (next.tracking?.exclusions?.[kind]?.names ?? []).join('\n');
@@ -704,6 +708,7 @@ export async function mountBenmoView({container: app, controller, availability =
     readDraft(); const submitted = clone(draft), operationEpoch = epoch, route = state.route, kind = state.kind;
     let payload = submitted;
     if (route === 'tracking-settings') {
+      if(submitted.injectionDepth.trim()===''||!Number.isSafeInteger(Number(submitted.injectionDepth))||Number(submitted.injectionDepth)<0||Number(submitted.injectionDepth)>10000)throw new Error('注入深度须为0–10000的整数');
       if (!submitted.prompt.trim() || submitted.prompt.length > 20000) throw new Error('请填写有效的追踪要求（最多 20000 字）');
     } else if (route === 'summary-settings') {
       const count = Number(submitted.recentFloors);

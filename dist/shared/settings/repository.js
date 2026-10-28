@@ -96,7 +96,16 @@ export function createSettingsRepository(adapter) {
       return update('ai',{...root.ai,taskRouting:assertTaskRouting({...routes,workshop:routes.workshop??taskRoutingView(root.ai).routes.workshop})},{...options,expectedEpoch:options.expectedEpoch??epochs.ai,credentials:[]});
     },
     saveEventGeneration: (value, options) => update('eventGeneration', value, options),
-    saveRecall: (value,options)=>update('recall',value,options),
+    saveRecall(value,options){
+      const {root}=adapter.snapshot(),before=settingsDomainValue(root,'recall'),next={...value};
+      // Lock inherited tracking depths only on an explicit memory-depth save.
+      // Unrelated edits retain explicit depths; reading old settings never writes them.
+      for(const key of ['itemDepth','npcDepth'])if(!Object.hasOwn(next,key)){
+        if(Object.hasOwn(before,key))next[key]=before[key];
+        else if(next.memoryDepth!==before.memoryDepth)next[key]=before.memoryDepth;
+      }
+      return update('recall',next,options);
+    },
     saveCumulativeGeneration:(value,options)=>update('cumulativeGeneration',value,options),
     saveScheduleTracking:(value,options)=>update('scheduleTracking',value,options),
     captureScheduleTracking(){const {root,epochs}=adapter.snapshot();return frozenSettingsCopy({config:settingsDomainValue(root,'scheduleTracking'),epoch:epochs.scheduleTracking});},

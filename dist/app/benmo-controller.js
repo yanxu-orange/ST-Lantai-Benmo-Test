@@ -135,6 +135,7 @@ export function createBenmoController({latestRuntime,trackingRuntime,narrativeRu
     skipNarrative(){return write(null,()=>narrativeRuntime.skip());},
     generateNarrative(kind,options={}){const scoped={...options};delete scoped.kind;delete scoped.kinds;Object.assign(scoped,kind==='both'?{kinds:['self','outline']}:{kind});return write(kind==='both'?null:kind,()=>narrativeRuntime.start(scoped));},
     cancelNarrative(kind){return write(kind,()=>narrativeRuntime.cancel(kind));},
+    saveTrackingDepth(kind,depth,options){return write(kind,()=>trackingRuntime.saveDepth(kind,depth,options));},
     saveTrackingPrompt(kind,prompt,options){return write(kind,()=>trackingRuntime.savePrompt(kind,prompt,options));},
     saveExclusionNames(kind,names,options){return write(kind,()=>trackingRuntime.saveExclusionNames(kind,names,options));},
     setRecordExcluded(kind,id,excluded){return write(kind,()=>trackingRuntime.setRecordExcluded(kind,id,excluded));},

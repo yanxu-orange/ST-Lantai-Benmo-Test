@@ -1,3 +1,4 @@
+import {defaultRecallSettings} from '../../shared/settings/model.js';
 import { trackingExclusionsOf, effectiveTrackingExclusions, trackingRecordExcluded } from '../../domain/tracking/exclusions.js';
 import {DEFAULT_TRACKING_PROMPTS} from '../../domain/tracking/prompts.js';
 import {sameTarget} from '../../domain/memory/repository.js';
@@ -5,28 +6,33 @@ import {featureGate} from '../../domain/controls/gate.js';
 import {currentTracking,prepareTrackingUpdate,applyTrackingResponseParts,addTrackingRecord,editTrackingRecord,deleteTrackingRecord,setTrackingPreferences,invalidateTrackingFloors,pruneTrackingSnapshots,setTrackingExclusionNames,setTrackingRecordExcluded} from '../../domain/tracking/data.js';
 import {TRACKING_FIELDS} from '../../domain/tracking/model.js';
 import {buildTrackingTask,parseTrackingResponseParts} from '../../domain/tracking/requests.js';
-import {buildTrackingRecall} from '../../domain/tracking/recall.js';
+import {buildTrackingRecall,trackingRecallPrompt} from '../../domain/tracking/recall.js';
 import {matchesStoredLatestSource} from '../../domain/latest/source.js';
 import {recallInputs} from './recall-runtime.js';
 const clone=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-const KEY='lantai_benmo_tracking_context',supported=new Set(['normal','regenerate','swipe','continue']);
+export const TRACKING_PROMPT_KEYS=Object.freeze({legacy:'lantai_benmo_tracking_context',item:'lantai_benmo_tracking_items',npc:'lantai_benmo_tracking_npcs'});
+const supported=new Set(['normal','regenerate','swipe','continue']);
 export function createTrackingRuntime({repository,adapter,settings,getContext,getControls,captureSource,onChange}={}) {
   const controls=()=>getControls?.()??{allowed:()=>false,capture:()=>null,matches:()=>false};
   const gate=featureGate(controls,'enabled'),categoryGates={items:featureGate(controls,'item'),npcs:featureGate(controls,'npc')};
-  let disposed=false,target=null,lastTarget=null,selection=null,state={records:[],preferences:{itemsEnabled:false,npcsEnabled:false},writeBlocked:false,error:'',target:null},tail=Promise.resolve(),serial=0,exclusionEpoch=0,pendingExclusions=0;
+  let disposed=false,target=null,lastTarget=null,selection=null,state={records:[],preferences:{itemsEnabled:false,npcsEnabled:false},writeBlocked:false,error:'',target:null},tail=Promise.resolve(),serial=0,exclusionEpoch=0,pendingExclusions=0,injectionEpoch=0,pendingDepths=0;
   const listeners=new Set(),releases=[];
   const effectivePreferences=()=>Object.fromEntries(['items','npcs'].map(key=>[`${key}Enabled`,gate.allowed()&&categoryGates[key].allowed()]));
   const captureCategories=()=>Object.fromEntries(['items','npcs'].map(key=>[key,categoryGates[key].capture()]));
   const contentOf=domain=>{const {revision,preferences,...content}=domain;return content;};
   const current=t=>{try{return !disposed&&sameTarget(t,repository.captureTarget());}catch{return false;}};
-  const snapshot=()=>clone({...state,exclusions:state.exclusions??trackingExclusionsOf(null),prompts:settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS,writeBlocked:state.writeBlocked||!gate.allowed()}),notify=change=>{for(const fn of listeners)try{fn(snapshot(),change);}catch{/* Observer cannot break data. */}};
+  const depths=()=>{const config=settings.captureRecall?.().recall??defaultRecallSettings();return {item:config.itemDepth??config.memoryDepth,npc:config.npcDepth??config.memoryDepth};};
+  let lastConfiguration={prompts:DEFAULT_TRACKING_PROMPTS,injectionDepths:{item:9999,npc:9999}};
+  function configuration(){try{lastConfiguration={prompts:settings.captureTrackingPrompts?.().prompts??DEFAULT_TRACKING_PROMPTS,injectionDepths:depths()};return {...lastConfiguration,confirmed:true};}catch(error){return {...lastConfiguration,confirmed:false,error:error.message};}}
+  const snapshot=()=>{const config=configuration();return clone({...state,injectionDepths:config.injectionDepths,exclusions:state.exclusions??trackingExclusionsOf(null),prompts:config.prompts,writeBlocked:state.writeBlocked||!gate.allowed()||!config.confirmed,error:state.error||config.error||''});},notify=change=>{for(const fn of listeners)try{fn(snapshot(),change);}catch{/* Observer cannot break data. */}};
+
   function adopt(t,captured,raw=captureSource(t)){
     if(selection&&!equal(trackingExclusionsOf(selection.tracking),trackingExclusionsOf(captured.tracking))){exclusionEpoch++;clear();}
     const previous=state,projected=currentTracking(captured.tracking,raw),exclusions=effectiveTrackingExclusions(captured.tracking,projected.records);target=clone(t);lastTarget=clone(t);selection=captured;
     state={records:projected.records.map(row=>({...row,excluded:trackingRecordExcluded(row,exclusions),...(row.kind==='npc'?{absentTurns:projected.absenceTurns[row.id]}:{})})),preferences:captured.tracking.preferences,exclusions:trackingExclusionsOf(captured.tracking),writeBlocked:false,error:'',target:clone(t),aiTurn:projected.aiTurn};if(!equal(previous,state))notify();return snapshot();
   }
   async function load({target:prepared,readView,raw}={}){const ticket=serial,t=prepared??await adapter.prepare(),captured=await repository.captureTracking(t,readView);if(disposed||ticket!==serial||!current(t))throw new Error('聊天已变化，请重新打开追踪');return adopt(t,captured,raw);}
-  function clear({invalidate=true}={}){if(invalidate)serial++;try{getContext().setExtensionPrompt(KEY,'',1,0,false,0);return true;}catch{return false;}}
+  function clear({invalidate=true}={}){injectionEpoch++;if(invalidate)serial++;let success=true;for(const key of Object.values(TRACKING_PROMPT_KEYS))try{getContext().setExtensionPrompt(key,'',1,0,false,0);}catch{success=false;}return success;}
   function mutate(change,{fresh=false,requireConfirmation=true,requireEnabled=true,category=null}={}){
     const requestedTarget=clone(target),requested=selection,ticket=serial,controlProof=gate.capture(),categoryGate=categoryGates[category],categoryProof=categoryGate?.capture();
     const controlsValid=()=>!requireEnabled||gate.allowed()&&gate.matches(controlProof)&&(!categoryGate||categoryGate.allowed()&&categoryGate.matches(categoryProof));
@@ -155,31 +161,44 @@ export function createTrackingRuntime({repository,adapter,settings,getContext,ge
   }
 
   async function intercept(messages,_size,_abort,type='normal'){
-    if(disposed||!clear()||pendingExclusions||!gate.allowed()||!Object.values(effectivePreferences()).some(Boolean)||!supported.has(type)||messages?.some(row=>String(row?.mes??row?.content??'').includes('[LANTAI_BACKGROUND_TASK:')))return;
-    const ticket=serial,t=repository.captureTarget(),proof=gate.capture(),categoryProofs=captureCategories(),preferences=effectivePreferences();
+    if(disposed||!clear({invalidate:false})||pendingExclusions||pendingDepths||!gate.allowed()||!Object.values(effectivePreferences()).some(Boolean)||!supported.has(type)||messages?.some(row=>String(row?.mes??row?.content??'').includes('[LANTAI_BACKGROUND_TASK:')))return;
+    const ticket=injectionEpoch,t=repository.captureTarget(),proof=gate.capture(),categoryProofs=captureCategories(),preferences=effectivePreferences();
     try{
       const captured=await repository.captureTracking(t);
       const raw=captureSource(t),projected=currentTracking(captured.tracking,raw),config=settings.captureRecall();
-      const valid=()=>!disposed&&ticket===serial&&current(t)&&gate.matches(proof)&&['items','npcs'].every(key=>!preferences[`${key}Enabled`]||categoryGates[key].matches(categoryProofs[key]))&&settings.captureRecall().epoch===config.epoch&&equal(captureSource(t),raw);
+      const valid=()=>!disposed&&ticket===injectionEpoch&&!pendingDepths&&current(t)&&gate.matches(proof)&&['items','npcs'].every(key=>!preferences[`${key}Enabled`]||categoryGates[key].matches(categoryProofs[key]))&&settings.captureRecall().epoch===config.epoch&&equal(captureSource(t),raw);
       if(!valid())return;
       const context=getContext(),inputs=recallInputs(messages,config.recall.recentFloorCount,context.chat);
       const result=await buildTrackingRecall({records:projected.records,exclusions:effectiveTrackingExclusions(captured.tracking,projected.records),preferences,aiTurn:projected.aiTurn,...inputs,settings:config.recall,countTokens:typeof context.getTokenCountAsync==='function'?text=>context.getTokenCountAsync(text):null});
       if(!valid())return;
       const latest=await repository.captureTracking(t);if(!valid()||!equal(latest.tracking,captured.tracking))return;
-      context.setExtensionPrompt(KEY,result.prompt,1,config.recall.memoryDepth,false,0);
-      if(!valid())clear();
-    }catch{if(!disposed&&ticket===serial)clear();}
+      for(const kind of ['item','npc']){if(!valid()){if(ticket===injectionEpoch)clear({invalidate:false});return;}context.setExtensionPrompt(TRACKING_PROMPT_KEYS[kind],trackingRecallPrompt(result.selected.filter(row=>row.record.kind===kind)),1,config.recall[kind+'Depth']??config.recall.memoryDepth,false,0);}
+      if(!valid()&&ticket===injectionEpoch)clear({invalidate:false});
+    }catch{if(!disposed&&ticket===injectionEpoch)clear({invalidate:false});}
   }
+  let lastRecall;try{lastRecall=settings.captureRecall?.();}catch{}
+  const offSettings=settings.subscribe?.(()=>{try{const next=settings.captureRecall();if(!equal(next,lastRecall)){lastRecall=next;clear({invalidate:false});notify({displayChanged:false});}}catch{clear({invalidate:false});}});if(offSettings)releases.push(offSettings);
   const context=getContext();
   for(const name of ['CHAT_CHANGED','CHAT_CREATED','MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED','GENERATION_STOPPED']){
     const event=context?.eventTypes?.[name],events=context?.eventSource;if(!event||!events?.on)continue;
     const listener=()=>{clear();if(name.startsWith('CHAT_')){target=null;selection=null;state={...state,records:[],exclusions:trackingExclusionsOf(null),target:null};notify();}};
     events.on(event,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,event,listener));
   }
-  return {load,snapshot,writeState:()=>({writeBlocked:state.writeBlocked||!gate.allowed(),error:state.error}),saveRecord,
+  return {load,snapshot,writeState:()=>{const config=configuration();return {writeBlocked:state.writeBlocked||!gate.allowed()||!config.confirmed,error:state.error||config.error||''};},saveRecord,
     saveExclusionNames(kind,names,{original}={}){const value=clone(names),before=clone(original);return changeExclusions(domain=>{if(before!==undefined&&!equal(trackingExclusionsOf(domain)[kind]?.names,before))throw new Error('追踪排除名单已变化，请重新读取后修改');return setTrackingExclusionNames(domain,kind,value);});},
     setRecordExcluded(kind,id,excluded){return changeExclusions((domain,raw)=>setTrackingRecordExcluded(domain,raw,kind,id,excluded));},
     defaultPrompts:DEFAULT_TRACKING_PROMPTS,
+    async saveDepth(kind,depth,{original}={}){
+      if(!['item','npc'].includes(kind)||!Number.isSafeInteger(depth)||depth<0||depth>10000)throw new Error('注入深度须为0–10000的整数');
+      const t=clone(target),control=gate.capture(),category=categoryGates[kind==='item'?'items':'npcs'],permission=category.capture();
+      const valid=()=>current(t)&&sameTarget(t,target)&&gate.matches(control)&&category.matches(permission);
+      if(!valid())throw new Error('聊天已变化，请重新读取追踪');
+      const captured=settings.captureRecall(),key=kind+'Depth';if(original!==undefined&&(captured.recall[key]??captured.recall.memoryDepth)!==original)throw new Error('注入深度已变化，请重新读取后修改');
+      pendingDepths++;clear({invalidate:false});try{
+        await settings.saveRecall({...captured.recall,[key]:depth},{expectedEpoch:captured.epoch,requireConfirmation:true,isCurrent:valid});
+        if(!valid())throw new Error('聊天已变化，请重新读取追踪');notify({displayChanged:false});return snapshot();
+      }finally{pendingDepths--;clear({invalidate:false});}
+    },
     async savePrompt(kind,prompt,{original}={}){
       if(!['item','npc'].includes(kind))throw new Error('追踪类别无效');
       const captured=settings.captureTrackingPrompts();

@@ -133,13 +133,14 @@ export function settingsFingerprint(value) {
   return JSON.stringify(ordered(value));
 }
 export const equalSettings = (a, b) => settingsFingerprint(a) === settingsFingerprint(b);
-export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:10,maxTokens:null,memoryDepth:9999,anniversaryPoolLimit:2,automaticSameDayEnabled:true,excludedTerms:[],recallCleaning:{rules:[]} }; }
+export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:10,maxTokens:null,memoryDepth:9999,itemDepth:9999,npcDepth:9999,anniversaryPoolLimit:2,automaticSameDayEnabled:true,excludedTerms:[],recallCleaning:{rules:[]} }; }
 export function recallChannels(value) { return value.channels??{keyword:true,bm25:false,vector:false,rerank:false}; }
 export function recallCandidateCounts(value) { return value.candidateCounts??{keyword:5,bm25:5,vector:5,date:5}; }
 export function assertRecallSettings(value) {
   try {
     value={anniversaryPoolLimit:2,automaticSameDayEnabled:true,...value};
-    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled',...(Object.hasOwn(value,'channels')?['channels']:[]),...(Object.hasOwn(value,'candidateCounts')?['candidateCounts']:[])]);
+    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled',...(Object.hasOwn(value,'channels')?['channels']:[]),...(Object.hasOwn(value,'candidateCounts')?['candidateCounts']:[]),...['itemDepth','npcDepth'].filter(key=>Object.hasOwn(value,key))]);
+    if(['itemDepth','npcDepth'].some(key=>Object.hasOwn(value,key)&&(!Number.isSafeInteger(value[key])||value[key]<0||value[key]>10000)))invalid();
     if(Object.hasOwn(value,'candidateCounts')){exact(value.candidateCounts,['keyword','bm25','vector','date']);if(Object.values(value.candidateCounts).some(count=>!Number.isSafeInteger(count)||count<1||count>RECALL_REQUEST_LIMITS.candidatePerRoute))invalid();}
     if(Object.hasOwn(value,'channels')){exact(value.channels,['keyword','bm25','vector','rerank']);if(Object.values(value.channels).some(item=>typeof item!=='boolean'))invalid();}
     if(typeof value.automaticSameDayEnabled!=='boolean'||!(value.anniversaryPoolLimit===null||Number.isSafeInteger(value.anniversaryPoolLimit)&&value.anniversaryPoolLimit>=0))invalid();
