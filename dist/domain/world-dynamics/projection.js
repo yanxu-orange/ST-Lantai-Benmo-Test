@@ -20,5 +20,5 @@ export function projectWorldOutcomes(domain,time){
    entries.push({...entry,text});
   }
  }
- return {entries,text:entries.map(entry=>`【${WORLD_KINDS[entry.kind]}】\n${entry.text}`).join('\n\n')};
+ return {entries,text:entries.map(entry=>`【${entry.kind==='custom'?(entry.name??WORLD_KINDS.custom):WORLD_KINDS[entry.kind]}】\n${entry.text}`).join('\n\n')};
 }

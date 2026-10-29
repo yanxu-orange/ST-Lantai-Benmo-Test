@@ -1,6 +1,8 @@
 // Ordered task ownership is shared by assembly, output validation and reading.
 export const WORLD_TASKS=Object.freeze({world:'世界动向',region:'地区动态',weather:'天气环境',activity:'活动机遇',character:'角色动态',opinion:'舆论动态',plot:'长期剧情库'});
-export const taskEnabled=(config,kind)=>kind==='aftermath'||config?.taskModules?.[kind]?.enabled!==false;
+export const customWorldConfig=config=>config?.custom??{enabled:false,name:'自定义区',content:''};
+export const worldTaskKinds=()=>[...Object.keys(WORLD_TASKS),'custom'];
+export const taskEnabled=(config,kind)=>kind==='custom'?customWorldConfig(config).enabled===true:kind==='aftermath'||config?.taskModules?.[kind]?.enabled!==false;
 export function splitWorldTasks(sections){
  const names=Object.entries(WORLD_TASKS),tasks=sections.tasks,design=sections.design;
  const headings=[...tasks.matchAll(/^\[([^\n]+)\]$/gm)];
@@ -39,7 +41,7 @@ export function withWorldDesign(config,text){
 }
 export function selectedWorldVersions(domain,config){
  const selected=[];
- for(const kind of [...Object.keys(WORLD_TASKS),'aftermath']){
+ for(const kind of [...worldTaskKinds(),'aftermath']){
   if(!taskEnabled(config,kind))continue;
   const version=domain?.current?.entries.some(e=>e.kind===kind)?domain.current:domain?.retained?.[kind];
   if(version)selected.push({kind,version,entries:version.entries.filter(e=>e.kind===kind)});

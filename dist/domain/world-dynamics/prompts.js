@@ -1,7 +1,7 @@
-import {WORLD_TASKS,modularWorldConfig,taskEnabled,worldDesignText} from './tasks.js';
+import {WORLD_TASKS,customWorldConfig,modularWorldConfig,taskEnabled,worldDesignText} from './tasks.js';
 import {WORLD_PRESET_SOURCE} from './preset-source.js';
 import {assertWorldConfig,WORLD_KINDS} from './data.js';
-import {markWorldMaterials,assembleWorldMaterials,defaultMaterialEnabled} from './materials.js';
+import {markWorldMaterials,assembleWorldMaterials,withSupplementMaterial,defaultMaterialEnabled} from './materials.js';
 const labels={identity:'AI身份区',rules:'基本规则',materials:'资料区',tasks:'任务区',design:'设计区'};
 export function defaultWorldConfig(){
  const matches=[...WORLD_PRESET_SOURCE.replaceAll('\r\n','\n').matchAll(/^\[(AI身份区|基本规则|资料区|任务区|设计区)\]$/gm)];
@@ -40,17 +40,17 @@ export function defaultWorldConfig(){
  sections.design=sections.design.replace('Phase 3｜构思各区内容','Step 3：回读[完结区]：哪些已完结的普通事件值得留下什么具体影响，持续至何日？已有影响应保留、调整还是移除？加入新影响时是否需要替换？\n\nPhase 3｜构思各区内容')
   .replace('舆论动态、长期剧情库的顺序检查','舆论动态、长期剧情库、完结区的顺序检查')
   +'\n织野，现在，认真阅读资料，然后从<LTdesign>开始创作吧。';
- sections.materials=markWorldMaterials(sections.materials);
- return modularWorldConfig({sections,materialEnabled:defaultMaterialEnabled(),themes,ideas:[],worldRefs:[],characterRefs:[],extraPeople:'',extra:'',notes:'',readStory:true,initialScope:'all',initialCount:100}).config;
+ sections.materials=withSupplementMaterial(markWorldMaterials(sections.materials));
+ return modularWorldConfig({sections,custom:{enabled:false,name:'自定义区',content:''},materialEnabled:defaultMaterialEnabled(),themes,ideas:[],worldRefs:[],characterRefs:[],supplementRefs:[],supplement:'',extraPeople:'',extra:'',notes:'',readStory:true,initialScope:'all',initialCount:100}).config;
 }
-export function worldResultText(version,{includePlot=true}={}){return version?version.entries.filter(e=>includePlot||e.kind!=='plot').map(e=>`【${WORLD_KINDS[e.kind]}】\n${e.text}`).join('\n\n'):'';}
+export function worldResultText(version,{includePlot=true}={}){return version?version.entries.filter(e=>includePlot||e.kind!=='plot').map(e=>`【${e.kind==='custom'?(e.name??WORLD_KINDS.custom):WORLD_KINDS[e.kind]}】\n${e.text}`).join('\n\n'):'';}
 export const worldDateText=d=>`${d.year}年${d.month}月${d.day}日`;
 export function assembleWorldRequest(config,inputs){
- const migrated=modularWorldConfig(assertWorldConfig(config));if(migrated.error)throw new Error(migrated.error);const c=migrated.config;if(!Object.values(c.taskModules).some(t=>t.enabled))throw new Error('请至少开启一个世界动态任务');if(taskEnabled(c,'region')&&!c.themes.some(t=>t.enabled))throw new Error('请至少开启一个地区主题');
+ const migrated=modularWorldConfig(assertWorldConfig(config));if(migrated.error)throw new Error(migrated.error);const c=migrated.config;const custom=customWorldConfig(c);if(custom.enabled&&(!custom.name.trim()||!custom.content.trim()))throw new Error('请填写自定义区名称和生成要求');if(!Object.values(c.taskModules).some(t=>t.enabled)&&!custom.enabled)throw new Error('请至少开启一个世界动态任务');if(taskEnabled(c,'region')&&!c.themes.some(t=>t.enabled))throw new Error('请至少开启一个地区主题');
  const themes=c.themes.filter(t=>t.enabled).map(t=>`地区动态主题库：${t.name}\n\n${t.content}`).join('\n\n');
  const ideas='灵感库：\n'+(c.ideas.filter(t=>t.enabled).map(t=>`${t.name}\n- ${t.content}`).join('\n\n')||'无');
  const tasks=Object.entries(WORLD_TASKS).filter(([key])=>taskEnabled(c,key));
- const taskText=tasks.map(([key,label])=>`[${label}]\n${c.taskModules[key].content}${key==='region'?'\n'+themes:key==='plot'?'\n'+ideas:''}`).join('\n\n')+'\n\n'+c.commonTasks+'\n\n本轮只输出上述开启任务的正式成品及公共完结区；未开启任务不输出标签或空区标记。';
+ const taskText=tasks.map(([key,label])=>`[${label}]\n${c.taskModules[key].content}${key==='region'?'\n'+themes:key==='plot'?'\n'+ideas:''}`).join('\n\n')+(custom.enabled?'\n\n['+custom.name.trim()+']\n任务：依据生成要求创作本区成果；如任务明确需要更新替换，则进行更新。\n\n'+custom.content+'\n\n只输出一个 <LTcustom>正文</LTcustom>，外层容器必须保留；内部正文按本区生成要求，不强制任何日期或字段。自定义内容不参与完结影响判断。':'')+'\n\n'+c.commonTasks+'\n\n本轮只输出上述开启任务的正式成品及公共完结区；未开启任务不输出标签或空区标记。';
  const design=worldDesignText(c,{enabledOnly:true});
  const materials=assembleWorldMaterials(c.sections.materials,c,inputs);
  const content=Object.entries(labels).map(([key,label])=>`[${label}]\n\n${key==='tasks'?taskText:key==='design'?design:key==='materials'?materials:c.sections[key]}`).join('\n\n');

@@ -3,6 +3,7 @@ export const WORLD_MATERIALS=Object.freeze({
  currentDate:{name:'当前日期',tag:'LTcurrentDate'},
  worldInfo:{name:'世界资料',tag:'LTworldInfo'},
  characterInfo:{name:'人物资料',tag:'LTcharacterInfo'},
+ supplementInfo:{name:'补充资料',tag:'LTsupplementInfo'},
  festivalInfo:{name:'近期节日',tag:'LTfestivalInfo'},
  plotHistory:{name:'已有长期剧情库',tag:'LTplotHistory'},
  worldHistory:{name:'上一版世界动态',tag:'LTworldHistory'},
@@ -32,7 +33,7 @@ function ranges(text){
   }
   // Old templates are recognized only when the named description immediately
   // precedes the unique slot. Never infer ownership from an arbitrary paragraph.
-  if(!opens.length&&!closes.length){if(text.includes(name+'：'))fail(name);continue;}
+  if(!opens.length&&!closes.length){if(key!=='supplementInfo'&&text.includes(name+'：'))fail(name);continue;}
   if(opens.length!==1||closes.length!==1||opens[0].index>=closes[0].index)fail(name);
   const prefix=text.slice(0,opens[0].index),description=prefix.match(new RegExp(`(^|\n)(${escaped(name)}：[^\n]*\n)[ \t]*$`));
   if(!description)fail(name);
@@ -46,7 +47,16 @@ function ranges(text){
 export function markWorldMaterials(template){
  let result=template;for(const row of ranges(template).reverse())if(row.bodyStart===row.start)result=result.slice(0,row.start)+boundary(row.name,'start')+'\n'+result.slice(row.start,row.end)+'\n'+boundary(row.name,'end')+result.slice(row.end);return result;
 }
+export const SUPPLEMENT_MATERIAL_DESCRIPTION='补充资料：其他相关信息';
+export function withSupplementMaterial(template){
+ const rows=ranges(template);if(rows.some(row=>row.key==='supplementInfo'))return template;
+ const anchor=rows.find(row=>row.key==='characterInfo')??rows.at(-1),closing='织野，读完资料，再看看我们的自由世界需要创造哪些内容。';let at=anchor?.end;
+ if(at===undefined){const found=[...template.matchAll(new RegExp(escaped(closing),'g'))];if(found.length!==1)throw new Error('补充资料插入位置无法确定，请在资料原文中加入补充资料说明和 <LTsupplementInfo></LTsupplementInfo>；原文已保留。');at=found[0].index;}
+ const block=boundary('补充资料','start')+'\n'+SUPPLEMENT_MATERIAL_DESCRIPTION+'\n<LTsupplementInfo>\n</LTsupplementInfo>\n'+boundary('补充资料','end');
+ return template.slice(0,at)+'\n\n'+block+'\n\n'+template.slice(at);
+}
 export function assembleWorldMaterials(template,config,inputs){
+ if(materialEnabled(config,'supplementInfo')&&((config.supplementRefs?.length??0)>0||config.supplement?.trim()||String(inputs.LTsupplementInfo??'').trim()))template=withSupplementMaterial(template);
  let result=template;
  for(const row of ranges(template).reverse()){
   let body=template.slice(row.bodyStart,row.bodyEnd);
