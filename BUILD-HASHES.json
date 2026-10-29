@@ -677,7 +677,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "ca4f05c42665fd724c33fa168ffe3ed2b9c273e074af9538ceefa879c429031d"
+    "sha256": "e9e655a6896edf77b0213c194a05dcceb09b95843498eb5e0aa04777f208ada2"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1677,6 +1677,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "bc56df9ae25540d771793016fa24e0028e5fdc03103e1450b455a8a6dc1b6b99"
+    "sha256": "d79723e250b27cd874eb35aaa2eea6a516df2e1bf1fde1e7cb18e18275fed39b"
   }
 ]
