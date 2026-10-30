@@ -677,7 +677,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "e9e655a6896edf77b0213c194a05dcceb09b95843498eb5e0aa04777f208ada2"
+    "sha256": "fc90fc869a180e356d321197b9d1f573a81c6e861467de49e94f6e0ef6ec8b9c"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1191,8 +1191,8 @@
   },
   {
     "path": "dist/domain/workshop/background.js",
-    "bytes": 3927,
-    "sha256": "3e2b0bc09b7d836d129bdcd5876e71982f4d1dbc9f4280834dfc9fb0d7b777af"
+    "bytes": 3933,
+    "sha256": "c6e5e4ca2406b21c0effe71baf5db6d26a5d159f578b9b321e8f4bf2e7b5edd1"
   },
   {
     "path": "dist/domain/workshop/examples.js",
@@ -1351,8 +1351,8 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "bytes": 80458,
-    "sha256": "61e7c4b1cffe9577094b27f945290f6fc2014ffe95c1fe7be26073e1ed22198f"
+    "bytes": 85129,
+    "sha256": "1e76edace1db34d6e34f35e84511fc0ea752f20a4fe942546f893e99113ad2c8"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -1456,8 +1456,8 @@
   },
   {
     "path": "dist/platform/sillytavern/round-record-display.js",
-    "bytes": 15247,
-    "sha256": "f60f9a0d46ab9d80cf43f3a99739d518cdacfcae76489f6d68ee50b4434b0f03"
+    "bytes": 15264,
+    "sha256": "867421834a1749333214298ad907a0aea79d7ae22217cff71007aafb900af402"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
@@ -1677,6 +1677,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "d79723e250b27cd874eb35aaa2eea6a516df2e1bf1fde1e7cb18e18275fed39b"
+    "sha256": "7e798467dc2b9070c29eba3890de194606066ddd0d1ccf0898f8e25bae2a8d7d"
   }
 ]

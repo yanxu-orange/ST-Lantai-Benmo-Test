@@ -37,7 +37,7 @@ export function upsertBackgroundResult(results,task,source,text,{makeId=()=>cryp
   if(typeof text!=='string'||!text.trim())throw new Error('后台结果正文不能为空');
   const previous=results.find(row=>row.moduleId===task.module.id&&row.replyId===source.replyId);
   // A story result from the same source cannot silently become a second capture.
-  if(previous&&previous.generationSource!=='background')throw new Error('该回复已有随剧情收集结果');
+  if(previous&&previous.generationSource!=='background')throw new Error('该回复已有酒馆生成的收集结果');
   const row={id:previous?.id??makeId(),moduleId:task.module.id,replyId:source.replyId,index:0,floor:source.assistantFloor,value:text.trim(),manualValue:previous?.manualValue??null,deleted:previous?.deleted??false,active:true,generationSource:'background',sourceSnapshot:storedLatestSource(source)};
   return previous?results.map(item=>item.id===previous.id?row:copy(item)):[...copy(results),row];
 }

@@ -40,7 +40,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   let workshopState=null,workshopFloorStates={},trackingState=null,trackingFloorStates={},scheduleState=null,scheduleFloorStates={};
   let libraryCache=null,displayEpoch=0,lastReadView=null,displayReadDirty=false,initialized=autoInitialize;
   let settingsRecoveryEpoch=0,displayRecoveryEpoch=null,maintenanceProof=null;
-  const automaticReceipts=new Map(),displayBatches=new Map(),failureReports=[],retryOwners=new Map();
+  const automaticReceipts=new Map(),displayBatches=new Map(),failureReports=[],retryOwners=new Map(),workshopRetryOwners=new Map();
   let state={...emptyLatest(),status:'idle',error:'',floorStates:{}};
   let backfillState={status:'idle',id:null,total:0,completed:0,skipped:0,failed:0,error:''},backfillController=null;
   let automaticState={status:'idle',message:'尚未收到新一轮正文生成信号',floor:null};
@@ -60,7 +60,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   }
   function inspect(){return copy({...state,target,sendDiagnostics,automatic:automaticState,backfill:backfillState,failureReports:currentFailures()});}
   function automaticStatus(status,message,floor=automaticState.floor){automaticState={status,message,floor};publish();}
-  function cancel(){retryOwners.clear();workshopSends.clear();stopBackfill();for(const [key,value] of automaticReceipts)if(['queued','running'].includes(value.status))automaticReceipts.set(key,{...value,status:'cancelled',message:'本轮自动生成已取消，未自动重试'});if(['waiting','queued','running'].includes(automaticState.status))automaticState={...automaticState,status:'cancelled',message:'本轮自动生成已取消，未自动重试'};serial++;foregroundType=null;for(const [key,value] of Object.entries(scheduleFloorStates))if(value.status==='running')scheduleFloorStates[key]={status:'cancelled',error:'任务已取消，未自动重试'};scheduleRuntime?.cancel?.();for(const [key,value] of Object.entries(trackingFloorStates))if(value.status==='running')trackingFloorStates[key]={status:'cancelled',error:'任务已取消，未自动重试'};for(const tasks of Object.values(workshopFloorStates))for(const [key,value] of Object.entries(tasks))if(value.status==='running')tasks[key]={status:'cancelled',error:'任务已取消，未自动重试'};receipt=null;foregroundEnded=false;generationQueue=Promise.resolve();queuedFloors.clear();displayBatches.clear();for(const job of jobs)job.abort();jobs.clear();for(const [key,value] of Object.entries(state.floorStates))if(value.status==='running')state.floorStates[key]={status:'cancelled',error:'任务已取消，未自动重试'};if(state.status==='running')state.status='ready';publish();}
+  function cancel(){retryOwners.clear();workshopRetryOwners.clear();workshopSends.clear();stopBackfill();for(const [key,value] of automaticReceipts)if(['queued','running'].includes(value.status))automaticReceipts.set(key,{...value,status:'cancelled',message:'本轮自动生成已取消，未自动重试'});if(['waiting','queued','running'].includes(automaticState.status))automaticState={...automaticState,status:'cancelled',message:'本轮自动生成已取消，未自动重试'};serial++;foregroundType=null;for(const [key,value] of Object.entries(scheduleFloorStates))if(value.status==='running')scheduleFloorStates[key]={status:'cancelled',error:'任务已取消，未自动重试'};scheduleRuntime?.cancel?.();for(const [key,value] of Object.entries(trackingFloorStates))if(value.status==='running')trackingFloorStates[key]={status:'cancelled',error:'任务已取消，未自动重试'};for(const tasks of Object.values(workshopFloorStates))for(const [key,value] of Object.entries(tasks))if(value.status==='running')tasks[key]={status:'cancelled',error:'任务已取消，未自动重试'};receipt=null;foregroundEnded=false;generationQueue=Promise.resolve();queuedFloors.clear();displayBatches.clear();for(const job of jobs)job.abort();jobs.clear();for(const [key,value] of Object.entries(state.floorStates))if(value.status==='running')state.floorStates[key]={status:'cancelled',error:'任务已取消，未自动重试'};if(state.status==='running')state.status='ready';publish();}
   function raw(t,retention=false){
     const snapshot=retention&&adapter.captureLatestRetentionSource?adapter.captureLatestRetentionSource(t):adapter.captureChatSource(t),chat=getContext().chat;
     snapshot.messages=snapshot.messages.map(item=>({...item,...latestSourceMetadata(chat[item.floor])}));
@@ -128,7 +128,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     if(readView&&!repository.matchesPanelData(t,readView))return read({target:t});
     if(target&&!sameTarget(target,t)){cancel();resetBackfill();state.floorStates={};invalidatedFloors.clear();}
     displayRecoveryEpoch=null;
-    lastReadView=readView;target=t;selection=captured;workshopState=workshop??null;trackingState=tracking??null;scheduleState=schedule??null;state={...captured.latest,status:state.status==='running'?'running':'ready',error:'',floorStates:state.floorStates};publish();return inspect();
+    lastReadView=readView;target=t;selection=captured;workshopState=workshop??null;trackingState=tracking??null;scheduleState=schedule??null;adoptWorkshopRetryResults();state={...captured.latest,status:state.status==='running'?'running':'ready',error:'',floorStates:state.floorStates};publish();return inspect();
     }catch(error){if(!disposed&&token===readSerial&&(!t||current(t)))failedDisplayRead(error,startedEpoch);throw error;}
   }
   function sendPreparationCurrent(owner){
@@ -169,7 +169,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     // trailing display reads; a display projection cannot certify new input.
     const completion=()=>valid()?{isCurrent:valid}:null;
     if(valid()&&readView&&!repository.matchesPanelData(t,readView)){invalidatedFloors.clear();await read({target:t});if(lastReadView&&maintenanceMatches(maintainedProof,lastReadView))maintenanceProof=maintainedProof;return completion();}
-    if(valid()){displayRecoveryEpoch=null;invalidatedFloors.clear();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};if(maintenanceMatches(maintainedProof,readView))maintenanceProof=maintainedProof;publish();return completion();}
+    if(valid()){displayRecoveryEpoch=null;invalidatedFloors.clear();lastReadView=readView;target=t;selection=captured;workshopState=maintained??workshop??null;trackingState=tracked??tracking??null;scheduleState=scheduled??schedule??null;adoptWorkshopRetryResults();state={...captured.latest,status:'ready',error:'',floorStates:state.floorStates};if(maintenanceMatches(maintainedProof,readView))maintenanceProof=maintainedProof;publish();return completion();}
     return false;
   }
   function queueRefresh(allowProjection=false,owner){
@@ -231,7 +231,35 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     }catch{return null;}
   }
   function retryLabel(replyId,options){const parts=failedRetry(null,options,replyId);return parts?.summary&&parts.trackingKinds.length?'重试摘要与追踪':parts&&(parts.summary||parts.trackingKinds.length)?'重试未完成项':null;}
-  async function generate(floor,{automatic=false,expectedMessage=null,workshopOnly=false,taskId,automaticSummaryProof=null,automaticMasterProof=null,automaticScheduleProof=null,queuedSummary=null,retryParts=null}={}){
+  const workshopRecord=(selection,moduleId,replyId)=>selection?.workshop.results.find(row=>row.moduleId===moduleId&&row.replyId===replyId)??null;
+  function adoptWorkshopRetryResults(){
+    if(!workshopState)return;
+    for(const [replyId,owners] of workshopRetryOwners)for(const [moduleId,owner] of owners){
+      if(workshopFloorStates[replyId]?.[moduleId]?.status!=='failed')continue;
+      const record=workshopRecord(workshopState.selection,moduleId,replyId),module=workshopState.modules.find(row=>row.id===moduleId);
+      if(!equal(record,owner.existing)){
+        workshopFloorStates[replyId][moduleId]={status:record&&!record.deleted&&record.active!==false?'ready':'idle',error:''};owners.delete(moduleId);
+      }else if(!equal(module,owner.module)){
+        workshopFloorStates[replyId][moduleId]={status:'cancelled',error:'工坊条目已变化，请重新生成此栏目'};owners.delete(moduleId);
+      }
+    }
+  }
+  function failedWorkshopRetry(floor,options={},replyId){
+    if(options.automatic||!options.workshopOnly||typeof options.taskId!=='string')return null;
+    try{
+      const id=replyId??raw(target).messages.find(row=>row.floor===floor)?.replyId,owners=workshopRetryOwners.get(id),owner=owners?.get(options.taskId);
+      if(!owner||workshopFloorStates[id]?.[options.taskId]?.status!=='failed')return null;
+      const members=[...owners].filter(([moduleId,row])=>row.requestId===owner.requestId&&workshopFloorStates[id]?.[moduleId]?.status==='failed').map(([moduleId,row])=>({moduleId,...copy(row)}));
+      return members.length?{replyId:id,members}:null;
+    }catch{return null;}
+  }
+  function workshopRetryLabel(replyId,moduleId){const retry=failedWorkshopRetry(null,{workshopOnly:true,taskId:moduleId},replyId);return retry?retry.members.length>1?'重试本批失败项':'重试此栏目':null;}
+  function rememberWorkshopRequest(replyId,tasks,requestId,operationId){
+    const owners=workshopRetryOwners.get(replyId)??new Map();
+    for(const task of tasks)owners.set(task.module.id,{requestId,operationId,module:copy(task.module),existing:copy(task.existing)});
+    workshopRetryOwners.set(replyId,owners);if(workshopRetryOwners.size>256)workshopRetryOwners.delete(workshopRetryOwners.keys().next().value);
+  }
+  async function generate(floor,{automatic=false,expectedMessage=null,workshopOnly=false,taskId,automaticSummaryProof=null,automaticMasterProof=null,automaticScheduleProof=null,queuedSummary=null,retryParts=null,workshopRetry=null}={}){
     const ticket=serial,controller=new AbortController(),requestId=crypto.randomUUID();let rawResponse=null,requestedTaskIds=[];jobs.add(controller);displayBatches.set(controller,{floor,ticket});let key=String(floor),t,latestTask=false,plan=null,trackingPlan=null,schedulePlan=null,preparationFailed=false,partialResults=false,skippedTasks=0,automaticReceiptKey=null,stage='preparation',firstFailure='',generationCurrent=null,originSource=null;
     const inputPair=snapshot=>snapshot.messages.filter(row=>row.floor===floor||row.floor===floor-1).map(({replyId,...row})=>row);
     const origin=getContext().chat?.[floor],originText=origin?.mes,originSwipe=origin?.swipe_id??0;
@@ -251,11 +279,27 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       stage='config';const preparation=()=>settings?.captureEventGeneration?.()??(getPreparationSettings??getGenerationSettings)(),preparationProof=preparation(),generation=preparationProof.generation??preparationProof;stage='preparation';
       latestTask=(retryParts?retryParts.summary:!workshopOnly)&&summaryMatches(summaryProof);
       const source=prepareLatestSource(rawSource,{floor,rules:generation.summaryCleaning.rules}),names=identities();
+      if(workshopRetry&&workshopRetry.replyId!==source.replyId)return false;
       displayBatches.set(controller,{floor,ticket,source});
       const valid=()=>{
         try{return allowed()&&getControls?.()?.matches(masterProof)===true&&!controller.signal.aborted&&ticket===serial&&current(t)&&equal(preparationProof,preparation())&&equal(names,identities())&&matchesBackgroundLatestSource(source,raw(t));}catch{return false;}
       };
       generationCurrent=valid;
+      const retryMembers=new Map((workshopRetry?.members??[]).map(row=>[row.moduleId,row]));
+      const filterWorkshopRetry=async candidate=>{
+        if(!candidate||!workshopRetry)return candidate;
+        const confirmed=await workshopRuntime.backgroundState(t);if(!valid())return {...candidate,tasks:[]};
+        workshopState=confirmed;
+        return {...candidate,tasks:candidate.tasks.filter(task=>{
+          const member=retryMembers.get(task.module.id),live=workshopRetryOwners.get(key)?.get(task.module.id);if(!member||!live||live.requestId!==member.requestId)return false;
+          const record=workshopRecord(confirmed.selection,task.module.id,key),module=confirmed.modules.find(row=>row.id===task.module.id);
+          if(equal(module,member.module)&&equal(record,member.existing))return true;
+          markWorkshop(task,!equal(record,member.existing)?record&&!record.deleted&&record.active!==false?'ready':'idle':'cancelled');
+          const owners=workshopRetryOwners.get(key);if(owners?.get(task.module.id)?.requestId===member.requestId)owners.delete(task.module.id);
+          return false;
+        })};
+      };
+
       // Each API category owns its configuration proof. A missing or changed
       // route cannot invalidate otherwise authorized sibling-category work.
       const groupProof=group=>{
@@ -279,11 +323,11 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       // Summary-only buttons retain their scope; completed replies share all
       // enabled tasks, while workshop retries can target one failed segment.
       if(!retryParts&&(automatic||workshopOnly)){
-        try{plan=await workshopRuntime?.prepareBackground(t,source,{automatic,taskId});}
+        try{plan=await workshopRuntime?.prepareBackground(t,source,{automatic,taskId:workshopRetry?undefined:taskId});plan=await filterWorkshopRetry(plan);}
         catch(error){if(!valid())return false;preparationFailed=true;for(const module of workshopState?.modules??[])if(taskId===undefined||module.id===taskId)markWorkshop({module},'failed',failure(error));}
       }
-      if(retryParts?retryParts.trackingKinds.length:automatic||workshopOnly){try{trackingPlan=await trackingRuntime?.prepareBackground(t,source,{automatic,taskId,categories:retryParts?.trackingKinds,rules:generation.summaryCleaning.rules,identities:names});}catch(error){if(!valid())return false;preparationFailed=true;markTracking('failed',failure(error));}}
-      if(!retryParts&&(automatic||workshopOnly)){try{schedulePlan=await scheduleRuntime?.prepareBackground(t,source,{automatic,taskId,automaticProof:automaticScheduleProof,identities:names});}catch(error){if(!valid())return false;preparationFailed=true;markSchedule('failed',failure(error));}}
+      if(!workshopRetry&&(retryParts?retryParts.trackingKinds.length:automatic||workshopOnly)){try{trackingPlan=await trackingRuntime?.prepareBackground(t,source,{automatic,taskId,categories:retryParts?.trackingKinds,rules:generation.summaryCleaning.rules,identities:names});}catch(error){if(!valid())return false;preparationFailed=true;markTracking('failed',failure(error));}}
+      if(!retryParts&&!workshopRetry&&(automatic||workshopOnly)){try{schedulePlan=await scheduleRuntime?.prepareBackground(t,source,{automatic,taskId,automaticProof:automaticScheduleProof,identities:names});}catch(error){if(!valid())return false;preparationFailed=true;markSchedule('failed',failure(error));}}
       let tasks=(plan?.tasks??[]).filter(task=>task.instructions.trim());
       for(const task of plan?.tasks??[])if(!task.instructions.trim()){preparationFailed=true;markWorkshop(task,'failed','请先填写该工坊条目的生成要求');}
       if(!latestTask&&!tasks.length&&!trackingPlan&&!schedulePlan){report(preparationFailed?'failed':'skipped',preparationFailed?`本轮准备失败：${firstFailure||'请检查生成要求'}`:'本轮没有可发送的任务，请检查功能开关、已有结果及生成要求');publish();return false;}
@@ -321,7 +365,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
         catch(error){if(!valid())return false;preparationFailed=true;markSchedule('failed',failure(error));schedulePlan=null;}
       }
       if(!valid()||!latestTask&&!tasks.length&&!trackingPlan&&!schedulePlan)return false;
-      const commonWorkshop=tasks.filter(task=>!hasWorkshopMaterials(task.module));
+      let commonWorkshop=tasks.filter(task=>!hasWorkshopMaterials(task.module));
       const descriptors=[...(latestTask?[{id:'latest',name:'最新摘要',instructions:preferences.prompt}]:[]),...(trackingPlan?[trackingPlan.task]:[]),...(schedulePlan?[schedulePlan.task]:[])];
       requestedTaskIds=[...descriptors,...tasks].map(task=>task.id);
       if(latestTask||trackingPlan){
@@ -390,11 +434,15 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       if(commonWorkshop.length){
         try{
           stage='config';commonCurrent=groupProof('workshop');
+          commonWorkshop=(await filterWorkshopRetry({...plan,tasks:commonWorkshop})).tasks;
+          if(commonWorkshop.length&&commonCurrent()){
           const ownRequest=buildWorkshopRoundRequest({source,tasks:commonWorkshop,identities:names});
+          rememberWorkshopRequest(key,commonWorkshop,requestId+':workshop',requestId);
           stage='request';const output=await provider.generateText({...ownRequest,signal:controller.signal,isCurrent:commonCurrent});
           if(!commonCurrent())throw new AiProviderError('cancelled');
           commonRawResponse=output.text;workshopSegments=parseBackgroundRoundResponse(output.text,commonWorkshop);
           for(const [id,segment] of workshopSegments)if(segment.error)retainFailure({requestId:requestId+':workshop',target:t,replyIds:[source.replyId],taskIds:[id],rawResponse:output.text,error:segment.error});
+          }
         }catch(error){if(!valid())return false;const message=failure(error);workshopSegments=new Map(commonWorkshop.map(task=>[task.id,{error:message}]));}
       }
       for(const task of [...commonWorkshop,...tasks.filter(task=>hasWorkshopMaterials(task.module))]){
@@ -406,11 +454,13 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
             const options=workshopMaterials(task.module),capture=()=>prepareWorkshopMaterials({module:task.module,source,raw:null,character:options.character?captureSingleCharacterCard(getContext()):null,userPersona:options.userPersona?captureCurrentUserPersona(getContext()):null,worldInfo:options.worldInfo?workshopSends.captureWorldInfo(source):undefined,history:options.history?(workshopSends.captureHistory(source)?.prepare(source)??{status:'unavailable',messages:[]}):undefined,recall:options.recalledMemory?workshopSends.capture(source):undefined}),prepared=capture();
             task.materials=prepared.materials;task.materialAvailability=prepared.availability;
             task.materialsCurrent=()=>{try{return equal(prepared,capture());}catch{return false;}};
-            const refreshed=await workshopRuntime.filterBackgroundPlan({...plan,tasks:[task]});
+            const refreshed=await filterWorkshopRetry(await workshopRuntime.filterBackgroundPlan({...plan,tasks:[task]}));
             stage='config';const configured=groupProof('workshop');
             taskCurrent=()=>configured()&&workshopRuntime.moduleAllowed(task.module)&&task.materialsCurrent();
+            if(workshopRetry&&!refreshed.tasks.length){skippedTasks++;publish();continue;}
             if(!refreshed.tasks.length||!taskCurrent())throw new Error('工坊条目或生成资料已变化');
             const ownRequest=buildWorkshopRoundRequest({source,tasks:[task],identities:names,materials:{char:task.materials['角色资料'],user:task.materials['用户人设'],worldInfo:task.materials['世界书'],custom:task.materials['自定义补充资料'],recall:task.materials['本轮召回记忆'],history:task.materials['前情提要']}});
+            rememberWorkshopRequest(key,[task],requestId+':'+task.id,requestId);
             stage='request';const ownOutput=await provider.generateText({...ownRequest,signal:controller.signal,isCurrent:taskCurrent});
             if(!taskCurrent())throw new Error('工坊条目或生成资料已变化');
             taskRawResponse=ownOutput.text;segment=parseBackgroundRoundResponse(ownOutput.text,[task]).get(task.id);
@@ -420,7 +470,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           await workshopRuntime.saveBackgroundResult(plan,task,segment.text,{isCurrent:taskCurrent});
           if(!valid())return false;
           markWorkshop(task,'ready');successes++;
-          workshopState=await workshopRuntime.backgroundState(t);
+          workshopState=await workshopRuntime.backgroundState(t);if(!valid())return false;adoptWorkshopRetryResults();
         }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')retainFailure({requestId:requestId+':'+task.id,target:t,replyIds:[source.replyId],taskIds:[task.id],rawResponse:taskRawResponse,error:failure(error,'save')});if(!valid())return false;markWorkshop(task,'failed',failure(error));}
         publish();
       }
@@ -456,6 +506,9 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       }
       return false;
     }finally{
+      const workshopOwners=workshopRetryOwners.get(key);
+      if(workshopOwners)for(const [moduleId,owner]of workshopOwners)if(owner.operationId===requestId&&workshopFloorStates[key]?.[moduleId]?.status!=='failed')workshopOwners.delete(moduleId);
+      if(workshopOwners?.size===0)workshopRetryOwners.delete(key);
       const owner=retryOwners.get(key);
       if(owner?.latest?.requestId===requestId)owner.latest.status=state.floorStates[key]?.status??'cancelled';
       if(owner?.tracking?.requestId===requestId)owner.tracking.status=trackingFloorStates[key]?.status??'cancelled';
@@ -469,6 +522,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   }
   function enqueueGeneration(floor,options){
     const ticket=serial,scope=JSON.stringify([ticket,floor]);if(queuedFloors.has(scope))return Promise.resolve(false);
+    const workshopRetry=failedWorkshopRetry(floor,options);if(workshopRetry)options={...options,workshopRetry};
     const retryParts=failedRetry(floor,options);if(retryParts){if(!retryParts.summary&&!retryParts.trackingKinds.length)return Promise.resolve(false);options={...options,retryParts};}
     if(!options.automatic&&(!options.workshopOnly||retryParts?.summary)){
       try{const replyId=raw(target).messages.find(row=>row.floor===floor)?.replyId;options={...options,queuedSummary:{replyId,record:copy(state.records.find(record=>record.sourceSnapshot.replyId===replyId)??null)}};}catch{return Promise.resolve(false);}
@@ -520,7 +574,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           const record=byReply.get(row.replyId)?.get(module.id),snapshot=record?.sourceSnapshot;
           const pair={epoch:source.epoch,messages:snapshot?.rawMessages.flatMap(item=>byFloor.has(item.floor)?[byFloor.get(item.floor)]:[])??[]};
           const valid=record&&!snapshot.rawMessages.some(item=>invalidatedFloors.has(item.floor))&&matchesStoredLatestSource(snapshot,pair);
-          return {id:module.id,kind:'workshop',name:module.name,body:valid?resultText(record):'',...(workshopFloorStates[row.replyId]?.[module.id]??{status:'idle',error:''})};
+          return {id:module.id,kind:'workshop',name:module.name,body:valid?resultText(record):'',...(workshopFloorStates[row.replyId]?.[module.id]??{status:'idle',error:''}),retryLabel:workshopRetryLabel(row.replyId,module.id)};
         });
         tasks.push(...(trackingRuntime?.floorTasks(trackingDisplay,source,floor,row.replyId,trackingFloorStates[row.replyId]??{},{includeIdle})??[]).map(task=>({...task,retryLabel:retryLabel(row.replyId,{workshopOnly:true,taskId:'tracking'})})));
         tasks.push(...(scheduleRuntime?.floorTasks(scheduleDisplay,source,floor,row.replyId,scheduleFloorStates[row.replyId]??{},{includeIdle})??[]));
