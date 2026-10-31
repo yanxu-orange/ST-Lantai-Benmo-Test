@@ -600,6 +600,11 @@
     "sha256": "4688b8af1adc7a9bb007f90634c69ef0b4514e954c779c584b3ae09c03922074"
   },
   {
+    "path": "dist/app/styles/style-text-reader.js",
+    "bytes": 1120,
+    "sha256": "a217b4b0bfbd744cd0ecadd1c2080682ee54d7675f5216f5f94bcb869e25859f"
+  },
+  {
     "path": "dist/app/styles/theme.js",
     "bytes": 1848,
     "sha256": "6f5aa6b60599fdd9f111b98f061300a7934abf5361946308e90cad1fa59c8533"
@@ -677,12 +682,12 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "fc90fc869a180e356d321197b9d1f573a81c6e861467de49e94f6e0ef6ec8b9c"
+    "sha256": "8836d8404c8d8983c6105d9913f94c3505dc9c972b3095889b00c07bd13a5bd2"
   },
   {
     "path": "dist/app/workshop-controller.js",
-    "bytes": 17794,
-    "sha256": "4862fbb2df49d603fb7119fb923c36ec583af54efdc09a285d9bceaa09ef36c8"
+    "bytes": 18988,
+    "sha256": "0d1fb98a55b1a3cc42d2710f07c4afc85f257f802974ecd9a4a0d6236ae6a180"
   },
   {
     "path": "dist/app/workshop-loading-view.js",
@@ -696,8 +701,8 @@
   },
   {
     "path": "dist/app/workshop-view.js",
-    "bytes": 28652,
-    "sha256": "9ab4fbcab92dcdeb71c725d3a526b41161a4ba3407d46fe13d4da04527368909"
+    "bytes": 29361,
+    "sha256": "77777dddf955c6a25d2a60ecdc3c918790b051c362b8584f4a57dab3e1c59824"
   },
   {
     "path": "dist/app/world-dynamics-controller.js",
@@ -1381,8 +1386,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 98237,
-    "sha256": "adc3218bb2b60bfc47ee46a024a3e069e094875506638fef4c1210c1118caf9c"
+    "bytes": 97886,
+    "sha256": "169d5484bf8298b45f5ed06f65fba0c5a4d6cb3040515bf1476c51776c0d1da1"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1561,8 +1566,8 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-runtime.js",
-    "bytes": 16457,
-    "sha256": "06aa3233386b3c68a74e0fc164475ac9f32d86ad2868b2ca00ceef37e84da6f1"
+    "bytes": 17991,
+    "sha256": "5f870e7b5e928eda9e589a018a60f5127ba4e862928bbfd504c4416f4a217c6d"
   },
   {
     "path": "dist/platform/sillytavern/workshop-send-context.js",
@@ -1677,6 +1682,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "7e798467dc2b9070c29eba3890de194606066ddd0d1ccf0898f8e25bae2a8d7d"
+    "sha256": "168cd6eb8cb0fbcb963dc4613afe1b2928d8a7510b1f3ca63ab930528f84906d"
   }
 ]

@@ -13,6 +13,7 @@ import {createWorkshopHistoryTicket} from './workshop-history.js';
 import {createNativeSummaryHider} from './native-summary-hide.js';
 import {createSummaryNarrativeActions} from '../../app/summary-controller.js';
 import { ensureBookThemeFont } from '../../app/styles/book-font.js';
+import {createStyleTextReader} from '../../app/styles/style-text-reader.js';
 import { MEMORY_SHELL_CSS } from './memory-shell-style.js';
 import {createNarrativeRuntime} from './narrative-runtime.js';
 import {mountWorkshopBackgroundDisplay} from './workshop-background-display.js';
@@ -87,6 +88,7 @@ export function cancelDisabledManagedTasks(runtime,policy){
 // host skins from changing the approved UI and prevents our UI CSS leakage.
 export function createMemoryHost({ document: doc = globalThis.document, getContext = getSillyTavernContext, fetch: request = globalThis.fetch,
   runtimeOptions = {}, appearanceOptions = {}, MutationObserver: Observer = globalThis.MutationObserver,createAdapter=createSillyTavernMemoryAdapter } = {}) {
+  const styleText = createStyleTextReader(request);
   let adapter, repository, app, panel, content, memoryContent, benmoContent, settingsContent, apiView, apiSession, returnFocus, returnEpoch, returnTarget,
     runtime, runtimePromise, notices, entry, unsubscribe, disposed = false, closing = false, replacingPage = false, ticket = 0, openingTicket = null, stylePromise, baseCss, sharedCssCache,
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryReturnFocus,memoryEditFocus,
@@ -758,7 +760,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
 
   async function briefingStyles(theme){
     await appearance.ensure();void ensureBookThemeFont(doc,theme);
-    if(!briefingStyleCache.has(theme))briefingStyleCache.set(theme,Promise.all([...BRIEFING_BASE_STYLE_ENTRIES,...(BRIEFING_THEME_STYLE_ENTRIES[theme]??[])].map(async({url})=>{const response=await request(url);if(!response.ok)throw new Error('简报样式未能加载');return resolveStyleAssets(await response.text(),url).replace(/:root\b/g,':host');})).then(parts=>parts.join('\n')).catch(error=>{briefingStyleCache.delete(theme);throw error;}));
+    if(!briefingStyleCache.has(theme))briefingStyleCache.set(theme,Promise.all([...BRIEFING_BASE_STYLE_ENTRIES,...(BRIEFING_THEME_STYLE_ENTRIES[theme]??[])].map(async({url})=>resolveStyleAssets(await styleText.read(url,'简报样式未能加载'),url).replace(/:root\b/g,':host'))).then(parts=>parts.join('\n')).catch(error=>{briefingStyleCache.delete(theme);throw error;}));
     return briefingStyleCache.get(theme);
   }
   async function notificationStyles() {
@@ -772,11 +774,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     return css;
   }
   async function styles() {
-    if (!stylePromise) stylePromise = Promise.all(BASE_STYLE_ENTRIES.map(async ({url}) => {
-      const response = await request(url);
-      if (!response.ok) throw new Error('兰台界面样式未能加载，请关闭后重试');
-      return response.text();
-    })).then(parts => {baseCss=parts.map(css => css.replace(/:root\b/g, ':host')).join('\n');return baseCss;}).catch(error => { stylePromise = null; throw error; });
+    if (!stylePromise) stylePromise = Promise.all(BASE_STYLE_ENTRIES.map(({url}) => styleText.read(url,'兰台界面样式未能加载，请关闭后重试')))
+      .then(parts => {baseCss=parts.map(css => css.replace(/:root\b/g, ':host')).join('\n');return baseCss;}).catch(error => { stylePromise = null; throw error; });
     return stylePromise;
   }
   async function openCumulativeTask(taskId){
@@ -865,16 +864,14 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summarySettingsView=mountSummarySettingsView(summaryContent,cleaningFacade,{readonlyContent:summaryReadonlyContent});return true;
   }
   async function sharedStyles() {
-    if(!sharedStylePromise)sharedStylePromise=Promise.all(SHARED_STYLE_ENTRIES.map(async ({url})=>{const response=await request(url);if(!response.ok)throw new Error('共用界面样式未能加载');return response.text();}))
+    if(!sharedStylePromise)sharedStylePromise=Promise.all(SHARED_STYLE_ENTRIES.map(({url})=>styleText.read(url,'共用界面样式未能加载')))
       .then(parts=>{sharedCssCache=parts.map(css=>css.replace(/:root\b/g,':host')).join('\n');return sharedCssCache;})
       .catch(error=>{sharedStylePromise=null;throw error;});
     return sharedStylePromise;
   }
   async function snowStyles() {
     if (!snowStylePromise) snowStylePromise = Promise.all(SNOW_ERMINE_STYLE_ENTRIES.map(async ({url}) => {
-      const response = await request(url);
-      if (!response.ok) throw new Error();
-      return resolveStyleAssets(await response.text(), url).replace(/:root\b/g, ':host');
+      return resolveStyleAssets(await styleText.read(url), url).replace(/:root\b/g, ':host');
     })).then(parts => { snowCss = parts.join('\n'); return snowCss; }).catch(() => {
       snowStylePromise = null;
       throw Object.assign(new Error('皮肤资源未能加载'), { code: 'APPEARANCE_STYLE_UNAVAILABLE' });
@@ -883,9 +880,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   async function springStyles() {
     if (!springStylePromise) springStylePromise = Promise.all(SPRING_STYLE_ENTRIES.map(async ({url}) => {
-      const response = await request(url);
-      if (!response.ok) throw new Error();
-      return resolveStyleAssets(await response.text(), url).replace(/:root\b/g, ':host');
+      return resolveStyleAssets(await styleText.read(url), url).replace(/:root\b/g, ':host');
     })).then(parts => { springCss = parts.join('\n'); return springCss; }).catch(() => {
       springStylePromise = null;
       throw Object.assign(new Error('皮肤资源未能加载'), { code: 'APPEARANCE_STYLE_UNAVAILABLE' });
@@ -899,9 +894,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     let bundle = bookStylesByTheme.get(theme);
     if (!bundle) { bundle = {promise:null,css:null,style:null};bookStylesByTheme.set(theme,bundle); }
     if (!bundle.promise) bundle.promise = Promise.all(BOOK_THEME_STYLE_ENTRIES[theme].map(async ({url}) => {
-      const response = await request(url);
-      if (!response.ok) throw new Error();
-      return resolveStyleAssets(await response.text(),url).replace(/:root\b/g,':host');
+      return resolveStyleAssets(await styleText.read(url),url).replace(/:root\b/g,':host');
     })).then(parts => { bundle.css = parts.join('\n');return bundle.css; }).catch(() => {
       bundle.promise = null;
       throw Object.assign(new Error('皮肤资源未能加载'),{code:'APPEARANCE_STYLE_UNAVAILABLE'});
@@ -1120,7 +1113,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>({status:'retained',reason:'native-visibility',removed:0}),
     dispose() {
-      if(disposed)return;disposed = true;panelHeightPreference.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();worldDisplay?.dispose();worldDisplayRuntime?.dispose();briefingStyleCache.clear();roundRecordDisplay?.dispose();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();worldHistory?.dispose();worldAuto?.dispose();worldAutoSettingsRelease?.();worldWaiting?.dispose();worldPrompts?.dispose();timeController?.dispose();worldController?.dispose();worldController=null;worldTarget=null;let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      if(disposed)return;disposed = true;styleText.dispose();panelHeightPreference.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();worldDisplay?.dispose();worldDisplayRuntime?.dispose();briefingStyleCache.clear();roundRecordDisplay?.dispose();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();worldHistory?.dispose();worldAuto?.dispose();worldAutoSettingsRelease?.();worldWaiting?.dispose();worldPrompts?.dispose();timeController?.dispose();worldController?.dispose();worldController=null;worldTarget=null;let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;if(closeError)throw closeError;
     },

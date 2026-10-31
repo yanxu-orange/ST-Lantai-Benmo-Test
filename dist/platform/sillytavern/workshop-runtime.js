@@ -13,6 +13,7 @@ const roleIds = {system:0,user:1,assistant:2};
 export function createWorkshopRuntime({repository,settings,getContext,captureSource,matchesSource,getControls,ensureReady,isSourceDeletionPending=()=>false}={}) {
   const gates=Object.fromEntries(['prompt','collect','sync'].map(key=>[key,featureGate(getControls,key)]));
   let disposed=false,serial=0,pending=null,identityUnconfirmed=true,backgroundSourceReader=null,lastCollection=null;
+  let promptRun=null,promptPrepared=null,promptPermit=null;
   const keys=new Set(),releases=[],listeners=new Set();
   const changed=()=>{for(const listener of listeners)try{listener();}catch{/* Display refresh cannot change a write. */}};
   const preparationPolicy=()=>Object.values(gates).map(gate=>({gate,allowed:gate.allowed(),proof:gate.capture()}));
@@ -28,7 +29,7 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     try{return !!proof&&!disposed&&proof.serial===serial&&sameTarget(target,repository.captureTarget())&&matchesSource(target,proof.source)&&proof.ownership===replyOwnership()&&proof.gates.every(row=>gates[row.key].allowed()===row.allowed&&(!row.allowed||gates[row.key].matches(row.proof)));}catch{return false;}
   }
   function clear(){
-    serial++;lastCollection=null;const context=getContext();let okay=true;
+    serial++;lastCollection=null;promptPrepared=promptPermit=null;const context=getContext();let okay=true;
     for(const key of keys){try{context.setExtensionPrompt(key,'',1,0,false,0);}catch{okay=false;}}
     if(okay)keys.clear();changed();return okay;
   }
@@ -98,11 +99,11 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
   }
   async function intercept(messages,_size,_abort,type='normal'){
     if(disposed||!clear()||!supported.has(type)||messages?.some(message=>String(message?.mes??message?.content??'').includes('[LANTAI_BACKGROUND_TASK:')))return;
-    const ticket=serial;
+    const ticket=serial,run=promptRun;
     try{
       const state=await request();if(!state||disposed||serial!==ticket)return;
       const {target,config,selection,modules}=state,source=captureSource?.(target);
-      const valid=()=>!disposed&&serial===ticket&&sameTarget(target,repository.captureTarget())&&settings.matchesWorkshop(config)&&(!matchesSource||matchesSource(target,source));
+      const valid=()=>!disposed&&serial===ticket&&(!run||promptRun===run)&&sameTarget(target,repository.captureTarget())&&settings.matchesWorkshop(config)&&(!matchesSource||matchesSource(target,source));
       const latest=await repository.captureWorkshop(target);
       if(!valid()||JSON.stringify(latest.workshop)!==JSON.stringify(selection.workshop))return;
       for(const prompt of composeWorkshopPrompts(modules,selection.workshop.results)){
@@ -111,6 +112,7 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
         getContext().setExtensionPrompt(key,prompt.text,1,prompt.depth,false,roleIds[prompt.role]);
         if(!valid()){if(serial===ticket)clear();return;}
       }
+      if(run&&promptRun===run&&run.type===type&&valid())promptPrepared={run,target:structuredClone(target),serial:ticket};
     }catch{if(!disposed&&serial===ticket)clear();}
   }
   async function backgroundState(target,{readView,captured}={}){
@@ -172,14 +174,21 @@ export function createWorkshopRuntime({repository,settings,getContext,captureSou
     }));
   }
   const context=getContext();let timer;
+  function capturePromptEditProof(target){
+    try{return !disposed&&promptPermit&&promptPermit.run===promptRun&&promptPermit.serial===serial&&sameTarget(target,promptPermit.target)&&sameTarget(target,repository.captureTarget())?promptPermit.proof:null;}catch{return null;}
+  }
+  for(const [name,listener] of [
+    ['GENERATION_STARTED',(type,_options,dryRun)=>{const normalized=type===undefined?'normal':type;promptRun=!dryRun&&supported.has(normalized)?{type:normalized}:null;promptPrepared=promptPermit=null;changed();}],
+    ['GENERATE_AFTER_DATA',(data,dryRun)=>{if(dryRun!==false||!data||!promptPrepared||promptPrepared.run!==promptRun||promptPrepared.serial!==serial||promptPermit)return;try{if(!sameTarget(promptPrepared.target,repository.captureTarget()))return;promptPermit={...promptPrepared,proof:Object.freeze({})};changed();}catch{/* Missing authority keeps prompt editing locked. */}}],
+  ]){const event=context?.eventTypes?.[name],events=context?.eventSource;if(event&&events?.on){events.on(event,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,event,listener));}}
   for(const name of ['MESSAGE_RECEIVED','MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED','GENERATION_ENDED']){
     const event=context?.eventTypes?.[name],events=context?.eventSource;if(!event||!events?.on)continue;
-    const listener=()=>{clear();clearTimeout(timer);timer=setTimeout(()=>request().catch(()=>{}),0);};
+    const listener=()=>{if(name==='GENERATION_ENDED')promptRun=null;clear();clearTimeout(timer);timer=setTimeout(()=>request().catch(()=>{}),0);};
     events.on(event,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,event,listener));
   }
   for(const name of ['CHAT_CHANGED','CHAT_CREATED','GENERATION_STOPPED']){
     const event=context?.eventTypes?.[name],events=context?.eventSource;if(!event||!events?.on)continue;
-    const listener=()=>{clearTimeout(timer);clear();};events.on(event,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,event,listener));
+    const listener=()=>{promptRun=null;clearTimeout(timer);clear();};events.on(event,listener);releases.push(()=>(events.off??events.removeListener)?.call(events,event,listener));
   }
-  return {request,intercept,clear,changed,captureDisplaySource,matchesDisplaySource,setBackgroundSourceReader(reader){backgroundSourceReader=reader;},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},moduleAllowed:module=>gates[module.lifecycle].allowed()&&(module.scope==='chat'||equal(settings.captureWorkshop().workshop.modules.find(item=>item.id===module.id),module)),backgroundState,prepareBackground,filterBackgroundPlan,filterCurrentBackgroundPlan,saveBackgroundResult,reconcileBackground,dispose(){if(disposed)return;clear();disposed=true;clearTimeout(timer);for(const release of releases)release();listeners.clear();}};
+  return {request,intercept,clear,changed,captureDisplaySource,matchesDisplaySource,capturePromptEditProof,matchesPromptEditProof:(target,proof)=>!!proof&&capturePromptEditProof(target)===proof,setBackgroundSourceReader(reader){backgroundSourceReader=reader;},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},moduleAllowed:module=>gates[module.lifecycle].allowed()&&(module.scope==='chat'||equal(settings.captureWorkshop().workshop.modules.find(item=>item.id===module.id),module)),backgroundState,prepareBackground,filterBackgroundPlan,filterCurrentBackgroundPlan,saveBackgroundResult,reconcileBackground,dispose(){if(disposed)return;clear();disposed=true;clearTimeout(timer);for(const release of releases)release();listeners.clear();}};
 }

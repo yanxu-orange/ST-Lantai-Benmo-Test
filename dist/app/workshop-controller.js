@@ -9,6 +9,12 @@ export function createWorkshopController({repository,settings,target,runtime,app
   const browsing=()=>isReadOnly()===true;
   const readOnlyError=()=>Object.assign(new Error('正文生成中，只能浏览已确认的工坊资料'),{code:'WORKSHOP_READ_ONLY'});
   const current=()=>!disposed&&operationGeneration===generation&&sameTarget(target,repository.captureTarget());
+  const promptProof=()=>runtime?.capturePromptEditProof?.(target)??null;
+  function existingPromptDraft(draft){
+    const matches=[...globalSnapshot.workshop.modules,...chatSnapshot.workshop.modules].filter(module=>module.id===draft.id);
+    const old=matches.length===1?matches[0]:null;
+    return !!old&&old.lifecycle==='prompt'&&(draft.kind??draft.lifecycle)==='prompt'&&old.scope===draft.scope&&(old.characterKey??null)===(draft.characterKey??null)&&old.enabled===draft.enabled&&(old.scope!=='character'||old.characterKey===binding?.owner);
+  }
   async function loadNow({refresh=false}={}){
     if(!current())throw new Error('聊天已变化，请重新打开工坊');
     readView=undefined;displaySource=null;
@@ -117,24 +123,24 @@ export function createWorkshopController({repository,settings,target,runtime,app
     }
     const modules=[...visible.values()].sort((a,b)=>Number(!!b.example)-Number(!!a.example)).map(module=>({...workshopEditableModule(module),kind:module.lifecycle,generationSource:module.lifecycle==='prompt'?'story':module.generationSource??'story',...(enabledIntents.has(module.id)?{enabled:enabledIntents.get(module.id)}:{})}));
     const results=Object.fromEntries(modules.map(module=>[module.id,(module.lifecycle==='sync'?visibleResults(chatSnapshot.workshop.results,module.id).slice(-3).reverse():visibleResults(chatSnapshot.workshop.results,module.id)).map(row=>({...row,text:resultText(row),edited:row.manualValue!==null}))]));
-    return {modules,results,displayModes:appearance?.inspect().workshopModes??{},displayModesWritable:!appearance||appearance.inspect().status==='ready',warning,pendingIds:[...toggleTasks.keys()],deletingIds:[...deleting],writeBlocked:!!writeFailure||readOnly||browsing(),characterName:getCharacterName?.(binding)??'当前角色',canUseCharacter:binding?.kind==='character'};
+    return {modules,results,displayModes:appearance?.inspect().workshopModes??{},displayModesWritable:!appearance||appearance.inspect().status==='ready',warning,pendingIds:[...toggleTasks.keys()],deletingIds:[...deleting],writeBlocked:!!writeFailure||readOnly||browsing(),promptWriteBlocked:!!writeFailure||((readOnly||browsing())&&!promptProof()),characterName:getCharacterName?.(binding)??'当前角色',canUseCharacter:binding?.kind==='character'};
   }
   async function commitGlobal(value,options={}){
-    const result=await settings.saveWorkshop(value,{...options,expectedEpoch:globalSnapshot.epoch,isCurrent:current});
+    const result=await settings.saveWorkshop(value,{...options,expectedEpoch:globalSnapshot.epoch,isCurrent:()=>current()&&(!options.isCurrent||options.isCurrent()===true)});
     if(result.status!=='committed')throw new Error('模块保存尚未确认');
     globalSnapshot=settings.captureWorkshop();displaySource=null;runtime?.changed?.();
   }
   async function commitChat(value,options={}){
-    const result=await repository.updateWorkshop(target,chatSnapshot,value,{...options,isCurrent:current});
+    const result=await repository.updateWorkshop(target,chatSnapshot,value,{...options,isCurrent:()=>current()&&(!options.isCurrent||options.isCurrent()===true)});
     chatSnapshot=result.selection;displaySource=null;runtime?.changed?.();
   }
-  function exclusive(action,{reconcile=false,reading=false}={}){
+  function exclusive(action,{reconcile=false,reading=false,writeCurrent}={}){
     busy++;const queuedGeneration=generation;
     const work=tail.then(async()=>{
       if(queuedGeneration!==generation)throw new Error('聊天已重新读取，请重新读取工坊');
       operationGeneration=queuedGeneration;
       if(!current())throw new Error('工坊已关闭或聊天已变化');
-      if(!reading&&(readOnly||browsing()))throw readOnlyError();
+      if(!reading&&(writeCurrent?!writeCurrent():(readOnly||browsing())))throw readOnlyError();
       if(writeFailure&&!reconcile)throw writeFailure;
       try{
         await action();
@@ -200,9 +206,11 @@ export function createWorkshopController({repository,settings,target,runtime,app
     return {destination,store,module};
   }
   function saveModule(value){
-    if(readOnly||browsing())throw readOnlyError();
+    const proof=readOnly||browsing()?promptProof():null;
+    if((readOnly||browsing())&&(!proof||!existingPromptDraft(value)))throw readOnlyError();
     if(!current()||writeFailure||deleting.has(value.id)||saving.has(value.id))throw writeFailure??new Error('模块当前无法保存，请重新读取');
     const draft=structuredClone(value);delete draft.displayMode;draft.id??=crypto.randomUUID();
+    const writeCurrent=()=>current()&&(proof?runtime.matchesPromptEditProof(target,proof)&&existingPromptDraft(draft):!readOnly&&!browsing());
     prepareModule(draft); // Validate and freeze the input before entering the queue.
     saving.add(draft.id);
     return exclusive(async()=>{
@@ -211,15 +219,15 @@ export function createWorkshopController({repository,settings,target,runtime,app
       const moving=source.modules.some(row=>row.id===module.id);
       // A cross-store move confirms its destination before deleting its source.
       // Ordinary same-store edits use the host's normal lightweight persistence.
-      if(destination==='chat')await commitChat(store,{requireConfirmation:moving});
-      else await commitGlobal(store,{requireConfirmation:moving});
+      if(destination==='chat')await commitChat(store,{requireConfirmation:moving,isCurrent:writeCurrent});
+      else await commitGlobal(store,{requireConfirmation:moving,isCurrent:writeCurrent});
       if(moving){
         source.modules=source.modules.filter(row=>row.id!==module.id);
-        if(destination==='chat')await commitGlobal(source);else await commitChat(source);
+        if(destination==='chat')await commitGlobal(source,{isCurrent:writeCurrent});else await commitChat(source,{isCurrent:writeCurrent});
       }
-    }).finally(()=>{saving.delete(draft.id);});
+    },{writeCurrent}).finally(()=>{saving.delete(draft.id);});
   }
-  return {load,ensure,snapshot,saveModule,async saveDisplayMode(id,mode,{original=null}={}){if(!current()||readOnly||browsing())throw readOnlyError();if(!appearance||!await appearance.selectWorkshopMode(id,mode,{original,isCurrent:current}))throw new Error(appearance?.inspect().message||'外观设置已变化，请重新读取');return snapshot();},rebindTarget(next){if(next.chatId!==target.chatId||next.rootId!==target.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){generation++;enabledIntents.clear();writeFailure=new Error('聊天已重新读取，请重新读取工坊');}target=structuredClone(next);},
+  return {load,ensure,snapshot,saveModule,subscribe:listener=>runtime?.subscribe?.(listener)??(()=>{}),async saveDisplayMode(id,mode,{original=null}={}){if(!current()||readOnly||browsing())throw readOnlyError();if(!appearance||!await appearance.selectWorkshopMode(id,mode,{original,isCurrent:current}))throw new Error(appearance?.inspect().message||'外观设置已变化，请重新读取');return snapshot();},rebindTarget(next){if(next.chatId!==target.chatId||next.rootId!==target.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){generation++;enabledIntents.clear();writeFailure=new Error('聊天已重新读取，请重新读取工坊');}target=structuredClone(next);},
     toggle,
     deleteModule(id){if(readOnly||browsing())return Promise.reject(readOnlyError());if(deleting.has(id))return Promise.reject(new Error('正在删除模块'));deleting.add(id);enabledIntents.delete(id);return exclusive(async()=>{const module=[...globalSnapshot.workshop.modules,...chatSnapshot.workshop.modules].find(row=>row.id===id);if(!module)throw new Error('模块已不存在');if(module){const store=structuredClone(module.scope==='chat'?chatSnapshot.workshop:globalSnapshot.workshop);store.modules=store.modules.filter(row=>row.id!==id);if(module.scope==='chat')await commitChat(store);else await commitGlobal(store);}deleting.delete(id);}).catch(error=>{if(error.code==='WORKSHOP_READ_ONLY')deleting.delete(id);throw error;});},
     editResult(id,text){return exclusive(()=>commitChat({...chatSnapshot.workshop,results:editResult(chatSnapshot.workshop.results,id,text)}));},

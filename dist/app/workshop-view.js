@@ -17,7 +17,10 @@ let state={kind:availability()[initialKind]&&Object.hasOwn(kinds,initialKind)?in
 let toastTimer,draftBaseline='',businessBaseline='',modeBaseline=null,renderedMarkup=null;const writeControls=new Map();let renderedAvailability;
 const availabilityKey=()=>JSON.stringify(['memory','time','workshop','prompt','collect','sync','benmo'].map(key=>availability()[key]));
 function restoreWriteControls(){for(const [node,disabled] of writeControls)node.disabled=disabled;writeControls.clear();}
-function syncWriteControls(){restoreWriteControls();for(const node of app.querySelectorAll('[data-action]'))if(['save','delete-module','delete-result','toggle'].includes(node.dataset.action)){const disabled=node.disabled===true;writeControls.set(node,disabled);node.disabled=disabled||revalidating||initial.writeBlocked===true;}}const scrolls={},collapsed={};
+function canSavePrompt(){const draft=state.draft,old=modules.find(module=>module.id===draft?.id);return state.route==='editor'&&initial.promptWriteBlocked===false&&old?.kind==='prompt'&&draft.kind==='prompt'&&old.scope===draft.scope&&(old.characterKey??null)===(draft.characterKey??null)&&old.enabled===draft.enabled;}
+function writeBlocked(action){return revalidating||!!initial.writeBlocked&&!(action==='save'&&canSavePrompt());}
+function syncWriteControls(){restoreWriteControls();for(const node of app.querySelectorAll('[data-action]'))if(['save','delete-module','delete-result','toggle'].includes(node.dataset.action)){const disabled=node.disabled===true;writeControls.set(node,disabled);node.disabled=disabled||writeBlocked(node.dataset.action);}}const scrolls={},collapsed={};
+function refreshWritePermissions(){try{const value=controller.snapshot();initial.writeBlocked=value.writeBlocked;initial.promptWriteBlocked=value.promptWriteBlocked;}catch{initial.writeBlocked=initial.promptWriteBlocked=true;}syncWriteControls();}
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const btn=(text,action,attrs='',tone='tertiary')=>`<button type="button" class="ui-button ui-button--${tone}" data-action="${action}" ${attrs}>${text}</button>`;
 const icon=(text,action,file,attrs='')=>`<button type="button" class="ui-icon-button ui-button--tertiary" aria-label="${esc(text)}" data-action="${action}" ${attrs}><img class="lt-icon" data-icon="${file}" src="${new URL(`./icons/${file}.svg`,import.meta.url)}" alt=""></button>`;
@@ -86,11 +89,11 @@ async function changeToggle(b){
    const value=await controller.toggle(id,intent.enabled);if(disposed)return;
    if(toggleIntents.get(id)!==intent)return;
    toggleIntents.delete(id);apply(controller.snapshot?.()??value);syncToggles(b);
- }catch(error){if(disposed)return;for(const pending of toggleIntents.values())pending.failed=true;initial.writeBlocked=true;remember();readDraft();lastError=error.message||'保存未确认，请重新读取';render();}
+ }catch(error){if(disposed)return;for(const pending of toggleIntents.values())pending.failed=true;initial.writeBlocked=initial.promptWriteBlocked=true;remember();readDraft();lastError=error.message||'保存未确认，请重新读取';render();}
 }
 app.addEventListener('click',async e=>{const b=e.target.closest('[data-action]');if(!b||b.disabled||disposed||suspended||(initializing&&!isCurrent()))return;const a=b.dataset.action,id=b.dataset.id;
 if(loading&&!['close','memory','time','benmo','settings'].includes(a))return;
-if((revalidating||initial.writeBlocked)&&['toggle','save','delete-module','delete-result'].includes(a))return;
+if(writeBlocked(a)&&['toggle','save','delete-module','delete-result'].includes(a))return;
 if(a==='toggle')return changeToggle(b);
 if(acting&&!['close','memory','time','benmo','settings','cancel-dialog','confirm-dialog'].includes(a))return;
 let ownsAction=false;
@@ -125,19 +128,20 @@ if(a==='save'){const f=app.querySelector('form');if(!f.reportValidity())return;r
 if(a==='back')leave(()=>go(['result-editor','directory'].includes(state.route)?'results':'root'));
 if(a==='close')leave(()=>controller.close());
 if(a==='memory'||a==='time'||a==='benmo'||a==='settings')leave(()=>controller[a]());if(a==='home')go('root');
-}catch(error){if(!disposed){readDraft();state.dialog=null;initial.writeBlocked=true;try{initial.writeBlocked=controller.snapshot?.()?.writeBlocked??true;}catch{}lastError=error.message||'操作未完成，请重试';remember();render();}}finally{if(ownsAction)acting=false;}},{signal:lifetime.signal});
+}catch(error){if(!disposed){readDraft();state.dialog=null;initial.writeBlocked=initial.promptWriteBlocked=true;refreshWritePermissions();lastError=error.message||'操作未完成，请重试';remember();render();}}finally{if(ownsAction)acting=false;}},{signal:lifetime.signal});
 
 app.addEventListener('keydown',event=>{
  if(!state.dialog)return;
  if(event.key==='Escape'){if(state.dialog.pending){event.preventDefault();event.stopPropagation();return;}event.preventDefault();event.stopPropagation();state.dialog=null;render();return;}
  if(event.key==='Tab'){const buttons=[...app.querySelectorAll('.wk-dialog button')];if(!buttons.length)return;event.preventDefault();const index=buttons.indexOf(app.getRootNode().activeElement);buttons[(index+(event.shiftKey?-1:1)+buttons.length)%buttons.length].focus();}
 },{signal:lifetime.signal});
+const unsubscribeWrites=controller.subscribe?.(refreshWritePermissions)??(()=>{});
 render();
 const loadingRoot=app.children?.[0],loadingMarkup=renderedMarkup;
 try{apply(await readValue(false));}catch(error){loadFailed=true;lastError=error.message||'读取未完成，请重试';}
-if(!isCurrent()){disposed=true;lifetime.abort();clearTimeout(toastTimer);if(loadingRoot){if(app.children?.[0]===loadingRoot)loadingRoot.remove();}else if(app.innerHTML===loadingMarkup)app.innerHTML='';return null;}
+if(!isCurrent()){disposed=true;unsubscribeWrites();lifetime.abort();clearTimeout(toastTimer);if(loadingRoot){if(app.children?.[0]===loadingRoot)loadingRoot.remove();}else if(app.innerHTML===loadingMarkup)app.innerHTML='';return null;}
 initializing=false;loading=false;render();
-return {refreshAvailability(){try{initial.writeBlocked=controller.snapshot().writeBlocked;}catch{initial.writeBlocked=true;}if(availabilityKey()!==renderedAvailability){remember();readDraft();render();}else syncWriteControls();},invalidate(message){readDraft();lastError=message;render();},dispose(){disposed=true;lifetime.abort();clearTimeout(toastTimer);app.innerHTML='';},back(){if(acting)return;leave(()=>state.route==='root'?controller.memory():go(['result-editor','directory'].includes(state.route)?'results':'root'));},blocking(){return acting||toggleIntents.size>0||dirty()||!!state.dialog;},suspend(){if(disposed||suspended)return;readVersion++;remember();readDraft();suspended=true;app.inert=true;},loading(){if(disposed)return;remember();readDraft();loading=true;loadFailed=false;lastError='';suspended=false;app.inert=false;render();},fail(error){if(disposed)return;loading=false;loadFailed=true;lastError=error?.message||'读取未完成，请重试';suspended=false;app.inert=false;render();},failed(){return loadFailed;},resume(value,{kind,checking=false}={}){
+return {refreshAvailability(){refreshWritePermissions();if(availabilityKey()!==renderedAvailability){remember();readDraft();render();}else syncWriteControls();},invalidate(message){readDraft();lastError=message;render();},dispose(){disposed=true;unsubscribeWrites();lifetime.abort();clearTimeout(toastTimer);app.innerHTML='';},back(){if(acting)return;leave(()=>state.route==='root'?controller.memory():go(['result-editor','directory'].includes(state.route)?'results':'root'));},blocking(){return acting||toggleIntents.size>0||dirty()||!!state.dialog;},suspend(){if(disposed||suspended)return;readVersion++;remember();readDraft();suspended=true;app.inert=true;},loading(){if(disposed)return;remember();readDraft();loading=true;loadFailed=false;lastError='';suspended=false;app.inert=false;render();},fail(error){if(disposed)return;loading=false;loadFailed=true;lastError=error?.message||'读取未完成，请重试';suspended=false;app.inert=false;render();},failed(){return loadFailed;},resume(value,{kind,checking=false}={}){
  if(disposed)return;readVersion++;remember();readDraft();restoreWriteControls();revalidating=checking;
  const priorKind=state.kind,priorRoute=state.route,wasUnavailable=loading||loadFailed;
  if(value)apply(value);loading=false;loadFailed=false;suspended=false;app.inert=false;
