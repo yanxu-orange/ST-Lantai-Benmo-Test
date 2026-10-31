@@ -1601,8 +1601,8 @@
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-runtime.js",
-    "bytes": 4463,
-    "sha256": "0e49a7378fb07d531f77a195e7a9eba39db66d367f4f4909005cf2c5ed920865"
+    "bytes": 4425,
+    "sha256": "9c263594989a3a3bcbad479bfc62b9890826bbbeb30f0259da2466eb0a4a2436"
   },
   {
     "path": "dist/platform/sillytavern/worldbook-reader.js",
