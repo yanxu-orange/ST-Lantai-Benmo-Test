@@ -10,7 +10,10 @@ export function reconcileWorldHistory(value,source,{changedFrom=Infinity}={}){
   const row=byFloor.get(version.anchor.floor);
   return !!row&&row.identity===version.anchor.identity&&row.role===version.anchor.role&&(row.swipeId??null)===version.anchor.swipeId;
  };
- const available=domain.versions.filter(valid),current=valid(domain.current)?domain.current:available.at(-1)??null;
+ const snapshot=version=>version.sections?{...version,sections:Object.fromEntries(Object.entries(version.sections).map(([kind,section])=>{
+  if(!section.previous||valid(section.previous))return [kind,section];const {previous,...empty}=section;return [kind,empty];
+ }))}:version;
+ const available=domain.versions.filter(valid).map(snapshot),current=valid(domain.current)?snapshot(domain.current):available.at(-1)??null;
  const versions=retainWorldVersions(available,endFloor);
  const retained=current?Object.fromEntries(Object.entries(domain.retained).filter(([,v])=>valid(v)&&v.endFloor<=current.endFloor)):{};
  return {...domain,current:copy(current),versions,retained:copy(retained)};

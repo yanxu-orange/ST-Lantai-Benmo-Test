@@ -39,11 +39,29 @@ export function withWorldDesign(config,text){
  for(const key of Object.keys(WORLD_TASKS))c.taskModules[key].design=split.taskModules[key].design;
  return c;
 }
+export const worldSectionKinds=()=>[...worldTaskKinds(),'aftermath'];
+export function worldSectionVersion(domain,kind){
+ const current=domain?.current;
+ if(current?.sections){const section=current.sections[kind];return section?.accepted?current:section?.previous??null;}
+ return current?.entries.some(e=>e.kind===kind)?current:domain?.retained?.[kind]??null;
+}
+export function flatWorldSection(version,kind){
+ if(!version)return null;
+ const {id,date,calendar,endFloor,anchor,generatedAt}=version;
+ return structuredClone({id,date,calendar,entries:version.entries.filter(e=>e.kind===kind),endFloor,anchor,generatedAt});
+}
+export function worldSections(domain,report){
+ return Object.fromEntries(worldSectionKinds().map(kind=>{
+  if(report.accepted.includes(kind))return [kind,{accepted:true}];
+  const previous=flatWorldSection(worldSectionVersion(domain,kind),kind),failure=report.failures.find(row=>row.kind===kind),diagnostic=failure?Object.fromEntries(Object.entries(failure).filter(([key])=>key!=='kind')):null;
+  return [kind,{accepted:false,...(previous?{previous}:{}),...(diagnostic?{diagnostic}:{})}];
+ }));
+}
 export function selectedWorldVersions(domain,config){
  const selected=[];
- for(const kind of [...worldTaskKinds(),'aftermath']){
+ for(const kind of worldSectionKinds()){
   if(!taskEnabled(config,kind))continue;
-  const version=domain?.current?.entries.some(e=>e.kind===kind)?domain.current:domain?.retained?.[kind];
+  const version=worldSectionVersion(domain,kind);
   if(version)selected.push({kind,version,entries:version.entries.filter(e=>e.kind===kind)});
  }
  return selected;

@@ -23,12 +23,12 @@ export function createWorldAutoRuntime({adapter,repository,history,dateRuntime,g
   const maintained=await history.request();if(!valid()||maintained.status!=='ready')return;const observed=await dateRuntime.request();if(!valid()||['failed','needs-calibration','cancelled','no-calendar','disabled'].includes(observed.status))return;
   let selection=await repository.captureWorldDynamics(target);if(!valid())return;let wanted=candidate(selection);if(!wanted?.forward)return;const attempt=key(target,wanted.date);if(attempts.has(attempt)||!canGenerate())return;
   if(controller.isGenerating()){const success=await controller.waitForGeneration();if(!valid()||!success)return;selection=await repository.captureWorldDynamics(target);if(!valid())return;wanted=candidate(selection);if(!wanted?.forward||attempts.has(key(target,wanted.date)))return;}
-  if(!canGenerate())return;mark(target,wanted.date);const token=++chain;status={status:'generating',date:copy(wanted.date)};onRun({running:true,token});
+  if(!canGenerate()||controller.isAutomaticBlocked?.())return;mark(target,wanted.date);const token=++chain;status={status:'generating',date:copy(wanted.date)};onRun({running:true,token});
   try{
    const success=await controller.generate({automatic:true});if(!valid()||!success)return;
    selection=await repository.captureWorldDynamics(target);if(!valid())return;recordCurrent({...selection,target});wanted=candidate(selection);if(!wanted)return;
    const end=adapter.captureSummarySource(target).messages.at(-1)?.floor??-1,more=materialEnabled(selection.worldDynamics.config,'storyContext')&&end>selection.worldDynamics.current.endFloor;
-   if(wanted.forward||more){mark(target,wanted.date);const caught=await controller.generate({automatic:true});if(valid()&&caught){const saved=await repository.captureWorldDynamics(target);if(valid())recordCurrent({...saved,target});}}
+   if(wanted.forward||more){if(controller.isAutomaticBlocked?.())return;mark(target,wanted.date);const caught=await controller.generate({automatic:true});if(valid()&&caught){const saved=await repository.captureWorldDynamics(target);if(valid())recordCurrent({...saved,target});}}
   }finally{onRun({running:false,token});if(current(target,ticket))status={status:'idle'};}
  }
  function request(){if(disposed)return Promise.resolve(copy(status));queued=true;if(pending)return pending;const job=(async()=>{await Promise.resolve();while(queued&&!disposed){queued=false;const ticket=serial;try{await check(ticket);}catch(error){if(!disposed&&ticket===serial)status={status:'failed',message:error?.message??'世界动态自动更新未完成'};}}return copy(status);})();pending=job;const done=()=>{if(pending===job){pending=null;if(queued&&!disposed)void request();}};job.then(done,done);return job;}

@@ -101,6 +101,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
  function open(route,force=false){
   if(!force&&!route.startsWith('reminders/')&&requestDiscard(()=>open(route,true)))return;
   if(state.invalidated||state.saving||!current())return;
+  if(state.route==='world'&&!['world','world-console'].includes(route))world?.releasePreview?.();
   if(world&&['world','world-console'].includes(route)){navigation++;stack.length=0;state.route='world';state.draft=null;state.error='';notify();void world.ensure().then(ready=>{if(ready&&route==='world-console'&&state.route==='world')world.openConsole();});return;}
   if(!writer?.inspect().saving)resetWriter();
   if(['home','manage'].includes(route)){if(route==='manage'&&world)void world.ensure().then(()=>notify());navigation++;stack.length=0;state.route=route;state.draft=null;state.pendingCalendar=null;state.error='';notify();return;}

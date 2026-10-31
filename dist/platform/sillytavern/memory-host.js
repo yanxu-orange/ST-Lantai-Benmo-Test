@@ -188,7 +188,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       visible: () => !!timeContainer && !summaryContent.hidden && summaryContent.contains(timeContainer),
       suspend() { if(this.visible()){summaryContent.hidden=true;summaryContent.inert=true;}timeController?.suspend(); },
       resume() { if(!timeView)return false;showAreaContainer(timeContainer);timeController.resume();return true; },
-      unmount() { timeView?.dispose();timeView=null;timeContainer=null;timeController?.suspend();this.settingsReturn=false; },
+      unmount() { worldController?.releasePreview();timeView?.dispose();timeView=null;timeContainer=null;timeController?.suspend();this.settingsReturn=false; },
     },
   };
   function focusAreaSettings(selector) { (summaryContent.querySelector(selector)??summaryContent.querySelector('.lt-main'))?.focus({preventScroll:true}); }
@@ -281,6 +281,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     });
   }
   function close() {
+    worldController?.releasePreview();
     interfaceDiagnostic.stop('panel-close');
     if (closing) return;
     closing = true;
@@ -594,7 +595,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function ensureWorldController(target){
     if(!worldController||!sameTarget(worldTarget,target)){
       worldController?.dispose();worldTarget=structuredClone(target);const notices=new Map();
-      worldController=createWorldDynamicsController({repository,history:worldHistory,onDomainChange:selection=>{if(selection){worldDisplayRuntime?.domainChanged(selection);worldAuto?.recordCurrent(selection);worldPrompts?.domainChanged(selection);}else{worldPrompts?.clear();worldWaiting?.clear();}void worldAuto?.request();},onGenerationAttempt:run=>worldAuto?.noteAttempt(run),onGenerationStart:run=>{worldAuto?.noteAttempt(run);if(!run.automatic){const token='manual:'+(++worldWaitSerial);notices.set(run.token,token);void worldWaiting?.show({token});}},onGenerationEnd:run=>{if(!run.automatic){const token=notices.get(run.token);notices.delete(run.token);worldWaiting?.hide(token);}},settings:runtime.settings,provider:runtime.provider,getContext,captureSource:t=>adapter.captureSummarySource(t),books:createWorldbookReader({getContext,...runtimeOptions.worldbookOptions}),allowed:()=>allowed('time'),onTime:()=>timeController?.open('home'),onManage:()=>timeController?.open('manage')});
+      worldController=createWorldDynamicsController({repository,history:worldHistory,dateRuntime:timeRuntime,onManualRelease:()=>void worldAuto?.request(),onDomainChange:selection=>{if(selection){worldDisplayRuntime?.domainChanged(selection);worldAuto?.recordCurrent(selection);worldPrompts?.domainChanged(selection);}else{worldPrompts?.clear();worldWaiting?.clear();}void worldAuto?.request();},onGenerationAttempt:run=>worldAuto?.noteAttempt(run),onGenerationStart:run=>{worldAuto?.noteAttempt(run);if(!run.automatic){const token='manual:'+(++worldWaitSerial);notices.set(run.token,token);void worldWaiting?.show({token});}},onGenerationEnd:run=>{if(!run.automatic){const token=notices.get(run.token);notices.delete(run.token);worldWaiting?.hide(token);}},settings:runtime.settings,provider:runtime.provider,getContext,captureSource:t=>adapter.captureSummarySource(t),books:createWorldbookReader({getContext,...runtimeOptions.worldbookOptions}),allowed:()=>allowed('time'),onTime:()=>timeController?.open('home'),onManage:()=>timeController?.open('manage')});
     }
     return worldController;
   }
