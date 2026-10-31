@@ -85,10 +85,15 @@ export function createFloorDisplayCoordinator({ document: doc = globalThis.docum
     const snapshot = formatter?.capture(source.floor) ?? null;
     for (const plan of plans) plan.bind?.(snapshot);
     const key = JSON.stringify([plans.map(plan => [plan.id, plan.content]), snapshot?.key ?? null]);
-    if (group.pending?.key === key || group.applied === key && !cleanup) return;
+    if (group.pending?.key === key && group.pending.valid() || group.applied === key && !cleanup) return;
     const job = { key }; group.pending = job;
-    const valid = () => group.pending === job && ownership(source)
-      && (!snapshot || snapshot.isCurrent()) && plans.every(plan => ownership(plan) && plan.current());
+    // Equal content can carry a newer runtime proof. Reuse only a live job;
+    // a superseded proof must not swallow the already-collected replacement.
+    const valid = job.valid = () => {
+      try { return group.pending === job && ownership(source)
+        && (!snapshot || snapshot.isCurrent()) && plans.every(plan => ownership(plan) && plan.current()); }
+      catch { return false; }
+    };
     void (async () => {
       const prepared = await Promise.all(plans.map(plan => plan.prepare(snapshot)));
       if (!valid()) return;

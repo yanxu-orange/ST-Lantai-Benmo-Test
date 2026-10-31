@@ -682,7 +682,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "8524a2386c9d92e3bf999bc9be7dba220a713086ce382e7d63ab9ce333a0fc29"
+    "sha256": "2aca0ed1a1b6661009fcbebb7b98d5110745748b1397d31f87941ba588ca3401"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1336,8 +1336,8 @@
   },
   {
     "path": "dist/platform/sillytavern/floor-display-coordinator.js",
-    "bytes": 9371,
-    "sha256": "8313ae3310bfff58488ac38e183b73a794d08aac0110cee20d8f8135aaf03192"
+    "bytes": 9625,
+    "sha256": "178bc8fd59c9c19d7b058a248c6c30b012cc56643b753c1eeafe0af26a151105"
   },
   {
     "path": "dist/platform/sillytavern/generation-diagnostic.js",
@@ -1581,13 +1581,13 @@
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-display-runtime.js",
-    "bytes": 6807,
-    "sha256": "974c112584941f90e48673925b2de2f1940b7dfe9a84fe6a69a2310c8b86a0a7"
+    "bytes": 7528,
+    "sha256": "536bb543adac7d9074a95c5483e83862aa43cf5aae83e320d3a535594de5757f"
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-display.js",
-    "bytes": 10157,
-    "sha256": "3cf6217b0b3689d73c76f5931ab9391e5b8df6e01b3146b602cbc28f74bca95c"
+    "bytes": 10479,
+    "sha256": "02ed9bf3dba444908a38ac53017ab8383860948ba9f794277e204bff5213d328"
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-prompts.js",
@@ -1682,6 +1682,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "dcece5da8574b3bf3d00186ddd783bc98b8d5912c0e278059045f5c6abc21fbd"
+    "sha256": "223bc35c0fda7e75d8e36db2a0827b8e0d67db6e058eb6d78f0718842a07995e"
   }
 ]
