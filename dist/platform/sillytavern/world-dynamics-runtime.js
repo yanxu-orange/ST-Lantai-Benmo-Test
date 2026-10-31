@@ -2,6 +2,9 @@ import {sameTarget} from '../../domain/memory/repository.js';
 import {featureGate} from '../../domain/controls/gate.js';
 import {reconcileWorldHistory} from '../../domain/world-dynamics/history.js';
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b),copy=structuredClone;
+// Host update notifications may change only adapter revisions. Outcomes follow
+// observed story/reply changes; raw revisions still guard the save transaction.
+const observedRow=({revision,...row})=>row;
 const compact=raw=>({epoch:raw.epoch,messages:raw.messages.map(({floor,identity,objectTicket,revision,role,swipeId,text})=>({floor,identity,objectTicket,revision,role,swipeId:swipeId??null,text}))});
 // Maintenance starts with host readiness, never with a mounted world page.
 export function createWorldDynamicsRuntime({adapter,repository,getContext,getControls,onChange=()=>{}}={}){
@@ -12,7 +15,7 @@ export function createWorldDynamicsRuntime({adapter,repository,getContext,getCon
  const current=(t,n)=>{try{return !disposed&&n===serial&&sameTarget(t,repository.captureTarget());}catch{return false;}};
  function observe(cutoff=Infinity){
   changedFrom=Math.min(changedFrom,cutoff);
-  try{const t=repository.captureTarget(),next=capture(t);if(sameTarget(t,target)&&baseline){const before=baseline.messages,after=next.messages;let i=0;while(i<Math.min(before.length,after.length)&&equal(baseline.epoch===next.epoch?before[i]:{...before[i],revision:0},baseline.epoch===next.epoch?after[i]:{...after[i],revision:0}))i++;if(i<before.length)changedFrom=Math.min(changedFrom,before[i].floor);}else{target=copy(t);changedFrom=Math.min(changedFrom,cutoff);}baseline=next;}catch{}
+  try{const t=repository.captureTarget(),next=capture(t);if(sameTarget(t,target)&&baseline){const before=baseline.messages,after=next.messages;let i=0;while(i<Math.min(before.length,after.length)&&equal(observedRow(before[i]),observedRow(after[i])))i++;if(i<before.length)changedFrom=Math.min(changedFrom,before[i].floor);}else{target=copy(t);changedFrom=Math.min(changedFrom,cutoff);}baseline=next;}catch{}
  }
  function request(){
   if(disposed)return Promise.resolve(status);observe();queued=true;if(pending)return pending;
@@ -26,9 +29,8 @@ export function createWorldDynamicsRuntime({adapter,repository,getContext,getCon
   return copy(status);})();pending=job;const clear=()=>{if(pending===job){pending=null;if(queued&&!disposed)void request();}};job.then(clear,clear);return job;
  }
  const on=(name,fn)=>{const type=context.eventTypes?.[name];if(type){events.on(type,fn);subscriptions.push([type,fn]);}};
- const floor=payload=>{const value=typeof payload==='number'?payload:payload?.messageId??payload?.mesId??payload?.index;return Number.isSafeInteger(value)&&value>=0?value:0;};
  for(const name of ['MESSAGE_SENT','MESSAGE_RECEIVED','CHARACTER_MESSAGE_RENDERED','USER_MESSAGE_RENDERED'])on(name,()=>void request());
- for(const name of ['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED'])on(name,payload=>{observe(floor(payload));void request();});
+ for(const name of ['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED'])on(name,()=>{observe();void request();});
  on('MESSAGE_DELETED',()=>{observe();void request();});
  on('GENERATION_STARTED',(_type,_options,dryRun)=>{if(dryRun!==true)void request();});
  for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{serial++;baseline=null;target=null;changedFrom=Infinity;blocked=false;emit({status:'loading'});void request();});

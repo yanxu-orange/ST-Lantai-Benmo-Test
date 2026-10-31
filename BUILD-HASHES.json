@@ -25,6 +25,11 @@
     "sha256": "a06af425d7035095586a51e0b3a4d7e21243ab3c63f00629cae604d8a5b28bc0"
   },
   {
+    "path": "dist/app/assets/workshop-statusbar-snow-ermine.regex.json",
+    "bytes": 4556,
+    "sha256": "21f14a25e1e1efbc9e25c5cd3c9b8198f1fcd068981342a47d2bc910f8cdb42d"
+  },
+  {
     "path": "dist/app/assets/workshop-statusbar.regex.json",
     "bytes": 4534,
     "sha256": "3a92d6b90680a9c82b106fe20fa8ba5d88d943187442089799ddd2e56c7b7056"
@@ -682,7 +687,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "2aca0ed1a1b6661009fcbebb7b98d5110745748b1397d31f87941ba588ca3401"
+    "sha256": "57c6570b936ad37941ada4c83c508841bae48787b1a6c910dc720e7edc4cfd36"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1596,8 +1601,8 @@
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-runtime.js",
-    "bytes": 4496,
-    "sha256": "3e1702a98ae938895fa93b3534758b8c4790661bba88efd5fb8f385f4a79b976"
+    "bytes": 4463,
+    "sha256": "0e49a7378fb07d531f77a195e7a9eba39db66d367f4f4909005cf2c5ed920865"
   },
   {
     "path": "dist/platform/sillytavern/worldbook-reader.js",
@@ -1682,6 +1687,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "223bc35c0fda7e75d8e36db2a0827b8e0d67db6e058eb6d78f0718842a07995e"
+    "sha256": "eb7cfa127f7332a156dbef3fa96f9bb5a2e91040b7dc356786cea0b40f382277"
   }
 ]
