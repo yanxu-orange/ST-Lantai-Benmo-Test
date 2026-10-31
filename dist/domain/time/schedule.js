@@ -1,5 +1,6 @@
 import {assertTime} from './data.js';
 import {createCalendar} from './calendar.js';
+import {occurrence} from './occurrence.js';
 import {storedSourceMessages} from '../summary/source.js';
 import {storedLatestSource,latestSourceKey,matchesLatestSource,matchesBackgroundLatestSource,createStoredLatestSourceMatcher} from '../latest/source.js';
 import {calendarCandidateKey,hasScheduleDateClue,emptyScheduleLedger,reconcileScheduleLedger,sameScheduleValue as equal} from './schedule-model.js';
@@ -11,6 +12,11 @@ const rowAt=(time,collection,id)=>time[collection]?.find(row=>row.id===id)??null
 const setRow=(time,collection,id,value)=>{time[collection]??=[];const index=time[collection].findIndex(row=>row.id===id);if(value===null){if(index>=0)time[collection].splice(index,1);}else if(index<0)time[collection].push(clone(value));else time[collection][index]=clone(value);};
 const lastChange=(time,id)=>ledger(time).receipts.findLast(row=>row.active&&row.changes.some(change=>change.id===id));
 const owned=(time,id)=>ledger(time).receipts.some(row=>row.changes.some(change=>change.id===id&&change.before===null));
+export function clearChangedScheduleCompletion(value,original){
+ const item=clone(value);
+ if(item.completedStart!==undefined&&(!original||['calendarId','startDate','repeat','durationDays'].some(key=>!equal(item[key],original[key]))))delete item.completedStart;
+ return item;
+}
 
 function sourceRetained(saved,source,versionsByReply){
  if(source.matches(saved))return versionsByReply===undefined||versionsByReply.get(saved.replyId)?.length===1;
@@ -93,7 +99,15 @@ export function applyScheduleResult(value,{plan,result,source,messages,replyVers
  for(const row of result.changes){
   const original=row.id===null?null:(rowAt(time,'items',row.id)??rowAt(time,'candidates',row.id)),isItem=original&&time.items.some(item=>item.id===original.id);
   if(row.action!=='upsert'){
-   if(isItem){const yearlyComplete=row.action==='complete'&&original.repeat==='yearly';change('items',original.id,{...original,status:yearlyComplete?'active':row.action==='cancel'?'cancelled':'completed',enabled:yearlyComplete?original.enabled:false,lastOutcome:row.action==='cancel'?'cancelled':'completed'},'updated');}
+   if(isItem){
+    if(row.action==='complete'&&original.kind==='schedule'&&['weekly','monthly'].includes(original.repeat)){
+     const date=plan.currentDate,definition=time.calendars.find(item=>item.id===original.calendarId);
+     if(!date?.day||date.calendarId!==original.calendarId||!definition)continue;
+     const calendar=createCalendar(definition),value=occurrence(calendar,original,date);
+     if(!value||calendar.compare(value.start,date)>0||calendar.compare(date,value.end)>0)continue;
+     change('items',original.id,{...original,status:'active',completedStart:value.start,lastOutcome:'completed'},'updated');
+    }else{const yearlyComplete=row.action==='complete'&&original.repeat==='yearly';change('items',original.id,{...original,status:yearlyComplete?'active':row.action==='cancel'?'cancelled':'completed',enabled:yearlyComplete?original.enabled:false,lastOutcome:row.action==='cancel'?'cancelled':'completed'},'updated');}
+   }
    else change('candidates',original.id,{...original,status:'ignored'},'updated');
    continue;
   }
@@ -113,14 +127,14 @@ export function applyScheduleResult(value,{plan,result,source,messages,replyVers
   if(priorCandidate&&priorCandidate.status!=='pending')continue;
   const arrangementChanged=!!isItem&&['dateText','startDate','repeat','durationDays'].some(key=>Object.hasOwn(row,key)&&!equal(row[key],original[key]));
   const certainty=row.certainty??(isItem&&!arrangementChanged?'confirmed':'uncertain');
-  const formal=row.kind==='schedule'&&validDate&&['once','yearly'].includes(repeat)&&certainty==='confirmed';
+  const formal=row.kind==='schedule'&&validDate&&['once','yearly','weekly','monthly'].includes(repeat)&&certainty==='confirmed';
   if(formal){
    if(priorCandidate)continue;
    const prior=isItem?original:original?.targetItem?rowAt(time,'items',original.itemId):null;
    const match=prior??time.items.find(item=>item.kind===row.kind&&calendarCandidateKey({...item,dateText})===calendarCandidateKey({kind:row.kind,title,calendarId,startDate,dateText}));
    if(match&&!prior){if(original)change('candidates',original.id,{...original,status:'adopted',itemId:match.id},'updated');continue;}
    const reactivate=!!prior&&['cancelled','completed'].includes(prior.status)&&(arrangementChanged||row.certainty==='confirmed');
-   const item={...(prior??{}),id:prior?.id??fresh(),kind:row.kind,title,calendarId,startDate,repeat,durationDays,advanceDays:prior?.advanceDays??plan.advanceDays,enabled:reactivate?true:prior?.enabled??true,remind:prior?.remind??true,show:prior?.show??true,description,instruction:prior?.instruction??'',status:reactivate||!prior?'active':prior.status??'active',dateText};
+   const item=clearChangedScheduleCompletion({...(prior??{}),id:prior?.id??fresh(),kind:row.kind,title,calendarId,startDate,repeat,durationDays,advanceDays:prior?.advanceDays??plan.advanceDays,enabled:reactivate?true:prior?.enabled??true,remind:prior?.remind??true,show:prior?.show??true,description,instruction:prior?.instruction??'',status:reactivate||!prior?'active':prior.status??'active',dateText},prior);
    change('items',item.id,item,prior?'updated':'added');if(original&&!isItem)change('candidates',original.id,{...original,status:'adopted',itemId:item.id},null);continue;
   }
   // An uncertain update cannot demote or erase a confirmed date. Keep its
@@ -149,6 +163,7 @@ export function ignoreScheduleCandidate(value,id){
 }
 export function adoptScheduleCandidate(value,id,item){
  let time=assertTime(value);const candidate=time.candidates?.find(row=>row.id===id);if(!candidate||candidate.status!=='pending'||item?.kind!==candidate.kind)throw new Error('候选或事项身份已变化');
+ item=clearChangedScheduleCompletion(item,candidate.targetItem);
  if(candidate.targetItem){
   const current=time.items.find(row=>row.id===candidate.itemId);
   if(item.id!==candidate.itemId||!equal(current,candidate.targetItem)||ledger(time).lockedIds.includes(candidate.itemId))throw new Error('候选对应的原事项已修改或删除，请重新读取');

@@ -656,8 +656,8 @@
   },
   {
     "path": "dist/app/time-controller.js",
-    "bytes": 30075,
-    "sha256": "28464c9362177bfbbcbd3f24d434743d267c3539b7da36316a21238bdd6e45da"
+    "bytes": 30252,
+    "sha256": "dd68040ab14e0d696b85709ddcbefef5e4a74402710881e1ee2185ec59d0e71b"
   },
   {
     "path": "dist/app/time-view.css",
@@ -666,8 +666,8 @@
   },
   {
     "path": "dist/app/time-view.js",
-    "bytes": 48142,
-    "sha256": "21f2fec5a3747d75bf46242f7df6116238d627ed2e00ec991b53b638adbb031c"
+    "bytes": 48318,
+    "sha256": "aa5f126cf0d8c32fd447a9b9f1f40bfec419135576e23311a5a55ed1a8189f44"
   },
   {
     "path": "dist/app/tracking-controller.js",
@@ -682,7 +682,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "8836d8404c8d8983c6105d9913f94c3505dc9c972b3095889b00c07bd13a5bd2"
+    "sha256": "8524a2386c9d92e3bf999bc9be7dba220a713086ce382e7d63ab9ce333a0fc29"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1051,8 +1051,8 @@
   },
   {
     "path": "dist/domain/time/data.js",
-    "bytes": 7536,
-    "sha256": "ac480ae17dce114c430f148b5786a3e86ab42afdeb9bcd7364d9f30722ce890d"
+    "bytes": 8262,
+    "sha256": "6b403c4b006f194535b595230d5ba00840972190dac8255f0a137f8b2738abb2"
   },
   {
     "path": "dist/domain/time/date-rule.js",
@@ -1076,8 +1076,8 @@
   },
   {
     "path": "dist/domain/time/occurrence.js",
-    "bytes": 7905,
-    "sha256": "133049c292824a74ab75b71ef6b029b7a9b7c0bccdcbeae8e37c2630994ed23f"
+    "bytes": 10788,
+    "sha256": "7c74966dd1827df2526d27f3d8951f4ecaa54ddeb5ecacab1c091d049252eebc"
   },
   {
     "path": "dist/domain/time/persistence.js",
@@ -1111,18 +1111,18 @@
   },
   {
     "path": "dist/domain/time/schedule-prompts.js",
-    "bytes": 1713,
-    "sha256": "a77ac164b7282f20ad13c07bd3349ea1154206074df4e0428a28c79184d9c7b1"
+    "bytes": 2119,
+    "sha256": "1eb08f871a2cd9dd0efc9879fa38f457a3b2e56067e3672e38ee2b141c378473"
   },
   {
     "path": "dist/domain/time/schedule-requests.js",
-    "bytes": 2412,
-    "sha256": "f5976c9db07fe45c02989827606d4b2a7360a5c640e7d97c7345c7bbddac97f6"
+    "bytes": 2796,
+    "sha256": "6e92ed3a3e1b580248a5faf32992f19c24eb514807a92eb8541cf4ff9bb807ed"
   },
   {
     "path": "dist/domain/time/schedule.js",
-    "bytes": 17955,
-    "sha256": "d07858a35b752be9361f2f0707bc194b6ed89a1503e37e6a55504303f660d0ab"
+    "bytes": 19020,
+    "sha256": "2cb5f708454864a5f4b028ee4859fb4f87ae500501d065deb1d50f53ecec8b2a"
   },
   {
     "path": "dist/domain/time/service.js",
@@ -1682,6 +1682,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "168cd6eb8cb0fbcb963dc4613afe1b2928d8a7510b1f3ca63ab930528f84906d"
+    "sha256": "dcece5da8574b3bf3d00186ddd783bc98b8d5912c0e278059045f5c6abc21fbd"
   }
 ]

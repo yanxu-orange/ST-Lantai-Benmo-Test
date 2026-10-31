@@ -42,7 +42,12 @@ export function assertTime(value){
   if(item.startYear!=null&&(!Number.isSafeInteger(item.startYear)||item.startYear<1||item.startYear>9999))throw new Error('起始年份无效');
   if(item.status!==undefined&&!['active','completed','cancelled'].includes(item.status))throw new Error('日程状态无效');
   if(item.show!=null&&typeof item.show!=='boolean')throw new Error('日历显示开关无效');
-  if(!['once','yearly'].includes(item.repeat)||!Number.isSafeInteger(item.durationDays)||item.durationDays<1||item.durationDays>366||(item.advanceDays===null?item.kind==='schedule':!integer(item.advanceDays)||item.advanceDays>365))throw new Error('时间事项区间无效');
+  if(!(item.kind==='schedule'?['once','yearly','weekly','monthly']:['once','yearly']).includes(item.repeat)||!Number.isSafeInteger(item.durationDays)||item.durationDays<1||item.durationDays>366||(item.advanceDays===null?item.kind==='schedule':!integer(item.advanceDays)||item.advanceDays>365))throw new Error('时间事项区间无效');
+  if(item.completedStart!==undefined){
+   if(item.kind!=='schedule'||!['weekly','monthly'].includes(item.repeat)||!item.completedStart||Object.getPrototypeOf(item.completedStart)!==Object.prototype||Object.keys(item.completedStart).length!==4||!['calendarId','year','month','day'].every(key=>Object.hasOwn(item.completedStart,key)))throw new Error('本次完成标记不适用于该日程');
+   const completed=calendar.validate(item.completedStart),distance=calendar.distance(item.startDate,completed);
+   if(distance<0||(item.repeat==='weekly'?distance%7!==0:completed.day!==item.startDate.day))throw new Error('本次完成日期不属于该重复日程');
+  }
   if(item.kind==='anniversary'&&item.durationDays!==1)throw new Error('纪念日持续天数须为1');
   if(typeof item.enabled!=='boolean'||typeof item.remind!=='boolean'||typeof item.description!=='string'||typeof item.instruction!=='string')throw new Error('时间事项字段无效');
  }

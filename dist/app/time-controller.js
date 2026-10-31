@@ -1,5 +1,5 @@
 import {worldPreferences,WORLD_CONTEXT_INTRO} from '../domain/world-dynamics/preferences.js';
-import {adoptScheduleCandidate,ignoreScheduleCandidate,markScheduleManual} from '../domain/time/schedule.js';
+import {adoptScheduleCandidate,ignoreScheduleCandidate,markScheduleManual,clearChangedScheduleCompletion} from '../domain/time/schedule.js';
 import {recognizeRecentDate} from '../domain/time/tracker.js';
 import {normalizeChronology,toUnifiedYear} from '../domain/time/chronology.js';
 import {sameTarget} from '../domain/memory/repository.js';
@@ -13,8 +13,8 @@ import {defaultTimeReminders} from '../shared/settings/time-reminders.js';
 import {createLatestSettingsWrite} from './latest-settings-write.js';
 const copy=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const names={schedule:'日程',anniversary:'纪念日',holiday:'节日'};
-function validatedItemDraft(draft){
- const item={...draft,title:typeof draft.title==='string'?draft.title.trim():''};
+function validatedItemDraft(draft,original){
+ const item=clearChangedScheduleCompletion({...draft,title:typeof draft.title==='string'?draft.title.trim():''},original);
  if(!item.title||item.title.length>160)throw new Error('名称须为1–160个字符');
  if(item.kind==='anniversary'&&item.startYear!=null&&item.startDate&&item.startYear>item.startDate.year)throw new Error('发生年份不能晚于所填日期');
  return item;
@@ -126,7 +126,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   const calendarId=state.time.calendars.some(row=>row.id===candidate.calendarId)?candidate.calendarId:state.time.activeCalendarId;
   const startDate=candidate.startDate&&candidate.startDate.calendarId===calendarId?copy(candidate.startDate):{calendarId,year:null,month:null,day:null};
   const original=candidate.targetItem?copy(candidate.targetItem):null;
-  navigate(`candidate/${candidate.kind}`,{...(original??{}),id:original?.id??id(),kind:candidate.kind,title:candidate.title,calendarId,startDate,repeat:['once','yearly'].includes(candidate.repeat)?candidate.repeat:(original?.repeat??(candidate.kind==='anniversary'?'yearly':'once')),durationDays:candidate.durationDays,advanceDays:original?.advanceDays??(candidate.kind==='anniversary'?null:3),enabled:original?.enabled??true,remind:original?.remind??true,show:original?.show??true,description:candidate.description,instruction:original?.instruction??''});
+  navigate(`candidate/${candidate.kind}`,{...(original??{}),id:original?.id??id(),kind:candidate.kind,title:candidate.title,calendarId,startDate,repeat:(candidate.kind==='schedule'?['once','yearly','weekly','monthly']:['once','yearly']).includes(candidate.repeat)?candidate.repeat:(original?.repeat??(candidate.kind==='anniversary'?'yearly':'once')),durationDays:candidate.durationDays,advanceDays:original?.advanceDays??(candidate.kind==='anniversary'?null:3),enabled:original?.enabled??true,remind:original?.remind??true,show:original?.show??true,description:candidate.description,instruction:original?.instruction??''});
   state.candidateOriginal=copy(candidate);notify();return true;
  }
  async function ignoreCandidate(candidateId=state.candidateOriginal?.id){
@@ -164,14 +164,14 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
     const definition=time.calendars.find(row=>row.id===draft.calendarId);
     if(!definition||!equal(definition,before.calendars.find(row=>row.id===draft.calendarId)))throw new Error('请先设置历法，或重新打开候选');
     if(!draft.startDate||!['year','month','day'].every(key=>Number.isSafeInteger(draft.startDate[key])))throw new Error('启用前请补全完整日期');
-    const item={...validatedItemDraft(draft),enabled:true};
+    const item={...validatedItemDraft(draft,original.targetItem),enabled:true};
     if(['completed','cancelled'].includes(item.status))item.status='active';
     return adoptScheduleCandidate(time,original.id,item);
    });});
   }
   if(route.startsWith('edit/')){
    const original=state.editorOriginal??undefined;
-   return explicit(async()=>{await persist(time=>{const found=time.items.find(item=>item.id===draft.id);if(!equal(found,original))throw new Error('此事项已变化，请重新打开');const item=validatedItemDraft(draft);if(item.enabled&&original?.enabled===false&&['completed','cancelled'].includes(item.status))item.status='active';if(item.dateRule?.type==='fixed'&&calendar().definition.type==='dynasty'&&!item.dateRule.monthId){const month=calendar().months(state.cursor.year)[item.dateRule.month-1];if(!month)throw new Error('月份不存在');item.dateRule={...item.dateRule,monthId:month.id};}time.items=found?time.items.map(row=>row.id===item.id?item:row):[...time.items,item];return found?markScheduleManual(time,item.id):time;});});
+   return explicit(async()=>{await persist(time=>{const found=time.items.find(item=>item.id===draft.id);if(!equal(found,original))throw new Error('此事项已变化，请重新打开');const item=validatedItemDraft(draft,original);if(item.enabled&&original?.enabled===false&&['completed','cancelled'].includes(item.status))item.status='active';if(item.dateRule?.type==='fixed'&&calendar().definition.type==='dynasty'&&!item.dateRule.monthId){const month=calendar().months(state.cursor.year)[item.dateRule.month-1];if(!month)throw new Error('月份不存在');item.dateRule={...item.dateRule,monthId:month.id};}time.items=found?time.items.map(row=>row.id===item.id?item:row):[...time.items,item];return found?markScheduleManual(time,item.id):time;});});
   }
   if(route.startsWith('reminders/'))return explicit(async({guard})=>{const kind=route.split('/')[1],latest=settings.captureTimeReminders();if(!settings.matchesTimeReminders(config))throw new Error('提醒设置已变化，请重新打开');const receipt=await settings.saveTimeReminders({...latest.reminders,[kind]:draft},{expectedEpoch:latest.epoch,isCurrent:guard});if(receipt.status!=='committed')throw new Error('提醒设置保存尚未确认');config=settings.captureTimeReminders();state.reminders=copy(config.reminders);});
   if(route==='calibrate'&&state.pendingCalendar&&state.time.activeCalendarId&&!confirmCalendar){state.confirm='calendar';notify();return false;}

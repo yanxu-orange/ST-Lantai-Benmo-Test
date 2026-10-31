@@ -10,6 +10,43 @@ function at(calendar, item, start) {
   return {start, end, duration};
 }
 function atOrNull(calendar,item,start){return start?at(calendar,item,start):null;}
+function weeklyOccurrence(calendar,item,today,start){
+  const duration=positive(item.durationDays,'持续天数'),distance=calendar.distance(start,today);
+  if(distance<0)return at(calendar,item,start);
+  const period=Math.floor(distance/7);
+  // Inspect only the bounded overlapping window, never replay elapsed weeks.
+  for(let index=period;index>=0;index--){
+    const point=calendar.shiftDays(start,index*7);
+    if(calendar.distance(point,today)>=duration)break;
+    const value=at(calendar,item,point);if(value)return value;
+  }
+  return atOrNull(calendar,item,calendar.shiftDays(start,(period+1)*7));
+}
+function nextMonthlyOccurrence(calendar,item,after,start){
+  const definition=calendar.definition,cycleMonths=definition.type==='modern'?12:definition.type==='custom'?definition.months.length:definition.importedYears.reduce((sum,year)=>sum+year.months.length,0);
+  let month={...after,day:1};
+  // Search at most one native calendar cycle, retaining the original day.
+  for(let index=0;month&&index<=cycleMonths;index++,month=calendar.shiftMonths(month,1)){
+    if(start.day>calendar.months(month.year)[month.month-1].days)continue;
+    const date={...month,day:start.day};
+    if(calendar.compare(date,start)>=0&&calendar.compare(date,after)>0)return at(calendar,item,date);
+  }
+  return null;
+}
+function monthlyOccurrence(calendar,item,today,start){
+  const duration=positive(item.durationDays,'持续天数');
+  if(calendar.compare(today,start)<0)return at(calendar,item,start);
+  const firstMonth={...start,day:1},thisMonth={...today,day:1};
+  const earliest=calendar.shiftDays(today,1-duration)??calendar.fromOrdinal(0),earliestMonth={...earliest,day:1};
+  const point=month=>start.day<=calendar.months(month.year)[month.month-1].days?{...month,day:start.day}:null;
+  // The only possible ongoing occurrences start inside this duration window.
+  for(let month=thisMonth;month&&calendar.compare(month,firstMonth)>=0&&calendar.compare(month,earliestMonth)>=0;month=calendar.shiftMonths(month,-1)){
+    const date=point(month);if(!date||calendar.compare(date,today)>0)continue;
+    if(calendar.distance(date,today)>=duration)break;
+    const value=at(calendar,item,date);if(value)return value;
+  }
+  return nextMonthlyOccurrence(calendar,item,today,start);
+}
 export function occurrence(calendar, item, today) {
   calendar.validate(today);
   if (!item || item.calendarId !== calendar.definition.id || item.enabled === false) return null;
@@ -34,6 +71,8 @@ export function occurrence(calendar, item, today) {
     return ongoing;
   }
   const start = calendar.validate(item.startDate);
+  if(item.kind==='schedule'&&item.repeat==='weekly')return weeklyOccurrence(calendar,item,today,start);
+  if(item.kind==='schedule'&&item.repeat==='monthly')return monthlyOccurrence(calendar,item,today,start);
   if (!['once','yearly'].includes(item.repeat)) throw new Error('重复方式无效');
   if (item.repeat === 'once') return at(calendar, item, start);
   const duration = item.kind === 'anniversary' ? 1 : positive(item.durationDays, '持续天数');
@@ -54,8 +93,12 @@ export function occurrence(calendar, item, today) {
 }
 export function reminderFact(calendar, item, today, {advanceDays = item?.advanceDays ?? 0} = {}) {
   if (!Number.isSafeInteger(advanceDays) || advanceDays < 0 || advanceDays > 365) throw new RangeError('提前提醒天数无效');
-  const value = occurrence(calendar, item, today);
+  let value = occurrence(calendar, item, today);
   if (!value) return null;
+  if(item.kind==='schedule'&&['weekly','monthly'].includes(item.repeat)&&item.completedStart&&calendar.compare(item.completedStart,today)<=0&&calendar.compare(item.completedStart,value.start)===0){
+    value=item.repeat==='weekly'?atOrNull(calendar,item,calendar.shiftDays(value.start,7)):nextMonthlyOccurrence(calendar,item,value.start,calendar.validate(item.startDate));
+    if(!value)return null;
+  }
   const until = calendar.distance(today, value.start);
   const since = -until;
   if (until > advanceDays || calendar.compare(today, value.end) > 0) return null;
