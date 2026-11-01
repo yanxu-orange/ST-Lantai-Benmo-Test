@@ -1,10 +1,11 @@
 import { trackSettingsSave, waitForSettingsSaves, hasSettingsSaves } from './pending-settings-saves.js';
-import {WORKSHOP_HIDE_RULE,WORKSHOP_STATUSBAR_RULE,WORKSHOP_STATUSBAR_LEGACY_RULE} from '../../domain/workshop/regex-rule.js';
+import {WORKSHOP_HIDE_RULE,WORKSHOP_STATUSBAR_RULE,WORKSHOP_STATUSBAR_PREVIOUS_RULE,WORKSHOP_STATUSBAR_LEGACY_RULE} from '../../domain/workshop/regex-rule.js';
 export const HIDE_REGEX_MARKER='workshop-hide-regex-v1';
-export const STATUS_REGEX_MARKER='workshop-statusbar-regex-v1';
+export const PREVIOUS_STATUS_REGEX_MARKER='workshop-statusbar-regex-v1';
+export const STATUS_REGEX_MARKER='workshop-statusbar-regex-v2';
 const definitions=[
   {rule:WORKSHOP_HIDE_RULE,marker:HIDE_REGEX_MARKER,names:['时间与关键词记忆｜隐藏模块回收块','兰台本末｜隐藏工坊回收块'],patterns:['/<tkm_result\\b[^>]*>[\\s\\S]*?<\\/tkm_result>/g']},
-  {rule:WORKSHOP_STATUSBAR_RULE,marker:STATUS_REGEX_MARKER,names:['砚序｜章节状态栏・杂志风・日夜持久化 v1'],patterns:[]},
+  {rule:WORKSHOP_STATUSBAR_RULE,marker:STATUS_REGEX_MARKER,previousMarker:PREVIOUS_STATUS_REGEX_MARKER,names:['砚序｜章节状态栏・杂志风・日夜持久化 v1'],patterns:[]},
 ];
 function matches(rule,definition){
   return rule?.id===definition.rule.id||rule?.scriptName===definition.rule.scriptName||definition.names.includes(rule?.scriptName)
@@ -12,6 +13,8 @@ function matches(rule,definition){
       &&[definition.rule.findRegex,...definition.patterns].includes(rule?.findRegex);
 }
 export const isWorkshopHideRule=rule=>matches(rule,definitions[0]);
+const sameRule=(actual,expected)=>actual&&Object.entries(expected).every(([key,value])=>JSON.stringify(actual[key])===JSON.stringify(value));
+const suppliedStatusbar=rule=>[WORKSHOP_STATUSBAR_PREVIOUS_RULE,WORKSHOP_STATUSBAR_LEGACY_RULE].some(previous=>rule.findRegex===previous.findRegex&&rule.replaceString===previous.replaceString);
 export function createWorkshopRegexInstaller({settings,getContext,fetchImpl=globalThis.fetch,
   loadEngine=()=>import('/scripts/extensions/regex/engine.js'),loadHost=()=>import('/script.js'),readServerRules,saveHost,isCurrent=()=>true}={}){
   let pending=null;
@@ -34,7 +37,9 @@ export function createWorkshopRegexInstaller({settings,getContext,fetchImpl=glob
     for(const definition of definitions){
       let snapshot=settings.captureWorkshop();
       if(snapshot.workshop.imports.includes(definition.marker))continue;
-      const attempted=definition.marker+'-attempted',previousAttempt=snapshot.workshop.imports.includes(attempted);
+      const attempted=definition.marker+'-attempted',previousAttempt=snapshot.workshop.imports.includes(attempted)
+        ||!!definition.previousMarker&&snapshot.workshop.imports.includes(definition.previousMarker+'-attempted');
+      const previouslyHandled=!!definition.previousMarker&&snapshot.workshop.imports.includes(definition.previousMarker);
       if(!previousAttempt)await saveMarker(snapshot,attempted);
       const hostSettings=getContext().extensionSettings;
       // Finish the earlier marker snapshot before installing host regex data.
@@ -43,11 +48,19 @@ export function createWorkshopRegexInstaller({settings,getContext,fetchImpl=glob
       const rules=engine.getScriptsByType(engine.SCRIPT_TYPES.GLOBAL);
       if(!Array.isArray(rules))throw new Error('无法读取酒馆正则');
       const index=rules.findIndex(rule=>matches(rule,definition)),next=structuredClone(rules);
+      // A completed older install followed by deletion is a user choice, not
+      // a fresh install. Advancing the marker must not resurrect that rule.
+      if(index<0&&previouslyHandled){
+        await settings.ensure();check();snapshot=settings.captureWorkshop();
+        if(getContext().extensionSettings!==hostSettings)throw new Error('酒馆设置已变化，正则安装已停止');
+        if(!snapshot.workshop.imports.includes(definition.marker))await saveMarker(snapshot,definition.marker);
+        outcomes.push({name:definition.rule.scriptName,status:'kept-missing'});continue;
+      }
       if(index<0&&previousAttempt)throw new Error('这条正则曾安装中断或已被删除，已保留现状；可手动导入正则文件');
       if(index<0)next.push(structuredClone(definition.rule));
       else {
         if(definition.names.includes(next[index].scriptName))next[index].scriptName=definition.rule.scriptName;
-        if(definition.marker===STATUS_REGEX_MARKER&&next[index].findRegex===WORKSHOP_STATUSBAR_LEGACY_RULE.findRegex&&next[index].replaceString===WORKSHOP_STATUSBAR_LEGACY_RULE.replaceString)next[index].replaceString=WORKSHOP_STATUSBAR_RULE.replaceString;
+        if(definition.marker===STATUS_REGEX_MARKER&&suppliedStatusbar(next[index]))next[index].replaceString=WORKSHOP_STATUSBAR_RULE.replaceString;
       }
       check();if(JSON.stringify(next)!==JSON.stringify(rules))await engine.saveScriptsByType(next,engine.SCRIPT_TYPES.GLOBAL);
       check();
@@ -57,10 +70,13 @@ export function createWorkshopRegexInstaller({settings,getContext,fetchImpl=glob
       if(getContext().extensionSettings!==hostSettings)throw new Error('酒馆设置已变化，正则安装已停止');
       const saving=save();trackSettingsSave(hostSettings,saving);await saving;
       check();const disk=await readDisk();check();
-      if(!Array.isArray(disk)||!disk.some(rule=>matches(rule,definition)))throw new Error('正则保存尚未确认');
+      if(getContext().extensionSettings!==hostSettings)throw new Error('酒馆设置已变化，正则安装已停止');
+      const expected=next[index<0?next.length-1:index];
+      if(!Array.isArray(disk)||!disk.some(rule=>sameRule(rule,expected)))throw new Error('正则保存尚未确认');
       // An API save can stage while the independent regex readback is in
       // flight. Rejoin the existing settings queue before capturing its marker.
       await settings.ensure();check();
+      if(getContext().extensionSettings!==hostSettings)throw new Error('酒馆设置已变化，正则安装已停止');
       snapshot=settings.captureWorkshop();
       if(!snapshot.workshop.imports.includes(definition.marker))await saveMarker(snapshot,definition.marker);
       outcomes.push({name:definition.rule.scriptName,status:index<0?'installed':'kept-existing'});

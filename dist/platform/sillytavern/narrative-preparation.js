@@ -51,9 +51,9 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materia
     readOriginal:sharedChoice==='original',
     readMemory:sharedChoice==='memory',
   }:null;
-  const sharedRange=summary&&joint?{...range,startFloor:Math.max(range.startFloor,Math.min(...kinds.map(kind=>narrativeHighWater(domain,kind)+1)))}:null;
+  const sharedRange=summary&&joint&&!restart?{...range,startFloor:Math.max(range.startFloor,Math.min(...kinds.map(kind=>narrativeHighWater(domain,kind)+1)))}:null;
   for(const kind of kinds){
-    const taskRange=sharedRange??(summary?{...range,startFloor:Math.max(range.startFloor,narrativeHighWater(domain,kind)+1)}:range);
+    const taskRange=sharedRange??(summary&&!restart?{...range,startFloor:Math.max(range.startFloor,narrativeHighWater(domain,kind)+1)}:range);
     tasks.push(await prepareNarrativeUpdate(projected,raw,{kind,...taskRange,events,card,originalOnly,materialSelection,sharedMaterials:joint?tasks[0]:null,...(jointBudget!==undefined?{jointBudget}:{}),...(originalOnly&&sentFloors?{sentFloors}:{}),rules,countTokens:count,deferAccounting:jointBudget!==undefined,isCurrent:()=>{guard();return true;}}));
   }
   guard();

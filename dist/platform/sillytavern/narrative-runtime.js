@@ -1,3 +1,4 @@
+import {assertSummaryNarrativeContinuation} from '../../domain/summary/data.js';
 import {captureSingleCharacterCard} from './character-card.js';
 import {recordNarrativeManual} from '../../domain/narrative/rollback.js';
 import {compactNarrativePool, resolveNarrativeSource, importNarrativeSource, importNarrativeProgress, semanticProgress, semanticLatest} from '../../domain/narrative/source-pool.js';
@@ -43,6 +44,7 @@ function abortable(start,signal){
 // Summary commits own automatic generation. Foreground replies only invalidate
 // stale work and injection; they never start independent narrative API calls.
 export function createNarrativeRuntime({repository,adapter,settings,provider,getGenerationSettings,getContext,getControls,captureSource,getSummaryActive,manager=createBackgroundTaskManager()}={}) {
+  const continuationAuthorizations=new Map();
   let disposed=false,target=null,lastTarget=null,selection=null,serial=0,readSerial=0,injectionSerial=0,mutationTail=Promise.resolve();
   let receipt=null,foregroundEnded=false,foregroundStopped=false,foregroundType=null,foregroundActive=false,quietDepth=0;
   let state={target:null,narrative:emptyNarrative(),self:emptyStatus(),outline:emptyStatus(),writeBlocked:false,error:''};
@@ -75,7 +77,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const captured=await repository.captureNarrative(t,readView);
     if(disposed||ticket!==serial||readTicket!==readSerial||!current(t))throw new Error('聊天已变化，请重新读取本末');
     unconfirmed=false;
-    if(!sequencePromise){const pending=captured.narrative.pendingRun;sequenceRun=pending?{...clone(pending),sourcePool:clone(captured.narrative.sourcePool??[]),...(pending.kinds.length>1?{jointBudget:pending.jointBudget??narrativeJointBudget(captured.narrative)}:{}),target:clone(t),stage:pending.status,error:pending.status==='failed'?'上次叙事批次未完成，请重试或跳过':'已保留完成的批次，请继续',pauseRequested:pending.pauseRequested===true,skipped:0}:null;reviewGuards=null;compactActiveSources(sequenceRun);}
+    if(!sequencePromise){const pending=captured.narrative.pendingRun;sequenceRun=pending?{...clone(pending),sourcePool:clone(captured.narrative.sourcePool??[]),...(pending.kinds.length>1?{jointBudget:pending.jointBudget??narrativeJointBudget(captured.narrative)}:{}),target:clone(t),stage:pending.status,error:pending.status==='failed'?'上次叙事批次未完成，请重试或跳过':'已保留完成的批次，请继续',pauseRequested:pending.pauseRequested===true,skipped:0}:null;if(sequenceRun?.summaryContinuation){const original=sequenceRun.summaryContinuation.target;if(original.chatId===t.chatId&&original.rootId===t.rootId){const choice={...sequenceRun.summaryContinuation,target:clone(t)};const required=sequenceRun.failedKinds.length?sequenceRun.failedKinds:choice.kinds;if(required.every(kind=>allowed(kind)&&(captured.narrative.preferences[kind].autoSource??'event')==='event')&&(await Promise.all(required.map(kind=>summaryContinuationDigest(captured.narrative,kind)))).every((hash,index)=>hash===choice.base[required[index]])){if(disposed||ticket!==serial||readTicket!==readSerial||!current(t))throw new Error('聊天已变化，请重新读取本末');choice.authorization=issueContinuationAuthorization(t,choice.kinds,choice.range,required);}sequenceRun.summaryContinuation=choice;}}reviewGuards=null;compactActiveSources(sequenceRun);}
     adopt(t,captured,{publish:false});publishRun();return snapshot();
   }
   function clearSlots(){
@@ -97,6 +99,8 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     unconfirmed=true;cancel();clearSlots();
     state={...state,preferencesWriteBlocked:unconfirmed||!target||!current(target),writeBlocked:true,error:error.message};notify();
   }
+  function issueContinuationAuthorization(t,selected,range,required=selected){const token=crypto.randomUUID();continuationAuthorizations.set(token,{target:clone(t),kinds:[...selected],range:clone(range),proofs:required.map(kind=>proof(kind,t))});while(continuationAuthorizations.size>256)continuationAuthorizations.delete(continuationAuthorizations.keys().next().value);return token;}
+  function continuationAuthorized(choice){const grant=continuationAuthorizations.get(choice?.authorization);return !!grant&&sameTarget(grant.target,choice.target)&&equal(grant.kinds,choice.kinds)&&equal(grant.range,choice.range)&&grant.proofs.every(matches);}
   function proof(kind,t=repository.captureTarget()){
     return {kind,target:clone(t),serial,epoch:epochs[kind],master:controls()?.capture('enabled'),category:controls()?.capture(kind)};
   }
@@ -167,7 +171,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     let failedKinds=active.failedKinds.filter(kind=>kind!==completedKind),index=active.index;
     if(completedKind&&!failedKinds.length){index++;failedKinds=[];}
     if(index>=active.ranges.length)return null;
-    const pending = {ranges:clone(active.ranges),index,kinds:[...active.kinds],failedKinds,...(active.jointBudget!==undefined?{jointBudget:active.jointBudget}:{}),...(active.pairId&&index===active.index?{pairId:active.pairId}:{}),...(active.reviewBeforeCommit?{reviewBeforeCommit:true}:{}),...(active.regenerateLatest?{regenerateLatest:true}:{}),...(active.pauseRequested?{pauseRequested:true}:{}),...(active.review&&index===active.index?{review:clone(active.review)}:{}),restart:active.restart===true,summary:active.summary===true,status:active.review&&index===active.index?'awaiting-review':active.status==='failed'?'failed':'paused',...(active.summarySource?{summarySource:active.summarySource}:{}),...(active.sentFloors?{sentFloors:storedSourceMessages(active.sentFloors),summarySnapshot:clone(active.summarySnapshot)}:{})};
+    const pending = {ranges:clone(active.ranges),index,kinds:[...active.kinds],failedKinds,...(active.jointBudget!==undefined?{jointBudget:active.jointBudget}:{}),...(active.pairId&&index===active.index?{pairId:active.pairId}:{}),...(active.summaryContinuation?{summaryContinuation:clone(active.summaryContinuation)}:{}),...(active.reviewBeforeCommit?{reviewBeforeCommit:true}:{}),...(active.regenerateLatest?{regenerateLatest:true}:{}),...(active.pauseRequested?{pauseRequested:true}:{}),...(active.review&&index===active.index?{review:clone(active.review)}:{}),restart:active.restart===true,summary:active.summary===true,status:active.review&&index===active.index?'awaiting-review':active.status==='failed'?'failed':'paused',...(active.summarySource?{summarySource:active.summarySource}:{}),...(active.sentFloors?{sentFloors:storedSourceMessages(active.sentFloors),summarySnapshot:clone(active.summarySnapshot)}:{})};
     if (pending.summarySnapshot) pending.summarySnapshot=importNarrativeSource(owner,pending.summarySnapshot,active);
     if (pending.review) for (const kind of pending.review.kinds) pending.review.progress[kind]=importNarrativeProgress(owner,pending.review.progress[kind],active);
     return pending;
@@ -286,6 +290,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const t=active.target,inputsAtStart=await captureInputs(t),root=inputsAtStart.root,raw=inputsAtStart.raw,captured={...inputsAtStart.captured,narrative:{...inputsAtStart.captured.narrative,preferences:clone(active.preferences)}},projectedAtStart=reconcileNarrativeSource(captured.narrative,raw).domain;
     if(!authorized())throw new Error('聊天或功能开关已变化，生成已停止');
     const proofs=authority.filter(({kind})=>allowed(kind)&&(!active.summary||(captured.narrative.preferences[kind].autoSource??'event')===(active.summarySource??'event'))&&(!options.only||options.only.includes(kind))&&(active.restart||active.regenerateLatest||(active.summary?narrativeHighWater(captured.narrative,kind):(projectedAtStart.progress[kind]?.lastProcessedFloor??-1))<range.endFloor));
+    if(active.summaryContinuation){const choice=active.summaryContinuation;if(!continuationAuthorized(choice))throw new Error('本次自述与大纲授权已失效，请跳过后重新确认');const required=options.only??active.kinds;if(required.some(kind=>!allowed(kind)||(inputsAtStart.captured.narrative.preferences[kind].autoSource??'event')!=='event'))throw new Error('本次自述与大纲功能或来源已变化，请跳过后重新确认');if(!sameTarget(choice.target,t)||!equal(choice.range,{start:range.startFloor,end:range.endFloor}))throw new Error('本次自述与大纲替换范围已变化，请跳过后重新确认');for(const {kind} of proofs)if(await summaryContinuationDigest(inputsAtStart.captured.narrative,kind)!==choice.base[kind])throw new Error('原自述与大纲已变化，请跳过本批后重新确认替换');if(!authorized())throw new Error('聊天或功能开关已变化，生成已停止');}
     if(!proofs.length){active.index++;await persistCheckpoint(active);return;}
     if(active.summarySnapshot&&!matchesStoredNarrativeSource(active.summarySnapshot,raw,active))throw new Error('已保存总结的原文来源已变化，请跳过本批');
     const durable=active.reviewBeforeCommit&&!active.summary,bind=durable?digest:async()=>null;
@@ -294,6 +299,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     const materialEpochs=active.kinds.map(kind=>[kind,epochs[kind]]);
     const preparationCurrent=()=>!unconfirmed&&!signal?.aborted&&proofs.every(matches)&&materialEpochs.every(([kind,epoch])=>epochs[kind]===epoch);
     const valid=()=>{try{
+      if(active.summaryContinuation&&!continuationAuthorized(active.summaryContinuation))return false;
       if(!preparationCurrent()||!equal(generation(),config)||usesCard&&!equal(cardSnapshot(),card))return false;
       const currentRaw=source(t),currentRoot=typeof adapter.peekConfirmed==='function'?adapter.peekConfirmed(t):null;
       const events=currentRoot?projectNarrativeMemory(currentRoot,currentRaw):null;
@@ -395,21 +401,34 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
     sequenceRun={...plan,preferences,reviewBeforeCommit:options.reviewBeforeCommit===true,target:clone(requestedTarget),index:0,status:'running',stage:'preparing',error:'',failedKinds:[],pauseRequested:false,skipped:0};
     return drive(sequenceRun);
   }
-  async function afterSummaryCommit({target:t,startFloor,endFloor,summarySource='event',sentFloors}){
-    if(!kinds.some(allowed))return {skipped:true};
+  async function summaryContinuationDigest(domain,kind){const progress=value=>value?{lastProcessedFloor:value.lastProcessedFloor,taskId:value.taskId,updatedAt:value.updatedAt,range:value.sourceSnapshot.requestedRange}:null,latest=domain.latestGeneration?.[kind];return digest({entries:domain[kind],progress:progress(domain.progress[kind]),latest:latest?{recordId:latest.recordId,pairId:latest.pairId,range:latest.range,baseline:{entries:latest.baseline.entries,progress:progress(latest.baseline.progress)}}:null,highWater:narrativeHighWater(domain,kind),rollback:domain.rollback?.[kind]??null,targets:roleTargets(domain.preferences[kind],kind)});}
+  async function planSummaryContinuation({target:t=repository.captureTarget(),startFloor,endFloor,authorization}={}){
+    const received=kinds.filter(allowed).map(kind=>proof(kind,t)),captured=await repository.captureNarrative(t);
+    const active=kinds.filter(kind=>allowed(kind)&&(captured.narrative.preferences[kind].autoSource??'event')==='event');
+    const base=Object.fromEntries(await Promise.all(active.map(async kind=>[kind,await summaryContinuationDigest(captured.narrative,kind)])));
+    if(!current(t)||received.some(item=>!matches(item)))throw new Error('聊天或叙事设置已变化');
+    const range={start:startFloor,end:endFloor};if(authorization!==undefined&&!continuationAuthorized({authorization,target:t,range,kinds:active}))throw new Error('本次自述与大纲授权已失效，请重新确认');
+    return {target:clone(t),range,revision:captured.narrative.revision,kinds:active,base,authorization:authorization??issueContinuationAuthorization(t,active,range),overlap:active.length>0&&Math.max(startFloor,...active.map(kind=>narrativeHighWater(captured.narrative,kind)+1))>endFloor};
+  }
+  async function afterSummaryCommit({target:t,startFloor,endFloor,summarySource='event',sentFloors,narrativeContinuation}){
+    if(!narrativeContinuation&&!kinds.some(allowed))return {skipped:true};
     const received=kinds.filter(allowed).map(kind=>proof(kind,t));
     const captured=await repository.captureNarrative(t);
-    const active=kinds.filter(kind=>allowed(kind)&&(captured.narrative.preferences[kind].autoSource??'event')===summarySource);
+    const choice=narrativeContinuation?assertSummaryNarrativeContinuation(narrativeContinuation):null;
+    if(choice&&(summarySource!=='event'||!sameTarget(choice.target,t)||!equal(choice.range,{start:startFloor,end:endFloor})))throw new Error('本次自述与大纲选择已失效');
+    if(choice?.mode==='skip')return {skipped:true,reason:'already-processed'};
+    const active=choice?.mode==='replace'?[...choice.kinds]:kinds.filter(kind=>allowed(kind)&&(captured.narrative.preferences[kind].autoSource??'event')===summarySource);
     if(!active.length)return {skipped:true};
-    if(!current(t)||active.some(kind=>!received.some(item=>item.kind===kind&&matches(item))))throw new Error('聊天已变化，生成已停止');
+    if(!current(t)||active.some(kind=>allowed(kind)&&!received.some(item=>item.kind===kind&&matches(item))))throw new Error('聊天已变化，生成已停止');
     if(sequencePromise||sequenceRun&&['failed','paused','awaiting-review'].includes(sequenceRun.status))throw new Error('请先处理当前叙事批次');
     // Freeze the shared continuation start once. A newly enabled category
     // does not trigger historical catch-up, and partial retries retain this
     // exact range instead of advancing past an unsaved category.
     const sharedStart=Math.max(startFloor,...active.map(kind=>narrativeHighWater(captured.narrative,kind)+1));
-    if(sharedStart>endFloor)return {skipped:true};
-    const ranges=[{startFloor:sharedStart,endFloor}];
-    sequenceRun={target:clone(t),preferences:clone(captured.narrative.preferences),kinds:active,...(active.length>1?{jointBudget:narrativeJointBudget(captured.narrative)}:{}),summarySource,...(sentFloors?{sentFloors:durableSourceMessages(sentFloors),summarySnapshot:(()=>{const rawMessages=durableSourceMessages(source(t).messages.filter(row=>row.floor<=endFloor));return {requestedRange:{start:0,end:endFloor},rawMessages,fingerprint:sourceFingerprint(rawMessages)};})()}:{}),ranges,index:0,restart:false,status:'running',stage:'preparing',error:'',failedKinds:[],pauseRequested:false,skipped:0,summary:true};
+    const replacing=choice?.mode==='replace';
+    if(!replacing&&sharedStart>endFloor)return {skipped:true,reason:'already-processed'};
+    const ranges=[{startFloor:replacing?startFloor:sharedStart,endFloor}];
+    sequenceRun={target:clone(t),preferences:clone(captured.narrative.preferences),kinds:active,...(active.length>1?{jointBudget:narrativeJointBudget(captured.narrative)}:{}),summarySource,...(sentFloors||replacing?{...(sentFloors?{sentFloors:durableSourceMessages(sentFloors)}:{}),summarySnapshot:(()=>{const rawMessages=durableSourceMessages(source(t).messages.filter(row=>row.floor<=endFloor));return {requestedRange:{start:0,end:endFloor},rawMessages,fingerprint:sourceFingerprint(rawMessages)};})()}:{}),ranges,index:0,restart:replacing,...(replacing?{summaryContinuation:choice}:{}),status:'running',stage:'preparing',error:'',failedKinds:replacing?[...active]:[],pauseRequested:false,skipped:0,summary:true};
     return drive(sequenceRun);
   }
   function commitCandidate(active,review,isCurrent,options){return queueMutation(()=>writeCandidate(active,review,isCurrent,options));}
@@ -440,10 +459,11 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
         next=recordNarrativeGeneration(next,baseline,kind,{range:review.range,pairId:review.pairId,source:(active.summarySource??active.preferences?.[kind]?.autoSource??next.preferences[kind].autoSource)==='cumulative'?'cumulative':'event',regenerateLatest:active.regenerateLatest===true,persistedBefore:latest.narrative,nonlinear:active.restart===true});
       }
       const remaining=active.failedKinds.filter(kind=>!review.kinds.includes(kind));
-      next.pendingRun=pendingCheckpoint({...active,status:remaining.length?'failed':active.status,index:active.index+(remaining.length?0:1),review:null,pairId:remaining.length?active.pairId:null,failedKinds:remaining},next);
+      let continuation=active.summaryContinuation;if(continuation&&remaining.length){const previous=continuationAuthorizations.get(continuation.authorization),authorization=crypto.randomUUID();continuationAuthorizations.set(authorization,{...previous,proofs:previous.proofs.filter(item=>remaining.includes(item.kind))});while(continuationAuthorizations.size>256)continuationAuthorizations.delete(continuationAuthorizations.keys().next().value);continuation={...continuation,authorization};}
+      next.pendingRun=pendingCheckpoint({...active,...(continuation?{summaryContinuation:continuation}:{}),status:remaining.length?'failed':active.status,index:active.index+(remaining.length?0:1),review:null,pairId:remaining.length?active.pairId:null,failedKinds:remaining},next);
       const saved=await repository.updateNarrative(t,latest,next,{isCurrent:valid,requireConfirmation:true});
       if(!valid())throw new Error('聊天或功能开关已变化，生成已停止');
-      active.review=null;compactActiveSources(active);reviewGuards=null;if(!remaining.length){active.pairId=null;active.index++;}active.failedKinds=remaining;active.usage=null;currentRequestPreview=null;previewGuard=null;
+      if(continuation)active.summaryContinuation=continuation;active.review=null;compactActiveSources(active);reviewGuards=null;if(!remaining.length){active.pairId=null;active.index++;}active.failedKinds=remaining;active.usage=null;currentRequestPreview=null;previewGuard=null;
       for(const kind of review.kinds){
         const beforeEntries=kind==='self'?baseline.self.flatMap(row=>row.entries):baseline.outline,afterEntries=kind==='self'?review.results.self.flatMap(row=>row.entries):review.results.outline,beforeById=new Map(beforeEntries.map(row=>[row.id,row.text]));
         categoryStatus(kind,{status:'ready',error:'',addedCount:afterEntries.filter(row=>!beforeById.has(row.id)).length,changedCount:afterEntries.filter(row=>beforeById.has(row.id)&&beforeById.get(row.id)!==row.text).length});
@@ -544,10 +564,10 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
   });
   for(const name of ['MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','MESSAGE_SWIPE_DELETED'])on(name,()=>{clear();markSources();});
   for(const name of ['CHAT_CHANGED','CHAT_CREATED'])on(name,()=>{clear();sequenceRun=null;readSerial++;target=null;selection=null;unconfirmed=false;foregroundActive=false;quietDepth=0;state={target:null,narrative:emptyNarrative(),self:emptyStatus(),outline:emptyStatus(),writeBlocked:false,error:''};notify();});
-  return {load,snapshot,writeState:()=>({writeBlocked:state.writeBlocked||unconfirmed||controls()?.allowed('enabled')!==true,error:state.error}),savePreferences,saveRunPreferences,saveEntries,preview,previewRequest,start,pause,resume,confirmReview,retry:resume,skip,afterSummaryCommit,hasPending:()=>!!sequenceRun&&['running','paused','failed','awaiting-review'].includes(sequenceRun.status),intercept,clear,cancel,defaultPrompts:DEFAULT_NARRATIVE_PROMPTS,
+  return {load,snapshot,planSummaryContinuation,writeState:()=>({writeBlocked:state.writeBlocked||unconfirmed||controls()?.allowed('enabled')!==true,error:state.error}),savePreferences,saveRunPreferences,saveEntries,preview,previewRequest,start,pause,resume,confirmReview,retry:resume,skip,afterSummaryCommit,hasPending:()=>!!sequenceRun&&['running','paused','failed','awaiting-review'].includes(sequenceRun.status),intercept,clear,cancel,defaultPrompts:DEFAULT_NARRATIVE_PROMPTS,
     controlsChanged(){clearSlots();if(taskOwner&&!taskOwner.proofs.every(matches))manager.cancel(taskOwner.id);notify();},
     rebindTarget(next){const previous=target??lastTarget;if(!previous||previous.chatId!==next.chatId||previous.rootId!==next.rootId)throw new Error('聊天已变化');if(!sameTarget(target,next)){clear();target=clone(next);selection=null;state={...state,target:clone(next),writeBlocked:true,error:'聊天已重新读取，请重新打开本末'};notify();}},
     subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},
-    dispose(){if(disposed)return;clear();disposed=true;readSerial++;for(const release of releases)release();listeners.clear();},
+    dispose(){if(disposed)return;clear();disposed=true;continuationAuthorizations.clear();readSerial++;for(const release of releases)release();listeners.clear();},
   };
 }

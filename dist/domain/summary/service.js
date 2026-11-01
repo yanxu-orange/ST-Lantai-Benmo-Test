@@ -3,12 +3,12 @@ import { equalData, exactKeys, validateIndexes } from '../memory/management-vali
 import { validDrafts, draftsToEvents, applyIndexes, reviewEvents, normalizeSummaryAliases, normalizeSummaryLocationAliases } from './candidates.js';
 import { buildSummaryRequest, summaryStages, summaryPreview } from './requests.js';
 import { prepareSummarySource, matchesSummarySource, matchesStoredSummarySource, storedSummarySource } from './source.js';
-import { publicSummarySettingsEvidence, normalizedSummarySettingsEvidence, publicSummaryTrackingTicket } from './data.js';
+import { publicSummarySettingsEvidence, normalizedSummarySettingsEvidence, publicSummaryTrackingTicket, assertSummaryNarrativeContinuation } from './data.js';
 import { prepareBatchTracking, applyBatchTracking } from '../tracking/batch.js';
 import { parseBatchTrackingResponseParts } from '../tracking/requests.js';
 
 // Uses the shared manager/provider. Chat transactions remain repository-owned.
-export function createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,hideSource=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID()}={}) {
+export function createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,hideSource=null,planSummaryContinuation=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID()}={}) {
   const records=new Map(),listeners=new Set(),reservations=new Set(),restorations=new Map(),continuations=new WeakMap();let disposed=false;
   const readSettings=()=>structuredClone(getGenerationSettings());
   const durableTrackingContext=context=>({identities:context.identities??{},allowed:context.allowed??{itemsEnabled:true,npcsEnabled:true}});
@@ -31,7 +31,8 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     if(record.narrativePromise)return record.narrativePromise;
     record.narrative={status:'running',error:''};record.stage='narrative';notify(taskId);
     record.narrativePromise=Promise.resolve().then(work).then(result=>{
-      record.narrative={status:result?.run?.status==='skipped'?'skipped':'succeeded',error:''};record.errorMessage='';
+      const skipped=result?.skipped===true||result?.run?.status==='skipped';
+      record.narrative={status:skipped?'skipped':'succeeded',error:'',...(skipped&&result?.reason==='already-processed'?{reason:'already-processed'}:{})};record.errorMessage='';
     }).catch(error=>{record.narrative={status:'failed',error:error.message};record.errorMessage=`本批记忆已保存；自述与大纲未完成：${error.message}`;}).finally(()=>{record.narrativePromise=null;notify(taskId);});
     await record.narrativePromise;return inspect(taskId);
   }
@@ -48,7 +49,10 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     if(stored&&!matchesStoredSummarySource(stored.sourceSnapshot,raw))throw new Error('原批来源已变化或隐藏楼层角色无法确认；请按当前范围重新总结');
     const savedSource=stored?.sourceSnapshot??options.resumePending?.sourceSnapshot;
     const source=prepareSummarySource(raw,{startFloor:range.start,endFloor:range.end,includeUser:savedSource?.includeUser??params.includeUser,excludedFloors:savedSource?.excludedFloors??selection.summary.excludedFloors,rules:settings.summaryCleaning.rules});
-    const snapshot={target,selection,settings,source,identities:readTrackingContext().identities,origin,operationId:uuid(),params:{includeUser:params.includeUser,reviewBeforeCommit:origin==='regeneration'||params.reviewBeforeCommit,hideOriginal:stored?.hideOriginal??params.hideOriginal},batchId:stored?.id??options.resumePending?.batchId??uuid()};
+    const consent=params.narrativeContinuation?assertSummaryNarrativeContinuation(params.narrativeContinuation):null;
+    if(consent&&options.resumePending&&consent.target.chatId===target.chatId&&consent.target.rootId===target.rootId)consent.target=structuredClone(target);
+    const snapshot={target,selection,settings,source,identities:readTrackingContext().identities,origin,operationId:uuid(),params:{includeUser:params.includeUser,reviewBeforeCommit:origin==='regeneration'||params.reviewBeforeCommit,hideOriginal:stored?.hideOriginal??params.hideOriginal,...(consent?{narrativeContinuation:consent}:{})},batchId:stored?.id??options.resumePending?.batchId??uuid()};
+    if(snapshot.params.narrativeContinuation){if(origin!=='manual')throw new Error('自动总结不能替换历史叙事');const choice=snapshot.params.narrativeContinuation;if(!sameTarget(choice.target,target)||!equalData(choice.range,source.actualRange))throw new Error('总结范围已变化，请重新选择自述与大纲处理方式');if(choice.mode==='replace'){if(!options.resumePending&&!choice.authorization)throw new Error('请重新确认本次自述与大纲替换');const plan=await planSummaryContinuation?.({target,startFloor:source.actualRange.start,endFloor:source.actualRange.end,...(!options.resumePending?{authorization:choice.authorization}:{})});if(!plan?.overlap||plan.revision!==choice.revision||!equalData(plan.kinds,choice.kinds)||!equalData(plan.base,choice.base))throw new Error('自述与大纲已变化，请重新确认本次替换');if(options.resumePending)choice.authorization=plan.authorization;}}
     const trackingPreferences={itemsEnabled:settings.trackingItemsEnabled===true,npcsEnabled:settings.trackingNpcsEnabled===true};
     if(trackingPreferences.itemsEnabled||trackingPreferences.npcsEnabled){
       const context=readTrackingContext();
@@ -62,8 +66,13 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     if(!targetCurrent(snapshot,target)||!sourceCurrent(snapshot,target))throw new Error('聊天来源或总结设置已变化');
     return snapshot;
   }
+  async function checkNarrativeContinuation(snapshot){
+    const choice=snapshot.params.narrativeContinuation;if(choice?.mode!=='replace')return;
+    if(!choice.authorization)throw new Error('请重新确认本次自述与大纲替换');const plan=await planSummaryContinuation?.({target:snapshot.target,startFloor:snapshot.source.actualRange.start,endFloor:snapshot.source.actualRange.end,authorization:choice.authorization});
+    if(!plan?.overlap||!sameTarget(plan.target,choice.target)||plan.revision!==choice.revision||!equalData(plan.kinds,choice.kinds)||!equalData(plan.base,choice.base))throw new Error('自述与大纲已变化，请重新确认本次替换');
+  }
   async function request(stage,ctx,snapshot,events,executionProvider) {
-    await repository.read(ctx.target);
+    await repository.read(ctx.target);await checkNarrativeContinuation(snapshot);
     const current=()=>!ctx.signal.aborted&&targetCurrent(snapshot,ctx.target)&&sourceCurrent(snapshot,ctx.target);
     if(!current())throw new Error('聊天来源或总结设置已变化');
     const spec=buildSummaryRequest(stage,{origin:snapshot.origin,source:snapshot.source,events,settings:snapshot.settings,identities:snapshot.identities,tracking:snapshot.tracking?{ticket:snapshot.tracking.ticket,...snapshot.tracking.context}:null}),ids=events.map(event=>event.id),names=available(snapshot.settings);
@@ -97,7 +106,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     try{events=reviewEvents(edited??state.candidate.events,state.candidate.events);}catch(error){return {status:'invalid',error:error.message};}
     const result=await manager.confirm(taskId,async ctx=>{
       await repository.read(ctx.target);
-      const snapshot=ctx.snapshot,selection=record.selection??snapshot.selection;
+      const snapshot=ctx.snapshot,selection=record.selection??snapshot.selection;await checkNarrativeContinuation(snapshot);
       const batch={id:snapshot.batchId,taskId:`${taskId}:${snapshot.operationId}`,sourceType:snapshot.selection.batch?.sourceType??snapshot.origin,requestedRange:snapshot.source.requestedRange,actualRange:snapshot.source.actualRange,sourceSnapshot:storedSummarySource(snapshot.source),settingsEvidence:snapshot.settings,generationMode:{fast:'one',quality:'two',enhanced:'three'}[snapshot.settings.generationMode],hideOriginal:snapshot.params.hideOriginal,generatedCandidates:ctx.candidate.generatedCandidates};
       try{
         const options={executionSnapshot:true,isCurrent:ctx.isCurrent,...(record.pendingId?{pendingId:record.pendingId}:{})};
@@ -124,7 +133,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
         if(receipt?.status==='committed'&&afterSummaryCommit)record.narrative={status:'running',error:''};return receipt;
       }catch(error){if(error.code==='COMMIT_UNCONFIRMED')record.outcome='unconfirmed';record.errorMessage=error.message;throw error;}
     });
-    if(result.status==='succeeded'&&record.narrative?.status==='running'){const {start,end}=state.snapshot.source.actualRange;await runNarrative(taskId,()=>afterSummaryCommit({target:state.target,startFloor:start,endFloor:end}));}
+    if(result.status==='succeeded'&&record.narrative?.status==='running'){const {start,end}=state.snapshot.source.actualRange;await runNarrative(taskId,()=>afterSummaryCommit({target:state.target,startFloor:start,endFloor:end,...(state.snapshot.params.narrativeContinuation?{narrativeContinuation:state.snapshot.params.narrativeContinuation}:{})}));}
     notify(taskId);return {...result,...(result.status==='succeeded'?{status:inspect(taskId).status}:{}),outcome:record.outcome};
   }
   const releaseSession=record=>{if(record?.executionProvider&&record.executionProvider!==provider){try{record.executionProvider.dispose?.();}catch{}record.executionProvider=null;}};
@@ -134,6 +143,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     if(state.status==='awaiting-user'&&!state.reviewPending&&!record.reviewRequired&&!record.autoConfirmScheduled){record.autoConfirmScheduled=true;queueMicrotask(()=>void confirm(state.taskId).then(result=>{if(result.status==='invalid'){record.errorMessage=result.error;record.invalidAuto=true;notify(state.taskId);}}));}
   });
     return Object.freeze({
+    async narrativeContinuation(options){if(!planSummaryContinuation)return null;const snapshot=await capture('manual',options);return planSummaryContinuation({target:snapshot.target,startFloor:snapshot.source.actualRange.start,endFloor:snapshot.source.actualRange.end});},
     async preview(origin,options) {const snapshot=await capture(origin,options);return {...summaryPreview(snapshot.source,snapshot.settings,snapshot.tracking?{ticket:snapshot.tracking.ticket,...snapshot.tracking.context}:null,snapshot.identities,snapshot.origin),snapshot};},
     async start(origin='manual',options={}) {
       if(disposed)throw new Error('总结服务已关闭');

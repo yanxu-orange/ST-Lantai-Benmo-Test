@@ -3,10 +3,11 @@ import { sameTarget } from '../domain/memory/repository.js';
 import { createAutomaticSummaryRunner } from '../domain/summary/auto-runner.js';
 
 const PARAMETER_SAVE_DELAY=250;
+const validParameters=(params,origin)=>!(!Number.isSafeInteger(params.startFloor)||params.startFloor<0||origin==='manual'&&!(params.endFloor===null||Number.isSafeInteger(params.endFloor)&&params.endFloor>=params.startFloor)||origin==='auto'&&(!Number.isSafeInteger(params.batchSize)||params.batchSize<1||!Number.isSafeInteger(params.recentFloors)||params.recentFloors<0));
 export function createSummaryController({repository,service,captureSource,control=null,onCommitted=()=>{}}={}) {
-  const runner=createAutomaticSummaryRunner({service,repository,captureSource}),listeners=new Set();
-  let disposed=false,ticket=0,openRequest=0,visible=false,parameterQueue=Promise.resolve(),parameterFailure=null,parameterTimer=null,parameterDrafts={};
-  const state={route:'manual',origin:'manual',target:null,summary:null,formalIds:[],params:null,parametersUnconfirmed:false,taskId:null,task:null,drafts:null,entries:{},openTerms:{},preview:null,previewOpen:false,previewView:'source',error:'',message:'',busy:false,scroll:0};
+  const runner=createAutomaticSummaryRunner({service,repository,captureSource}),listeners=new Set(),continuationListeners=new Set();
+  let disposed=false,ticket=0,openRequest=0,visible=false,parameterQueue=Promise.resolve(),parameterFailure=null,parameterTimer=null,parameterDrafts={},previewRevision=0,continuationRevision=0;
+  const state={route:'manual',origin:'manual',target:null,summary:null,formalIds:[],params:null,parametersUnconfirmed:false,taskId:null,task:null,drafts:null,entries:{},openTerms:{},preview:null,previewOpen:false,previewView:'source',error:'',message:'',busy:false,scroll:0,narrativeContinuation:null,narrativeContinuationMode:'skip'};
   const generationPreview=createGenerationPreview(state);
   const notify=()=>{if(!disposed)for(const listener of [...listeners])try{listener(inspect());}catch{/* display only */}};
   const inspect=()=>({...state,drafts:state.drafts,parameterReadRequired:parameterDrafts[state.origin]?.readRequired===true,automatic:runner.inspect()});
@@ -25,10 +26,11 @@ export function createSummaryController({repository,service,captureSource,contro
     parameterFailure=error?{serial:ticket,error}:null;
     if(error)state.error=state.parametersUnconfirmed?'保存结果尚未确认，请重新读取':error.message;
   }
-  function queueParameters(){
+  function queueParameters({editing=false}={}){
     cancelParameterTimer();
     const target=state.target,serial=ticket,origin=state.origin,draft=parameterDrafts[origin],current=()=>viewCurrent(serial,target);
     if(!draft||!current()||state.parametersUnconfirmed||draft.readRequired)return parameterQueue;
+    if(!editing)draft.editingInvalid=false;
     draft.requested=draft.revision;
     if(draft.queued||draft.requested<=draft.attempted)return parameterQueue;
     draft.queued=true;
@@ -36,8 +38,9 @@ export function createSummaryController({repository,service,captureSource,contro
       let validated=false;
       try{
         while(current()&&!state.parametersUnconfirmed&&draft.requested>draft.attempted){
+          if(draft.editingInvalid&&!validParameters(draft.params,origin))break;
           const params=structuredClone(draft.params);draft.attempted=draft.revision;validated=false;
-          if(!Number.isSafeInteger(params.startFloor)||params.startFloor<0||origin==='manual'&&!(params.endFloor===null||Number.isSafeInteger(params.endFloor)&&params.endFloor>=params.startFloor)||origin==='auto'&&(!Number.isSafeInteger(params.batchSize)||params.batchSize<1||!Number.isSafeInteger(params.recentFloors)||params.recentFloors<0))throw new Error('总结范围参数无效');
+          if(!validParameters(params,origin))throw new Error('总结范围参数无效');
           validated=true;
           if(!sameParams(state.summary.preferences[origin],params)){
             if(!sameParams(draft.baseline,state.summary.preferences[origin]))throw new Error('总结参数已变化，请重新读取');
@@ -53,6 +56,13 @@ export function createSummaryController({repository,service,captureSource,contro
       }}finally{draft.queued=false;}
     });
     return parameterQueue;
+  }
+  const notifyContinuation=()=>{for(const fn of [...continuationListeners])try{fn(inspect());}catch{/* display only */}};
+  function invalidateContinuation(){continuationRevision++;state.narrativeContinuation=null;state.narrativeContinuationMode='skip';notifyContinuation();}
+  async function refreshContinuation(){
+    const request=++continuationRevision,selected=state.target,params=structuredClone(state.params),serial=ticket;
+    if(state.origin!=='manual'||!validParameters(params,'manual')||typeof service.narrativeContinuation!=='function')return;
+    try{const plan=await service.narrativeContinuation(params);if(request!==continuationRevision||!viewCurrent(serial,selected)||state.origin!=='manual'||state.params.startFloor!==params.startFloor||state.params.endFloor!==params.endFloor)return;state.narrativeContinuation=plan?.overlap?plan:null;notifyContinuation();}catch{/* The real start revalidates authority and reports failures. */}
   }
   async function action(work){const controlProof=control?.capture(),serial=ticket,target=state.target;state.busy=true;state.error='';notify();const current=()=>viewCurrent(serial,target)&&(!control||control.matches(controlProof));try{await work(current);}catch(error){if(current())state.error=error.message;}finally{if(viewCurrent(serial,target)){state.busy=false;notify();}}}
   async function captureView(target){
@@ -70,8 +80,8 @@ export function createSummaryController({repository,service,captureSource,contro
     if(task.status==='awaiting-user'&&task.candidate?.incomplete)state.error=task.errorMessage||'后续阶段尚未完成，正文草稿已保留。';
     const trackingWarnings=(task.diagnostics??[]).filter(row=>row.kind==='tracking').map(row=>`${row.category==='items'?'物品':'角色'}追踪有未采用项：${row.message}`);
     if(task.status==='awaiting-user'&&task.snapshot.tracking){const enabled=task.snapshot.tracking.ticket.preferences;state.message=`${enabled.itemsEnabled?'物品':''}${enabled.itemsEnabled&&enabled.npcsEnabled?'与':''}${enabled.npcsEnabled?'角色':''}追踪结果将在采用本批时一起保存。`;if(trackingWarnings.length)state.error=[task.candidate?.incomplete?(task.errorMessage||'后续阶段尚未完成，正文草稿已保留。'):'',...new Set(trackingWarnings)].filter(Boolean).join('；');}
-    if(['narrative-running','narrative-failed'].includes(task.status)){state.busy=false;state.route=state.origin;state.drafts=null;state.message='本批记忆已保存，正在生成自述与大纲';if(task.status==='narrative-failed'){state.message='本批记忆已保存';state.error=task.errorMessage||'自述与大纲未完成，请重试或跳过';}void refresh();}
-    if(task.status==='succeeded'){state.error=task.hiding?.status==='failed'?task.hiding.message:'';state.message=task.narrative?.status==='skipped'?'本批记忆已保存，已跳过本批自述与大纲':trackingWarnings.length?'已保存本批记忆；'+[...new Set(trackingWarnings)].join('；'):'已保存本批记忆';state.route=state.origin;state.drafts=null;const serial=ticket;void refresh().then(current=>{if(current&&visible&&serial===ticket)onCommitted();});}
+    if(['narrative-running','narrative-failed'].includes(task.status)){state.busy=false;state.route=state.origin;state.drafts=null;state.message='本批记忆已保存，正在处理自述与大纲续接';if(task.status==='narrative-failed'){state.message='本批记忆已保存';state.error=task.errorMessage||'自述与大纲未完成，请重试或跳过';}void refresh();}
+    if(task.status==='succeeded'){invalidateContinuation();void refreshContinuation();state.error=task.hiding?.status==='failed'?task.hiding.message:'';state.message=task.narrative?.status==='skipped'?(task.narrative.reason==='already-processed'?'本批记忆已保存；本批范围已处理，保留现有自述与大纲':'本批记忆已保存，已跳过本批自述与大纲'):trackingWarnings.length?'已保存本批记忆；'+[...new Set(trackingWarnings)].join('；'):'已保存本批记忆';state.route=state.origin;state.drafts=null;const serial=ticket;void refresh().then(current=>{if(current&&visible&&serial===ticket)onCommitted();});}
     if(['failed','stale','cancelled'].includes(task.status)){state.error=task.receipt?.status==='committed'?'记忆已保存；原文隐藏未完成，请检查酒馆隐藏状态':task.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':task.errorMessage||'本批未完成，请重新发起';}
     notify();
   }
@@ -80,22 +90,23 @@ export function createSummaryController({repository,service,captureSource,contro
     notify();
   });
   return Object.freeze({
-    inspect,runner,flushParams:queueParameters,setVisible(value){visible=value===true;if(!visible)void queueParameters();},setScroll(value){state.scroll=value;},
+    inspect,runner,subscribeNarrativeContinuation(fn){continuationListeners.add(fn);return()=>continuationListeners.delete(fn);},selectNarrativeContinuation(mode){if(!state.busy&&!['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(state.task?.status)&&state.narrativeContinuation&&['skip','replace'].includes(mode)){state.narrativeContinuationMode=mode;notifyContinuation();}},flushParams:queueParameters,setVisible(value){visible=value===true;if(!visible)void queueParameters();},setScroll(value){state.scroll=value;},
     async open(origin='manual') {
       if(disposed||!['manual','auto'].includes(origin))return false;
-      const request=++openRequest,next=repository.captureTarget();
+      const request=++openRequest,next=repository.captureTarget();invalidateContinuation();
       const preserve=!!state.target&&sameTarget(state.target,next);if(preserve)await queueParameters();else cancelParameterTimer();if(disposed||request!==openRequest||!sameTarget(next,repository.captureTarget()))return false;
       if(state.target&&sameTarget(state.target,next)&&state.taskId&&['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(service.inspect(state.taskId)?.status)){notify();return true;}
       const serial=++ticket;state.busy=true;state.error='';notify();
-      try{const selected=await captureView(next);if(disposed||serial!==ticket||!sameTarget(next,repository.captureTarget()))return false;state.target=next;state.summary=selected.summary;if(!preserve)state.parametersUnconfirmed=false;parameterFailure=null;state.formalIds=selected.formalIds;state.origin=origin;state.route=origin;selectParameters(selected.summary,origin,preserve);state.taskId=null;state.task=null;state.drafts=null;generationPreview.invalidate({close:true});state.message='';const narrativeId=await service.restorePendingNarrative?.(origin);if(!viewCurrent(serial,next))return false;if(narrativeId){state.taskId=narrativeId;taskChanged(service.inspect(narrativeId));return true;}if(selected.summary.pending){try{const id=await service.restorePending(origin);if(!viewCurrent(serial,next))return false;state.taskId=id;taskChanged(service.inspect(id));}catch(error){if(!viewCurrent(serial,next))return false;state.error=error.message;}}return true;}
+      try{const selected=await captureView(next);if(disposed||serial!==ticket||!sameTarget(next,repository.captureTarget()))return false;state.target=next;state.summary=selected.summary;if(!preserve)state.parametersUnconfirmed=false;parameterFailure=null;state.formalIds=selected.formalIds;state.origin=origin;state.route=origin;selectParameters(selected.summary,origin,preserve);state.taskId=null;state.task=null;state.drafts=null;generationPreview.invalidate({close:true});state.message='';const narrativeId=await service.restorePendingNarrative?.(origin);if(!viewCurrent(serial,next))return false;if(narrativeId){state.taskId=narrativeId;taskChanged(service.inspect(narrativeId));return true;}void refreshContinuation();if(selected.summary.pending){try{const id=await service.restorePending(origin);if(!viewCurrent(serial,next))return false;state.taskId=id;taskChanged(service.inspect(id));}catch(error){if(!viewCurrent(serial,next))return false;state.error=error.message;}}return true;}
       catch(error){if(!disposed&&serial===ticket)state.error=error.message;return false;}finally{if(!disposed&&serial===ticket){state.busy=false;notify();}}
     },
     changeParams(mutator,{defer=false}={}){
       if(state.busy||state.parametersUnconfirmed||!state.params||['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(state.task?.status))return parameterQueue;
-      const draft=parameterDrafts[state.origin];
-      if(changeGenerationDraft(state.params,mutator,()=>generationPreview.invalidate())){draft.revision++;if(!draft.readRequired){draft.error=null;parameterFailure=null;state.error='';}}
-      if(defer){cancelParameterTimer();parameterTimer=setTimeout(()=>{parameterTimer=null;void queueParameters();},PARAMETER_SAVE_DELAY);return parameterQueue;}
-      return queueParameters();
+      const draft=parameterDrafts[state.origin],rangeBefore=[state.params.startFloor,state.params.endFloor];
+      if(changeGenerationDraft(state.params,mutator,()=>{previewRevision++;generationPreview.invalidate();})){draft.revision++;if(!draft.readRequired){draft.error=null;parameterFailure=null;state.error='';}}
+      if(rangeBefore[0]!==state.params.startFloor||rangeBefore[1]!==state.params.endFloor)invalidateContinuation();
+      if(defer){cancelParameterTimer();draft.editingInvalid=!validParameters(state.params,state.origin);if(draft.editingInvalid)return parameterQueue;parameterTimer=setTimeout(()=>{parameterTimer=null;void queueParameters({editing:true}).then(()=>refreshContinuation());},PARAMETER_SAVE_DELAY);return parameterQueue;}
+      return queueParameters().then(()=>refreshContinuation());
     },
     async saveParams(){
       const draft=parameterDrafts[state.origin];
@@ -103,15 +114,15 @@ export function createSummaryController({repository,service,captureSource,contro
       await queueParameters();if(state.parametersUnconfirmed)throw new Error('保存结果尚未确认，请重新读取');if(parameterFailure?.serial===ticket)throw parameterFailure.error;
     },
     async start() {
-      if(state.busy||service.isBusy?.())return;const origin=state.origin,params=structuredClone(state.params);state.message='';state.drafts=null;
-      await action(async current=>{await this.saveParams();if(!current())return;if(origin==='auto'){runner.start();}else {const id=await service.start('manual',params);if(current()){state.taskId=id;taskChanged(service.inspect(id));}}});
+      if(state.busy||service.isBusy?.())return;const origin=state.origin,params=structuredClone(state.params),plan=state.narrativeContinuation,choice=origin==='manual'&&plan?{mode:state.narrativeContinuationMode,...Object.fromEntries(['target','range','revision','kinds','base','authorization'].filter(key=>plan[key]!==undefined).map(key=>[key,structuredClone(plan[key])]))}:null;state.message='';state.drafts=null;
+      await action(async current=>{await this.saveParams();if(!current())return;if(origin==='auto'){runner.start();}else {const id=await service.start('manual',{...params,...(choice?{narrativeContinuation:choice}:{})});if(current()){state.taskId=id;taskChanged(service.inspect(id));}}});
     },
     async retryNarrative(){if(state.busy||!state.taskId)return;const id=state.taskId;await action(async current=>{const result=await service.retryNarrative(id);if(!current())return;if(!result)throw new Error('当前批次不能重试');taskChanged(service.inspect(id));if(result.status==='succeeded')runner.afterNarrative();});},
     async skipNarrative(){if(state.busy||!state.taskId)return;const id=state.taskId;await action(async current=>{const result=await service.skipNarrative(id);if(!current())return;if(!result)throw new Error('当前批次不能跳过');taskChanged(service.inspect(id));if(result.status==='succeeded')runner.afterNarrative();});},
     async retry(){if(state.busy||!state.taskId)return;const taskId=state.taskId,drafts=structuredClone(state.drafts);await action(async current=>{const id=await service.retry(taskId,drafts);if(!current())return;if(!id)throw new Error('草稿来源或配置已变化，不能重试');state.taskId=id;state.drafts=null;state.error='';if(service.inspect(id)?.origin==='auto')runner.transferTask(id);taskChanged(service.inspect(id));});},
     async regenerate(batchId){if(state.busy||service.isBusy?.())return;state.drafts=null;await action(async current=>{const id=await service.start('regeneration',{batchId});if(current()){state.taskId=id;taskChanged(service.inspect(id));}});},
-    async preview(){if(state.busy)return;const origin=state.origin,params=structuredClone(state.params),summary=state.summary,target=state.target;await action(async current=>{await queueParameters();if(!current())return;if(state.parametersUnconfirmed)throw new Error('保存结果尚未确认，请重新读取');if(parameterFailure?.serial===ticket)throw parameterFailure.error;let options=params;if(origin==='auto'){const {automaticSummaryPlan}=await import('../domain/summary/auto-runner.js');if(!current())return;const plan=automaticSummaryPlan({...summary,preferences:{...summary.preferences,auto:params}},captureSource(target));if(plan.status!=='ready')throw new Error('尚无可总结的完整批次');options={...options,...plan};}if(!current())return;await generationPreview.prepare(()=>service.preview(origin,options),current);});},
-    togglePreview(){generationPreview.toggle();notify();},
+    async preview(){if(state.busy)return;const revision=++previewRevision,origin=state.origin,params=structuredClone(state.params),summary=state.summary,target=state.target;await action(async current=>{const previewCurrent=()=>current()&&revision===previewRevision;await queueParameters();if(!previewCurrent())return;if(state.parametersUnconfirmed)throw new Error('保存结果尚未确认，请重新读取');if(parameterFailure?.serial===ticket)throw parameterFailure.error;let options=params;if(origin==='auto'){const {automaticSummaryPlan}=await import('../domain/summary/auto-runner.js');if(!current())return;const plan=automaticSummaryPlan({...summary,preferences:{...summary.preferences,auto:params}},captureSource(target));if(plan.status!=='ready')throw new Error('尚无可总结的完整批次');options={...options,...plan};}if(!previewCurrent())return;await generationPreview.prepare(()=>service.preview(origin,options),previewCurrent);});},
+    togglePreview(){previewRevision++;generationPreview.toggle();notify();},
     previewView(view){generationPreview.view(view);notify();},
     changeDrafts(mutator){if(state.busy||!state.drafts)return;mutator(state.drafts);state.error='';},
     removeDraft(index){if(state.busy||!state.drafts?.[index])return false;const [removed]=state.drafts.splice(index,1);state.openTerms=Object.fromEntries(Object.entries(state.openTerms).filter(([key])=>Number(key)!==index).map(([key,value])=>[Number(key)>index?Number(key)-1:Number(key),value]));for(const key of Object.keys(state.entries))if(key.startsWith(`${removed.id}:`))delete state.entries[key];state.error='';return true;},
@@ -124,7 +135,7 @@ export function createSummaryController({repository,service,captureSource,contro
     stop(){runner.stop();},wake(){runner.wake();},
     showTask(taskId){const task=service.inspect(taskId);if(!task||!sameTarget(task.target,repository.captureTarget()))return false;cancelParameterTimer();state.target=task.target;state.origin=task.origin==='auto'?'auto':'manual';state.taskId=taskId;state.summary=task.snapshot.selection.summary;selectParameters(state.summary,state.origin,false);taskChanged(task);void refresh();return true;},
     subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},
-    dispose(){cancelParameterTimer();disposed=true;ticket++;releaseService();releaseRunner();runner.dispose();listeners.clear();}
+    dispose(){cancelParameterTimer();disposed=true;ticket++;releaseService();releaseRunner();runner.dispose();listeners.clear();continuationListeners.clear();}
   });
 }
 

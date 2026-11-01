@@ -15,7 +15,7 @@ export const WORKSHOP_HIDE_RULE = Object.freeze({
   "markdownOnly": true,
   "promptOnly": false
 });
-export const WORKSHOP_STATUSBAR_RULE = Object.freeze({
+export const WORKSHOP_STATUSBAR_PREVIOUS_RULE = Object.freeze({
   "id": "633e2a2b-f33d-4233-bf77-6471f0ade43e",
   "scriptName": "兰台-时间状态栏美化",
   "disabled": false,
@@ -31,6 +31,29 @@ export const WORKSHOP_STATUSBAR_RULE = Object.freeze({
   "maxDepth": null,
   "markdownOnly": true,
   "promptOnly": false
+});
+// Preserve the exact supplied two-state template for safe, content-proven upgrades.
+// Additional palettes change colors only; layout and original day/night CSS stay intact.
+const statusbarPalettes = `.yx-storybar[data-theme="snow"]{
+  --yx-bg:#f4f8fc;
+  --yx-ink:#183555;
+  --yx-muted:#7892ac;
+  --yx-line:rgba(120,146,172,.30);
+  --yx-shadow:rgba(120,146,172,.08);
+}
+.yx-storybar[data-theme="spring"]{
+  --yx-bg:#fdfcf8;
+  --yx-ink:#3c5546;
+  --yx-muted:#5f7163;
+  --yx-line:#dfe8dd;
+  --yx-shadow:rgba(51,73,50,.08);
+}
+`;
+export const WORKSHOP_STATUSBAR_RULE = Object.freeze({
+  ...WORKSHOP_STATUSBAR_PREVIOUS_RULE,
+  replaceString: WORKSHOP_STATUSBAR_PREVIOUS_RULE.replaceString
+    .replace('data-lantai-storybar=""', 'data-lantai-storybar="" data-lantai-storybar-palettes="four"')
+    .replace('<style>\n', '<style>\n' + statusbarPalettes)
 });
 export const WORKSHOP_STATUSBAR_LEGACY_RULE = Object.freeze({
   "id": "633e2a2b-f33d-4233-bf77-6471f0ade43e",

@@ -5,6 +5,12 @@ const validRange=value=>value&&Number.isSafeInteger(value.start)&&value.start>=0
 const exact=(value,keys)=>{if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).length!==keys.length||keys.some(key=>!Object.hasOwn(value,key)))throw new Error('总结数据结构无效');};
 const integer=(value,min=0)=>Number.isSafeInteger(value)&&value>=min;
 const text=value=>typeof value==='string'&&!!value.trim();
+// Task-scoped consent and generated-outcome proof; never a global preference or chat copy.
+export function assertSummaryNarrativeContinuation(value){
+  exact(value,['mode','target','range','revision','kinds','base',...(Object.hasOwn(value??{},'authorization')?['authorization']:[])]);if(value.authorization!==undefined&&!text(value.authorization))throw new Error('叙事授权无效');exact(value.target,['chatId','rootId','epoch']);exact(value.range,['start','end']);
+  if(!['skip','replace'].includes(value.mode)||!text(value.target.chatId)||!text(value.target.rootId)||!integer(value.target.epoch)||!validRange(value.range)||!integer(value.revision)||!Array.isArray(value.kinds)||!value.kinds.length||new Set(value.kinds).size!==value.kinds.length||value.kinds.some(kind=>!['self','outline'].includes(kind)))throw new Error('本次自述与大纲选择无效');
+  exact(value.base,value.kinds);if(Object.values(value.base).some(hash=>typeof hash!=='string'||!/^[a-f0-9]{64}$/.test(hash)))throw new Error('本次自述与大纲基版无效');return copy(value);
+}
 export function emptySummary() {
   return {schema:1,revision:0,preferences:{
     manual:{startFloor:0,endFloor:null,includeUser:true,reviewBeforeCommit:true,hideOriginal:true},
@@ -65,7 +71,7 @@ export function assertSummaryPending(value) {
   const publicSettings=publicSummarySettingsEvidence(value.settingsEvidence);
   if(publicSettings.generationMode!==undefined&&publicSettings.generationMode!=={one:'fast',two:'quality',three:'enhanced'}[value.generationMode])throw new Error('待审核模式与配置不符');
   if(!stages||!Array.isArray(value.completedStages)||!value.completedStages.length||value.completedStages.length>stages.length||value.completedStages.some((stage,index)=>stage!==stages[index])||value.nextStage!==(stages[value.completedStages.length]??null)||!(value.failedStage===null||value.failedStage===value.nextStage&&value.nextStage!==null))throw new Error('待审核阶段证据无效');
-  exact(value.params,['includeUser','reviewBeforeCommit','hideOriginal']);if(Object.values(value.params).some(item=>typeof item!=='boolean'))throw new Error('待审核参数无效');
+  exact(value.params,['includeUser','reviewBeforeCommit','hideOriginal',...(Object.hasOwn(value.params??{},'narrativeContinuation')?['narrativeContinuation']:[])]);if(Object.hasOwn(value.params,'narrativeContinuation')){if(value.origin!=='manual')throw new Error('自动总结不能替换历史叙事');assertSummaryNarrativeContinuation(value.params.narrativeContinuation);}if(['includeUser','reviewBeforeCommit','hideOriginal'].some(key=>typeof value.params[key]!=='boolean'))throw new Error('待审核参数无效');
   if(!Array.isArray(value.events)||!value.events.length||new Set(value.events.map(event=>event?.id)).size!==value.events.length)throw new Error('待审核切片身份无效');
   for(const event of value.events){validateEvent(event);if(event.batch!==null||event.mergedFrom!=null||event.supersededBy!=null||JSON.stringify(event.sources)!==JSON.stringify([value.sourceSnapshot?.actualRange]))throw new Error('待审核切片不得占用正式关系或改变来源');}
   if(value.sourceSnapshot?.includeUser!==value.params.includeUser)throw new Error('待审核来源策略不符');
