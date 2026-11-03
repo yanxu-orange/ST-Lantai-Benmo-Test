@@ -51,16 +51,23 @@ export function createWorkshopDisplayFormatter({getContext,getHelper=()=>globalT
           &&chat.slice(floor+1).filter(row=>!row.is_system).length===depth&&rules()===ruleKey;}catch{return false;}
       };
       return {key,helper,isCurrent,ownsChat,
-        async format(raw,{scope,directHtml}={}){
+        async format(raw,{scope,directHtml,workshopBody}={}){
           try{
             const lib=await library();if(!isCurrent()||typeof lib.DOMPurify?.sanitize!=='function')return null;
-            const regexed=helper.formatAsTavernRegexedString(raw,source,'display',{depth,character_name:name});
+            let input=raw,regexed=helper.formatAsTavernRegexedString(input,source,'display',{depth,character_name:name});
+            // Packet rules keep priority. An unchanged packet may instead use
+            // the author's original body; never feed transformed output back
+            // through regexes or decode the serialized packet.
+            if(regexed===raw&&typeof workshopBody==='string'&&workshopBody&&isCurrent()){
+              input=workshopBody;
+              regexed=helper.formatAsTavernRegexedString(input,source,'display',{depth,character_name:name});
+            }
             // Blank display replacements also keep the original readable here.
             if(typeof regexed!=='string'||!regexed.trim()||!isCurrent())return null;
             // Only the caller's original workshop body can supply direct HTML.
             // Packet replacements retain their existing sanitization policy.
-            const direct=regexed===raw&&typeof directHtml==='string'&&hasHtml(directHtml);
-            if(regexed===raw&&!direct&&!hasHtml(raw))return null;
+            const direct=regexed===input&&typeof directHtml==='string'&&hasHtml(directHtml);
+            if(regexed===input&&!direct&&!hasHtml(input))return null;
             const markdown=helper.builtin.renderMarkdown(direct?directHtml:regexed);
             if(typeof markdown!=='string'||!isCurrent())return null;
             // Encode AFTER Markdown: style text in fenced HTML is escaped and

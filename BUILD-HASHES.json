@@ -687,7 +687,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "82f3c9cd7c2246c37c61778d7bb1020fd33dd3cbb53c3038d7cd234df15a7bcb"
+    "sha256": "0b35146bde32c3df07027771887fe4d5ae5c863c49503a2669c8a7bf20621485"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1466,8 +1466,8 @@
   },
   {
     "path": "dist/platform/sillytavern/round-record-display.js",
-    "bytes": 15264,
-    "sha256": "867421834a1749333214298ad907a0aea79d7ae22217cff71007aafb900af402"
+    "bytes": 15596,
+    "sha256": "bb72ca118c6c209c30b4f619824e0993d08c48beecc7f143031ce5b3222c8027"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
@@ -1551,8 +1551,8 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-display-formatter.js",
-    "bytes": 8379,
-    "sha256": "6ed46e7212add2a6c2adbc3024fe7ffe4b34fc1dc6d63d5b95904e6034438317"
+    "bytes": 8877,
+    "sha256": "2bd23d3bae894a3224538c67aa008a164fd04e2f2118d94b41e84242bbf0e3b6"
   },
   {
     "path": "dist/platform/sillytavern/workshop-history.js",
@@ -1687,6 +1687,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "c7ea397b3e9fccc4aa2b000d994ae226b2ec513ca1abbacb9798707cc271ac00"
+    "sha256": "45f2cb9b29e10b3326defdc16e49f317fac1ce1ef39ae64dd1c51a7908d2afa0"
   }
 ]
