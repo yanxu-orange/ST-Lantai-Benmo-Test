@@ -45,10 +45,11 @@ export function createCumulativeRuntime({repository, settings, getContext} = {})
       if (!Number.isSafeInteger(depth) || depth < 0 || depth > 10000 || typeof current.body !== 'string' || !current.body.trim()) throw new Error('invalid');
       const context = getContext();
       if (typeof context?.setExtensionPrompt !== 'function') throw new Error('unavailable');
-      context.setExtensionPrompt(CUMULATIVE_PROMPT_KEY,current.body,1,depth,false,0);
+      const introduction=config.generation.injectionPrompt??'',prompt=introduction.trim()?introduction+'\n\n'+current.body:current.body;
+      context.setExtensionPrompt(CUMULATIVE_PROMPT_KEY,prompt,1,depth,false,0);
       if (!valid(receipt)) throw new Error('stale');
       proof = Object.freeze(receipt);
-      status = {status:'injected',type,depth,prompt:current.body,currentVersionId:current.id};
+      status = {status:'injected',type,depth,prompt,currentVersionId:current.id};
     } catch {
       // An old async continuation must not clear a newly installed slot.
       if (!disposed && serial === ticket) {

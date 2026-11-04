@@ -20,6 +20,12 @@ const assertKind=kind=>{if(!kinds.includes(kind))throw new Error('本末类别�
 const content=(domain,kind)=>kind==='self'?domain.self:domain.outline;
 const stable=value=>value&&typeof value==='object'?Array.isArray(value)?value.map(stable):Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):value;
 async function digest(value){const bytes=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(stable(value))));return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');}
+// Legacy reviews predate the injection-only field; keep their original generation binding.
+async function legacyReviewPreferencesMatch(preferences,binding){
+  if(await digest(preferences)===binding)return true;
+  if(!Object.hasOwn(preferences,'injectionPrompt'))return false;
+  const {injectionPrompt,...previous}=preferences;return await digest(previous)===binding;
+}
 const roleTargets=(preferences,kind)=>kind==='self'?preferences.characters.map(({id,name})=>({id,name})):null;
 const targetsRemain=(preferences,targets)=>targets===null||targets.every(target=>preferences.characters.some(row=>row.id===target.id&&row.name===target.name));
 const materialPreferences=(domain,selected)=>selected.map(kind=>{const p=domain.preferences[kind];return {kind,readMemory:p.readMemory,readOriginal:p.readOriginal,autoSource:p.autoSource??'event',...(kind==='self'?{readCard:p.readCard}:{})};});
@@ -445,7 +451,7 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       events={};
       for(const kind of review.kinds){
         const binding=review.bindings.categories[kind];
-        if(persisted?((review.bindings.version===2?(!targetsRemain(latest.narrative.preferences[kind],kind==='self'?binding.targets:null)||await digest(kind==='self'?binding.targets:null)!==binding.preferences):await digest(latest.narrative.preferences[kind])!==binding.preferences)||await digest(latest.narrative[kind])!==binding.entries||binding.progress!==null&&await digest(semanticProgress(latest.narrative.progress[kind],latest.narrative))!==binding.progress||binding.latestGeneration!==null&&await digest(semanticLatest(latest.narrative.latestGeneration?.[kind]??null,latest.narrative))!==binding.latestGeneration):(!targetsRemain(latest.narrative.preferences[kind],roleTargets(active.preferences[kind],kind))||!equal(latest.narrative[kind],expected.narrative[kind])||!equal(semanticProgress(latest.narrative.progress[kind],latest.narrative),semanticProgress(expected.narrative.progress[kind],expected.narrative))||!equal(semanticLatest(latest.narrative.latestGeneration?.[kind],latest.narrative),semanticLatest(expected.narrative.latestGeneration?.[kind],expected.narrative))))throw new Error('本末内容或设置已变化，请重新生成');
+        if(persisted?((review.bindings.version===2?(!targetsRemain(latest.narrative.preferences[kind],kind==='self'?binding.targets:null)||await digest(kind==='self'?binding.targets:null)!==binding.preferences):!await legacyReviewPreferencesMatch(latest.narrative.preferences[kind],binding.preferences))||await digest(latest.narrative[kind])!==binding.entries||binding.progress!==null&&await digest(semanticProgress(latest.narrative.progress[kind],latest.narrative))!==binding.progress||binding.latestGeneration!==null&&await digest(semanticLatest(latest.narrative.latestGeneration?.[kind]??null,latest.narrative))!==binding.latestGeneration):(!targetsRemain(latest.narrative.preferences[kind],roleTargets(active.preferences[kind],kind))||!equal(latest.narrative[kind],expected.narrative[kind])||!equal(semanticProgress(latest.narrative.progress[kind],latest.narrative),semanticProgress(expected.narrative.progress[kind],expected.narrative))||!equal(semanticLatest(latest.narrative.latestGeneration?.[kind],latest.narrative),semanticLatest(expected.narrative.latestGeneration?.[kind],expected.narrative))))throw new Error('本末内容或设置已变化，请重新生成');
         events[kind]=narrativeMemoryRows(projectNarrativeMemory(root,raw),review.range.endFloor).filter(row=>binding.memoryIds.includes(row.id));
         if(persisted&&binding.memory!==null&&binding.readMemory&&await digest(events[kind])!==binding.memory)throw new Error('记忆材料已变化，请重新生成');
       }
@@ -527,9 +533,9 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       const valid=()=>!disposed&&ticket===injectionSerial&&current(t)&&proofs.every(matches)&&equal(source(t),raw)&&(!repository.matchesNarrative||repository.matchesNarrative(t,captured));
       if(!valid())return;
       const domain=projection.domain,parts=[];
-      if(active.includes('outline')&&!projection.staleKinds.includes('outline')&&domain.outline.length)parts.push({kind:'outline',depth:domain.preferences.outline.depth,text:`${NARRATIVE_OUTLINE_INJECTION}\n\n【已发生的故事大纲】\n${domain.outline.map(row=>row.text).join('\n')}`});
+      if(active.includes('outline')&&!projection.staleKinds.includes('outline')&&domain.outline.length){const intro=domain.preferences.outline.injectionPrompt??NARRATIVE_OUTLINE_INJECTION;parts.push({kind:'outline',depth:domain.preferences.outline.depth,text:`${intro.trim()?intro+'\n\n':''}【已发生的故事大纲】\n${domain.outline.map(row=>row.text).join('\n')}`});}
       if(active.includes('self')&&!projection.staleKinds.includes('self')){
-        const chosen=domain.preferences.self.characters.filter(row=>row.inject!==false),records=chosen.flatMap(character=>{const record=domain.self.find(row=>row.id===character.id);return record?.entries.length?[`${narrativeSelfInjection(character.name)}\n\n【${character.name}的阶段自述】\n${record.entries.map(row=>row.text).join('\n')}`]:[];});
+        const chosen=domain.preferences.self.characters.filter(row=>row.inject!==false),records=chosen.flatMap(character=>{const record=domain.self.find(row=>row.id===character.id);const intro=narrativeSelfInjection(character.name,domain.preferences.self.injectionPrompt);return record?.entries.length?[`${intro.trim()?intro+'\n\n':''}【${character.name}的阶段自述】\n${record.entries.map(row=>row.text).join('\n')}`]:[];});
         if(records.length)parts.push({kind:'self',depth:domain.preferences.self.depth,text:records.join('\n\n')});
       }
       // Equal-depth content is one payload, making outline-before-self order

@@ -1,7 +1,7 @@
 import {activeEvents,validateEvent} from '../memory/model.js';
 import {assertBatch} from '../summary/data.js';
 import {applySummaryCleaningRules} from '../summary/cleaning.js';
-import {assertRecallSettings,defaultRecallSettings,frozenSettingsCopy} from '../../shared/settings/model.js';
+import {assertRecallSettings,defaultRecallSettings,frozenSettingsCopy,DEFAULT_MEMORY_INJECTION_PROMPT} from '../../shared/settings/model.js';
 import {evaluateOrdinaryRecallWithAliases} from './detail-alias-relevance.js';
 import {orderMemoriesForNarrative} from './narrative-ordering.js';
 import {dateContext,memoryDatePoint} from './date-facts.js';
@@ -55,7 +55,7 @@ export function rankingFacts(entry,rank){
       suppressionReasons:parent.suppressionReasons})),
     combinations:(evidence?.bundleContributions??[]).filter(bundle=>bundle.consumedValue>0).map(bundle=>({roles:bundle.roles,value:bundle.consumedValue}))};
 }
-export function memoryPrompt(events){if(!events.length)return '';return ['<lantai_event_memory>','以下内容是过去已经发生的记忆，可能与最近的讨论有关。请将其作为事实与经历参考，自然保持连续性；不要机械复述，也不要声称看见了记忆条目。',...events.map(event=>`【${event.startTime&&event.endTime?`${event.startTime} — ${event.endTime}`:event.startTime||event.endTime}｜${event.title}】\n${event.body}`),'</lantai_event_memory>'].join('\n\n');}
+export function memoryPrompt(events,injectionPrompt=DEFAULT_MEMORY_INJECTION_PROMPT){if(!events.length)return '';return ['<lantai_event_memory>',...(injectionPrompt.trim()?[injectionPrompt]:[]),...events.map(event=>`【${event.startTime&&event.endTime?`${event.startTime} — ${event.endTime}`:event.startTime||event.endTime}｜${event.title}】\n${event.body}`),'</lantai_event_memory>'].join('\n\n');}
 
 export function prepareRecallData({events,batches=[],input='',recentHistory=[],settings=defaultRecallSettings(),countTokens=null,time=null,timeAvailable=true}={}){
   settings=assertRecallSettings(settings);
@@ -102,7 +102,7 @@ export async function buildRecall({events,batches=[],input='',recentHistory=[],s
   const memoryMap=new Map(memories.map(memory=>[memory.id,memory])),ordering=orderMemoriesForNarrative({items:selected.map(item=>({memory:memoryMap.get(item.id),memoryId:item.id,libraryIndex:memories.findIndex(memory=>memory.id===item.id)}))});
   const byId=new Map(selected.map(item=>[item.id,item])),ordered=ordering.orderedIds.map(id=>byId.get(id));
   if(new Set(ordering.orderedIds).size!==ordering.orderedIds.length)throw new Error('召回记忆重复');
-  return frozenSettingsCopy({version:'event-recall-v2',time:{status:context.status,current:context.current,targets:base.timeResult.targets,specialTargets:special.targetResult.targets,diagnostics:special.targetResult.diagnostics},specialBudget:{limit:settings.anniversaryPoolLimit,selectedCount:routing.specialPool.selectedIds.length},matching:{input:current,history},selected:ordered,unselected,prompt:memoryPrompt(ordered.map(item=>item.event)),selectedIds:ordering.orderedIds,
+  return frozenSettingsCopy({version:'event-recall-v2',time:{status:context.status,current:context.current,targets:base.timeResult.targets,specialTargets:special.targetResult.targets,diagnostics:special.targetResult.diagnostics},specialBudget:{limit:settings.anniversaryPoolLimit,selectedCount:routing.specialPool.selectedIds.length},matching:{input:current,history},selected:ordered,unselected,prompt:memoryPrompt(ordered.map(item=>item.event),settings.injectionPrompt),selectedIds:ordering.orderedIds,
     budget:{maxCount:settings.maxCount,maxTokens:settings.maxTokens,totalTokens:settings.maxTokens===null?null:totalTokens,estimated,scope:'ordinary-body',soft:true},
     ordering:{orderedIds:ordering.orderedIds,strongEdges:ordering.strongEdges,retainedOrdinalEdges:ordering.retainedOrdinalEdges,suppressedOrdinalEdges:ordering.suppressedOrdinalEdges,diagnostics:ordering.diagnostics},diagnostics:aliases?.diagnostics??[]});
 }

@@ -49,9 +49,9 @@ function assertBase(value) {
   if (!text(value.versionId) || !text(value.body) || typeof value.startTime !== 'string' || typeof value.endTime !== 'string') throw new Error('古法完整基版无效');
 }
 export function publicCumulativeEvidence(value) {
-  const allowed = ['promptOverrides','injectionPosition','summaryCleaning','includeUser','checkBeforeSave','hideSource','trackingItemsEnabled','trackingNpcsEnabled','trackingIdentityReferencesEnabled'];
+  const allowed = ['promptOverrides','injectionPosition','injectionPrompt','summaryCleaning','includeUser','checkBeforeSave','hideSource','trackingItemsEnabled','trackingNpcsEnabled','trackingIdentityReferencesEnabled'];
   if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).some(key=>!allowed.includes(key))) throw new Error('古法公开配置证据无效');
-  assertCumulativeGeneration(Object.fromEntries(['promptOverrides','injectionPosition','trackingItemsEnabled','trackingNpcsEnabled','trackingIdentityReferencesEnabled'].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]])));
+  assertCumulativeGeneration(Object.fromEntries(['promptOverrides','injectionPosition','injectionPrompt','trackingItemsEnabled','trackingNpcsEnabled','trackingIdentityReferencesEnabled'].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]])));
   if(['includeUser','checkBeforeSave','hideSource'].some(key=>Object.hasOwn(value,key)&&typeof value[key]!=='boolean'))throw new Error('古法配置策略无效');
   if(Object.hasOwn(value,'summaryCleaning')) {
     exact(value.summaryCleaning,['rules']);if(!Array.isArray(value.summaryCleaning.rules))throw new Error('古法清洗证据无效');

@@ -11,7 +11,7 @@ export function createCumulativeSettingsController({
   const state = {
     status: 'loading', target: null, draft: null, promptDrafts: {},
     excludedFloors: [], opened: {}, scroll: {}, message: '', error: null,
-    savedSequence: 0, injectionDraft: null, floorDraft: ''
+    savedSequence: 0, injectionDraft: null, injectionPromptDraft: null, floorDraft: ''
   };
   const trackingAllowed = key => { try { return !getControls || getControls()?.allowed(key) === true; } catch { return false; } };
   const narrativeSettings = () => {
@@ -68,6 +68,7 @@ export function createCumulativeSettingsController({
       if (!preserve) {
         state.promptDrafts = {};
         state.injectionDraft = null;
+        state.injectionPromptDraft = null;
       }
       state.status = 'ready';
       state.error = null;
@@ -234,13 +235,20 @@ export function createCumulativeSettingsController({
       state.injectionDraft = value;
       return true;
     },
+    editInjectionPrompt(value) {
+      if (typeof value !== 'string' || !editable()) return false;
+      state.injectionPromptDraft = value;
+      return true;
+    },
     saveInjection() {
       const value = state.injectionDraft ?? state.draft?.injectionPosition ?? 9999;
+      const introduction = state.injectionPromptDraft;
       return commit(draft => {
         const n = typeof value === 'string' && !value.trim() ? NaN : Number(value);
         if (!Number.isSafeInteger(n) || n < 0) throw new Error('请输入大于或等于0的整数深度。');
         draft.injectionPosition = n;
-      }, () => { state.injectionDraft = null; });
+        if (introduction !== null) draft.injectionPrompt = introduction;
+      }, () => { state.injectionDraft = null; state.injectionPromptDraft = null; });
     },
     setFloorDraft(value) { state.floorDraft = value; },
     addFloor: value => floor('add', value),
@@ -254,6 +262,7 @@ export function createCumulativeSettingsController({
       if (busy) return false;
       state.promptDrafts = {};
       state.injectionDraft = null;
+      state.injectionPromptDraft = null;
       onBack();
       return true;
     },

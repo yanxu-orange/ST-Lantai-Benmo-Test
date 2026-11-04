@@ -25,9 +25,10 @@ export function narrativeBatchSourceChoice(preferences, kinds, {summary = false,
 }
 export function assertNarrativePreferences(value, kind) {
   assertKind(kind);
-  const keys = ['readMemory', 'readOriginal', 'background', 'budget', 'depth', 'prompt', ...(kind === 'self' ? ['readCard', 'characters'] : []), ...(Object.hasOwn(value??{}, 'autoSource') ? ['autoSource'] : [])];
+  const keys = ['readMemory', 'readOriginal', 'background', 'budget', 'depth', 'prompt', ...(kind === 'self' ? ['readCard', 'characters'] : []), ...(Object.hasOwn(value??{}, 'autoSource') ? ['autoSource'] : []), ...(Object.hasOwn(value??{}, 'injectionPrompt') ? ['injectionPrompt'] : [])];
   if (!exact(value, keys) || typeof value.readMemory !== 'boolean' || typeof value.readOriginal !== 'boolean'
     || typeof value.background !== 'string' || typeof value.prompt !== 'string' || !integer(value.budget, 1)) throw new Error('自述或大纲设置无效');
+  if (Object.hasOwn(value, 'injectionPrompt') && typeof value.injectionPrompt !== 'string') throw new Error('自述或大纲注入提示词无效');
   if (value.autoSource !== undefined && !['event', 'cumulative', 'none'].includes(value.autoSource)) throw new Error('叙事自动来源无效');
   if (!integer(value.depth) || value.depth > 10000) throw new Error('请填写 0—10000 的整数注入深度');
   if (kind === 'self') {

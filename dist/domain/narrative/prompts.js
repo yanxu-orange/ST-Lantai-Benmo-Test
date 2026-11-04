@@ -48,6 +48,8 @@ export const NARRATIVE_BOUNDARY = '原文是事件的直接记录，记忆资料
 export const NARRATIVE_PROTOCOL = '固定输出协议：返回完整更新结果的 JSON，不加 Markdown 或解释。每条为字符串，按剧情顺序排列。只能修改每组已有结果的最后两条及追加，更早条目必须逐字保留。没有重要变化时逐字返回已有结果；尚无结果且没有重要变化时，保留相应 JSON 外壳，将对应的 entries 返回为空数组。不得新增重复条目。';
 export const NARRATIVE_SELF_PROTOCOL = '每个指定角色返回一次，使用对应的 id。后来的认识不能改写早期自述。';
 export const NARRATIVE_OUTLINE_INJECTION = '这是此前剧情的大纲，记录了重要事件及其发展。续写时，请参考这些内容，了解故事如何发展到当前，承接已有进展，避免反复展开已经解决的冲突，不要机械复述。';
-export function narrativeSelfInjection(name) {
-  return `这是${name}的阶段自述，记录了其重要经历、想法与决定。续写时，请参考这些内容，塑造经历这些事情之后的角色，体现他的成长与变化，不要机械复述。`;
+export const NARRATIVE_SELF_INJECTION = '这是【角色名】的阶段自述，记录了其重要经历、想法与决定。续写时，请参考这些内容，塑造经历这些事情之后的角色，体现其成长与变化，不要机械复述。';
+export const DEFAULT_NARRATIVE_INJECTION_PROMPTS = Object.freeze({self:NARRATIVE_SELF_INJECTION,outline:NARRATIVE_OUTLINE_INJECTION});
+export function narrativeSelfInjection(name, template = NARRATIVE_SELF_INJECTION) {
+  return template.replace(/【角色名】|［角色名］/gu, () => name);
 }

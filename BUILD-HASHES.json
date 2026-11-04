@@ -46,8 +46,8 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "bytes": 110178,
-    "sha256": "cb02d19c6c730f8f1971d372594dfc1c127f420f86c867dcb629a293de34ada0"
+    "bytes": 110707,
+    "sha256": "6de384f8f299a4f3a1cf3ff23ec5b2fa7000ef3a084e3cfa13ca76b972ef5540"
   },
   {
     "path": "dist/app/book-themes/assets/PinyonScript-OFL.txt",
@@ -101,13 +101,13 @@
   },
   {
     "path": "dist/app/cumulative-settings-controller.js",
-    "bytes": 10871,
-    "sha256": "f3da02aa0bbc4a0d871090fa6080a20e9fc497bf9177db3263f54c9cabf83191"
+    "bytes": 11313,
+    "sha256": "139c2e5605efa1b9c5481a1c66629e25da8655e2de16b7e5538069d6c04865d0"
   },
   {
     "path": "dist/app/cumulative-settings-view.js",
-    "bytes": 7784,
-    "sha256": "d200d83d54b645df1eb3bd6462f825378475d1fcafc15cdf425aa33dcf828999"
+    "bytes": 8126,
+    "sha256": "3d5709cc9f48696955f5d87238ecf129114eff265a58f17eeb7822e7e37567d4"
   },
   {
     "path": "dist/app/cumulative-view.js",
@@ -276,8 +276,8 @@
   },
   {
     "path": "dist/app/recall-controller.js",
-    "bytes": 16245,
-    "sha256": "08c17d1eaf33f91b5a1c6d36d5a0fd6c19505affd85a9153d539434975b538e9"
+    "bytes": 16267,
+    "sha256": "bd4e7ffb0db38872246b4a392ad0a557b961cf607b9ee0499c3bfb2c21be4f4e"
   },
   {
     "path": "dist/app/recall-ranking-reasons.js",
@@ -291,8 +291,8 @@
   },
   {
     "path": "dist/app/recall-view.js",
-    "bytes": 32947,
-    "sha256": "e184bb9b31cca4a2d055bf1e4d743e355efaa4b789076e25dd46596fc6522a1d"
+    "bytes": 33460,
+    "sha256": "4f53c2d87e0534fe271f5e811b0a27266203ea6adaaf2306e8dad3983e0b7339"
   },
   {
     "path": "dist/app/schedule-settings-view.js",
@@ -687,7 +687,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "d17106ec3eca1f716db30ee6c7a7e794698254c591822bcbae6ecbd8d1ad3ca9"
+    "sha256": "31cd35a8fb19a63d6761ba2e5d610e3fbdc0803ed352a807c57ae5749d72f53d"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -741,8 +741,8 @@
   },
   {
     "path": "dist/domain/cumulative/data.js",
-    "bytes": 13361,
-    "sha256": "951aee169a2b9cf256486b63ccdd4bfab0d9268dcbed40cba46185787fea87b9"
+    "bytes": 13397,
+    "sha256": "625d8c897a1657ebaaaca435a754ad492f7c648b8c204add9c21db8a1da362f9"
   },
   {
     "path": "dist/domain/cumulative/requests.js",
@@ -851,13 +851,13 @@
   },
   {
     "path": "dist/domain/narrative/data.js",
-    "bytes": 27460,
-    "sha256": "757cef6bd5ee4735788671cb433ec925c84559d77c004a13ca0ea3476df4ba6f"
+    "bytes": 27686,
+    "sha256": "c1496e052fcb7a9be6d15a66e0136b46cc8f52f814cf69534df32b3f052af655"
   },
   {
     "path": "dist/domain/narrative/prompts.js",
-    "bytes": 7105,
-    "sha256": "a5b8c2d52b4233edbc00fa6584fa928c95f52716e40ae8067e3850986be7b492"
+    "bytes": 7389,
+    "sha256": "67882d794e32827fca7844bdf8ada7e06e9f764acb52767f3378c31f3bc20857"
   },
   {
     "path": "dist/domain/narrative/requests.js",
@@ -896,8 +896,8 @@
   },
   {
     "path": "dist/domain/recall/build.js",
-    "bytes": 14602,
-    "sha256": "53f1ed3ea9161a2e1f40657e600dc00a153ad6df87dbb79d8e21690fd8e2ee53"
+    "bytes": 14552,
+    "sha256": "0b1c71b06c8f5f1c3b801ac0ceef2413a37a4936b25f0a9e6fc7f661e76c38a3"
   },
   {
     "path": "dist/domain/recall/date-facts.js",
@@ -926,8 +926,8 @@
   },
   {
     "path": "dist/domain/recall/multichannel-build.js",
-    "bytes": 13666,
-    "sha256": "822fc5a283f94a5dc96d53af3af2d250dd59e8a619219c4c253965606a2a2a34"
+    "bytes": 13691,
+    "sha256": "6fe303a4583174abb7d59601174cb502ed8a0e13ad88d7627e58cad1e1db3c45"
   },
   {
     "path": "dist/domain/recall/multichannel.js",
@@ -1326,8 +1326,8 @@
   },
   {
     "path": "dist/platform/sillytavern/cumulative-runtime.js",
-    "bytes": 4524,
-    "sha256": "ee9fca72f27eee6eb82d55e704db7bcd4c56b84990a192c69528db3348807411"
+    "bytes": 4642,
+    "sha256": "f4904f53906954f1b580142b188bbf7a95216a05a10ea5573c0a6a3de5fd7c0b"
   },
   {
     "path": "dist/platform/sillytavern/events.js",
@@ -1406,8 +1406,8 @@
   },
   {
     "path": "dist/platform/sillytavern/narrative-runtime.js",
-    "bytes": 59922,
-    "sha256": "8f758f532a68f47eac280b9bb6a9748d089590a57bb2a1d40bf4de4dac57970f"
+    "bytes": 60473,
+    "sha256": "d5561eacfb4e78436139cbffe185d672d4d6cd0cdf820024bc1cb118cdd78d4f"
   },
   {
     "path": "dist/platform/sillytavern/native-summary-hide.js",
@@ -1651,8 +1651,8 @@
   },
   {
     "path": "dist/shared/settings/model.js",
-    "bytes": 23181,
-    "sha256": "ed5a1a7fd3f68032b257a9ac58f06538c7505882274174daafca9e61db67296d"
+    "bytes": 23663,
+    "sha256": "4d2afdc6eb2148e8bbd1e2f0f7e848b7d6284f2b9c428185c1614e0f73c608a8"
   },
   {
     "path": "dist/shared/settings/repository.js",
@@ -1687,6 +1687,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "395f6f30de2771ccc65e511f1c044b2325535d1d9d5a6def708506373461cada"
+    "sha256": "f8fb8e9ffe5cd725f965cd69f58361b8f751ac1ca1f78de9435fd259da6c4165"
   }
 ]

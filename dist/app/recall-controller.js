@@ -4,7 +4,7 @@ import {sameTarget} from '../domain/memory/repository.js';
 import {normalizeCleaningRule,BUILTIN_SUMMARY_CLEANING_SHORTCUTS} from '../domain/summary/cleaning.js';
 
 const copy=value=>structuredClone(value);
-const numericFields=['recentFloorCount','maxCount','maxTokens','memoryDepth','anniversaryPoolLimit','candidateCounts'];
+const editableFields=['recentFloorCount','maxCount','maxTokens','memoryDepth','anniversaryPoolLimit','candidateCounts','injectionPrompt'];
 const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
 export function createRecallController({repository,settings,runtime,onBack=()=>{},onClose=()=>{}}={}) {
   let disposed=false,ticket=0,previewTicket=0,indexTicket=0,baseline=null,visible=true,sessionTarget=null,reading=false,checking=false,externalPending=false,writer=null;
@@ -61,7 +61,7 @@ export function createRecallController({repository,settings,runtime,onBack=()=>{
   }
   async function read() {
     syncSession();
-    const retained=baseline&&['failed','unconfirmed'].includes(state.status)?Object.fromEntries(numericFields.filter(key=>key==='candidateCounts'?JSON.stringify(state.draft?.[key])!==JSON.stringify(baseline.recall[key]):!Object.is(state.draft?.[key],baseline.recall[key])).map(key=>[key,state.draft[key]])):{};
+    const retained=baseline&&['failed','unconfirmed'].includes(state.status)?Object.fromEntries(editableFields.filter(key=>key==='candidateCounts'?JSON.stringify(state.draft?.[key])!==JSON.stringify(baseline.recall[key]):!Object.is(state.draft?.[key],baseline.recall[key])).map(key=>[key,state.draft[key]])):{};
     if(state.autoSaving)return false;
     writer?.dispose();writer=null;
     const target=repository.captureTarget(),serial=++ticket;cancelPreview();reading=true;state.status='loading';state.error='';state.actual=actualView();notify();
@@ -97,7 +97,7 @@ export function createRecallController({repository,settings,runtime,onBack=()=>{
           baseline=settings.captureRecall();return baseline.recall;
         },
         onChange(snapshot){
-          const typed=Object.fromEntries(numericFields.filter(key=>Object.hasOwn(state.draft,key)).map(key=>[key,state.draft[key]]));
+          const typed=Object.fromEntries(editableFields.filter(key=>Object.hasOwn(state.draft,key)).map(key=>[key,state.draft[key]]));
           state.draft={...copy(snapshot.value),...typed};state.autoSaving=snapshot.saving;
           cancelPreview();state.preview=null;state.testStatus='stale';state.error='';
           if(!current(target,serial)){state.status='failed';state.error='聊天已变化，请重新读取。';}
@@ -127,7 +127,7 @@ export function createRecallController({repository,settings,runtime,onBack=()=>{
     editTestInput(value){if(typeof value!=='string'||state.testInput===value)return;cancelPreview();state.testInput=value;state.preview=null;state.testStatus='dirty';state.error='';notify();},
     invalidatePreview(){cancelPreview();state.preview=null;state.testStatus='stale';},resume(){visible=true;if(state.route==='settings')void refreshIndex();},suspend(){visible=false;indexTicket++;cancelPreview();if(state.testStatus==='running'){state.testStatus='stale';state.preview=null;}},
     route(value){cancelPreview();if(state.testStatus==='running'){state.testStatus='stale';state.preview=null;}state.route=value;state.error='';state.actual=actualView();notify();if(value==='settings')void refreshIndex();},tab(value){cancelPreview();if(state.testStatus==='running'){state.testStatus='stale';state.preview=null;}state.tab=value;state.actual=actualView();notify();},
-    edit(field,value){syncSession();if(!numericFields.includes(field)||!state.draft||state.status!=='ready')return false;if(!state.autoSaving&&!validateBaseline())return false;if(!Object.is(state.draft[field],value)){state.draft[field]=value;}return true;},
+    edit(field,value){syncSession();if(!editableFields.includes(field)||!state.draft||state.status!=='ready')return false;if(!state.autoSaving&&!validateBaseline())return false;if(!Object.is(state.draft[field],value)){state.draft[field]=value;}return true;},
     toggleSameDay(){return changeLight(draft=>{draft.automaticSameDayEnabled=!draft.automaticSameDayEnabled;});},
     toggleChannel(channel){if(!['keyword','bm25','vector','rerank'].includes(channel))return Promise.resolve(false);return changeLight(draft=>{draft.channels={...recallChannels(draft),[channel]:!recallChannels(draft)[channel]};});},
     addTerm(value){const word=value.trim();if(!word)return Promise.resolve(false);return changeLight(draft=>{if(!draft.excludedTerms.includes(word))draft.excludedTerms.push(word);});},

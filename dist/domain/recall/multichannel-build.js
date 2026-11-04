@@ -114,7 +114,7 @@ export function createMultichannelBuilder({vectorIndex,provider}={}){
   const narrative=orderMemoriesForNarrative({items:selected.map(item=>({memory:memoryMap.get(item.id),memoryId:item.id,libraryIndex:order.get(item.id)}))}),byId=new Map(selected.map(item=>[item.id,item]));
   const ordered=narrative.orderedIds.map(id=>byId.get(id));if(new Set(narrative.orderedIds).size!==selected.length)throw Error('duplicate-recall-id');assertAiCurrent(signal,isCurrent);
   return frozenSettingsCopy({version:'event-recall-multichannel-v1',time:{status:context.status,current:context.current,targets:timeResult.targets,specialTargets:special.targetResult.targets,diagnostics:special.targetResult.diagnostics},
-   specialBudget:{limit:settings.anniversaryPoolLimit,selectedCount:specialSelected.length},matching:{input:current,history},selected:ordered,unselected,prompt:memoryPrompt(ordered.map(row=>row.event)),selectedIds:narrative.orderedIds,
+   specialBudget:{limit:settings.anniversaryPoolLimit,selectedCount:specialSelected.length},matching:{input:current,history},selected:ordered,unselected,prompt:memoryPrompt(ordered.map(row=>row.event),settings.injectionPrompt),selectedIds:narrative.orderedIds,
    budget:{maxCount:settings.maxCount,maxTokens:settings.maxTokens,totalTokens:settings.maxTokens===null?null:totalTokens,estimated,scope:'ordinary-body',soft:true},ordering:{...narrative},diagnostics:keyword?.aliasResult?.diagnostics??[],
    multichannel:{channels,candidates:collected.cards,routeClaims:collected.routes,orderingMethod,rrfK,candidateCount:collected.cards.length,totalMs:now()-started,selectionNetworkMs:(channels.vector.elapsedMs??0)+(channels.rerank.elapsedMs??0)}});
  };

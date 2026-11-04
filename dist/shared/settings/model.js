@@ -133,13 +133,15 @@ export function settingsFingerprint(value) {
   return JSON.stringify(ordered(value));
 }
 export const equalSettings = (a, b) => settingsFingerprint(a) === settingsFingerprint(b);
+export const DEFAULT_MEMORY_INJECTION_PROMPT='以下内容是过去已经发生的记忆，可能与最近的讨论有关。请将其作为事实与经历参考，自然保持连续性；不要机械复述，也不要声称看见了记忆条目。';
 export function defaultRecallSettings() { return { recentFloorCount:6,maxCount:10,maxTokens:null,memoryDepth:9999,itemDepth:9999,npcDepth:9999,anniversaryPoolLimit:2,automaticSameDayEnabled:true,excludedTerms:[],recallCleaning:{rules:[]} }; }
 export function recallChannels(value) { return value.channels??{keyword:true,bm25:false,vector:false,rerank:false}; }
 export function recallCandidateCounts(value) { return value.candidateCounts??{keyword:5,bm25:5,vector:5,date:5}; }
 export function assertRecallSettings(value) {
   try {
     value={anniversaryPoolLimit:2,automaticSameDayEnabled:true,...value};
-    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled',...(Object.hasOwn(value,'channels')?['channels']:[]),...(Object.hasOwn(value,'candidateCounts')?['candidateCounts']:[]),...['itemDepth','npcDepth'].filter(key=>Object.hasOwn(value,key))]);
+    exact(value,['recentFloorCount','maxCount','maxTokens','memoryDepth','excludedTerms','recallCleaning','anniversaryPoolLimit','automaticSameDayEnabled',...(Object.hasOwn(value,'channels')?['channels']:[]),...(Object.hasOwn(value,'candidateCounts')?['candidateCounts']:[]),...['itemDepth','npcDepth','injectionPrompt'].filter(key=>Object.hasOwn(value,key))]);
+    if(Object.hasOwn(value,'injectionPrompt')&&typeof value.injectionPrompt!=='string')invalid();
     if(['itemDepth','npcDepth'].some(key=>Object.hasOwn(value,key)&&(!Number.isSafeInteger(value[key])||value[key]<0||value[key]>10000)))invalid();
     if(Object.hasOwn(value,'candidateCounts')){exact(value.candidateCounts,['keyword','bm25','vector','date']);if(Object.values(value.candidateCounts).some(count=>!Number.isSafeInteger(count)||count<1||count>RECALL_REQUEST_LIMITS.candidatePerRoute))invalid();}
     if(Object.hasOwn(value,'channels')){exact(value.channels,['keyword','bm25','vector','rerank']);if(Object.values(value.channels).some(item=>typeof item!=='boolean'))invalid();}
@@ -162,7 +164,7 @@ export function defaultCumulativeGeneration() {
 export function assertCumulativeGeneration(value) {
   try {
     const trackingKeys = Object.keys(defaultCumulativeGeneration());
-    if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).some(key=>!['promptOverrides','injectionPosition',...trackingKeys].includes(key)))invalid();
+    if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).some(key=>!['promptOverrides','injectionPosition','injectionPrompt',...trackingKeys].includes(key)))invalid();
     value = { ...defaultCumulativeGeneration(), ...value };
     if (trackingKeys.some(key => typeof value[key] !== 'boolean')) invalid();
     if(Object.hasOwn(value,'promptOverrides')) {
@@ -170,6 +172,7 @@ export function assertCumulativeGeneration(value) {
       if(!prompts||Object.getPrototypeOf(prompts)!==Object.prototype||Object.entries(prompts).some(([key,item])=>!CUMULATIVE_PROMPT_KEYS.includes(key)||typeof item!=='string'))invalid();
     }
     if(Object.hasOwn(value,'injectionPosition')&&(!Number.isSafeInteger(value.injectionPosition)||value.injectionPosition<0||value.injectionPosition>10000))invalid();
+    if(Object.hasOwn(value,'injectionPrompt')&&typeof value.injectionPrompt!=='string')invalid();
     return frozenSettingsCopy(value);
   }catch{throw new SettingsError();}
 }
