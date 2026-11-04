@@ -108,7 +108,22 @@ export function rollbackNarrativeTail(value,deletion){
     const history=domain.rollback?.[kind],witness=null;
     const valid=true;
     let affected=history?.operations.findIndex(op=>op.type==='generation'&&op.range.endFloor>=first)??-1;
-    if(progress.lastProcessedFloor<first){if(!history||history.operations.at(-1)?.type!=='manual')continue;affected=history.operations.length;}
+    if(progress.lastProcessedFloor<first){
+      // A manual historical range can retain later prose or an automatic high-water.
+      const entries=value=>kind==='outline'?value:value.flatMap(row=>row.entries),removed=entry=>entry.sources.some(range=>range.end>=first),latest=domain.latestGeneration?.[kind];
+      const removedContent=entries(domain[kind]).some(removed);
+      const records=domain.generationRecords?.[kind]??[],invalidLatest=latest&&(latest.range.endFloor>=first||latest.baseline.progress?.lastProcessedFloor>=first||entries(latest.baseline.entries).some(removed));
+      if(removedContent||(domain.highWater?.[kind]??-1)>=first||records.some(row=>row.endFloor>=first)||invalidLatest){
+        if(removedContent)domain[kind]=kind==='outline'?domain.outline.filter(entry=>!removed(entry)):domain.self.map(row=>({...row,entries:row.entries.filter(entry=>!removed(entry))}));
+        const retained=records.filter(row=>row.endFloor<first);
+        if(domain.generationRecords)domain.generationRecords[kind]=retained;
+        domain.highWater??={self:null,outline:null};domain.highWater[kind]=Math.max(progress.lastProcessedFloor,...retained.map(row=>row.endFloor));
+        if(invalidLatest)domain.latestGeneration[kind]=null;
+        domain.rollback??={self:null,outline:null};domain.rollback[kind]={boundary:domain.highWater[kind],operations:[]};
+        outcomes.push({kind,status:'restored',lastProcessedFloor:progress.lastProcessedFloor});continue;
+      }
+      if(!history||history.operations.at(-1)?.type!=='manual')continue;affected=history.operations.length;
+    }
     if(!valid||!history||affected<0||history.boundary!==null&&history.boundary>=first){
       clearAffected(kind);
       continue;

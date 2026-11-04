@@ -59,7 +59,7 @@ function memoryPayload(row, originalRanges) {
   }
   return {...clone(row), overlapsOriginal: mergeRanges(overlaps)};
 }
-export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endFloor, events = [], card = null, countTokens = null, rules, originalOnly = false, sentFloors: suppliedFloors, jointBudget, deferAccounting = false, materialSelection = null, sharedMaterials = null, isCurrent = () => true} = {}) {
+export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endFloor, events = [], card = null, countTokens = null, rules, originalOnly = false, sentFloors: suppliedFloors, jointBudget, deferAccounting = false, materialSelection = null, sharedMaterials = null, manualRange = false, isCurrent = () => true} = {}) {
   assertKind(kind);
   if (jointBudget !== undefined && !integer(jointBudget, 1)) throw new Error('联合材料预算无效');
   const deferredBudget = jointBudget !== undefined;
@@ -81,7 +81,7 @@ export async function prepareNarrativeUpdate(value, raw, {kind, startFloor, endF
   if (!range(requestedRange)) throw new Error('自述或大纲本批范围无效');
   if (kind === 'self' && !preferences.characters.length) throw new Error('请先指定要生成自述的角色');
   const previous = clone(domain[kind]), previousEntries = kind === 'outline' ? previous : previous.flatMap(row => row.entries);
-  if (previousEntries.some(entry => entry.sources.some(item => item.end > endFloor)) || domain.progress[kind]?.lastProcessedFloor > endFloor) throw new Error('已有结果包含截止楼层之后的内容，请选择更晚的结束楼层');
+  if (!manualRange && (previousEntries.some(entry => entry.sources.some(item => item.end > endFloor)) || domain.progress[kind]?.lastProcessedFloor > endFloor)) throw new Error('已有结果包含截止楼层之后的内容，请选择更晚的结束楼层');
   if (domain.progress[kind] && !matchesStoredNarrativeSource(domain.progress[kind].sourceSnapshot, raw, domain)) throw new Error('已有自述或大纲来源已变化，请先更新来源投影');
   const rawMessages = source.messages.filter(row => row.floor <= endFloor).sort((a, b) => a.floor - b.floor);
   if (rawMessages.length !== endFloor + 1 || rawMessages.some((row, index) => row.floor !== index)) throw new Error('截至本批的原文前缀不可用，无法验证来源');

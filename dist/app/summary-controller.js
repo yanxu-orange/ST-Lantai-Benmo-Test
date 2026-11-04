@@ -90,7 +90,7 @@ export function createSummaryController({repository,service,captureSource,contro
     notify();
   });
   return Object.freeze({
-    inspect,runner,subscribeNarrativeContinuation(fn){continuationListeners.add(fn);return()=>continuationListeners.delete(fn);},selectNarrativeContinuation(mode){if(!state.busy&&!['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(state.task?.status)&&state.narrativeContinuation&&['skip','replace'].includes(mode)){state.narrativeContinuationMode=mode;notifyContinuation();}},flushParams:queueParameters,setVisible(value){visible=value===true;if(!visible)void queueParameters();},setScroll(value){state.scroll=value;},
+    inspect,runner,subscribeNarrativeContinuation(fn){continuationListeners.add(fn);return()=>continuationListeners.delete(fn);},selectNarrativeContinuation(mode){if(!state.busy&&!['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(state.task?.status)&&state.narrativeContinuation&&['skip','append','rebuild'].includes(mode)){state.narrativeContinuationMode=mode;notifyContinuation();}},flushParams:queueParameters,setVisible(value){visible=value===true;if(!visible)void queueParameters();},setScroll(value){state.scroll=value;},
     async open(origin='manual') {
       if(disposed||!['manual','auto'].includes(origin))return false;
       const request=++openRequest,next=repository.captureTarget();invalidateContinuation();

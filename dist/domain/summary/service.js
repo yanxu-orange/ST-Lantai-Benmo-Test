@@ -52,7 +52,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     const consent=params.narrativeContinuation?assertSummaryNarrativeContinuation(params.narrativeContinuation):null;
     if(consent&&options.resumePending&&consent.target.chatId===target.chatId&&consent.target.rootId===target.rootId)consent.target=structuredClone(target);
     const snapshot={target,selection,settings,source,identities:readTrackingContext().identities,origin,operationId:uuid(),params:{includeUser:params.includeUser,reviewBeforeCommit:origin==='regeneration'||params.reviewBeforeCommit,hideOriginal:stored?.hideOriginal??params.hideOriginal,...(consent?{narrativeContinuation:consent}:{})},batchId:stored?.id??options.resumePending?.batchId??uuid()};
-    if(snapshot.params.narrativeContinuation){if(origin!=='manual')throw new Error('自动总结不能替换历史叙事');const choice=snapshot.params.narrativeContinuation;if(!sameTarget(choice.target,target)||!equalData(choice.range,source.actualRange))throw new Error('总结范围已变化，请重新选择自述与大纲处理方式');if(choice.mode==='replace'){if(!options.resumePending&&!choice.authorization)throw new Error('请重新确认本次自述与大纲替换');const plan=await planSummaryContinuation?.({target,startFloor:source.actualRange.start,endFloor:source.actualRange.end,...(!options.resumePending?{authorization:choice.authorization}:{})});if(!plan?.overlap||plan.revision!==choice.revision||!equalData(plan.kinds,choice.kinds)||!equalData(plan.base,choice.base))throw new Error('自述与大纲已变化，请重新确认本次替换');if(options.resumePending)choice.authorization=plan.authorization;}}
+    if(snapshot.params.narrativeContinuation){if(origin!=='manual')throw new Error('自动总结不能替换历史叙事');const choice=snapshot.params.narrativeContinuation;if(!sameTarget(choice.target,target)||!equalData(choice.range,source.actualRange))throw new Error('总结范围已变化，请重新选择自述与大纲处理方式');if(choice.mode!=='skip'){if(!options.resumePending&&!choice.authorization)throw new Error('请重新确认本次自述与大纲替换');const plan=await planSummaryContinuation?.({target,startFloor:source.actualRange.start,endFloor:source.actualRange.end,...(!options.resumePending?{authorization:choice.authorization}:{})});if(!plan?.overlap||plan.revision!==choice.revision||!equalData(plan.kinds,choice.kinds)||!equalData(plan.base,choice.base))throw new Error('自述与大纲已变化，请重新确认本次替换');if(options.resumePending)choice.authorization=plan.authorization;}}
     const trackingPreferences={itemsEnabled:settings.trackingItemsEnabled===true,npcsEnabled:settings.trackingNpcsEnabled===true};
     if(trackingPreferences.itemsEnabled||trackingPreferences.npcsEnabled){
       const context=readTrackingContext();
@@ -67,7 +67,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     return snapshot;
   }
   async function checkNarrativeContinuation(snapshot){
-    const choice=snapshot.params.narrativeContinuation;if(choice?.mode!=='replace')return;
+    const choice=snapshot.params.narrativeContinuation;if(!choice||choice.mode==='skip')return;
     if(!choice.authorization)throw new Error('请重新确认本次自述与大纲替换');const plan=await planSummaryContinuation?.({target:snapshot.target,startFloor:snapshot.source.actualRange.start,endFloor:snapshot.source.actualRange.end,authorization:choice.authorization});
     if(!plan?.overlap||!sameTarget(plan.target,choice.target)||plan.revision!==choice.revision||!equalData(plan.kinds,choice.kinds)||!equalData(plan.base,choice.base))throw new Error('自述与大纲已变化，请重新确认本次替换');
   }

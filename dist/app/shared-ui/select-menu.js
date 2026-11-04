@@ -35,7 +35,14 @@ export function mountSelectMenus(root){
   doc.addEventListener('pointerdown',outside,true);doc.addEventListener('focusin',focusOutside,true);doc.addEventListener('scroll',scroll,true);win.addEventListener('resize',resize);win.visualViewport?.addEventListener('resize',resize);win.visualViewport?.addEventListener('scroll',resize);
   if(win.MutationObserver){const s=state;s.observer=new win.MutationObserver(records=>{if(state===s&&(records.some(row=>row.target===s.select||s.select.contains(row.target))||!current(s)))close();});s.observer.observe(root,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['disabled','hidden','inert','open','data-ui-theme','value','label','selected']});}return true;
  }
- function pointer(event){if(event.type==='mousedown'&&win.PointerEvent)return;const select=sourceOf(event);if(!select||!eligible(select)||event.button>0)return;event.preventDefault();if(state?.select===select)close({focus:true});else if(!open(select))try{select.showPicker?.();}catch{}pointerClick={select,id:event.pointerId};}
+ function pointer(event){
+  const select=sourceOf(event);if(!select||!eligible(select)||event.button>0)return;
+  // Touch must remain a native pan until the completed tap produces a click.
+  if(event.type==='pointerdown'&&event.pointerType==='touch'){pointerClick=null;return;}
+  // A compatible mousedown must not invoke the native picker before our click.
+  if(event.type==='mousedown'&&win.PointerEvent){event.preventDefault();return;}
+  event.preventDefault();if(state?.select===select)close({focus:true});else if(!open(select))try{select.showPicker?.();}catch{}pointerClick={select,id:event.pointerId};
+ }
  function click(event){const select=sourceOf(event);if(!select||!eligible(select))return;if(selectMenuCompatibleClick(pointerClick,select,event)){pointerClick=null;event.preventDefault();return;}if(state?.select===select){event.preventDefault();close({focus:true});}else if(open(select))event.preventDefault();else try{select.showPicker?.();}catch{}}
  function keydown(event){const select=sourceOf(event);if(!select||!eligible(select)||event.isComposing||event.keyCode===229)return;const s=state?.select===select?state:null,key=event.key;if(key==='Tab'){if(s)close();return;}if(key==='Escape'){if(s){event.preventDefault();event.stopPropagation();close({focus:true});}return;}if(event.ctrlKey||event.metaKey)return;
   const navigation=['ArrowDown','ArrowUp','Home','End','PageDown','PageUp'].includes(key),character=key.length===1&&!event.altKey;

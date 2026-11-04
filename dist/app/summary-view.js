@@ -17,7 +17,7 @@ const optionChoices=(origin,params)=>{
 const number=(key,label,value)=>`<label class="ui-field"><span>${label}</span><input class="ui-input" type="number" min="0" step="1" inputmode="numeric" data-summary-param="${key}" value="${esc(value)}"></label>`;
 function narrativeContinuationChoice(state){
  if(state.origin!=='manual'||!state.narrativeContinuation)return '';
- return '<div class="ui-field"><span>自述与大纲（本范围已处理）</span><div class="ui-choice-group">'+[['skip','跳过，保留现有成果'],['replace','按本次范围重新生成并替换']].map(([mode,label])=>'<label class="ui-choice ui-choice--control-only"><input type="radio" name="summary-narrative-continuation" data-summary-narrative-continuation="'+mode+'" '+(state.narrativeContinuationMode===mode?'checked':'')+' '+(state.busy||['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(state.task?.status)?'disabled':'')+'><span>'+label+'</span></label>').join('')+'</div></div>';
+ return '<div class="ui-field"><span>自述与大纲（本范围已处理）</span><div class="ui-choice-group">'+[['skip','跳过，保留现有成果'],['append','接续生成'],['rebuild','全部重建']].map(([mode,label])=>'<label class="ui-choice ui-choice--control-only"><input type="radio" name="summary-narrative-continuation" data-summary-narrative-continuation="'+mode+'" '+(state.narrativeContinuationMode===mode?'checked':'')+' '+(state.busy||['starting','running','awaiting-user','committing','narrative-running','narrative-failed'].includes(state.task?.status)?'disabled':'')+'><span>'+label+'</span></label>').join('')+'</div></div>';
 }
 const histories=new WeakMap();
 const savedNotices=new WeakMap();

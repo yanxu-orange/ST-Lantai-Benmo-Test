@@ -8,7 +8,7 @@ const text=value=>typeof value==='string'&&!!value.trim();
 // Task-scoped consent and generated-outcome proof; never a global preference or chat copy.
 export function assertSummaryNarrativeContinuation(value){
   exact(value,['mode','target','range','revision','kinds','base',...(Object.hasOwn(value??{},'authorization')?['authorization']:[])]);if(value.authorization!==undefined&&!text(value.authorization))throw new Error('叙事授权无效');exact(value.target,['chatId','rootId','epoch']);exact(value.range,['start','end']);
-  if(!['skip','replace'].includes(value.mode)||!text(value.target.chatId)||!text(value.target.rootId)||!integer(value.target.epoch)||!validRange(value.range)||!integer(value.revision)||!Array.isArray(value.kinds)||!value.kinds.length||new Set(value.kinds).size!==value.kinds.length||value.kinds.some(kind=>!['self','outline'].includes(kind)))throw new Error('本次自述与大纲选择无效');
+  if(!['skip','append','rebuild','replace'].includes(value.mode)||!text(value.target.chatId)||!text(value.target.rootId)||!integer(value.target.epoch)||!validRange(value.range)||!integer(value.revision)||!Array.isArray(value.kinds)||!value.kinds.length||new Set(value.kinds).size!==value.kinds.length||value.kinds.some(kind=>!['self','outline'].includes(kind)))throw new Error('本次自述与大纲选择无效');
   exact(value.base,value.kinds);if(Object.values(value.base).some(hash=>typeof hash!=='string'||!/^[a-f0-9]{64}$/.test(hash)))throw new Error('本次自述与大纲基版无效');return copy(value);
 }
 export function emptySummary() {

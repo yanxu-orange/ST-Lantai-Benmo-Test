@@ -77,7 +77,7 @@ function assertNarrativeContent(value, owner = value) {
         || report.budget !== joint.budget || report.estimated !== joint.estimated || report.tokenMethod !== joint.tokenMethod || report.outputReserve > joint.outputReserve) throw new Error('自述或大纲联合材料报告无效');
     }
     const entries = kind === 'self' ? value.self.flatMap(row => row.entries) : value.outline;
-    if (entries.some(entry => entry.sources.some(source => source.end > progress.lastProcessedFloor))) throw new Error('自述或大纲进度落后于结果');
+    if (entries.some(entry => entry.sources.some(source => source.end > Math.max(progress.lastProcessedFloor, owner.highWater?.[kind] ?? -1)))) throw new Error('自述或大纲进度落后于结果');
   }
 }
 function checkSource(snapshot, owner) {
@@ -97,16 +97,16 @@ export function validateNarrative(value) {
   for (const kind of ['self', 'outline']) assertNarrativePreferences(value.preferences[kind], kind);
   if (value.pendingRun !== undefined && value.pendingRun !== null) {
     const pending = value.pendingRun;
-    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status', ...(Object.hasOwn(pending, 'jointBudget') ? ['jointBudget'] : []), ...(Object.hasOwn(pending, 'summarySource') ? ['summarySource'] : []), ...(Object.hasOwn(pending, 'sentFloors') ? ['sentFloors'] : []), ...(Object.hasOwn(pending, 'summarySnapshot') ? ['summarySnapshot'] : []), ...['reviewBeforeCommit', 'regenerateLatest', 'pauseRequested', 'review', 'pairId','summaryContinuation'].filter(key => Object.hasOwn(pending, key))]) || !Array.isArray(pending.ranges) || !pending.ranges.length
+    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status', ...(Object.hasOwn(pending, 'jointBudget') ? ['jointBudget'] : []), ...(Object.hasOwn(pending, 'summarySource') ? ['summarySource'] : []), ...(Object.hasOwn(pending, 'sentFloors') ? ['sentFloors'] : []), ...(Object.hasOwn(pending, 'summarySnapshot') ? ['summarySnapshot'] : []), ...['reviewBeforeCommit', 'regenerateLatest', 'manualRange', 'pauseRequested', 'review', 'pairId','summaryContinuation'].filter(key => Object.hasOwn(pending, key))]) || !Array.isArray(pending.ranges) || !pending.ranges.length
       || pending.ranges.some(item => !exact(item, ['startFloor', 'endFloor']) || !integer(item.startFloor) || !integer(item.endFloor, item.startFloor))
       || !integer(pending.index) || pending.index >= pending.ranges.length || !Array.isArray(pending.kinds) || !pending.kinds.length || new Set(pending.kinds).size !== pending.kinds.length || pending.kinds.some(kind => !['self', 'outline'].includes(kind))
       || !Array.isArray(pending.failedKinds) || new Set(pending.failedKinds).size !== pending.failedKinds.length || pending.failedKinds.some(kind => !pending.kinds.includes(kind))
       || typeof pending.restart !== 'boolean' || typeof pending.summary !== 'boolean' || !['paused', 'failed', 'awaiting-review'].includes(pending.status)) throw new Error('叙事批次断点无效');
-    for (const key of ['reviewBeforeCommit', 'regenerateLatest', 'pauseRequested']) if (Object.hasOwn(pending, key) && typeof pending[key] !== 'boolean') throw new Error('叙事批次检查选项无效');
+    for (const key of ['reviewBeforeCommit', 'regenerateLatest', 'manualRange', 'pauseRequested']) if (Object.hasOwn(pending, key) && typeof pending[key] !== 'boolean') throw new Error('叙事批次检查选项无效');
     if (Object.hasOwn(pending, 'pairId') && !text(pending.pairId)) throw new Error('叙事批次身份无效');
     if (pending.reviewBeforeCommit && pending.summary) throw new Error('自动续接不能进入手动检查');
     if (pending.status === 'awaiting-review' || Object.hasOwn(pending, 'review')) assertNarrativeReview(pending, value);
-    if(pending.summaryContinuation!==undefined){assertSummaryNarrativeContinuation(pending.summaryContinuation);if(!pending.summary||!pending.restart||pending.summarySource!=='event'||pending.summaryContinuation.mode!=='replace'||!same(pending.kinds,pending.summaryContinuation.kinds))throw new Error('叙事替换任务范围无效');}
+    if(pending.summaryContinuation!==undefined){assertSummaryNarrativeContinuation(pending.summaryContinuation);if(!pending.summary||pending.summarySource!=='event'||!['append','rebuild','replace'].includes(pending.summaryContinuation.mode)||pending.restart!==(pending.summaryContinuation.mode!=='append')||pending.summaryContinuation.mode==='append'&&pending.manualRange!==true||!same(pending.kinds,pending.summaryContinuation.kinds))throw new Error('叙事替换任务范围无效');}
     if (Object.hasOwn(pending, 'jointBudget') && !integer(pending.jointBudget, 1)) throw new Error('叙事批次联合预算无效');
     if (pending.summarySource !== undefined && !['event', 'cumulative'].includes(pending.summarySource)) throw new Error('叙事批次来源无效');
     if (pending.summarySnapshot !== undefined) checkSource(pending.summarySnapshot, value);

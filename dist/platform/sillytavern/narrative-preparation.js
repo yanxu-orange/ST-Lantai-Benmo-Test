@@ -21,7 +21,7 @@ export function projectNarrativeBatchBase(domain,raw,{kinds,restart=false,index=
 
 // Read-only preparation shared by the actual sender and the transient preview.
 // Never retain a provider, repository, or mutable host object in the result.
-export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materialKinds=kinds,restart=false,index=0,summary=false,summarySource,jointBudget,sentFloors,regenerateLatest=false,card=null,rules=[],countTokens=null,isCurrent=()=>true}={}) {
+export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materialKinds=kinds,restart=false,index=0,summary=false,summarySource,jointBudget,sentFloors,regenerateLatest=false,manualRange=false,card=null,rules=[],countTokens=null,isCurrent=()=>true}={}) {
   const guard=()=>{
     let current=false;try{current=typeof isCurrent==='function'&&isCurrent()===true;}catch{}
     if(!current)throw Object.assign(new Error('自述或大纲任务已取消或来源已变化'),{code:'NARRATIVE_CANCELLED'});
@@ -29,7 +29,7 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materia
   guard();
   if(!Array.isArray(kinds)||!kinds.length||new Set(kinds).size!==kinds.length||kinds.some(kind=>!['self','outline'].includes(kind)))throw new Error('请选择有效的叙事类别');
   // Capture all data before the first tokenizer await, including retry inputs.
-  const captured=structuredClone({domain,root,raw,range,kinds,materialKinds,restart,index,summary,summarySource,jointBudget,sentFloors,regenerateLatest,card,rules});
+  const captured=structuredClone({domain,root,raw,range,kinds,materialKinds,restart,index,summary,summarySource,jointBudget,sentFloors,regenerateLatest,manualRange,card,rules});
   ({domain,root,raw,range,kinds,materialKinds,card,rules,sentFloors}=captured);
   // Exact-text memoization is local to this preparation only. A host tokenizer
   // need not be additive; every distinct budget decision is still counted.
@@ -51,10 +51,10 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materia
     readOriginal:sharedChoice==='original',
     readMemory:sharedChoice==='memory',
   }:null;
-  const sharedRange=summary&&joint&&!restart?{...range,startFloor:Math.max(range.startFloor,Math.min(...kinds.map(kind=>narrativeHighWater(domain,kind)+1)))}:null;
+  const sharedRange=summary&&joint&&!restart&&!manualRange?{...range,startFloor:Math.max(range.startFloor,Math.min(...kinds.map(kind=>narrativeHighWater(domain,kind)+1)))}:null;
   for(const kind of kinds){
-    const taskRange=sharedRange??(summary&&!restart?{...range,startFloor:Math.max(range.startFloor,narrativeHighWater(domain,kind)+1)}:range);
-    tasks.push(await prepareNarrativeUpdate(projected,raw,{kind,...taskRange,events,card,originalOnly,materialSelection,sharedMaterials:joint?tasks[0]:null,...(jointBudget!==undefined?{jointBudget}:{}),...(originalOnly&&sentFloors?{sentFloors}:{}),rules,countTokens:count,deferAccounting:jointBudget!==undefined,isCurrent:()=>{guard();return true;}}));
+    const taskRange=sharedRange??(summary&&!restart&&!manualRange?{...range,startFloor:Math.max(range.startFloor,narrativeHighWater(domain,kind)+1)}:range);
+    tasks.push(await prepareNarrativeUpdate(projected,raw,{kind,...taskRange,events,card,originalOnly,manualRange,materialSelection,sharedMaterials:joint?tasks[0]:null,...(jointBudget!==undefined?{jointBudget}:{}),...(originalOnly&&sentFloors?{sentFloors}:{}),rules,countTokens:count,deferAccounting:jointBudget!==undefined,isCurrent:()=>{guard();return true;}}));
   }
   guard();
   if(jointBudget!==undefined){

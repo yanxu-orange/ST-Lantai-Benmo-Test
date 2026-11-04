@@ -16,3 +16,8 @@ export function serializeRoundRecord(card){
  if(card.kind==='workshop')return `<LTworkshopRecord version="1">\n${taskText(card.tasks[0],'LTtask')}\n</LTworkshopRecord>`;
  return `<LTroundRecord version="1">\n${card.tasks.map(task=>taskText(task,{summary:'LTsummary',tracking:'LTtracking',schedule:'LTschedule'}[task.kind])).join('\n')}\n</LTroundRecord>`;
 }
+// Reading fallback is built from outcomes, never decoded from the regex packet.
+export function roundRecordFallback(card){
+ if(card.kind==='workshop')return card.tasks[0].body??'';
+ return card.tasks.map(task=>[task.name,task.body,task.error].filter(value=>typeof value==='string'&&value).join('\n')).join('\n\n');
+}
