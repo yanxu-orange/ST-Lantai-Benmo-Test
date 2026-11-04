@@ -2,7 +2,7 @@ import {isVerifiedTailDeletion} from '../../domain/summary/source-deletion.js';
 import {sameTarget} from '../../domain/memory/repository.js';
 import {featureGate} from '../../domain/controls/gate.js';
 import {createCalendar} from '../../domain/time/calendar.js';
-import {worldCalendar} from '../../domain/world-dynamics/data.js';
+import {sameWorldCalendar} from '../../domain/world-dynamics/data.js';
 import {worldPreferences} from '../../domain/world-dynamics/preferences.js';
 import {materialEnabled} from '../../domain/world-dynamics/materials.js';
 const copy=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -14,7 +14,7 @@ export function createWorldAutoRuntime({adapter,repository,history,dateRuntime,g
  const mark=(target,date,endFloor=adapter.captureSummarySource(target).messages.at(-1)?.floor??-1)=>attempts.set(key(target,date),{scope:scope(target),date:copy(date),endFloor});
  function recordCurrent(selection){const v=selection.worldDynamics.current;lastConfirmed.set(scope(selection.target),v?{id:v.id,endFloor:v.endFloor,date:copy(v.date),calendar:copy(v.calendar)}:null);}
  function reconcileHistory(selection){const s=scope(selection.target),before=lastConfirmed.get(s),next=selection.worldDynamics.current;if(before&&(!next||next.endFloor<before.endFloor||equal(next.calendar,before.calendar)&&createCalendar(next.calendar).compare(next.date,before.date)<0)){for(const [id,attempt]of attempts)if(attempt.scope===s&&(!next||attempt.date.calendarId!==next.date.calendarId||createCalendar(next.calendar).compare(attempt.date,next.date)>0))attempts.delete(id);}recordCurrent(selection);}
- function candidate(selection){const {worldDynamics:domain,time}=selection,version=domain.current,definition=time?.calendars.find(v=>v.id===time.activeCalendarId);if(!version||!worldPreferences(domain).enabled||!definition||time.currentDate?.day==null||!equal(worldCalendar(definition),worldCalendar(version.calendar)))return null;const calendar=createCalendar(definition),date=calendar.validate(time.currentDate);return {date,forward:calendar.compare(date,version.date)>0};}
+ function candidate(selection){const {worldDynamics:domain,time}=selection,version=domain.current,definition=time?.calendars.find(v=>v.id===time.activeCalendarId);if(!version||!worldPreferences(domain).enabled||!definition||time.currentDate?.day==null||!sameWorldCalendar(definition,version.calendar))return null;const calendar=createCalendar(definition),date=calendar.validate(time.currentDate);return {date,forward:calendar.compare(date,version.date)>0};}
  const supported=new Set(['normal','regenerate','swipe','continue']);
  const locator=row=>row?{floor:row.floor,identity:row.identity,objectTicket:row.objectTicket,role:row.role,swipeId:row.swipeId??null}:null;
  const sameReply=(a,b)=>equal(locator(a),locator(b));

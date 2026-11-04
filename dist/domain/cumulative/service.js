@@ -51,14 +51,32 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     try{const selection=record?.selection??snapshot.selection,proof=repository.matchesCumulativeTaskProof?.(target,selection,snapshot.source,snapshot.tracking?.ticket.revision);if(proof!==undefined)return proof;return (repository.matchesCumulativeTask??repository.matchesCumulative).call(repository,target,selection)&&(!snapshot.tracking||repository.matchesTrackingRevision(target,snapshot.tracking.ticket.revision))&&matchesCumulativeSource(snapshot.source,captureSource(target,snapshot.source.requestedRange));}catch{return false;}
   }
   const current=(snapshot,target)=>targetCurrent(snapshot,target)&&sourceCurrent(snapshot,target);
-  function inspect(taskId) {
+  function taskState(taskId){
     const record=records.get(taskId),state=manager.inspect(taskId)??record?.restoredTask;if(!state||!record)return null;
     const narrative=record.narrativeRetired?null:record.narrative;
-    return {...state,...(state.status==='succeeded'&&narrative?.status==='running'?{status:'narrative-running'}:state.status==='succeeded'&&narrative?.status==='failed'?{status:'narrative-failed'}:{}),narrative:narrative?{...narrative}:null,origin:record.origin,stage:record.stage,outcome:record.outcome,reviewResolution:record.reviewResolution,rebindRequired:record.rebindRequired,receipt:record.receipt?structuredClone(record.receipt):null,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,hiding:record.hiding?{...record.hiding}:null,diagnostics:structuredClone(record.diagnostics??[]),trackingRejected:structuredClone(record.trackingRejected??record.trackingParts?.rejected??null)};
+    return {...state,...(state.status==='succeeded'&&narrative?.status==='running'?{status:'narrative-running'}:state.status==='succeeded'&&narrative?.status==='failed'?{status:'narrative-failed'}:{})};
+  }
+  function releaseInput(taskId,closing=false){
+    const record=records.get(taskId),state=taskState(taskId);if(!record||!state||record.writeInFlight||record.outcome==='unconfirmed'||record.rebindRequired)return false;
+    if(!closing&&(state.status!=='succeeded'||record.reviewResolution!=='committed'||record.narrativePromise))return false;
+    if(closing&&record.pendingId&&record.reviewResolution!=='committed')return false;
+    const managed=manager.inspect(taskId),base=managed??record.restoredTask;if(managed&&!manager.forget(taskId))return false;
+    // Completed views retain configuration evidence and status, not task input,
+    // candidates, or an entire historical repository receipt.
+    record.restoredTask=Object.freeze({taskId,status:base.status,attempt:state.attempt,error:state.error,hasCandidate:false,reviewPending:false,target:state.target,
+      snapshot:Object.freeze({operationId:record.operationId,...(state.snapshot?.settingsEvidence?{settingsEvidence:state.snapshot.settingsEvidence}:{}),...(Object.hasOwn(state.snapshot??{},'controlProof')?{controlProof:state.snapshot.controlProof}:{})})});
+    record.receipt=record.receipt?{status:record.receipt.status}:null;record.selection=null;record.trackingParts=null;record.resumeControlProof=null;
+    return true;
+  }
+  function inspect(taskId) {
+    const record=records.get(taskId),state=taskState(taskId);if(!state||!record)return null;
+    const narrative=record.narrativeRetired?null:record.narrative;
+    return {...state,narrative:narrative?{...narrative}:null,origin:record.origin,stage:record.stage,outcome:record.outcome,reviewResolution:record.reviewResolution,rebindRequired:record.rebindRequired,receipt:record.receipt?structuredClone(record.receipt):null,errorMessage:record.errorMessage,restoreOnly:record.restoreOnly,hiding:record.hiding?{...record.hiding}:null,diagnostics:structuredClone(record.diagnostics??[]),trackingRejected:structuredClone(record.trackingRejected??record.trackingParts?.rejected??null)};
   }
   function notify(taskId){const state=inspect(taskId);if(state)for(const listener of [...listeners])try{listener(state);}catch{/* observation only */}}
   const busyStatuses=['starting','running','awaiting-user','committing','narrative-running','narrative-failed'];
-  const isBusy=(target=repository.captureTarget())=>reservations.has(target.chatId)||[...records.keys()].some(id=>{const state=inspect(id);return state&&sameTarget(state.target,target)&&(busyStatuses.includes(state.status)||state.outcome==='unconfirmed'||state.rebindRequired);});
+  const busy=(state,record)=>state&&(busyStatuses.includes(state.status)||record.outcome==='unconfirmed'||record.rebindRequired);
+  const isBusy=(target=repository.captureTarget())=>reservations.has(target.chatId)||[...records].some(([id,record])=>{const state=taskState(id);return state&&sameTarget(state.target,target)&&busy(state,record);});
   // The confirmed cumulative version stays saved even if its narrative step fails.
   // Mark this step inside the commit so manager success cannot release the runner early.
   async function runNarrative(taskId,work){
@@ -67,7 +85,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     record.narrativePromise=Promise.resolve().then(work).then(result=>{
       record.narrative={status:result?.run?.status==='skipped'?'skipped':'succeeded',error:''};record.errorMessage='';record.stage='completed';
     }).catch(error=>{record.narrative={status:'failed',error:error?.message??'生成未完成'};record.errorMessage=`本批古法总结已保存；自述与大纲未完成：${record.narrative.error}`;}).finally(()=>{record.narrativePromise=null;notify(taskId);});
-    await record.narrativePromise;return inspect(taskId);
+    await record.narrativePromise;releaseInput(taskId,disposed);notify(taskId);return inspect(taskId);
   }
   function evidence(config,params){return publicCumulativeEvidence({...config.generation,injectionPosition:config.generation.injectionPosition??9999,summaryCleaning:config.summaryCleaning,includeUser:params.includeUser,checkBeforeSave:params.checkBeforeSave,hideSource:params.hideSource});}
   async function capture(origin,options={},pending=null,capturedSettings=settings(),initial=null) {
@@ -145,7 +163,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
       }catch(error){writeError(record,error);throw error;}finally{record.writeInFlight=false;}
     });
     if(result.status==='succeeded'&&record.narrative?.status==='running'){const source=state.snapshot.source,{start,end}=source.requestedRange;await runNarrative(taskId,()=>afterSummaryCommit({target:state.target,startFloor:start,endFloor:end,sentFloors:structuredClone(source.sentFloors)}));}
-    notify(taskId);return {...result,...(result.status==='succeeded'?{status:inspect(taskId).status}:{}),outcome:record.outcome};
+    releaseInput(taskId,disposed);notify(taskId);return {...result,...(result.status==='succeeded'?{status:inspect(taskId).status}:{}),outcome:record.outcome};
   }
   const releaseSession=record=>{if(record?.executionProvider&&record.executionProvider!==provider){try{record.executionProvider.dispose?.();}catch{}record.executionProvider=null;}};
   const release=manager.subscribe(state=>{
@@ -158,7 +176,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     const initialTarget=repository.captureTarget(),key=initialTarget?.chatId;if(!key||reservations.has(key))throw new Error('当前聊天已有古法任务');reservations.add(key);
     let executionProvider=null,adopted=false;
     try{
-      for(const id of records.keys()){const state=inspect(id);if(state?.target.chatId===key&&(busyStatuses.includes(state.status)||state.outcome==='unconfirmed'||state.rebindRequired))throw new Error('当前聊天已有古法任务或未确认保存');}
+      for(const [id,record] of records){const state=taskState(id);if(state?.target.chatId===key&&busy(state,record))throw new Error('当前聊天已有古法任务或未确认保存');}
       const capturedSettings=settings(),initial=repository.captureCumulativeTask?{selection:repository.captureCumulativeTask(initialTarget),raw:structuredClone(captureSource(initialTarget))}:null;
       executionProvider=provider.captureSession?.('summary')??provider;
       if(await getPendingNarrative?.())throw new Error('请先继续、重试或跳过当前自述与大纲批次');
@@ -191,8 +209,9 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
     automaticPlan(domain,raw){const generation=settings().generation;return automaticCumulativePlan(domain,raw,{trackingEnabled:generation.trackingItemsEnabled===true||generation.trackingNpcsEnabled===true});},
     async preview(origin='manual',options={}){const snapshot=await capture(origin,options);return {...request(snapshot),snapshot};},
     resumeAutoConfirm(){for(const [id,record]of records){const state=inspect(id);if(record.autoConfirmPaused&&!record.reviewRequired&&!record.restoreOnly&&record.outcome!=='unconfirmed'&&state?.status==='awaiting-user'&&!state.reviewPending&&state.candidate&&control?.allowed()&&sameTarget(state.target,repository.captureTarget())){record.resumeControlProof=control.capture();record.autoConfirmPaused=false;queueMicrotask(()=>void confirm(id));}}},
-    start:(origin='manual',options={})=>launch(origin,options),confirm,inspect,isBusy,settled:taskId=>manager.settled(taskId),
-    completed(taskId){return new Promise(resolve=>{let off;const check=()=>{const state=inspect(taskId),record=records.get(taskId);if(!state||['succeeded','failed','stale','cancelled','narrative-failed'].includes(state.status)||state.status==='awaiting-user'&&record.reviewRequired){off?.();resolve(state);}};off=service.subscribe(state=>{if(state.taskId===taskId)check();});check();});},
+    start:(origin='manual',options={})=>launch(origin,options),confirm,inspect,isBusy,
+    async settled(taskId){const result=await manager.settled(taskId);return releaseInput(taskId,disposed)?inspect(taskId):result??inspect(taskId);},
+    completed(taskId){return new Promise(resolve=>{let off;const check=()=>{const state=inspect(taskId),record=records.get(taskId);if(!state||['succeeded','failed','stale','cancelled','narrative-failed'].includes(state.status)||state.status==='awaiting-user'&&record.reviewRequired){off?.();if(state?.status==='succeeded')void service.settled(taskId).then(()=>resolve(inspect(taskId)));else resolve(state);}};off=service.subscribe(state=>{if(state.taskId===taskId)check();});check();});},
     async restorePendingNarrative(origin='manual'){
       const target=repository.captureTarget(),key=JSON.stringify([target.chatId,target.rootId,target.epoch]);
       if(restorations.has(key))return restorations.get(key);
@@ -259,7 +278,7 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
       notify(taskId);return structuredClone(record.receipt);
     },
     subscribe(listener){if(typeof listener!=='function')throw new TypeError('Observer must be a function');listeners.add(listener);return()=>listeners.delete(listener);},
-    dispose(){if(disposed)return;disposed=true;for(const [id,record] of records){manager.cancel(id);releaseSession(record);}release();listeners.clear();},
+    dispose(){if(disposed)return;disposed=true;for(const [id,record] of records){manager.cancel(id);releaseSession(record);releaseInput(id,true);}release();listeners.clear();},
   };
   return Object.freeze(service);
 }

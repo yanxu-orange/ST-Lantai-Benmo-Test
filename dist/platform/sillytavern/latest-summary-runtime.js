@@ -11,7 +11,7 @@ import {prepareLatestSource,prepareManualLatestSource,matchesLatestSource,matche
 import {buildLatestRequest,promptIdentities} from '../../domain/latest/requests.js';
 import {planLatestBackfill,buildLatestBackfillRequest,parseLatestBackfillResponse} from '../../domain/latest/backfill.js';
 import {buildBackgroundRoundRequest,parseBackgroundRoundResponse} from '../../domain/background/round.js';
-import {buildWorkshopRoundRequest} from '../../domain/workshop/requests.js';
+import {buildWorkshopRoundRequest,parseWorkshopRoundResponse} from '../../domain/workshop/requests.js';
 import {resultText} from '../../domain/workshop/results.js';
 import {transformLatestMessages} from '../../domain/latest/transform.js';
 import {prepareWorkshopIdentities,WORKSHOP_REPLY_KEY} from './workshop-identities.js';
@@ -440,7 +440,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
           rememberWorkshopRequest(key,commonWorkshop,requestId+':workshop',requestId);
           stage='request';const output=await provider.generateText({...ownRequest,signal:controller.signal,isCurrent:commonCurrent});
           if(!commonCurrent())throw new AiProviderError('cancelled');
-          commonRawResponse=output.text;workshopSegments=parseBackgroundRoundResponse(output.text,commonWorkshop);
+          commonRawResponse=output.text;workshopSegments=parseWorkshopRoundResponse(output.text,commonWorkshop);
           for(const [id,segment] of workshopSegments)if(segment.error)retainFailure({requestId:requestId+':workshop',target:t,replyIds:[source.replyId],taskIds:[id],rawResponse:output.text,error:segment.error});
           }
         }catch(error){if(!valid())return false;const message=failure(error);workshopSegments=new Map(commonWorkshop.map(task=>[task.id,{error:message}]));}
@@ -463,7 +463,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
             rememberWorkshopRequest(key,[task],requestId+':'+task.id,requestId);
             stage='request';const ownOutput=await provider.generateText({...ownRequest,signal:controller.signal,isCurrent:taskCurrent});
             if(!taskCurrent())throw new Error('工坊条目或生成资料已变化');
-            taskRawResponse=ownOutput.text;segment=parseBackgroundRoundResponse(ownOutput.text,[task]).get(task.id);
+            taskRawResponse=ownOutput.text;segment=parseWorkshopRoundResponse(ownOutput.text,[task]).get(task.id);
             if(segment.error)retainFailure({requestId:requestId+':'+task.id,target:t,replyIds:[source.replyId],taskIds:[task.id],rawResponse:ownOutput.text,error:segment.error});
           }
           stage='parse';if(!taskCurrent())throw new AiProviderError('cancelled');if(segment.error){firstFailure||=`解析失败：${segment.error}`;throw new Error(segment.error);}stage='save';

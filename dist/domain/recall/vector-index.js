@@ -27,26 +27,28 @@ export function createVectorIndex({provider,store=null}={}){
  const caches=new Map(),jobs=new Map(),listeners=new Set();let disposed=false;
  const notify=()=>{for(const listener of listeners)try{listener();}catch{}};
  const current=(job,isCurrent)=>{try{return!disposed&&jobs.get(job.key)===job&&!job.controller.signal.aborted&&isCurrent()===true;}catch{return false;}};
- function view(target,events,config){
-  const docs=documents(events),cache=caches.get(key(target)),job=jobs.get(key(target));
+ function viewDocuments(target,docs,config){
+  const cache=caches.get(key(target)),job=jobs.get(key(target));
   const matches=cache?.identity===identity(config),valid=matches?docs.filter(doc=>cache.entries.get(doc.id)?.version===doc.version):[];
   return{status:job?'preparing':valid.length===docs.length&&matches?'ready':valid.length?'partial':'needs-preparation',indexed:valid.length,total:docs.length,missing:docs.length-valid.length,dimensions:matches?cache.dimensions:null,
    lastError:matches?cache.error:null,modelIdentityVerified:matches&&valid.length>0?valid.every(doc=>cache.entries.get(doc.id).modelIdentityVerified):false,runtimeOnly:!store,refreshRequiresPreparation:!store,
    maintenanceStatus:job?'processing':valid.length===docs.length&&matches?'ready':matches&&cache.error?'failed':matches&&cache.paused?'paused':'pending',persistent:!!store&&matches&&!cache.storageError};
  }
- async function hydrate({target,events,config,signal,isCurrent=()=>true}){
+ function view(target,events,config){return viewDocuments(target,documents(events),config);}
+ async function hydrateWithDocuments({target,config,signal,isCurrent=()=>true},getDocuments){
   assertAiCurrent(signal,isCurrent);const cacheKey=key(target),expected=identity(config),old=caches.get(cacheKey);
-  if(old?.identity===expected)return view(target,events,config);
+  if(old?.identity===expected)return viewDocuments(target,getDocuments(),config);
   const cache={identity:expected,entries:new Map(),dimensions:null,error:null,paused:false,storageError:false};
-  if(!store){if(!old)caches.set(cacheKey,cache);return view(target,events,config);}
+  if(!store){if(!old)caches.set(cacheKey,cache);return viewDocuments(target,getDocuments(),config);}
   try{
    const rows=await store.load({target,identity:expected},{signal,isCurrent});assertAiCurrent(signal,isCurrent);
-   const wanted=new Map(documents(events).map(doc=>[doc.id,doc.version]));
+   const wanted=new Map(getDocuments().map(doc=>[doc.id,doc.version]));
    for(const row of rows){if(!validStoredVector(row)||wanted.get(row.id)!==row.version)continue;if(cache.dimensions!==null&&cache.dimensions!==row.dimensions)throw new AiProviderError('mapping');cache.dimensions=row.dimensions;cache.entries.set(row.id,{id:row.id,version:row.version,vector:Array.from(row.vector),modelIdentityVerified:row.modelIdentityVerified});}
    // Another request may have hydrated/prepared this scope while storage read.
-   if(caches.get(cacheKey)!==old)return view(target,events,config);caches.set(cacheKey,cache);return view(target,events,config);
+   if(caches.get(cacheKey)!==old)return viewDocuments(target,getDocuments(),config);caches.set(cacheKey,cache);return viewDocuments(target,getDocuments(),config);
   }catch(error){assertAiCurrent(signal,isCurrent);cache.error=safeCode(error);cache.storageError=true;if(caches.get(cacheKey)===old)caches.set(cacheKey,cache);throw new AiProviderError(cache.error);}
  }
+ function hydrate({target,events,config,signal,isCurrent=()=>true}){return hydrateWithDocuments({target,config,signal,isCurrent},()=>documents(events));}
  function cancel(target){
   let changed=false;for(const job of jobs.values())if(!target||job.key===key(target)){job.controller.abort();jobs.delete(job.key);const cache=caches.get(job.key);if(cache)cache.paused=true;changed=true;}if(changed)notify();
  }
@@ -80,11 +82,13 @@ export function createVectorIndex({provider,store=null}={}){
  }
  async function query({target,events,config,text,signal,isCurrent,dateById=new Map(),requestProvider=provider}){
   if(disposed||typeof requestProvider?.embed!=='function')throw new AiProviderError('configuration');assertAiCurrent(signal,isCurrent);
-  await hydrate({target,events,config,signal,isCurrent});
-  const state=view(target,events,config),cache=caches.get(key(target));
+  // Reuse generated-memory text/version work only inside this captured query.
+  let preparedDocuments;const getDocuments=()=>preparedDocuments??=documents(events);
+  await hydrateWithDocuments({target,config,signal,isCurrent},getDocuments);
+  const state=viewDocuments(target,getDocuments(),config),cache=caches.get(key(target));
   if(!text.trim())return{status:'empty-query',rows:[],index:state};
   if(!state.indexed)return{status:'missing-index',rows:[],index:state};
-  const docs=documents(events).filter(doc=>cache.entries.get(doc.id)?.version===doc.version&&!dateById.get(doc.id)?.blocked);
+  const docs=getDocuments().filter(doc=>cache.entries.get(doc.id)?.version===doc.version&&!dateById.get(doc.id)?.blocked);
   if(!docs.length)return{status:'no-date-eligible',rows:[],index:state};
   const guarded=()=>isCurrent()===true&&!disposed&&caches.get(key(target))===cache&&cache.identity===identity(config);
   const result=await requestProvider.embed({inputs:[{id:'query',text}],inputType:'query',expectedDimensions:cache.dimensions,signal,isCurrent:guarded});

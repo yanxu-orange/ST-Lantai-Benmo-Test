@@ -2,14 +2,14 @@ import {createCalendar} from '../time/calendar.js';
 import {selectedWorldVersions} from './tasks.js';
 import {worldFields,worldDates} from './output.js';
 import {worldDateText} from './prompts.js';
-import {WORLD_KINDS,worldCalendar} from './data.js';
+import {WORLD_KINDS,sameWorldCalendar} from './data.js';
 export {WORLD_CONTEXT_INTRO} from './preferences.js';
 const dates=(text,cal)=>worldDates(text,cal);
 export function projectWorldOutcomes(domain,time){
  const definition=time?.calendars?.find(row=>row.id===time.activeCalendarId);if(!definition||time.currentDate?.day==null)return {entries:[],text:''};
  const cal=createCalendar(definition),today=cal.validate(time.currentDate),entries=[],sectionDates=domain?.current?.sections?{}:null;
  for(const row of selectedWorldVersions(domain,domain?.config)){
-  if(JSON.stringify(worldCalendar(definition))!==JSON.stringify(worldCalendar(row.version.calendar)))continue;
+  if(!sameWorldCalendar(definition,row.version.calendar))continue;
   if(sectionDates)sectionDates[row.kind]={date:structuredClone(row.version.date),retained:!domain.current.sections[row.kind].accepted};
   for(const entry of row.entries){
    const fields=worldFields(entry.text);let text=entry.text;

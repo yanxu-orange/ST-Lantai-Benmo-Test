@@ -56,6 +56,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     for(const config of providerSessions.keys())releaseSession(config);
     maintenance.checkLifecycle();
     previous?.abort?.abort();
+    if(reason==='CHAT_CHANGED'||!gate.allowed())buildMulti.reset();
     if(previous)record(previous.target,{status:'failed',type:previous.type,message:'本轮召回已取消，未注入记忆。'});
     else if(reason==='stopped'&&oldProof)record(oldProof.target,{status:'failed',type:'cancelled',message:'本轮生成已取消，未继续注入记忆。'});
     try {
@@ -249,6 +250,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   // Ordinary settings changes do not cancel a captured task. Explicit host
   // lifecycle/feature-stop hooks still clear it, and source checks remain live.
   releases.push(maintenance.subscribe(notify));
+  if(typeof settings.subscribe==='function'){const off=settings.subscribe(()=>{if(!gate.allowed())buildMulti.reset();});if(typeof off==='function')releases.push(off);}
   for(const name of ['CHAT_CHANGED','GENERATION_ENDED','GENERATION_STOPPED','MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_SWIPED','MESSAGE_DELETED']) {
     const event=context?.eventTypes?.[name],source=context?.eventSource;
     if(!event||typeof source?.on!=='function')continue;
@@ -282,6 +284,6 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     getReplacementProof(){try{return proof&&current(proof.target,proof.serial,proof.config,proof.source)?proof:null;}catch{return null;}},
     inspect,inspectView:({more=false}={})=>inspect(more?null:2),
     subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn);},
-    dispose(){if(disposed)return;clear();disposed=true;maintenance.dispose();releases.forEach(fn=>fn());listeners.clear();records.clear();}
+    dispose(){if(disposed)return;clear();disposed=true;buildMulti.dispose();maintenance.dispose();releases.forEach(fn=>fn());listeners.clear();records.clear();}
   });
 }

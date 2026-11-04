@@ -1,6 +1,5 @@
-// Latest summaries, workshop cards and world briefings share one floor transaction. Collection
-// updates only wrappers/controls; every async body calculation settles before
-// the synchronous body commit and the one optional public Helper rescan.
+// Regex displays share one floor transaction and optional public Helper rescan.
+// Native shadow displays commit independently using their own runtime proof.
 const coordinators = new WeakMap();
 let scopeSerial = 0;
 export const floorOf = message => {
@@ -68,7 +67,7 @@ export function commitDisplayBodies(updates, snapshot, doc) {
 export function createFloorDisplayCoordinator({ document: doc = globalThis.document, runtime, formatter, getTarget,
   MutationObserver: Observer = globalThis.MutationObserver } = {}) {
   let scheduled = false, stopped = false, unsubscribe = null, observer = null;
-  const participants = new Set(), groups = new WeakMap(), cleanups = new Map();
+  const participants = new Set(), groups = new WeakMap(), nativeGroups = new WeakMap(), cleanups = new Map();
   const targetKey = () => {try{return JSON.stringify(getTarget?getTarget():runtime.inspect?.().target??null);}catch{return JSON.stringify(null);}};
   const ownership = plan => plan.message.isConnected !== false && floorOf(plan.message) === plan.floor
     && targetKey() === plan.target && (!plan.ownsChat || plan.ownsChat());
@@ -76,13 +75,14 @@ export function createFloorDisplayCoordinator({ document: doc = globalThis.docum
     if (!ownership(plan)) return;
     cleanups.set(plan.message, plan); schedule();
   }
-  function transact(message, plans, cleanup) {
-    let group = groups.get(message);
-    if (!group) { group = { pending: null, applied: null }; groups.set(message, group); }
+  function transact(message, plans, cleanup, nativeState = null) {
+    const store = nativeState ? nativeGroups : groups, owner = nativeState ?? message;
+    let group = store.get(owner);
+    if (!group) { group = { pending: null, applied: null }; store.set(owner, group); }
     if (plans.some(plan => plan.busy)) { group.pending = null; return; }
     const source = plans[0] ?? cleanup;
-    if (!source || !ownership(source) || plans.some(plan => !ownership(plan))) { group.pending = null; cleanups.delete(message); return; }
-    const snapshot = formatter?.capture(source.floor) ?? null;
+    if (!source || !ownership(source) || plans.some(plan => !ownership(plan))) { group.pending = null; if (cleanup) cleanups.delete(message); return; }
+    const snapshot = nativeState ? null : formatter?.capture(source.floor) ?? null;
     for (const plan of plans) plan.bind?.(snapshot);
     const key = JSON.stringify([plans.map(plan => [plan.id, plan.content]), snapshot?.key ?? null]);
     if (group.pending?.key === key && group.pending.valid() || group.applied === key && !cleanup) return;
@@ -132,7 +132,9 @@ export function createFloorDisplayCoordinator({ document: doc = globalThis.docum
     }
     for (const [message, cleanup] of cleanups) if (!ownership(cleanup)) cleanups.delete(message);
     for (const message of new Set([...byMessage.keys(), ...cleanups.keys()])) {
-      transact(message, byMessage.get(message) ?? [], cleanups.get(message));
+      const plans = byMessage.get(message) ?? [];
+      for (const plan of plans) if (plan.native) transact(message, [plan], null, plan.state);
+      transact(message, plans.filter(plan => !plan.native), cleanups.get(message));
     }
   }
   function schedule() {

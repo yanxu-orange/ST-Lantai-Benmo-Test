@@ -687,7 +687,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "0b35146bde32c3df07027771887fe4d5ae5c863c49503a2669c8a7bf20621485"
+    "sha256": "c2d728b64f10f90e4d5c15dd9a105f55bae84ce7414036fb2f1a0d60bc469900"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -751,8 +751,8 @@
   },
   {
     "path": "dist/domain/cumulative/service.js",
-    "bytes": 33023,
-    "sha256": "db62e6d3b606e71b4894286fd2519e6dfee484f818af291b4d3a2084e0cb571f"
+    "bytes": 34834,
+    "sha256": "91a04d714b11d0061b48ab263733df663eea04357fb2a9ad60a3d47aecdf6db4"
   },
   {
     "path": "dist/domain/cumulative/source.js",
@@ -976,8 +976,8 @@
   },
   {
     "path": "dist/domain/recall/vector-index.js",
-    "bytes": 10288,
-    "sha256": "d00dba6642222fbb5e44a0cb1f3cc618b745b34b778dc62f358816ca448ab692"
+    "bytes": 10801,
+    "sha256": "5107a1210882f7f3a02603740b1d3d59faaedfc29678f45f379002d72714d679"
   },
   {
     "path": "dist/domain/recall/vector-records.js",
@@ -1231,8 +1231,8 @@
   },
   {
     "path": "dist/domain/workshop/requests.js",
-    "bytes": 3070,
-    "sha256": "19b180993bac03baa5bcc71c6e939ff67e386ff12ad468873acd1f9601d744f8"
+    "bytes": 3711,
+    "sha256": "eaed8dfe9d1a0ab5072e13b95d0c863150c46559a570c79213d61cfcf8d6c830"
   },
   {
     "path": "dist/domain/workshop/results.js",
@@ -1241,8 +1241,8 @@
   },
   {
     "path": "dist/domain/world-dynamics/data.js",
-    "bytes": 9788,
-    "sha256": "156194553e243db7ed8140479a3d8bb1218f1c0c0e6993f5965b7b4e5b20d4be"
+    "bytes": 10077,
+    "sha256": "ea3c8616e033a50946d9986e6b3e47ada96776d773614fd92adc02f58ed67212"
   },
   {
     "path": "dist/domain/world-dynamics/display-text.js",
@@ -1276,8 +1276,8 @@
   },
   {
     "path": "dist/domain/world-dynamics/projection.js",
-    "bytes": 2189,
-    "sha256": "7951ee81c8a2028469cdee982648bc7c4c2902b9be862e9c23d0f7acd80cdbc8"
+    "bytes": 2149,
+    "sha256": "6f85f0e1f295cff9ffd54801721bc39f6c40979536467165c5a06ff66c0bb92d"
   },
   {
     "path": "dist/domain/world-dynamics/prompts.js",
@@ -1341,8 +1341,8 @@
   },
   {
     "path": "dist/platform/sillytavern/floor-display-coordinator.js",
-    "bytes": 9625,
-    "sha256": "178bc8fd59c9c19d7b058a248c6c30b012cc56643b753c1eeafe0af26a151105"
+    "bytes": 9850,
+    "sha256": "9d7266fc56d05eba3b4877a6ed1e8b0383731b27cad21ce451b568a014392300"
   },
   {
     "path": "dist/platform/sillytavern/generation-diagnostic.js",
@@ -1361,8 +1361,8 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "bytes": 85129,
-    "sha256": "1e76edace1db34d6e34f35e84511fc0ea752f20a4fe942546f893e99113ad2c8"
+    "bytes": 85152,
+    "sha256": "0c6d2e73da39fd176dbffa351eddcd63c98f16fc0e9f558f724bb5a3afadbf5e"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -1441,8 +1441,8 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-multichannel.js",
-    "bytes": 4070,
-    "sha256": "a765a531a9a4c8a2908d67b243bde783453a7a942291e4db34179a5fac74ab6e"
+    "bytes": 5138,
+    "sha256": "0bf04d6f0029fdf142470fd4ab0af454cac25a7e0e5c44515d8332ca49aa0ec2"
   },
   {
     "path": "dist/platform/sillytavern/recall-preview-worker.js",
@@ -1456,8 +1456,8 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-runtime.js",
-    "bytes": 23407,
-    "sha256": "3c3986547c2616dbf0f5e92ff6b7e296d0d49fa90c3a1f31411318c4672b69f5"
+    "bytes": 23664,
+    "sha256": "8d43ac425e06f51a5757d554e0d47064d3fb4349fc8a8f1ebf0882595a0fe007"
   },
   {
     "path": "dist/platform/sillytavern/round-record-data.js",
@@ -1466,8 +1466,8 @@
   },
   {
     "path": "dist/platform/sillytavern/round-record-display.js",
-    "bytes": 15596,
-    "sha256": "bb72ca118c6c209c30b4f619824e0993d08c48beecc7f143031ce5b3222c8027"
+    "bytes": 15506,
+    "sha256": "955faa7ad2fa3aa8f33eaca58e134fa95dacada0a567d7ef3fe741db32091ba5"
   },
   {
     "path": "dist/platform/sillytavern/schedule-runtime.js",
@@ -1551,8 +1551,8 @@
   },
   {
     "path": "dist/platform/sillytavern/workshop-display-formatter.js",
-    "bytes": 8877,
-    "sha256": "2bd23d3bae894a3224538c67aa008a164fd04e2f2118d94b41e84242bbf0e3b6"
+    "bytes": 9044,
+    "sha256": "8ec5c6883d9420db4562e01d257827ce75285d503a3e071b0b8a7900adafe3c9"
   },
   {
     "path": "dist/platform/sillytavern/workshop-history.js",
@@ -1581,8 +1581,8 @@
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-auto.js",
-    "bytes": 12316,
-    "sha256": "b556463fe852a4000d534d60ea8109e7d36b8b119616cf957761359231b1ce96"
+    "bytes": 12302,
+    "sha256": "e640d4c6027a351d6f6f511fe1212190cf6e7bfd083ac12fbcea28eb8060ba56"
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-display-runtime.js",
@@ -1591,8 +1591,8 @@
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-display.js",
-    "bytes": 10688,
-    "sha256": "5a6dcdcd533a5c8a332c45dfea41ed16f9bff383c27fa3beee0164bb2a4b9891"
+    "bytes": 10706,
+    "sha256": "e432080d74fd96b2ac1b6930c2c5e8954aeeba8eae17230a16dd05341dbf8000"
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-prompts.js",
@@ -1601,8 +1601,8 @@
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-runtime.js",
-    "bytes": 5132,
-    "sha256": "4a91523c2458c3e6b527906dfdcf1b5cfd898e2689e39215b41aa7a42e1b7a34"
+    "bytes": 5763,
+    "sha256": "22e93862ccfa5920b415d7d4cc3c9d73bb9ee5a58d32e9c7324454e8c4468792"
   },
   {
     "path": "dist/platform/sillytavern/worldbook-reader.js",
@@ -1687,6 +1687,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "45f2cb9b29e10b3326defdc16e49f317fac1ce1ef39ae64dd1c51a7908d2afa0"
+    "sha256": "bfdcdf39aa8460f2e3bcf314d22195282cf4eb4b89d0096847e0f58b346f7d3e"
   }
 ]

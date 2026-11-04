@@ -55,10 +55,11 @@ export function createWorkshopDisplayFormatter({getContext,getHelper=()=>globalT
           try{
             const lib=await library();if(!isCurrent()||typeof lib.DOMPurify?.sanitize!=='function')return null;
             let input=raw,regexed=helper.formatAsTavernRegexedString(input,source,'display',{depth,character_name:name});
-            // Packet rules keep priority. An unchanged packet may instead use
-            // the author's original body; never feed transformed output back
-            // through regexes or decode the serialized packet.
-            if(regexed===raw&&typeof workshopBody==='string'&&workshopBody&&isCurrent()){
+            // A text rule can change the packet without consuming its shell.
+            // Only a packet result that consumed the protocol takes priority;
+            // otherwise format the original body, never the transformed packet.
+            const packetRemains=typeof regexed==='string'&&/<LTworkshopRecord\b[^>]*>[\s\S]*<\/LTworkshopRecord\s*>/i.test(regexed);
+            if((regexed===raw||packetRemains)&&typeof workshopBody==='string'&&workshopBody&&isCurrent()){
               input=workshopBody;
               regexed=helper.formatAsTavernRegexedString(input,source,'display',{depth,character_name:name});
             }

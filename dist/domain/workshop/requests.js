@@ -1,4 +1,4 @@
-import {validateTasks} from '../background/round.js';
+import {validateTasks,parseBackgroundRoundResponse} from '../background/round.js';
 import {bindPromptNames,latestSourceMessages,promptIdentities} from '../latest/requests.js';
 
 export const WORKSHOP_IDENTITY='你是一名精通场外线索梳理的资深编辑，长期协助作者整理“连载故事”的故事外补充内容，包括番外、发展走向、信息整理等丰富的场外信息。现在，请依据现有的多种资料，按各项任务规定的内容与范围完成工作。';
@@ -33,4 +33,15 @@ export function buildWorkshopRoundRequest({source,tasks,materials={},identities=
     ...tasks.map(task=>`<lantai_task id="${task.id}">\n本任务结果正文\n</lantai_task>`),
   ].join('\n\n'));
   return {task:'workshop.round',title:'工坊生成',messages:parts.map(({role,content})=>({role,content})),previewParts:parts};
+}
+
+// Only an actual single-workshop request can own otherwise unwrapped output.
+// Detect protocol-like markers broadly; malformed/ambiguous packets never fall
+// through to raw author text. Author tags and entities remain opaque.
+export function parseWorkshopRoundResponse(text,tasks){
+  const results=parseBackgroundRoundResponse(text,tasks);
+  if(tasks.length!==1||typeof text!=='string'||!results.get(tasks[0].id)?.error)return results;
+  const body=text.trim().replace(/<\/lantai_task>$/,'').trim();
+  if(body&&!/<\s*\/?\s*lantai_task\b/i.test(body))results.set(tasks[0].id,{text:body});
+  return results;
 }

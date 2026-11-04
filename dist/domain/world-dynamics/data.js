@@ -22,6 +22,8 @@ export function assertWorldConfig(value){
 }
 export function emptyWorldDynamics(){return {schema:1,revision:0,config:null,current:null,versions:[],deleted:[],retained:{}};}
 export function worldCalendar(definition){const value={id:definition.id,type:definition.type,name:definition.name};if(definition.type==='custom')value.months=definition.months.map(m=>({name:m.name,days:m.days}));if(definition.type==='dynasty')value.importedYears=definition.importedYears.map(y=>({sourceYear:y.sourceYear,months:y.months.map(m=>({name:m.name,days:m.days}))}));return value;}
+// Display names do not change the dates represented by a saved world outcome.
+export function sameWorldCalendar(left,right){const structure=value=>{const {name,...calendar}=worldCalendar(value);return calendar;};return JSON.stringify(structure(left))===JSON.stringify(structure(right));}
 function assertSectionDiagnostic(d){
  const optional=['field','expectedDate','actualDate','expectedCount','actualCount'];exact(d,['code',...optional.filter(k=>Object.hasOwn(d,k))]);
  if(!WORLD_DIAGNOSTIC_CODES.includes(d.code)||Object.hasOwn(d,'field')&&!WORLD_DIAGNOSTIC_FIELDS.includes(d.field))throw new Error('世界分区诊断无效');
