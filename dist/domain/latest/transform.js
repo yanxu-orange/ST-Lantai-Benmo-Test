@@ -13,10 +13,13 @@ function plainMessage(message,source){
   return role===source.role?keys[0]:null;
 }
 export function formatLatestSummary(body){return `[最新摘要]\n${body.trim()}`;}
+export const LATEST_SUMMARY_GUIDANCE='以下是此前一段剧情的摘要，供你了解近期发生了什么，它的进度通常衔接在大纲之后，需要你认真核对前后逻辑。';
+export const RECENT_STORY_GUIDANCE='以下是最近的完整剧情正文，其中可能包含状态栏等附加信息。请结合用户最新输入，承接当前情境继续创作。';
+const withGuidance=(intro,body)=>body.startsWith(intro+'\n\n')?body:intro+'\n\n'+body;
 
 // The host owns mapping. Never infer floors from compacted prompt positions,
 // duplicate text, or an assistant/user alternation that may no longer exist.
-export function transformLatestMessages({messages,sourceMap,raw,latest,diagnostics=[]}={}){
+export function transformLatestMessages({messages,sourceMap,raw,latest,diagnostics=[],guidance=false}={}){
   if(!Array.isArray(messages))throw new Error('最新摘要发送消息无效');
   const output=messages.map(message=>message&&typeof message==='object'?{...message}:message);
   const domain=assertLatest(latest),source=assertRawSummarySource(raw);
@@ -30,7 +33,7 @@ export function transformLatestMessages({messages,sourceMap,raw,latest,diagnosti
   // This copy is used only for identity matching, never to add hidden messages.
   const semanticByFloor=new Map(source.messages.map(message=>[message.floor,
     ['user','assistant','system'].includes(message.semanticRole)?{...message,role:message.semanticRole,system:message.semanticRole==='system'}:message]));
-  const recentStart=Math.max(...source.messages.map(message=>message.floor))+1-domain.preferences.recentFloors,removed=new Set();
+  const recentStart=Math.max(...source.messages.map(message=>message.floor))+1-domain.preferences.recentFloors,removed=new Set(),replaced=new Map();
   for(const record of domain.records){
     const snapshot=record.sourceSnapshot,floor=snapshot.assistantFloor,userFloor=snapshot.userFloor;
     const reply=semanticByFloor.get(floor);
@@ -57,7 +60,20 @@ export function transformLatestMessages({messages,sourceMap,raw,latest,diagnosti
     // Preserve this slot's role, including user-only replacements.
     output[index]=Object.fromEntries(['id','name','role','is_user','is_system','send_date'].filter(field=>Object.hasOwn(messages[index],field)).map(field=>[field,messages[index][field]]));
     output[index][key]=record.body;
+    replaced.set(index,key);
     for(const slot of eligible)if(slot.index!==index)removed.add(slot.index);
+  }
+  if(guidance){
+    // Guidance belongs to this send copy, never saved summaries or background
+    // workshop materials. Pick actual send order, not record insertion order.
+    const first=[...replaced.keys()].sort((a,b)=>a-b)[0];
+    if(first!==undefined){const key=replaced.get(first);output[first][key]=withGuidance(LATEST_SUMMARY_GUIDANCE,output[first][key]);}
+    // A missing old summary does not make its original a recent-story boundary.
+    const recent=output.findIndex((message,index)=>{
+      const floor=mapping[index],key=plainMessage(message,byFloor.get(floor));
+      return integer(floor)&&floor>=recentStart&&counts.get(floor)===1&&!removed.has(index)&&!replaced.has(index)&&key&&!!message[key].trim();
+    });
+    if(recent!==-1){const key=plainMessage(output[recent],byFloor.get(mapping[recent]));output[recent][key]=withGuidance(RECENT_STORY_GUIDANCE,output[recent][key]);}
   }
   return output.filter((_,index)=>!removed.has(index));
 }

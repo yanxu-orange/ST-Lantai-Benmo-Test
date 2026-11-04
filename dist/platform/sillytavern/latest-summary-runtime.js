@@ -537,7 +537,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     const t=repository.captureTarget(),ticket=serial,proof=getControls?.()?.capture('summary'),captured=await repository.captureLatest(t);
     if(!summaryMatches(proof)||ticket!==serial||!current(t))return;
     const source=raw(t),mapping=mapSummaryPromptFloors(messages,getContext().chat);if(!mapping){sendDiagnostics=[{reason:'source-mapping-unavailable'}];return;}
-    const transformed=transformLatestMessages({messages,sourceMap:mapping,raw:source,diagnostics:sendDiagnostics,latest:{...captured.latest,preferences:{...captured.latest.preferences,enabled:true},records:captured.latest.records.filter(record=>!invalidatedFloors.has(record.sourceSnapshot.assistantFloor)&&!invalidatedFloors.has(record.sourceSnapshot.userFloor))}});
+    const transformed=transformLatestMessages({messages,sourceMap:mapping,raw:source,diagnostics:sendDiagnostics,guidance:true,latest:{...captured.latest,preferences:{...captured.latest.preferences,enabled:true},records:captured.latest.records.filter(record=>!invalidatedFloors.has(record.sourceSnapshot.assistantFloor)&&!invalidatedFloors.has(record.sourceSnapshot.userFloor))}});
     if(!summaryMatches(proof)||ticket!==serial||!current(t)||!adapter.matchesChatSource(t,source))return;
     messages.splice(0,messages.length,...transformed);
   }

@@ -13,7 +13,14 @@ export function trackingRecordText(record, aiTurn = 0) {
   if (record.kind === 'npc' && record.lastAppearanceTurn !== null) fields.push(`最后实际出场：第 ${record.lastAppearanceTurn} 个 AI 回合`, `缺席：${npcAbsenceTurns(record, aiTurn)} 个 AI 回合`);
   return `【${record.kind === 'npc' ? 'NPC' : '物品'}｜${record.name}】${fields.length ? `\n${fields.join('；')}` : ''}`;
 }
-export const trackingRecallPrompt=selected=>selected.length?['<lantai_entity_memory>', '以下是故事相关的道具与角色介绍，用以保持人物、物品及相关设定的连续性。剧情涉及相关人物或物品时，你可以酌情参考，但不要机械复述。', ...selected.map(row=>row.text), '</lantai_entity_memory>'].join('\n\n'):'';
+const trackingIntros = {
+  item: '以下是故事中已记录的重要物品信息。剧情涉及这些物品时，请参考其位置、保管者、归属与相关变化，保持情节连续。',
+  npc: '以下是故事中已记录的相关人物信息。剧情涉及这些人物时，请参考其身份、外表及人物关系，保持角色设定与交往的连续性。',
+};
+export const trackingRecallPrompt=selected=>selected.length?['<lantai_entity_memory>', ...['item','npc'].flatMap(kind=>{
+  const rows=selected.filter(row=>row.record.kind===kind);
+  return rows.length?[trackingIntros[kind],...rows.map(row=>row.text)]:[];
+}), '</lantai_entity_memory>'].join('\n\n'):'';
 export async function buildTrackingRecall({ records = [], input = '', recentHistory = [], aiTurn = 0,
   preferences = { itemsEnabled: true, npcsEnabled: true }, exclusions = emptyTrackingExclusions(), settings = defaultRecallSettings(), countTokens = null } = {}) {
   settings = assertRecallSettings(settings); preferences = assertTrackingPreferences(preferences);
