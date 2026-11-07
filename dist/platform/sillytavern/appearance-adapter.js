@@ -1,4 +1,4 @@
-import { trackSettingsSave } from './pending-settings-saves.js';
+import { trackSettingsSave,waitForSettingsSaves } from './pending-settings-saves.js';
 import { getSillyTavernContext } from './context.js';
 import { DEFAULT_THEME, isTheme } from '../../app/styles/theme.js';
 
@@ -83,13 +83,14 @@ export function createAppearanceAdapter({ getContext = getSillyTavernContext, fe
       if(disposed||!confirmed)return false;
       try{const current=local();return fingerprint(expected)===fingerprint(confirmed.root)&&current.fingerprint===confirmed.fingerprint&&current.epoch===confirmed.epoch;}catch{return false;}
     },
-    async save(theme, expected, { isCurrent = () => true,roundRecordMode,workshopModes } = {}) {
+    async save(theme, expected, { isCurrent = () => true,roundRecordMode,workshopModes,requireConfirmation=false } = {}) {
       if (!isTheme(theme)) throw failure('APPEARANCE_INVALID');
       let ticket = local();
       if (!confirmed) throw failure('APPEARANCE_UNCONFIRMED');
       if (fingerprint(expected) !== fingerprint(confirmed.root) || ticket.fingerprint !== confirmed.fingerprint || ticket.epoch !== confirmed.epoch) throw failure('APPEARANCE_CONFLICT');
       const guard = () => { try { return !disposed && isCurrent() === true; } catch { return false; } };
       const save = await saver(); unchanged(ticket);
+      if(requireConfirmation){await waitForSettingsSaves(ticket.ctx.extensionSettings);unchanged(ticket);}
       if (!guard()) throw failure('APPEARANCE_CONFLICT');
       unchanged(ticket);
       const draft=assertAppearance({...ticket.root,theme,...(roundRecordMode===undefined?{}:{roundRecordMode}),...(workshopModes===undefined?{}:{workshopModes})});
@@ -100,8 +101,10 @@ export function createAppearanceAdapter({ getContext = getSillyTavernContext, fe
       ticket = local();
       try {
         // The host owns background persistence. Do not wait or read it back.
-        trackSettingsSave(ticket.ctx.extensionSettings, save());
+        const work=Promise.resolve(save());trackSettingsSave(ticket.ctx.extensionSettings,work);
+        if(requireConfirmation){await work;unchanged(ticket);const disk=await server();unchanged(ticket);if(fingerprint(disk)!==fingerprint(next))throw failure('APPEARANCE_UNCONFIRMED');}
       } catch {
+        if(requireConfirmation){confirmed=null;throw failure('APPEARANCE_UNCONFIRMED');}
         if (ticket.ctx.extensionSettings[APPEARANCE_KEY] === next) {
           install(previous, previous === undefined ? assertAppearance(defaults()) : assertAppearance(previous), ticket);
         }

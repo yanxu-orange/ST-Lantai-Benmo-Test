@@ -19,6 +19,7 @@ import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,asse
 import {matchesStoredSummarySource,matchesSourceMetadata,matchesSummarySource} from '../summary/source.js';
 import {matchesCumulativeSource} from '../cumulative/source.js';
 import {cumulativeOf,assertCumulativePreferences,assertCumulativeExclusions,assertCumulativePending,assertCumulativeVersion,baseSnapshotOf,cumulativeCoverage,matchesCumulativeReplacementSource} from '../cumulative/data.js';
+import {applyChatSettingsRestore} from '../settings-backup.js';
 export function sameTarget(a, b) { return !!a && !!b && !!a.chatId && !!a.rootId && Number.isSafeInteger(a.epoch) && a.chatId === b.chatId && a.rootId === b.rootId && a.epoch === b.epoch; }
 const copy = value => structuredClone(value);
 // Normalize only the domain being compared, after the caller's currentness
@@ -175,6 +176,10 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     });
   };
   return {
+    restoreSettings(target,previous,settings,{isCurrent=()=>true}={}){
+      const frozen=copy(target),baseline=copy(previous),draft=copy(settings);
+      return enqueue(async()=>{const root=await read(frozen);const guard=current=>{requireTarget(frozen);if(!isCurrent()||!equal(assertRoot(copy(current),frozen),baseline))throw new Error('聊天设置或成果已变化，请重新选择备份文件。');return true;};guard(root);const next=assertRoot(applyChatSettingsRestore(root,draft),frozen);if(equal(root,next))return {status:'unchanged',root};next.revision=root.revision+1;return {status:'committed',root:await commit(frozen,root,next,guard,{requireConfirmation:true})};});
+    },
     subscribeEventCommits(listener){if(typeof listener!=='function')throw new TypeError('成果监听无效');eventCommitListeners.add(listener);return()=>eventCommitListeners.delete(listener);},
     capturePanelData,readPanelRoot,matchesPanelData,
     async captureNarrative(target,readView){const frozen=copy(target);return freeze({target:frozen,narrative:narrativeOf(await panelRead(frozen,readView))});},

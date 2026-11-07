@@ -25,6 +25,9 @@ export function createAppearanceSession({ adapter, prepareTheme = async () => {}
     return pending;
   }
   return Object.freeze({
+    captureBackup(){if(!baseline||disposed||pending||state.status!=='ready'||adapter.isConfirmed?.(baseline)===false)throw new Error('请先重新读取外观设置。');return structuredClone(baseline);},
+    matchesBackup(value){return !disposed&&!pending&&state.status==='ready'&&JSON.stringify(value)===JSON.stringify(baseline)&&adapter.isConfirmed?.(baseline)!==false;},
+    restoreBackup(value,expected,{isCurrent=()=>true}={}){if(!baseline||disposed||pending||state.status!=='ready'||JSON.stringify(expected)!==JSON.stringify(baseline))return Promise.resolve(false);return run(async()=>{if(!isCurrent())throw Object.assign(new Error(),{code:'APPEARANCE_CONFLICT'});await prepareTheme(value.theme);return adapter.save(value.theme,baseline,{roundRecordMode:value.roundRecordMode,workshopModes:value.workshopModes,requireConfirmation:true,isCurrent:()=>!disposed&&isCurrent()});},'saving');},
     inspect,
     read: () => run(() => adapter.read(), 'loading'),
     ensure() {

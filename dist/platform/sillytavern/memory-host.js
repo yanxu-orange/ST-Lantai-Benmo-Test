@@ -27,6 +27,8 @@ import {createSourceDeletionRuntime} from './source-deletion-runtime.js';
 import {createSourceDeletionDialog} from '../../app/source-deletion-dialog.js';
 import {createControlSession} from '../../app/control-session.js';
 import {mountSettingsRootView} from '../../app/settings-root-view.js';
+import {createSettingsBackupSession,downloadSettingsBackup} from '../../app/settings-backup-session.js';
+import {APP_VERSION} from '../../app/version.js';
 import {mountWorkshopLoading} from '../../app/workshop-loading-view.js';
 import {mountStorybarTheme} from './storybar-theme.js';
 import {createWorkshopRegexInstaller} from './workshop-regex.js';
@@ -117,7 +119,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   const lifetime = new AbortController();
   let cumulativeRuntime,cumulativeView,cumulativeSettingsView,cumulativeSettingsController,cumulativeSettingsTarget,cumulativeNotices,
     cleaningController,cleaningTarget,cleaningFacade,memoryType='event',cumulativePage='root',cumulativeReturnPage='root',cumulativePageTarget=null;
-  let controls,controlSubscription,previousPolicy=null,settingsRootView,settingsOpen=false;
+  let controls,controlSubscription,previousPolicy=null,settingsRootView,settingsOpen=false,settingsBackup=null,settingsRestoring=false;
   const allowed=key=>['benmo','summary','item','npc','self','outline'].includes(key)?availability()[key]===true:!!controls?.allowed(key);
   const availability=()=>{
     const global=controls?.inspect(),local=benmoController?.availability(),master=controls?.allowed('enabled')===true;
@@ -407,8 +409,8 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     if(!next.event){runtime.summaryController?.stop();recallRuntime?.clear();}
     if(!next.cumulative)runtime.cumulativeRunner?.stop();
     cancelDisabledManagedTasks(runtime,next);
-    if(before&&!before.event&&next.event)runtime.summaryService?.resumeAutoConfirm();
-    if(before&&!before.cumulative&&next.cumulative)runtime.cumulativeService?.resumeAutoConfirm();
+    if(!settingsRestoring&&before&&!before.event&&next.event)runtime.summaryService?.resumeAutoConfirm();
+    if(!settingsRestoring&&before&&!before.cumulative&&next.cumulative)runtime.cumulativeService?.resumeAutoConfirm();
     cumulativeRuntime?.setEnabled(next.cumulative);latestRuntime?.setEnabled(next.enabled);
     if(!next.enabled)trackingRuntime?.clear();if(!next.enabled||!next.time){worldController?.cancel();worldWaiting?.clear();}
     if(!before||['enabled','item','npc'].some(key=>before[key]!==next[key]))trackingRuntime?.controlsChanged?.();
@@ -734,8 +736,16 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   function mountSettingsRoot(focusAction=null){
     if(!panel||closing||replacingPage)return;
     settingsRootView?.dispose();apiView?.dispose();apiView=null;
-    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,availability,focusAction,heightPreference:panelHeightPreference,onGenerationDiagnostic:()=>downloadGenerationDiagnostic(doc),interfaceDiagnostic:{inspect:interfaceDiagnostic.inspect,subscribe:interfaceDiagnostic.subscribe,start:startInterfaceDiagnostic,stop:()=>interfaceDiagnostic.stop('manual'),download:interfaceDiagnostic.download},onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onTaskApi:openTaskApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
+    if(!settingsBackup)settingsBackup=createSettingsBackupSession({settings:runtime.settings,appearance,repository,pluginVersion:APP_VERSION,download:(text,name)=>downloadSettingsBackup(doc,text,name),canRestore:settingsRestoreIdle,beginRestore(){if(settingsRestoring||!settingsRestoreIdle())return null;settingsRestoring=true;const release=worldAuto?.suspendForSettingsRestore();let ended=false;return()=>{if(ended)return;ended=true;release?.();settingsRestoring=false;if(!disposed){void controls.refresh();void latestRuntime?.refresh().catch(()=>{});void narrativeRuntime?.load().catch(()=>{});}};}});
+    settingsRootView=mountSettingsRootView(settingsContent,{controls,appearance,settings:runtime.settings,settingsBackup,availability,focusAction,heightPreference:panelHeightPreference,onGenerationDiagnostic:()=>downloadGenerationDiagnostic(doc),interfaceDiagnostic:{inspect:interfaceDiagnostic.inspect,subscribe:interfaceDiagnostic.subscribe,start:startInterfaceDiagnostic,stop:()=>interfaceDiagnostic.stop('manual'),download:interfaceDiagnostic.download},onSchedule:()=>void openSchedule({candidates:true,fromSettings:true}),onApi:openApiSettings,onTaskApi:openTaskApiSettings,onNavigate:reason=>returnFromSettings(reason),onClose:close});
     syncAppearance();interfaceDiagnostic.stage('shown','settings');
+  }
+  function settingsRestoreIdle(){
+    if(disposed||foregroundBrowsing||worldController?.isGenerating()||narrativeRuntime?.hasPending()||sourceDeletionRuntime?.hasPendingRollback())return false;
+    const active=new Set(['starting','running','committing','awaiting-user','awaiting-review','waiting','queued']);
+    if(runtime?.manager.list().some(row=>active.has(row.status)))return false;
+    if([runtime?.summaryController?.runner?.inspect().status,runtime?.cumulativeRunner?.inspect().status].some(status=>active.has(status)))return false;
+    const latest=latestRuntime?.inspect();return ![latest?.status,latest?.automatic?.status,latest?.backfill?.status].some(status=>active.has(status));
   }
   function openApiSettings(){
     if(!settingsOpen||apiSession||!panel)return;
@@ -1114,7 +1124,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>({status:'retained',reason:'native-visibility',removed:0}),
     dispose() {
-      if(disposed)return;disposed = true;styleText.dispose();panelHeightPreference.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();worldDisplay?.dispose();worldDisplayRuntime?.dispose();briefingStyleCache.clear();roundRecordDisplay?.dispose();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();worldHistory?.dispose();worldAuto?.dispose();worldAutoSettingsRelease?.();worldWaiting?.dispose();worldPrompts?.dispose();timeController?.dispose();worldController?.dispose();worldController=null;worldTarget=null;let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      if(disposed)return;disposed = true;settingsBackup?.dispose();styleText.dispose();panelHeightPreference.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();worldDisplay?.dispose();worldDisplayRuntime?.dispose();briefingStyleCache.clear();roundRecordDisplay?.dispose();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();worldHistory?.dispose();worldAuto?.dispose();worldAutoSettingsRelease?.();worldWaiting?.dispose();worldPrompts?.dispose();timeController?.dispose();worldController?.dispose();worldController=null;worldTarget=null;let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;if(closeError)throw closeError;
     },

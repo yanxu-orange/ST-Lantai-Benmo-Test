@@ -2,7 +2,7 @@ import { assertTaskRoutes, defaultTaskRoutes, assertTaskRouting, taskRoutingView
 
 export function createSettingsRepository(adapter) {
   let queue = Promise.resolve();
-  function update(field, value, { expectedEpoch: requestedEpoch, isCurrent, requireConfirmation = false, credentials = [] } = {}) {
+  function update(field, value, { expectedEpoch: requestedEpoch, isCurrent, requireConfirmation = false, credentials = [], replaceCredentials = false } = {}) {
     if ((requestedEpoch !== undefined && (!Number.isSafeInteger(requestedEpoch) || requestedEpoch < 0))
       || (isCurrent !== undefined && typeof isCurrent !== 'function')) throw new SettingsError();
     const guard = () => {
@@ -57,7 +57,7 @@ export function createSettingsRepository(adapter) {
       if (currentEpochs.epoch !== epochs.epoch || currentEpochs[field] !== expectedEpoch
         || !equalSettings(current, root) || (previous && !equalSettings(root[field], previous[field]))) throw new SettingsError('SETTINGS_CONFLICT');
       const nextCredentials = field === 'ai' ? draft.presets.flatMap(preset => {
-        const credential = replacements.find(item => item.presetId === preset.id) ?? root.credentials.find(item => item.presetId === preset.id);
+        const credential = replacements.find(item => item.presetId === preset.id) ?? (replaceCredentials?undefined:root.credentials.find(item => item.presetId === preset.id));
         return credential ? [credential] : [];
       }) : root.credentials;
       if (equalSettings(settingsDomainValue(root, field, 'no-op'), draft) && equalSettings(root.credentials, nextCredentials)) return { status: 'committed', root: publicSettings(root), changed: false };
@@ -78,6 +78,13 @@ export function createSettingsRepository(adapter) {
     queue=work.catch(()=>{});return work;
   }
   return Object.freeze({
+    // Explicit settings-backup path only. The ordinary read/inspect surfaces
+    // continue to strip credential values. Callers keep this snapshot private.
+    captureBackup({includeCredentials=false}={}){
+      const work=queue.then(async()=>{let root;try{root=adapter.peek();}catch{root=await adapter.read({waitForPendingSaves:true});}const {root:current,epochs}=adapter.snapshot();if(root!==current&&!equalSettings(root,current))throw new SettingsError('SETTINGS_CONFLICT');return frozenSettingsCopy({settings:{...current,credentials:includeCredentials?current.credentials:[]},epoch:epochs.epoch,epochs});});
+      queue=work.catch(()=>{});return work;
+    },
+    restoreAi:(value,credentials,options={})=>update('ai',value,{...options,credentials,replaceCredentials:true,requireConfirmation:true}),
     read:()=>readSettings(),
     ensure:()=>readSettings(true),
     saveAi: (value, options) => update('ai', value, options),

@@ -8,7 +8,8 @@ import {materialEnabled} from '../../domain/world-dynamics/materials.js';
 const copy=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 export function createWorldAutoRuntime({adapter,repository,history,dateRuntime,getContext,getControls,getController,canGenerate=()=>true,onRun=()=>{},scheduleStart=work=>setTimeout(work,0)}={}){
  const gate=featureGate(getControls,'time'),attempts=new Map(),lastConfirmed=new Map(),releases=[];let disposed=false,serial=0,pending=null,queued=false,chain=0,lastDate=null,status={status:'idle'},observedReply=null,continuePermit=null,foreground=null,receipt=null,foregroundStopped=false,latestSeen=null,editedReply=null,editEpoch=0;
- const current=(target,ticket)=>{try{return !disposed&&ticket===serial&&sameTarget(target,repository.captureTarget());}catch{return false;}};
+ let restoring=false,restoreBoundary=null;
+ const current=(target,ticket)=>{try{return !disposed&&!restoring&&ticket===serial&&sameTarget(target,repository.captureTarget());}catch{return false;}};
  const scope=target=>JSON.stringify([target.chatId,target.rootId]);
  const key=(target,date)=>JSON.stringify([target.chatId,target.rootId,date.calendarId,date.year,date.month,date.day]);
  const mark=(target,date,endFloor=adapter.captureSummarySource(target).messages.at(-1)?.floor??-1)=>attempts.set(key(target,date),{scope:scope(target),date:copy(date),endFloor});
@@ -22,6 +23,7 @@ export function createWorldAutoRuntime({adapter,repository,history,dateRuntime,g
  function completedStream(floor,processor=getContext()?.streamingProcessor){const message=getContext()?.chat?.[floor];if(message?.gen_started&&!message?.gen_finished)return false;if(!processor||Number.isSafeInteger(processor.messageId)&&processor.messageId!==floor)return true;return processor.isFinished===true&&processor.isStopped!==true&&!processor.abortController?.signal?.aborted&&!(processor.toolCalls?.length);}
  function eligible(selection,wanted){
   const row=latestReply(selection.target);if(row&&(!latestSeen||!sameReply(latestSeen,row)))latestSeen=copy(row);if(!row||foreground&&!foreground.ended||foregroundStopped||!completedStream(row.floor))return false;
+  if(restoring||restoreBoundary&&restoreBoundary.scope===scope(selection.target))return false;
   let permit=continuePermit;if(permit&&(!sameTarget(permit.target,selection.target)||!sameReply(permit.row,row)||permit.row.text!==row.text))continuePermit=permit=null;
   const s=scope(selection.target);if(!observedReply||observedReply.scope!==s||!sameReply(observedReply.row,row)||permit&&!permit.date){observedReply={scope:s,row:locator(row),date:copy(wanted.date)};if(permit)permit.date=copy(wanted.date);}
   if(!equal(observedReply.date,wanted.date)||permit&&!equal(permit.date,wanted.date))return false;
@@ -35,6 +37,7 @@ export function createWorldAutoRuntime({adapter,repository,history,dateRuntime,g
   try{const t=repository.captureTarget(),row=latestReply(t),message=getContext()?.chat?.[r.floor];if(!sameTarget(t,r.target)||!row||row.floor!==r.floor||r.message&&r.message!==message)return;
    if(foreground.endRow&&(!sameReply(foreground.endRow,row)||foreground.endRow.text!==row.text)||foreground.endEditEpoch!==undefined&&foreground.endEditEpoch!==editEpoch){editedReply=locator(row);receipt=null;foreground=null;continuePermit=null;void request();return;}
    if(foreground.explicit===true)editedReply=null;latestSeen=copy(row);
+   if(restoreBoundary?.scope===scope(t)&&foreground.explicit===true&&(!sameReply(foreground.restoreStart,row)||foreground.restoreStart?.text!==row.text))restoreBoundary=null;
    if(foreground.explicit===true&&foreground.type==='continue'&&r.type==='continue'&&typeof row.objectTicket==='string'&&row.objectTicket)continuePermit={target:copy(t),row:copy(row),date:null};
   }catch{}
   receipt=null;foreground=null;void request();
@@ -60,7 +63,7 @@ export function createWorldAutoRuntime({adapter,repository,history,dateRuntime,g
  for(const name of ['MESSAGE_SENT','MESSAGE_SWIPED','MESSAGE_DELETED']){const event=context?.eventTypes?.[name];if(event&&events?.on){const fn=()=>void request();events.on(event,fn);releases.push(()=>(events.off??events.removeListener)?.call(events,event,fn));}}
  const on=(name,fn)=>{const event=context?.eventTypes?.[name];if(event&&events?.on){events.on(event,fn);releases.push(()=>(events.off??events.removeListener)?.call(events,event,fn));}};
  for(const name of ['MESSAGE_EDITED','MESSAGE_UPDATED'])on(name,floor=>{try{const row=latestReply(repository.captureTarget());if(row&&((latestSeen&&sameReply(latestSeen,row)&&latestSeen.text!==row.text)||!latestSeen&&name==='MESSAGE_EDITED'&&(floor===undefined||floor===row.floor))){editedReply=locator(row);editEpoch++;}if(row)latestSeen=copy(row);}catch{}void request();});
- on('GENERATION_STARTED',(type,_options,dryRun)=>{if(dryRun===true)return;const normalized=type??'normal';if(!supported.has(normalized))return;foreground={type:normalized,ended:false,explicit:true};receipt=null;foregroundStopped=false;continuePermit=null;});
+ on('GENERATION_STARTED',(type,_options,dryRun)=>{if(dryRun===true)return;const normalized=type??'normal';if(!supported.has(normalized))return;let restoreStart;try{if(restoreBoundary)restoreStart=copy(latestReply(repository.captureTarget()));}catch{}foreground={type:normalized,ended:false,explicit:true,...(restoreBoundary?{restoreStart}:{})};receipt=null;foregroundStopped=false;continuePermit=null;});
  on('MESSAGE_RECEIVED',(floor,type)=>{const normalized=type==='appendFinal'&&foreground?.type==='continue'?'continue':type===undefined?(foreground?.type??'normal'):type;if(!supported.has(normalized)||foregroundStopped)return;try{const target=repository.captureTarget();if(receipt&&foreground?.ended){flushReceipt();void request();return;}if(!foreground)foreground={type:normalized,ended:false};const message=context?.chat?.[floor];latestSeen=copy(latestReply(target));receipt={target:copy(target),floor,type:normalized,message,processor:getContext()?.streamingProcessor??null};flushReceipt();}catch{}void request();});
  on('GENERATION_ENDED',()=>{if(foreground&&!foreground.ended){foreground.ended=true;foreground.endEditEpoch=editEpoch;try{foreground.endRow=copy(latestReply(repository.captureTarget()));}catch{}}flushReceipt();void request();});
  on('CHARACTER_MESSAGE_RENDERED',()=>{flushReceipt();void request();});
@@ -69,5 +72,5 @@ export function createWorldAutoRuntime({adapter,repository,history,dateRuntime,g
  releases.push(dateRuntime.subscribe(value=>{flushReceipt();const next=JSON.stringify(value.date??null);if(next!==lastDate){lastDate=next;if(value.date)void request();}}));
  if(typeof adapter.subscribeSourceDeletions==='function')releases.push(adapter.subscribeSourceDeletions(record=>{if(disposed||!record.target||!isVerifiedTailDeletion(record.deletion))return;const s=scope(record.target),end=record.deletion.after.messages.length;for(const [id,attempt]of attempts)if(attempt.scope===s&&attempt.endFloor>=end)attempts.delete(id);}));
  scheduleStart(()=>{if(!disposed)void request();});
- return {request,noteAttempt({target,date,endFloor}){mark(target,date,endFloor);},recordCurrent,reconcileHistory,controlsChanged(){serial++;void request();},inspect:()=>copy(status),dispose(){disposed=true;serial++;queued=false;attempts.clear();lastConfirmed.clear();observedReply=null;continuePermit=null;foreground=null;receipt=null;latestSeen=null;editedReply=null;for(const release of releases)release();}};
+ return {request,suspendForSettingsRestore(){restoring=true;serial++;receipt=null;foreground=null;continuePermit=null;let released=false;return()=>{if(released)return;released=true;restoring=false;serial++;try{const target=repository.captureTarget();restoreBoundary={scope:scope(target),row:locator(latestReply(target))};}catch{restoreBoundary=null;}};},noteAttempt({target,date,endFloor}){mark(target,date,endFloor);},recordCurrent,reconcileHistory,controlsChanged(){serial++;void request();},inspect:()=>copy(status),dispose(){disposed=true;serial++;queued=false;attempts.clear();lastConfirmed.clear();observedReply=null;continuePermit=null;foreground=null;receipt=null;latestSeen=null;editedReply=null;for(const release of releases)release();}};
 }
