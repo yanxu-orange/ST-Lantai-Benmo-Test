@@ -246,7 +246,7 @@ function createProvider(getConfig, transport, constant) {
         throw new AiProviderError(error instanceof AiProviderError ? error.code : 'transport');
       }
     },
-    async generateJson({ task, messages, jsonSchema = null, signal, isCurrent, validate, maxOutputTokens } = {}) {
+    async generateJson({ task, messages, jsonSchema = null, signal, isCurrent, validate, maxOutputTokens, onDispatch, onResponseModel } = {}) {
       if (typeof validate !== 'function' || typeof isCurrent !== 'function') throw new AiProviderError('request');
       assertAiCurrent(signal, isCurrent);
       const taskGroup = aiTaskGroup(task);
@@ -259,7 +259,8 @@ function createProvider(getConfig, transport, constant) {
       };
       try {
         assertAiCurrent(signal, current);
-        const text = await transport.generate({ ...request, ...(taskGroup ? {taskGroup} : {}), config, signal, isCurrent: current });
+        const text = await transport.generate({ ...request, ...(taskGroup ? {taskGroup} : {}), config, signal, isCurrent: current,
+          ...(onDispatch ? {onDispatch} : {}), ...(onResponseModel ? {onResponseModel} : {}) });
         assertAiCurrent(signal, current);
         const data = parseStrictJson(text);
         try { if (validate(data) !== true) throw new Error(); }

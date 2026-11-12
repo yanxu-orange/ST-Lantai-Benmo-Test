@@ -6,6 +6,7 @@ import {prepareCumulativeSource,storedCumulativeSource,matchesCumulativeSource,m
 import {buildCumulativeRequest,validCumulativeSummary} from './requests.js';
 import {prepareBatchTracking,applyBatchTracking} from '../tracking/batch.js';
 import {parseBatchTrackingResponseParts} from '../tracking/requests.js';
+import {beginSummaryDiagnostics} from '../memory/diagnostics.js';
 import {prepareSummarySource} from '../summary/source.js';
 import {automaticCumulativePlan} from './auto-runner.js';
 import {publicSummaryTrackingTicket} from '../summary/data.js';
@@ -30,7 +31,7 @@ const AI_FAILURE_MESSAGES=Object.freeze({
 // The host supplies PUBLIC tickets only:
 // {generation,cumulativeEpoch,summaryCleaning,cleaningEpoch,aiIdentity,aiEpoch}.
 // aiIdentity is an opaque public selection identity, never a credential or API object.
-export function createCumulativeSummaryService({repository,manager,provider,captureSource,getGenerationSettings,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,hideSource=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}) {
+export function createCumulativeSummaryService({repository,manager,provider,captureSource,getGenerationSettings,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,hideSource=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,memoryDiagnostics=null,uuid=()=>crypto.randomUUID(),now=()=>new Date().toISOString()}={}) {
   const records=new Map(),listeners=new Set(),reservations=new Set(),restorations=new Map(),reboundReceipts=new WeakSet();let disposed=false;
   const durableTrackingContext=context=>({identities:context.identities??{},allowed:context.allowed??{itemsEnabled:true,npcsEnabled:true}});
   const readTrackingContext=()=>structuredClone(getTrackingContext());
@@ -167,7 +168,10 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
   }
   const releaseSession=record=>{if(record?.executionProvider&&record.executionProvider!==provider){try{record.executionProvider.dispose?.();}catch{}record.executionProvider=null;}};
   const release=manager.subscribe(state=>{
-    const record=records.get(state.taskId);if(!record)return;if(['succeeded','stale','cancelled'].includes(state.status))releaseSession(record);notify(state.taskId);
+    const record=records.get(state.taskId);if(!record)return;if(['succeeded','stale','cancelled'].includes(state.status))releaseSession(record);
+    record.diagnosticAttempt?.status(record.outcome === 'unconfirmed' ? 'unconfirmed' : state.status);
+    if(['succeeded','stale','cancelled','failed'].includes(state.status))record.diagnosticAttempt=null;
+    notify(state.taskId);
     if(state.status==='awaiting-user'&&!state.reviewPending&&!record.reviewRequired&&!record.autoConfirmScheduled){record.autoConfirmScheduled=true;queueMicrotask(()=>void confirm(state.taskId));}
   });
   async function launch(origin,options={},pending=null) {
@@ -192,11 +196,16 @@ export function createCumulativeSummaryService({repository,manager,provider,capt
         await repository.read(ctx.target);
         const isCurrent=()=>!ctx.signal.aborted&&current(ctx.snapshot,ctx.target);
         if(!isCurrent())throw new Error('古法来源已变化');record.stage='summary';notify(ctx.taskId);
+        const spec = request(ctx.snapshot);
+        record.diagnosticAttempt = beginSummaryDiagnostics(memoryDiagnostics, 'cumulative', ctx);
+        const diagnostic = record.diagnosticAttempt?.stage('summary', spec, true);
         let output;
-        try{output=await executionProvider.generateJson({...request(ctx.snapshot),signal:ctx.signal,isCurrent,validate:data=>validCumulativeSummary(ctx.snapshot.tracking&&data&&typeof data==='object'?Object.fromEntries(Object.entries(data).filter(([key])=>key!=='tracking')):data)});}catch(error){writeError(record,error);throw error;}
+        try{output=await executionProvider.generateJson({...spec,...(diagnostic ? {onDispatch: diagnostic.onDispatch, onResponseModel:diagnostic.onResponseModel} : {}),signal:ctx.signal,isCurrent,validate:data=>validCumulativeSummary(ctx.snapshot.tracking&&data&&typeof data==='object'?Object.fromEntries(Object.entries(data).filter(([key])=>key!=='tracking')):data)});}catch(error){diagnostic?.end(ctx.signal.aborted ? 'cancelled' : 'failed');writeError(record,error);throw error;}
         if(!isCurrent()||!validCumulativeSummary(ctx.snapshot.tracking&&output?.data?Object.fromEntries(Object.entries(output.data).filter(([key])=>key!=='tracking')):output?.data))throw new Error('古法结果或来源无效');
         if(snapshot.tracking){record.trackingParts=parseBatchTrackingResponseParts(output.data.tracking,{ticket:snapshot.tracking.ticket});record.diagnostics=Object.entries(record.trackingParts.errors).flatMap(([category,message])=>message?[{kind:'tracking',category,message}]:[]);}
         const timestamp=now(),version={id:snapshot.versionId,taskId:snapshot.operationId,body:output.data.summary,startTime:snapshot.startTime,endTime:snapshot.endTime,baseSnapshot:snapshot.baseSnapshot,sourceSnapshot:storedCumulativeSource(snapshot.source),coverageRanges:snapshot.coverageRanges,settingsEvidence:snapshot.settingsEvidence,createdAt:timestamp,updatedAt:timestamp};
+        diagnostic?.end('returned');
+        record.diagnosticAttempt?.results([version]);
         if(record.reviewRequired){const draft={schema:1,id:version.taskId,operation:origin==='regeneration'?'replace':'append',version,createdAt:timestamp,updatedAt:timestamp,...(snapshot.tracking?{tracking:{ticket:publicSummaryTrackingTicket(snapshot.tracking.ticket),context:durableTrackingContext(snapshot.tracking.context),parts:record.trackingParts}}:{})};record.pendingId=draft.id;
           record.writeInFlight=true;try{const receipt=await repository.saveCumulativePending(ctx.target,record.selection,draft,{executionSnapshot:true,isCurrent});record.selection=receipt.selection;}catch(error){if(error.code!=='COMMIT_UNCONFIRMED')record.pendingId=null;writeError(record,error);throw error;}finally{record.writeInFlight=false;}
         }

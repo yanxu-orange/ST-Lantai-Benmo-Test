@@ -1,6 +1,7 @@
 import { blankEvent, validateEvent } from './model.js';
 import { sameTarget, mergeRanges, mergeParticipants } from './repository.js';
 import { parseStoryDate } from './timeline.js';
+import { compareTimeValues, parseStoryTimePoint } from '../recall/narrative-time.js';
 import { generationSettings,indexRequest,mergeRequest } from './management-prompts.js';
 import { equalData,exactKeys,strings,validateIndexes,validateMergedText,validateReview,originalSnapshot } from './management-validation.js';
 
@@ -13,6 +14,73 @@ export function initialMergeTimes(events) {
   return `${chosen.date.year}年${chosen.date.month}月${chosen.date.day}日`;
  };
  return {startTime:boundary('startTime',false),endTime:boundary('endTime',true)};
+}
+function directStoryTime(raw) {
+ const text=raw.trim();
+ const endOfDay=/24[:：]00$/u.test(text);
+ const clock=/(凌晨|清晨|早晨|上午|中午|午后|下午|傍晚|晚上)\s*(\d{1,2})[时点](半|(?:(\d{1,2})分))?$/u.exec(text);
+ const point=parseStoryTimePoint(endOfDay?text.replace(/24[:：]00$/u,'00:00'):clock?text.slice(0,clock.index):text);
+ if(point.status!=='parsed')return point;
+ const value=point.value;
+ if(endOfDay){
+  // Normalize only for comparison. setUTCFullYear also handles years 1–99
+  // without the 1900 offset used by Date.UTC.
+  const next=new Date(0);next.setUTCFullYear(value.year,value.month-1,value.day+1);
+  return {...point,raw:text,value:{...value,year:next.getUTCFullYear(),month:next.getUTCMonth()+1,day:next.getUTCDate()}};
+ }
+ if(clock){
+  let hour=Number(clock[2]);
+  const minute=clock[3]==='半'?30:Number(clock[4]??0),period=clock[1];
+  if(value.day===null||value.hour!==null||minute>59||hour>12||
+   (period==='中午'&&hour!==12)||(['清晨','早晨','上午','晚上','傍晚'].includes(period)&&hour===12))return {status:'unknown',raw:text};
+  if(period==='凌晨'&&hour===12)hour=0;
+  if(['午后','下午','傍晚','晚上'].includes(period)&&hour<12){
+   if(hour===0)return {status:'unknown',raw:text};
+   hour+=12;
+  }
+  return {...point,raw:text,value:{...value,hour,minute}};
+ }
+ return point;
+}
+function directMergeTimes(events) {
+ const boundary=(key,direction)=>{
+  const values=events.map(event=>event[key]);
+  if(values.some(value=>!value.trim()))return '';
+  if(values.every(value=>value===values[0]))return values[0];
+  const points=values.map(directStoryTime);
+  if(points.some(point=>point.status!=='parsed'))return '';
+  const compare=(left,right)=>{
+   const order=compareTimeValues(left.value,right.value);
+   // The parser preserves a date for named periods, without assigning a
+   // clock time. Different periods within that day cannot decide a boundary.
+   return order===0&&left.raw!==right.raw&&[left,right].some(point=>point.value.hour===null&&/凌晨|清晨|早晨|上午|中午|午后|下午|傍晚|晚上|夜间|深夜/u.test(point.raw))?null:order;
+  };
+  let chosen=0;
+  for(let index=1;index<points.length;index++)if(compare(points[index],points[chosen])===direction)chosen=index;
+  if(points.some(point=>![0,direction].includes(compare(points[chosen],point))))return '';
+  return values[chosen];
+ };
+ return {startTime:boundary('startTime',-1),endTime:boundary('endTime',1)};
+}
+function directlyMergedEvent(events,id,ranges,detailIds,uuid){
+ const details=new Map();
+ for(const {detailWords} of events)for(const term of detailWords){
+  const word=term.word.trim();
+  if(!details.has(word))details.set(word,new Set());
+  for(const alias of term.aliases)if(alias!==word)details.get(word).add(alias);
+ }
+ const detailWords=[...details].map(([word,aliases])=>{
+  if(!detailIds.has(word))detailIds.set(word,uuid());
+  return {id:detailIds.get(word),word,aliases:[...aliases]};
+ });
+ return validateEvent({
+  ...blankEvent(id),
+  title:events.map(event=>event.title.trim()).filter(Boolean).join('／')||'合并记忆',
+  body:events.map(event=>event.body).join('\n\n'),
+  ...mergeParticipants(events),...directMergeTimes(events),sources:ranges,
+  mode:events.every(event=>event.mode==='resident')?'resident':'trigger',
+  eventWords:[...new Set(events.flatMap(event=>event.eventWords))],detailWords
+ });
 }
 export function createMemoryManagementService({repository,manager,provider,getGenerationSettings,getOriginalSnapshot,control=null,uuid=()=>crypto.randomUUID()}={}) {
  if(!repository||typeof repository.matchesSelection!=='function'||!manager||typeof manager.start!=='function'||typeof provider?.generateJson!=='function'||typeof getGenerationSettings!=='function')throw new TypeError('记忆管理依赖未配置');
@@ -70,7 +138,8 @@ export function createMemoryManagementService({repository,manager,provider,getGe
  function start(snapshot,worker) {
   if(!targetCurrent(snapshot,snapshot.selection.target)||!sourcesCurrent(snapshot,snapshot.selection.target))throw new Error('记忆来源或生成设置已变化');
   const taskId=manager.start({key:`memory:${snapshot.kind}:${snapshot.selection.target.chatId}:${snapshot.selection.events.map(event=>event.id).sort().join('|')}`,target:snapshot.selection.target,snapshot,validateCurrent:target=>targetCurrent(snapshot,target),validateSnapshot:sourcesCurrent,worker});
-  records.set(taskId,{kind:snapshot.kind,outcome:null,stage:snapshot.kind==='merge'?'merge-text':snapshot.kind==='keywords'?'keywords':'undo-review'});
+  const stage=snapshot.kind==='merge'?(snapshot.sourceMode==='direct'?'direct-merge':'merge-text'):snapshot.kind==='keywords'?'keywords':'undo-review';
+  records.set(taskId,{kind:snapshot.kind,outcome:null,stage});
   const state=manager.inspect(taskId);if(state&&terminal.has(state.status))releaseTerminal({taskId,status:state.status,attempt:state.attempt,error:state.error});
   return taskId;
  }
@@ -87,8 +156,8 @@ export function createMemoryManagementService({repository,manager,provider,getGe
   },
   async merge(ids,{sourceMode}={}) {
    const operationProof=control?.capture();if(control&&!control.allowed())throw new Error('功能已关闭');
-   if(!['original','memories'].includes(sourceMode))throw new Error('请选择合并来源');
-   const settings=readSettings(),target=repository.captureTarget(),selection=await repository.captureSelection(target,ids);
+   if(!['original','memories','direct'].includes(sourceMode))throw new Error('请选择合并方式');
+   const settings=sourceMode==='direct'?null:readSettings(),target=repository.captureTarget(),selection=await repository.captureSelection(target,ids);
    if(selection.events.length<2||selection.events.some(event=>event.mergedFrom))throw new Error('合并至少需要两条未合并的活动记忆');
    const ranges=mergeRanges(selection.events.flatMap(event=>event.sources));
    if(sourceMode==='original'&&(!ranges.length||typeof getOriginalSnapshot!=='function'))throw new Error('当前记忆缺少可确认的原文来源');
@@ -96,6 +165,11 @@ export function createMemoryManagementService({repository,manager,provider,getGe
    if(control&&!control.matches(operationProof))throw new Error('功能开关已变化，请重新开始');
    return start(snapshot,async ctx=>{
     const captured=ctx.snapshot,events=captured.selection.events;await checkAsync(captured,ctx.target);
+    if(captured.sourceMode==='direct'){
+     const event=directlyMergedEvent(events,mergedId,captured.ranges,detailIds,uuid);
+     records.get(ctx.taskId).stage='final-review';
+     return {kind:'merge',event,sourceIds:events.map(event=>event.id),sourceCount:events.length,ranges:captured.ranges,coherenceWarning:''};
+    }
     const current=()=>!ctx.signal.aborted&&targetCurrent(captured,ctx.target)&&sourcesCurrent(captured,ctx.target);
     const output=await provider.generateJson({...mergeRequest(events,captured.settings,captured.sourceMode,captured.original),signal:ctx.signal,isCurrent:current,validate:validateMergedText});
     if(!current()||!validateMergedText(output.data))throw new Error('合并正文结果或来源无效');
@@ -150,7 +224,7 @@ export function createMemoryManagementService({repository,manager,provider,getGe
      await checkAsync(ctx.snapshot,ctx.target);
      const options={isCurrent:ctx.isCurrent};
      if(ctx.candidate.kind==='keywords')return await repository.rebuildKeywords(ctx.target,ctx.snapshot.selection,reviewed??ctx.candidate.results,options);
-     if(ctx.candidate.kind==='merge')return await repository.merge(ctx.target,ctx.snapshot.selection,ctx.candidate.event,options);
+     if(ctx.candidate.kind==='merge')return await repository.merge(ctx.target,ctx.snapshot.selection,ctx.candidate.event,{...options,allowUnknownTime:ctx.snapshot.sourceMode==='direct'});
      if(ctx.candidate.kind==='undo')return await repository.undoMerge(ctx.target,ctx.snapshot.selection,options);
      throw new Error('候选类型无效');
     }catch(error){if(error?.code==='COMMIT_UNCONFIRMED')record.outcome='unconfirmed';throw error;}

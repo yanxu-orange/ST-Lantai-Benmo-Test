@@ -61,6 +61,7 @@ import { mountSummarySettingsView } from '../../app/summary-settings-view.js';
 import { summaryReadonlyContent } from '../../domain/summary/requests.js';
 import {createSummaryNotifications} from './summary-notifications.js';
 import {createRecallRuntime} from './recall-runtime.js';
+import {createHostMemoryDiagnostics, startSendDiagnostic, inspectDiagnosticMaterials} from './memory-diagnostics.js';
 import {createRecallController} from '../../app/recall-controller.js';
 import {mountRecallView} from '../../app/recall-view.js';
 import {createCumulativeRuntime} from './cumulative-runtime.js';
@@ -96,6 +97,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     summaryContent,summaryView,summarySettingsView,summarySettingsController,summarySettingsTarget,summarySettingsFromMemory=false,summaryNotices,summaryReturnFocus,memoryEditFocus,
     recallRuntime,recallController,recallView,recallTarget,pageRequest=0,recallEntryRequest=0,
     sharedStyle,sharedObserver,sharedStylePromise,snowStyle,snowStylePromise,snowCss,springStyle,springStylePromise,springCss;
+  const memoryDiagnostics = createHostMemoryDiagnostics({version:APP_VERSION, document:doc, getTarget:()=>repository.captureTarget()});
   let releasePanelDiagnostic=null,foregroundBrowsing=false,decoration=null,selectMenus=null;
   // Native scrolling remains unchanged; height is a browser-local presentation preference.
   const panelHeightPreference=createPanelHeightPreference({document:doc,getShadow:()=>panel?.shadowRoot});
@@ -337,7 +339,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     let attempt;do{attempt=workshopPreparation;await attempt;}while(attempt!==workshopPreparation);
   }
   async function ensureRuntime() {
-    if (!runtimePromise) runtimePromise = new Promise(afterPageFrame).then(()=>disposed||lifetime.signal.aborted?null:createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, signal: lifetime.signal,getControls:()=>controls,planSummaryContinuation:args=>narrativeRuntime.planSummaryContinuation(args),afterSummaryCommit:args=>narrativeRuntime.afterSummaryCommit(args),retrySummaryCommit:args=>resumeSummaryNarrative('retry',args),skipSummaryCommit:args=>resumeSummaryNarrative('skip',args),getPendingNarrative:async()=>{if(!narrativeRuntime)return null;await narrativeRuntime.load();return narrativeRuntime.hasPending()?narrativeRuntime.snapshot().run:null;},captureSummarySource:(target,range)=>adapter.captureSummarySource(target,range),hideSource:createNativeSummaryHider({repository,getContext,captureSource:target=>adapter.captureSummarySource(target),verifyHidden:(target,rows)=>adapter.verifyNativeHidden(target,rows)}) }))
+    if (!runtimePromise) runtimePromise = new Promise(afterPageFrame).then(()=>disposed||lifetime.signal.aborted?null:createManagementRuntime({ repository, getContext, document: doc, fetchImpl: request, ...runtimeOptions, memoryDiagnostics, signal: lifetime.signal,getControls:()=>controls,planSummaryContinuation:args=>narrativeRuntime.planSummaryContinuation(args),afterSummaryCommit:args=>narrativeRuntime.afterSummaryCommit(args),retrySummaryCommit:args=>resumeSummaryNarrative('retry',args),skipSummaryCommit:args=>resumeSummaryNarrative('skip',args),getPendingNarrative:async()=>{if(!narrativeRuntime)return null;await narrativeRuntime.load();return narrativeRuntime.hasPending()?narrativeRuntime.snapshot().run:null;},captureSummarySource:(target,range)=>adapter.captureSummarySource(target,range),hideSource:createNativeSummaryHider({repository,getContext,captureSource:target=>adapter.captureSummarySource(target),verifyHidden:(target,rows)=>adapter.verifyNativeHidden(target,rows)}) }))
       .then(async value => { if(!value)return null;if (disposed) { value.dispose(); return null; } runtime = value;
         controls=createControlSession({settings:runtime.settings,repository,prepareTarget:()=>adapter.prepare()});
         await controls.ensure();
@@ -588,7 +590,19 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     memoryContent.hidden=true;memoryContent.inert=true;summaryContent.hidden=false;
     recallController.resume();
       recallController.route('monitor');recallController.tab('actual');
-    recallView=mountRecallView({container:summaryContent,controller:recallController});
+    recallView=mountRecallView({container:summaryContent,controller:recallController,diagnostics:memoryDiagnostics && {
+      store:memoryDiagnostics, target,
+      titles:ids=>{
+        if(!sameTarget(target, repository.captureTarget()))return new Map();
+        const wanted=new Set(ids);
+        return new Map(adapter.peekConfirmed(target).events.filter(event=>wanted.has(event.id)).map(event=>[event.id,event.title]));
+      },
+      materials:row=>{
+        if(!sameTarget(target, repository.captureTarget()))return null;
+        return inspectDiagnosticMaterials({row,attempts:memoryDiagnostics.inspect(target).summaries,
+          root:adapter.peekConfirmed(target),readSource:range=>adapter.captureSummarySource(target,range)});
+      }
+    }});
     const controller=recallController;
     afterPageFrame(()=>{
       if(panel&&serial===ticket&&request===pageRequest&&recallController===controller&&sameTarget(target,repository.captureTarget()))void controller.init();
@@ -1084,7 +1098,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     open, close, openSettings, openTask,openBenmo,openLatestSummary,openSummary:showSummary,openSummarySettings,openSummaryTask,openRecall,openTime,openSchedule,openWorkshop,openTracking,openCumulative:showCumulative,openCumulativeSettings,
     async interceptPrompt(...args){
       if(disposed)return;worldPrompts?.clear();
-      const request=++recallEntryRequest;let entryTarget;
+      const request=++recallEntryRequest;let entryTarget, updateDiagnostic, diagnosticFinished=false;
       try{
         ensureAdapter();try{entryTarget=repository.captureTarget();}catch{/* Cold entry has no confirmed target yet. */}
         const target=await adapter.prepare();
@@ -1096,10 +1110,18 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         if(sourceDeletionRuntime?.hasPendingRollback()){recallRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();return;}
         const prepared=await latestRuntime.prepareSend(target);if(!current())return;
         if(!prepared)throw new Error('发送前资料准备已失效');
+        updateDiagnostic = startSendDiagnostic(memoryDiagnostics, target, args, getContext);
         latestRuntime?.replaceWorkshopSend();
         await timePrompts?.intercept(...args);if(!current())return;
         await worldPrompts?.intercept(...args);if(!current())return;
+        const diagnosticSequence = updateDiagnostic ? recallRuntime?.diagnosticSequence() : null;
         await recallRuntime?.intercept(...args);if(!current())return;
+        let diagnosticSelection;
+        if(updateDiagnostic){
+          try{diagnosticSelection=recallRuntime?.diagnosticSelection(target,diagnosticSequence);}
+          catch{/* Optional projection. */}
+          updateDiagnostic(diagnosticSelection??{status:'unknown'});
+        }
         await cumulativeRuntime?.intercept(...args);if(!current())return;
         await workshopRuntime?.intercept(...args);if(!current())return;
         await trackingRuntime?.intercept(...args);if(!current())return;
@@ -1108,10 +1130,24 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         const historyAfterSummary=historyBefore;
         const history=createWorkshopHistoryTicket({before:historyBefore,afterSummary:historyAfterSummary,afterCumulative:args[0],type:args[3]??'normal',cumulativeProof:cumulativeRuntime?.getReplacementProof(),getCurrent:()=>({target:repository.captureTarget(),original:getContext().chat,raw:adapter.captureSummarySource(target),root:adapter.peekConfirmed(target),eventEnabled:controls.allowed('event'),summaryEnabled:controls.allowed('summary'),cumulativeCurrent:proof=>controls.allowed('cumulative')&&runtime.settings.matchesCumulativeGeneration(proof.config)})});
         await latestRuntime?.intercept(...args);if(!current())return;
-        const adopted=await recallRuntime?.finalizeSend();if(!current())return;if(adopted===false||typeof adopted==='function'&&!adopted()){worldPrompts?.clear();latestRuntime?.invalidateWorkshopSend();return;}
+        const adopted=await recallRuntime?.finalizeSend();if(!current())return;if(adopted===false||typeof adopted==='function'&&!adopted()){
+          diagnosticFinished=true;
+          updateDiagnostic?.({status:recallRuntime?.diagnosticStopped(target,diagnosticSequence)?'cancelled':'withdrawn',cumulativeInjection:{status:'unknown'}});
+          worldPrompts?.clear();latestRuntime?.invalidateWorkshopSend();return;
+        }
         worldPrompts?.finalize();
         latestRuntime?.sealWorkshopSend(args[3]??'normal',recallRuntime?.captureWorkshopInjection()??null,history);
-      }catch{if(!disposed&&request===recallEntryRequest){latestRuntime?.invalidateWorkshopSend();timePrompts?.clear();worldPrompts?.clear();workshopRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();recallRuntime?.preparationFailed(entryTarget,args[0],args[3]);cumulativeRuntime?.preparationFailed(entryTarget);}/* Keep the host prompt copy on unavailable authority. */}
+        if(updateDiagnostic){
+          const cumulative=cumulativeRuntime?.getReplacementProof(), versionId=cumulative?.selection.cumulative.currentVersionId;
+          const eventProof=diagnosticSelection?.status==='selected'&&typeof adopted==='function';
+          const selected=eventProof?diagnosticSelection.selected:[];
+          diagnosticFinished=true;
+          const stopped=recallRuntime?.diagnosticStopped(target,diagnosticSequence);
+          updateDiagnostic({status:stopped?'cancelled':eventProof?(selected.length?'adopted':'none'):diagnosticSelection?.status==='selected'?'withdrawn':diagnosticSelection?.status??'unknown', adopted:stopped?[]:selected,
+            cumulativeInjection:versionId?{versionId,status:'adopted'}:{status:'unknown'}});
+        }
+      }catch{diagnosticFinished=true;updateDiagnostic?.({status:'failed',cumulativeInjection:{status:'unknown'}});if(!disposed&&request===recallEntryRequest){latestRuntime?.invalidateWorkshopSend();timePrompts?.clear();worldPrompts?.clear();workshopRuntime?.clear();trackingRuntime?.clear();narrativeRuntime?.clear();recallRuntime?.preparationFailed(entryTarget,args[0],args[3]);cumulativeRuntime?.preparationFailed(entryTarget);}/* Keep the host prompt copy on unavailable authority. */}
+      finally{if(!diagnosticFinished)updateDiagnostic?.({status:'unknown'});}
     },
     latestStatus:()=>latestRuntime?.inspect()??{status:'idle'},
     timeStatus:()=>timeRuntime?.inspect()??{status:'idle',date:null},
@@ -1124,7 +1160,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
     recallStatus:()=>recallRuntime?.inspect()??{status:'empty'},
     promptHistoryStatus:()=>({status:'retained',reason:'native-visibility',removed:0}),
     dispose() {
-      if(disposed)return;disposed = true;settingsBackup?.dispose();styleText.dispose();panelHeightPreference.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();worldDisplay?.dispose();worldDisplayRuntime?.dispose();briefingStyleCache.clear();roundRecordDisplay?.dispose();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();worldHistory?.dispose();worldAuto?.dispose();worldAutoSettingsRelease?.();worldWaiting?.dispose();worldPrompts?.dispose();timeController?.dispose();worldController?.dispose();worldController=null;worldTarget=null;let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
+      if(disposed)return;disposed = true;memoryDiagnostics?.dispose();settingsBackup?.dispose();styleText.dispose();panelHeightPreference.dispose();interfaceDiagnostic.dispose();releaseInterfaceDiagnostic();generationBrowseReleases.forEach(release=>release());releaseGenerationDiagnostic();worldDisplay?.dispose();worldDisplayRuntime?.dispose();briefingStyleCache.clear();roundRecordDisplay?.dispose();workshopBackgroundDisplay?.dispose();latestDisplay?.dispose();latestRuntime?.dispose();narrativeRuntime?.dispose();sourceDeletionRuntime?.dispose();sourceDeletionNotices?.dispose();storybarTheme.dispose();benmoSubscription?.();benmoController?.dispose();unsubscribeAppearance();appearance.dispose();timePrompts?.dispose();workshopRuntime?.dispose();trackingRuntime?.dispose();scheduleRuntime?.dispose();timeRuntime?.dispose();worldHistory?.dispose();worldAuto?.dispose();worldAutoSettingsRelease?.();worldWaiting?.dispose();worldPrompts?.dispose();timeController?.dispose();worldController?.dispose();worldController=null;worldTarget=null;let closeError;try{close();}catch(error){closeError=error;} cumulativeNotices?.dispose();cumulativeSettingsController?.dispose();cleaningController?.dispose();cumulativeRuntime?.dispose();notices?.dispose();summaryNotices?.dispose();summarySettingsController?.dispose();recallController?.dispose();recallRuntime?.dispose(); controlSubscription?.();controls?.dispose();runtime?.dispose(); lifetime.abort(); unsubscribe?.(); adapter?.dispose(); observer.disconnect();
       if (readyEvent && source) (source.removeListener ?? source.off)?.call(source, readyEvent, ready);
       entry?.remove(); entry = null;if(closeError)throw closeError;
     },

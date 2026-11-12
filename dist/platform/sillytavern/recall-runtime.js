@@ -37,6 +37,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
   const releaseSession=config=>{const session=providerSessions.get(config);providerSessions.delete(config);try{session?.dispose?.();}catch{/* Cleanup cannot interrupt host generation. */}};
   const cancelPreview=()=>{previewAbort?.abort();previewAbort=null;previewGuard=null;previewSource=null;releaseSession(previewConfig);previewConfig=null;};
   const records=new Map(),listeners=new Set(),releases=[];
+  let diagnosticStop=null;
   const key=target=>JSON.stringify([target.chatId,target.rootId]);
   const notify=()=>{for(const fn of [...listeners])try{fn();}catch{/* observers cannot break host generation */}};
   const scopedSources=typeof captureRecallSource==='function'&&typeof matchesRecallSource==='function';
@@ -59,6 +60,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     if(reason==='CHAT_CHANGED'||!gate.allowed())buildMulti.reset();
     if(previous)record(previous.target,{status:'failed',type:previous.type,message:'本轮召回已取消，未注入记忆。'});
     else if(reason==='stopped'&&oldProof)record(oldProof.target,{status:'failed',type:'cancelled',message:'本轮生成已取消，未继续注入记忆。'});
+    if(reason==='stopped'&&(previous||oldProof))diagnosticStop={target:(previous??oldProof).target,sequence:recordSequence};
     try {
       const context=getContext();if(typeof context?.setExtensionPrompt!=='function')throw new Error();
       context.setExtensionPrompt(RECALL_PROMPT_KEY,'',1,0,false,0);return true;
@@ -69,6 +71,21 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     }
   }
   function record(target,value){records.set(key(target),copy({...value,sequence:++recordSequence}));notify();}
+  const diagnosticStopped = (target,since) => diagnosticStop?.sequence > since && sameTarget(target,diagnosticStop.target);
+  function diagnosticSelection(target, since) {
+    const entry = records.get(key(target));
+    if (!entry || entry.sequence <= since) return null;
+    if (diagnosticStopped(target,since)) return {status:'cancelled'};
+    if (entry.status !== 'injected') return {status:entry.status};
+    const {selected, unselected, selectedIds} = entry.result;
+    const candidateCount = selected.length + unselected.length;
+    const candidates = [...selected.slice(0,80), ...unselected.slice(0,Math.max(0,80-selected.length))].map(item => ({
+      id:item.id, rank:item.rank ?? item.ranking?.rank,
+      channels:item.sources ?? (item.pool === 'resident' ? ['resident'] : item.pool === 'special' ? ['time'] : item.reasons?.length ? ['keyword'] : []),
+      reasons:[...new Set(item.reasons?.map(reason => reason.code))], excludedReason:item.excludedReason
+    }));
+    return {status:'selected', candidates, candidateCount, selected:selectedIds};
+  }
   function preparationFailed(target,messages,type='normal') {
     if(disposed)return;
     try{if(!target||!sameTarget(target,repository.captureTarget()))return;}catch{return;}
@@ -283,6 +300,7 @@ export function createRecallRuntime({repository,settings,getContext,captureSourc
     },
     getReplacementProof(){try{return proof&&current(proof.target,proof.serial,proof.config,proof.source)?proof:null;}catch{return null;}},
     inspect,inspectView:({more=false}={})=>inspect(more?null:2),
+    diagnosticSelection, diagnosticStopped, diagnosticSequence:()=>recordSequence,
     subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn);},
     dispose(){if(disposed)return;clear();disposed=true;buildMulti.dispose();maintenance.dispose();releases.forEach(fn=>fn());listeners.clear();records.clear();}
   });

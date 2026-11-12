@@ -6,9 +6,10 @@ import { prepareSummarySource, matchesSummarySource, matchesStoredSummarySource,
 import { publicSummarySettingsEvidence, normalizedSummarySettingsEvidence, publicSummaryTrackingTicket, assertSummaryNarrativeContinuation } from './data.js';
 import { prepareBatchTracking, applyBatchTracking } from '../tracking/batch.js';
 import { parseBatchTrackingResponseParts } from '../tracking/requests.js';
+import {beginSummaryDiagnostics} from '../memory/diagnostics.js';
 
 // Uses the shared manager/provider. Chat transactions remain repository-owned.
-export function createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,hideSource=null,planSummaryContinuation=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,uuid=()=>crypto.randomUUID()}={}) {
+export function createEventSummaryService({repository,manager,provider,getGenerationSettings,captureSource,getTrackingContext=()=>({identities:{},allowed:{itemsEnabled:true,npcsEnabled:true}}),control=null,hideSource=null,planSummaryContinuation=null,afterSummaryCommit=null,retrySummaryCommit=null,skipSummaryCommit=null,getPendingNarrative=null,memoryDiagnostics=null,uuid=()=>crypto.randomUUID()}={}) {
   const records=new Map(),listeners=new Set(),reservations=new Set(),restorations=new Map(),continuations=new WeakMap();let disposed=false;
   const readSettings=()=>structuredClone(getGenerationSettings());
   const durableTrackingContext=context=>({identities:context.identities??{},allowed:context.allowed??{itemsEnabled:true,npcsEnabled:true}});
@@ -92,8 +93,16 @@ export function createEventSummaryService({repository,manager,provider,getGenera
     };
     const validate=data=>{try{return validateRaw(normalize(eventData(data)).data);}catch{return false;}};
     records.get(ctx.taskId).stage=stage;notify(ctx.taskId);
-    const output=await executionProvider.generateJson({...spec,signal:ctx.signal,isCurrent:current,validate});
-    if(!current()||!validate(output.data))throw new Error('总结结果或来源无效');
+    const diagnostic = records.get(ctx.taskId).diagnosticAttempt?.stage(stage, spec, stage==='fast'||stage.endsWith('Summary'));
+    let output;
+    try {
+      output=await executionProvider.generateJson({...spec,signal:ctx.signal,isCurrent:current,validate,...(diagnostic ? {onDispatch: diagnostic.onDispatch, onResponseModel:diagnostic.onResponseModel} : {})});
+      if(!current()||!validate(output.data))throw new Error('总结结果或来源无效');
+      diagnostic?.end('returned');
+    } catch (error) {
+      diagnostic?.end(ctx.signal.aborted ? 'cancelled' : 'failed');
+      throw error;
+    }
     const normalized=normalize(eventData(output.data)),record=records.get(ctx.taskId);record.diagnostics.push(...normalized.diagnostics);
     if(trackingStage){record.trackingParts=parseBatchTrackingResponseParts(output.data?.tracking,{ticket:snapshot.tracking.ticket});for(const [list,error] of Object.entries(record.trackingParts.errors))if(error)record.diagnostics.push({kind:'tracking',category:list,message:error});}
     return normalized.data;
@@ -139,6 +148,8 @@ export function createEventSummaryService({repository,manager,provider,getGenera
   const releaseSession=record=>{if(record?.executionProvider&&record.executionProvider!==provider){try{record.executionProvider.dispose?.();}catch{}record.executionProvider=null;}};
   const release=manager.subscribe(state=>{
     const record=records.get(state.taskId);if(!record)return;if(['succeeded','stale','cancelled'].includes(state.status))releaseSession(record);
+    record.diagnosticAttempt?.status(record.outcome === 'unconfirmed' ? 'unconfirmed' : state.status);
+    if(['succeeded','stale','cancelled','failed'].includes(state.status))record.diagnosticAttempt=null;
     notify(state.taskId);
     if(state.status==='awaiting-user'&&!state.reviewPending&&!record.reviewRequired&&!record.autoConfirmScheduled){record.autoConfirmScheduled=true;queueMicrotask(()=>void confirm(state.taskId).then(result=>{if(result.status==='invalid'){record.errorMessage=result.error;record.invalidAuto=true;notify(state.taskId);}}));}
   });
@@ -168,6 +179,8 @@ export function createEventSummaryService({repository,manager,provider,getGenera
         let events=structuredClone(resume?.events??[]),generatedCandidates=structuredClone(resume?.generatedCandidates??[]),completedStages=[...(resume?.completedStages??[])];
         const stages=summaryStages(ctx.snapshot.settings.generationMode);
         if(options.restoreOnly){execution.reviewRequired=true;execution.stage=resume.failedStage??'final-review';return {kind:'event-summary',events,generatedCandidates,incomplete:!!resume.nextStage,nextStage:resume.nextStage,trackingParts:execution.trackingParts};}
+        execution.diagnosticAttempt = beginSummaryDiagnostics(memoryDiagnostics, 'event', ctx, {continuationId:resume?.id});
+        if(resume&&events.length)execution.diagnosticAttempt?.results(events);
         for(const stage of stages.slice(resume?(resume.nextStage===null?stages.length:stages.indexOf(resume.nextStage)):0)) {
           let output;
           try{output=await request(stage,ctx,ctx.snapshot,events,executionProvider);}catch(error){
@@ -185,6 +198,7 @@ export function createEventSummaryService({repository,manager,provider,getGenera
           } else if(stage==='aliases')events=events.map(event=>({...event,detailWords:event.detailWords.map(term=>({...term,aliases:output.indexes.find(item=>item.draftId===event.id).detailAliases.find(item=>item.parentDetail===term.word)?.aliases??[]}))}));
           else events=applyIndexes(events,stage==='enhancedKeywords'?{indexes:output.indexes.map(item=>({...item,detailAliases:[]}))}:output,uuid);
           completedStages.push(stage);
+          if(stage==='fast'||stage.endsWith('Summary'))execution.diagnosticAttempt?.results(events);
           if(execution.pendingId){
             const previous=execution.selection.summary.pending;
             const pending={...previous,events,completedStages:[...completedStages],nextStage:stages[completedStages.length]??null,failedStage:null,updatedAt:new Date().toISOString()};

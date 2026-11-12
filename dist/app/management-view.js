@@ -19,7 +19,7 @@ export function managementView(state) {
  const title=state.kind==='keywords'?'重建关键词与检索简称':'合并记忆';let content='',actions='';
  if(state.status==='preflight') {
   if(state.kind==='keywords'){content=state.error?'':'<p role="status">正在发起重建…</p>';}
-  else {content=`<p>合并选中的 ${state.ids.length} 条记忆</p>`+section('正文来源',`<div class="lt-stack">${button('根据聊天原文融合','original',false,state.busy||!state.originalAvailable)}${!state.originalAvailable?'<p class="lt-meta">当前没有可确认的原文来源</p>':''}${button('根据记忆内容融合','memories',true,state.busy)}</div>`);}
+  else {content=`<p>合并选中的 ${state.ids.length} 条记忆</p>`+section('合并方式',`<div class="lt-stack">${button('直接拼接','direct',false,state.busy)}${button('根据聊天原文融合','original',false,state.busy||!state.originalAvailable)}${!state.originalAvailable?'<p class="lt-meta">当前没有可确认的原文来源</p>':''}${button('根据记忆内容融合','memories',true,state.busy)}</div>`);}
  } else if(state.outcome==='unconfirmed') {content='<p role="alert">保存结果待确认，可能已经写入。请重新读取实际结果。</p>';actions=button('重新读取','recover',true,state.busy);}
  else if(state.status==='stale') {content='<p role="status">来源或聊天目标已变化，请返回后重新发起。</p>';}
  else if(state.status==='cancelled') {content='<p role="status">任务已取消</p>';}
@@ -34,7 +34,7 @@ export function managementView(state) {
   else content=`<p class="lt-meta">合并 ${candidate.sourceCount} 条记忆 · ${esc(ranges(candidate.ranges))}</p>${candidate.coherenceWarning?`<p class="lt-management-warning" role="status">${esc(candidate.coherenceWarning)}</p>`:''}${facts(candidate.event)}${words(candidate.event)}`;
   if(state.status==='failed')content='<p role="alert">保存未完成，审核候选已保留。可再次确认或取消。</p>'+content;
   actions=(candidate.kind==='keywords'?'':button('取消任务','cancel'))+button(candidate.kind==='keywords'?'保存重建结果':'确认合并','confirm',true,state.busy);
- } else if(state.status==='failed') {content='<p role="alert">生成未完成，请检查 API 设置或重新生成。正式记忆未提交。</p>'+button('前往 API 设置','settings');actions=button('取消任务','cancel')+button('重新生成','retry',true,state.busy);}
- else {content=`<p role="status">${state.status==='committing'?'正在保存…':state.stage==='merge-indexes'?'正在生成关键词与简称…':state.kind==='keywords'?`正在重建，共 ${state.ids.length} 条`:'正在融合正文…'}</p>`;actions=state.status==='committing'?'':button('取消任务','cancel');}
- return {title,content:`<div class="lt-management lt-stack">${state.error?`<p class="lt-error" role="alert">${esc(state.error)}</p>`:''}${content}${state.status==='preflight'&&state.error?button('前往 API 设置','settings'):''}</div>`,actions:`<div class="lt-management-actions">${actions}</div>`};
+ } else if(state.status==='failed') {content=state.sourceMode==='direct'?'<p role="alert">拼接未完成，正式记忆未提交。</p>':'<p role="alert">生成未完成，请检查 API 设置或重新生成。正式记忆未提交。</p>'+button('前往 API 设置','settings');actions=button('取消任务','cancel')+button(state.sourceMode==='direct'?'重试拼接':'重新生成','retry',true,state.busy);}
+ else {content=`<p role="status">${state.status==='committing'?'正在保存…':state.stage==='direct-merge'?'正在准备拼接…':state.stage==='merge-indexes'?'正在生成关键词与简称…':state.kind==='keywords'?`正在重建，共 ${state.ids.length} 条`:'正在融合正文…'}</p>`;actions=state.status==='committing'?'':button('取消任务','cancel');}
+ return {title,content:`<div class="lt-management lt-stack">${state.error?`<p class="lt-error" role="alert">${esc(state.error)}</p>`:''}${content}${state.status==='preflight'&&state.error&&state.sourceMode!=='direct'?button('前往 API 设置','settings'):''}</div>`,actions:`<div class="lt-management-actions">${actions}</div>`};
 }

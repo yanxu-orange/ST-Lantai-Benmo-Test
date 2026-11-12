@@ -45,6 +45,14 @@ function readAssistantText(response) {
   return '';
 }
 
+function observeModel(observer, value, authorization = null) {
+  if (!observer) return;
+  const privateKey = authorization ? JSON.parse(authorization).Authorization.slice('Bearer '.length) : null;
+  const safe = typeof value==='string' && /^[a-z0-9][a-z0-9._:/@+-]{0,127}$/i.test(value) && !value.includes('://')
+    && (!privateKey || !value.includes(privateKey));
+  try { observer(safe ? value : null); } catch { /* Optional observation. */ }
+}
+
 // The same pure preparation can drive a prompt preview and actual sending.
 // mainApi=null denotes the plugin chat transport; no credentials are included.
 export function prepareSillyTavernAiRequest({ task, messages, jsonSchema = null, mainApi = null }) {
@@ -64,7 +72,7 @@ export function prepareSillyTavernAiRequest({ task, messages, jsonSchema = null,
 
 // Host calls and private backend routes live only in this platform adapter.
 export function createSillyTavernAiTransport({ getContext = getSillyTavernContext, fetchImpl = globalThis.fetch, resolveCredential, captureCredential } = {}) {
-    async function generate({ config: configured, task, taskGroup, messages, jsonSchema = null, signal, isCurrent = () => true, maxTokens, maxOutputTokens }, execution=null) {
+    async function generate({ config: configured, task, taskGroup, messages, jsonSchema = null, signal, isCurrent = () => true, maxTokens, maxOutputTokens, onDispatch, onResponseModel }, execution=null) {
       if (maxTokens !== undefined && (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > 128)) throw new AiProviderError('request');
       assertMaxOutputTokens(maxOutputTokens);
       if (maxTokens !== undefined && maxOutputTokens !== undefined) throw new AiProviderError('request');
@@ -102,6 +110,13 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
           // Current ST silently produces {} for non-chat schema extraction;
           // use the raw text path there. Chat invalid text must survive intact
           // rather than being replaced with {} by host extraction.
+          if (onDispatch) {
+            try {
+              const model = context.mainApi === 'openai' && typeof context.getChatCompletionModel === 'function'
+                ? context.getChatCompletionModel() : null;
+              observeModel(value=>onDispatch({model:value}),model);
+            } catch { /* Optional observation. */ }
+          }
           text = await context.generateRaw({ prompt: prepared.prompt, api: context.mainApi, jsonSchema: prepared.jsonSchema,
             trimNames: false, quietToLoud: false, instructOverride: false, ...(outputLimit === undefined ? {} : { responseLength: outputLimit }) });
         } else {
@@ -115,6 +130,7 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
             messages: prepared.messages, json_schema: jsonSchema ?? undefined, stream: false, n: 1, ...(outputLimit === undefined ? {} : { max_tokens: outputLimit }) });
           const headers = context.getRequestHeaders();
           assertAiCurrent(signal, current);
+          if(onDispatch)observeModel(value=>onDispatch({model:value}),config.model,authorization);
           const response = await fetchImpl('/api/backends/chat-completions/generate', {
             method: 'POST', headers, signal, body,
           });
@@ -123,6 +139,7 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
           const result = await response.json();
           assertAiCurrent(signal, current);
           if (result?.error) throw new AiProviderError('http');
+          observeModel(onResponseModel,result?.model,authorization);
           text = readAssistantText(result);
         }
         assertAiCurrent(signal, current);

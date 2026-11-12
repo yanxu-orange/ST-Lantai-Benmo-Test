@@ -281,7 +281,7 @@ export function mountMemoryApp(container, repository, { history: browserHistory 
       if(target.dataset.action?.startsWith('mgmt-')){
         const action=target.dataset.action.slice(5);
         if(action==='back'){management.setScroll($('.lt-main').scrollTop);await returnManagement();}
-        else if(action==='start'||action==='original'||action==='memories')await management.start(action==='start'?undefined:action);
+        else if(['start','original','memories','direct'].includes(action))await management.start(action==='start'?undefined:action);
         else if(action==='review'){if(container.querySelector('[data-composing=true]'))return;for(const field of container.querySelectorAll('[data-management-entry]'))addManagementWords(field.dataset.managementEntry);management.review();}
         else if(action==='confirm'){if(container.querySelector('[data-composing=true]'))return;for(const field of [...container.querySelectorAll('[data-index-entry]')])addIndexWords(field);await management.confirm();const invalid=$('[data-invalid=true]');if(invalid){invalid.scrollIntoView({block:'nearest'});(invalid.querySelector('input')??invalid).focus({preventScroll:true});}}
         else if(action==='cancel')management.cancel();

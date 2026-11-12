@@ -38,7 +38,8 @@ export function createManagementController({ service, repository, originalAvaila
       if (!ids.length || events.some(event => !event)) throw new Error('所选记忆已变化，请重新读取');
       if (kind === 'merge' && (ids.length < 2 || events.some(event => event.mergedFrom))) throw new Error('请至少选择两条未合并的记忆');
       const operationKey = key(kind,target,ids), previous = operations.get(operationKey), previousTask=previous?.taskId?service.inspect(previous.taskId):null;
-      if (previousTask && (previousTask.outcome==='unconfirmed'&&!previous.recovered||previousTask.committing||previousTask.status==='committing'||previousTask.outcome!=='unconfirmed'&&!['succeeded','cancelled','stale'].includes(previousTask.status)&&taskCurrent(previous,previousTask))) current = previous;
+      const reorderedDirectDraft=previousTask?.snapshot?.sourceMode==='direct'&&previousTask.status==='awaiting-user'&&!previousTask.committing&&previousTask.outcome!=='unconfirmed'&&ids.some((id,index)=>id!==previous.ids[index]);
+      if (previousTask && !reorderedDirectDraft && (previousTask.outcome==='unconfirmed'&&!previous.recovered||previousTask.committing||previousTask.status==='committing'||previousTask.outcome!=='unconfirmed'&&!['succeeded','cancelled','stale'].includes(previousTask.status)&&taskCurrent(previous,previousTask))) current = previous;
       else {
         if(previousTask&&!['succeeded','cancelled','stale'].includes(previousTask.status))service.cancel(previous.taskId);
         if(previous?.recovered)service.forget?.(previous.taskId,{recovered:true});
@@ -57,19 +58,22 @@ export function createManagementController({ service, repository, originalAvaila
       if(task && !['succeeded','committing','cancelled','stale'].includes(task.status) && task.outcome!=='unconfirmed' && !taskCurrent(current,task))return {...current,taskId:task.taskId,status:'stale',error:'记忆来源或设置已变化，请返回后重新发起'};
       const fields = task?.reviewPending ? current.fields ?? task.candidate.fields : current.fields;
       if(task?.candidate?.kind==='keywords'&&!task.reviewPending&&!current.indexes)current.indexes=structuredClone(task.candidate.results).map(item=>({...item,detailWords:item.detailWords.map(term=>({...term,aliasesText:term.aliases.join('，')}))}));
-      let available=false;try{available=current.kind==='merge'&&!!originalAvailable(current.target,mergeRanges(current.events.flatMap(event=>event.sources)));}catch{}
-      return {...current, ...task, error:current.error||task?.error||'', status:task?.status ?? 'preflight', fields, originalAvailable:available};
+      if(current.kind==='merge'&&!task&&!current.busy) {
+        try{current.originalAvailable=!!originalAvailable(current.target,mergeRanges(current.events.flatMap(event=>event.sources)));}
+        catch{current.originalAvailable=false;}
+      }
+      return {...current, ...task, error:current.error||task?.error||'', status:task?.status ?? 'preflight', fields};
     },
     async start(sourceMode) {
-      const entry=current;if(!entry||entry.busy||entry.taskId||this.inspect()?.status==='stale')return false;
+      const entry=current;if(!entry||entry.busy||entry.taskId||!liveTarget(entry)||!repository.matchesSelection(entry.target,entry.selection))return false;
       if (!service) { entry.error='请先在 API 设置中选择来源并完成配置。';emit();return false; }
-      entry.busy=true;entry.error='';emit();
+      entry.busy=true;entry.error='';entry.sourceMode=sourceMode;emit();
       try {
         entry.taskId=entry.kind==='keywords'?await service.rebuildKeywords(entry.ids):entry.kind==='merge'?await service.merge(entry.ids,{sourceMode}):await service.undoMerge(entry.ids[0]);
         const task=service.inspect(entry.taskId);if(task&&!['stale','cancelled'].includes(task.status))notify(entry,task,'started');
         if(task?.status==='awaiting-user'&&!task.reviewPending)notify(entry,task,'complete');else if(task?.status==='failed')notify(entry,task,'failed');
         return true;
-      } catch { entry.error='无法发起，请检查 API 设置与记忆来源。';return false; }
+      } catch { entry.error=sourceMode==='direct'?'无法准备拼接，请检查所选记忆。':'无法发起，请检查 API 设置与记忆来源。';return false; }
       finally {entry.busy=false;emit();}
     },
     change(mutator) {const state=this.inspect();if(!state?.reviewPending||!current)return;current.fields=structuredClone(state.fields);mutator(current.fields);current.error='';},

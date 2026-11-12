@@ -201,18 +201,18 @@
   },
   {
     "path": "dist/app/management-controller.js",
-    "bytes": 9913,
-    "sha256": "0cd85f2178a05da0ada5c1e50c8c6f561668e3e29717ec397d2df070523d08a3"
+    "bytes": 10364,
+    "sha256": "86cfce52c1995ab7a7fa79d4ba0b23fd9a2c1369f85e49f7400032cd1ec87034"
   },
   {
     "path": "dist/app/management-view.js",
-    "bytes": 9573,
-    "sha256": "3891631433348be3345ebc8f73db8a984bf85f032566bb172ba0aa8e2624c411"
+    "bytes": 9842,
+    "sha256": "d14af665c6dc2925f142a128f7c8e8c85cfe429b5d1a381e6c7e76ccb0b93e9e"
   },
   {
     "path": "dist/app/memory-app.js",
-    "bytes": 63504,
-    "sha256": "046557dd335ac81f3dbdedef75adad739d496b44b83055c72ae563107e2a5fac"
+    "bytes": 63503,
+    "sha256": "99d5ad0b8cc2a1fceac325bf118f714419f13f9bbcc066cbeca275868392b57f"
   },
   {
     "path": "dist/app/memory-card-time.js",
@@ -280,6 +280,11 @@
     "sha256": "bd4e7ffb0db38872246b4a392ad0a557b961cf607b9ee0499c3bfb2c21be4f4e"
   },
   {
+    "path": "dist/app/recall-diagnostics-view.js",
+    "bytes": 10784,
+    "sha256": "3fe8462a6e01ee41692bd792ebfa14a36a494276ab4d492f9441ffa7510dc088"
+  },
+  {
     "path": "dist/app/recall-ranking-reasons.js",
     "bytes": 6180,
     "sha256": "d442654c9205b2afa4ee5e36f2db38aa373d3849194033052901a6e3f1b9fc47"
@@ -291,8 +296,8 @@
   },
   {
     "path": "dist/app/recall-view.js",
-    "bytes": 33460,
-    "sha256": "4f53c2d87e0534fe271f5e811b0a27266203ea6adaaf2306e8dad3983e0b7339"
+    "bytes": 34412,
+    "sha256": "a8aaef3719161f114af88e06ab2f7688db97a14b3c1a491f510fa774bf343768"
   },
   {
     "path": "dist/app/schedule-settings-view.js",
@@ -697,7 +702,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "b3cb1cd137f3a7a309050d8bef814cc4d6aef41e7c6dff1c52d4182e32ed9089"
+    "sha256": "5127c1002529dfa4251a9207045ca59536fe90e16cd2311a076514d990023019"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -761,8 +766,8 @@
   },
   {
     "path": "dist/domain/cumulative/service.js",
-    "bytes": 34834,
-    "sha256": "91a04d714b11d0061b48ab263733df663eea04357fb2a9ad60a3d47aecdf6db4"
+    "bytes": 35598,
+    "sha256": "bd0fd2cf0df64ac6077d521933cb69c59e5f02c69712785e8f87895fe8773e40"
   },
   {
     "path": "dist/domain/cumulative/source.js",
@@ -800,6 +805,11 @@
     "sha256": "c14902809cc8f08ffd829b047118a8aa68ea3e810ee3ede62144f4d9724d1333"
   },
   {
+    "path": "dist/domain/memory/diagnostics.js",
+    "bytes": 11640,
+    "sha256": "effccfba57554ee5d52d3fedb8908fb8cea5e1036806ded902e4c3a152887a72"
+  },
+  {
     "path": "dist/domain/memory/event-model.js",
     "bytes": 5024,
     "sha256": "140b6a90daa91c72a574e71e7d63b0c7f9e73bd7f073875bd27dab71d30d31c2"
@@ -821,8 +831,8 @@
   },
   {
     "path": "dist/domain/memory/management-service.js",
-    "bytes": 14936,
-    "sha256": "250e422297dd61c075149d288ac13dd6c02caf05f513efba4dc75bb19c4cac0a"
+    "bytes": 18886,
+    "sha256": "7c3e22b5ca3c179b4c5decc9f23e770f7604f8846ee9d01cc3122151c143f785"
   },
   {
     "path": "dist/domain/memory/management-validation.js",
@@ -841,8 +851,8 @@
   },
   {
     "path": "dist/domain/memory/repository.js",
-    "bytes": 65683,
-    "sha256": "ace55570e503f79203d892869ee27b234aa20f4c4e2401f352b26cb3badc1ad6"
+    "bytes": 65770,
+    "sha256": "773541300bb8cd412a8f4b6b41a12d6330dccfda56b916dcade8c9b7da28f2ed"
   },
   {
     "path": "dist/domain/memory/results-persistence.js",
@@ -1026,8 +1036,8 @@
   },
   {
     "path": "dist/domain/summary/service.js",
-    "bytes": 32803,
-    "sha256": "909b09a13897540034808a628b66eb505248e836482526889b2c36178a0b50e6"
+    "bytes": 33810,
+    "sha256": "567e381e3d20be5326c66171a923b3cb14060bebfbccae069e5cfdeaabe85c4c"
   },
   {
     "path": "dist/domain/summary/source-deletion.js",
@@ -1311,8 +1321,8 @@
   },
   {
     "path": "dist/platform/sillytavern/ai-provider.js",
-    "bytes": 10714,
-    "sha256": "774dc72a6d27fa1d6f1545d6c6d783a57db32fe405fea029feb4d31e8193a082"
+    "bytes": 11709,
+    "sha256": "9fc8ef592d0093da6526bded893141d89be694042c09f9898cbc05eabe65d239"
   },
   {
     "path": "dist/platform/sillytavern/api-settings-operations.js",
@@ -1391,13 +1401,18 @@
   },
   {
     "path": "dist/platform/sillytavern/management-runtime.js",
-    "bytes": 20852,
-    "sha256": "5985c59b22cd8d2501f81dee3047ef37f69f115209e3145c6d07db9c94108288"
+    "bytes": 20906,
+    "sha256": "fa4fdc5afff2be58736c5ed2c5e8892687412ef6315177e7e444bcbcc7cf6172"
   },
   {
     "path": "dist/platform/sillytavern/memory-adapter.js",
     "bytes": 43427,
     "sha256": "c3a46c521d0fa9ab7940a9f44c0105aad30c8ff7de0ee5449c0a54a481907176"
+  },
+  {
+    "path": "dist/platform/sillytavern/memory-diagnostics.js",
+    "bytes": 3644,
+    "sha256": "3208937dfc468d9ea4bf166df0fd593f4b925b66eb4677c4359f9968ad8c4a98"
   },
   {
     "path": "dist/platform/sillytavern/memory-host.css",
@@ -1406,8 +1421,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 99688,
-    "sha256": "826cb513bc5ddbda0500a7a21ba6b4933c8868d8d4ad3c7dc01440b89fa8ae75"
+    "bytes": 102346,
+    "sha256": "444ae9f0052f2109719de3f0b97f3514f29cb2f843408e9879200dd554074501"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1471,8 +1486,8 @@
   },
   {
     "path": "dist/platform/sillytavern/recall-runtime.js",
-    "bytes": 23664,
-    "sha256": "8d43ac425e06f51a5757d554e0d47064d3fb4349fc8a8f1ebf0882595a0fe007"
+    "bytes": 24962,
+    "sha256": "90adf89686e805ef19fa4ee7fea9e1663dc3abd2777ee40d119da6e40ce6928d"
   },
   {
     "path": "dist/platform/sillytavern/round-record-data.js",
@@ -1631,8 +1646,8 @@
   },
   {
     "path": "dist/shared/ai/provider.js",
-    "bytes": 13750,
-    "sha256": "1aa3949132d3c2467068c521be8ab6ae6eac6ba755fc4cdb2d95d75cc4be6a8c"
+    "bytes": 13873,
+    "sha256": "512cf4026ac5952c1cad5c43f5f252f0dd3f0ef2643859f5a216f08f0136453e"
   },
   {
     "path": "dist/shared/ai/recall-provider.js",
@@ -1702,6 +1717,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "07ae875599a1c369778ff05356c48074158634b9ccb8bb3f051ff5ad83821783"
+    "sha256": "8f259b3798681c22163f8a1fe5ec952367fa07fd60986cf5867fccb77b4f81f0"
   }
 ]

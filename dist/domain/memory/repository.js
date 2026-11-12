@@ -634,7 +634,8 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         if (sources.length < 2 || sources.some(event => event.mergedFrom)) throw new Error('合并至少需要两条未合并的活动记忆');
         if (!candidate || root.events.some(event => event.id === candidate.id) || root.deletedMergeIds?.includes(candidate.id) || candidate.mergedFrom != null || candidate.supersededBy != null) throw new Error('合并结果身份或关系无效');
         const timestamp = now();
-        const event = validateEventForSave({ ...candidate, createdAt: timestamp, updatedAt: timestamp, batch: null,
+        const validate = options.allowUnknownTime === true ? validateEvent : validateEventForSave;
+        const event = validate({ ...candidate, createdAt: timestamp, updatedAt: timestamp, batch: null,
           sources: mergeRanges(sources.flatMap(source => source.sources)),
           mode: sources.every(source => source.mode === 'resident') ? 'resident' : 'trigger', mergedFrom: sources.map(source => source.id) });
         const ids = new Set(event.mergedFrom);
