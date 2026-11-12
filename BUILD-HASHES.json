@@ -702,7 +702,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "5127c1002529dfa4251a9207045ca59536fe90e16cd2311a076514d990023019"
+    "sha256": "5199e82dc08a752900015a07b3154b930d607dae59a7499608ea07b02d4f8053"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1321,8 +1321,8 @@
   },
   {
     "path": "dist/platform/sillytavern/ai-provider.js",
-    "bytes": 11709,
-    "sha256": "9fc8ef592d0093da6526bded893141d89be694042c09f9898cbc05eabe65d239"
+    "bytes": 11989,
+    "sha256": "e5258da161826fc9c75402c6fa812f5e8dad571d32b65c9a86f5b5e818680199"
   },
   {
     "path": "dist/platform/sillytavern/api-settings-operations.js",
@@ -1717,6 +1717,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "8f259b3798681c22163f8a1fe5ec952367fa07fd60986cf5867fccb77b4f81f0"
+    "sha256": "169622cb6259bd1bc75f468a4eb13201a24888d915235ecf06af89ffb59e2256"
   }
 ]

@@ -45,6 +45,13 @@ function readAssistantText(response) {
   return '';
 }
 
+function completionLimit(config, limit) {
+  if (limit === undefined) return {};
+  const officialGpt = new URL(config.endpoint).origin === 'https://api.openai.com'
+    && /^gpt-[56](?:[.-][a-z0-9]+)*$/i.test(config.model);
+  return officialGpt ? { max_completion_tokens: limit } : { max_tokens: limit };
+}
+
 function observeModel(observer, value, authorization = null) {
   if (!observer) return;
   const privateKey = authorization ? JSON.parse(authorization).Authorization.slice('Bearer '.length) : null;
@@ -127,7 +134,7 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
           key = null;
           const body = JSON.stringify({ chat_completion_source: 'custom', custom_url: config.endpoint,
             model: config.model, secret_id: `lantai-benmo:plugin-owned:${config.credentialId}`, custom_include_headers: authorization,
-            messages: prepared.messages, json_schema: jsonSchema ?? undefined, stream: false, n: 1, ...(outputLimit === undefined ? {} : { max_tokens: outputLimit }) });
+            messages: prepared.messages, json_schema: jsonSchema ?? undefined, stream: false, n: 1, ...completionLimit(config, outputLimit) });
           const headers = context.getRequestHeaders();
           assertAiCurrent(signal, current);
           if(onDispatch)observeModel(value=>onDispatch({model:value}),config.model,authorization);
