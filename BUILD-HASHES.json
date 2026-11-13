@@ -676,8 +676,8 @@
   },
   {
     "path": "dist/app/time-controller.js",
-    "bytes": 30350,
-    "sha256": "49999a3fef52b7b40bbd5b44a156ab8e54577d11f0bed8917fffba0b6d49ccc0"
+    "bytes": 31406,
+    "sha256": "95d80b5ae281c937303d6ce9cc6d969f72666659be9406b53b9cf618590a952d"
   },
   {
     "path": "dist/app/time-view.css",
@@ -686,8 +686,8 @@
   },
   {
     "path": "dist/app/time-view.js",
-    "bytes": 48318,
-    "sha256": "aa5f126cf0d8c32fd447a9b9f1f40bfec419135576e23311a5a55ed1a8189f44"
+    "bytes": 49191,
+    "sha256": "5c8207215f93fa29f25e9b43e93bbb1ae6b5e2010b5c4ef1236f3421ef5d4728"
   },
   {
     "path": "dist/app/tracking-controller.js",
@@ -702,7 +702,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "5199e82dc08a752900015a07b3154b930d607dae59a7499608ea07b02d4f8053"
+    "sha256": "4d959b5992b0518bec99b59a2f55ab766b02c76b70b94660f78760d84905685d"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -1081,8 +1081,8 @@
   },
   {
     "path": "dist/domain/time/data.js",
-    "bytes": 8262,
-    "sha256": "6b403c4b006f194535b595230d5ba00840972190dac8255f0a137f8b2738abb2"
+    "bytes": 8580,
+    "sha256": "770fb96f8fa146968cb1388ffc0f7a71778f6fdceaeb2ff6684cd67737aca6c4"
   },
   {
     "path": "dist/domain/time/date-rule.js",
@@ -1121,8 +1121,8 @@
   },
   {
     "path": "dist/domain/time/prompts.js",
-    "bytes": 1614,
-    "sha256": "3afb055a722aedb566414704c97ec3124920665d6ba55914d8b80ccdcc746e48"
+    "bytes": 2843,
+    "sha256": "f69a93153165d0b9a31b2fce943a7b33547e29537d64d2f71f64d3d84ee8a14a"
   },
   {
     "path": "dist/domain/time/recognition.js",
@@ -1136,8 +1136,8 @@
   },
   {
     "path": "dist/domain/time/schedule-model.js",
-    "bytes": 10084,
-    "sha256": "5e754f01e0f51082612f8105f63a1820830ffb04f0bb7039a8bd1b4947bf400d"
+    "bytes": 10629,
+    "sha256": "5716b2025768d8f0aa30b8ff8ecc15b068820e2b95fbf0a8853df0fd52fe5085"
   },
   {
     "path": "dist/domain/time/schedule-prompts.js",
@@ -1546,8 +1546,8 @@
   },
   {
     "path": "dist/platform/sillytavern/time-prompts.js",
-    "bytes": 4496,
-    "sha256": "5cfa39bd61eac547c7e9594aca0e255be80d122535d1ae193b754bdf3820e2b7"
+    "bytes": 5088,
+    "sha256": "ca9f24b3e6549964810f0be38ead576a4b2992851b8f0686e37ec622cd272c16"
   },
   {
     "path": "dist/platform/sillytavern/time-runtime.js",
@@ -1616,13 +1616,13 @@
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-display-runtime.js",
-    "bytes": 7599,
-    "sha256": "f402f000465990086d039437cacf86f1332ff9888112cd2195496c8383e6f2d1"
+    "bytes": 8041,
+    "sha256": "930d3a42327ac3688b22ff039ebe6178c62b3e3db57ffea781f3ca3648071bf3"
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-display.js",
-    "bytes": 10706,
-    "sha256": "e432080d74fd96b2ac1b6930c2c5e8954aeeba8eae17230a16dd05341dbf8000"
+    "bytes": 10766,
+    "sha256": "6dc49f5707057bb5c949f12213bc6340368b7cd063c459d8e30768921183e481"
   },
   {
     "path": "dist/platform/sillytavern/world-dynamics-prompts.js",
@@ -1717,6 +1717,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "169622cb6259bd1bc75f468a4eb13201a24888d915235ecf06af89ffb59e2256"
+    "sha256": "8ec27579b13565135cd3b594fe8da4d391fd146f5b877f19c39240d66183fca9"
   }
 ]

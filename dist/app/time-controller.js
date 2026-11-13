@@ -1,5 +1,6 @@
 import {worldPreferences,WORLD_CONTEXT_INTRO} from '../domain/world-dynamics/preferences.js';
 import {adoptScheduleCandidate,ignoreScheduleCandidate,markScheduleManual,clearChangedScheduleCompletion} from '../domain/time/schedule.js';
+import {canRemindScheduleCandidate} from '../domain/time/schedule-model.js';
 import {recognizeRecentDate} from '../domain/time/tracker.js';
 import {normalizeChronology,toUnifiedYear} from '../domain/time/chronology.js';
 import {sameTarget} from '../domain/memory/repository.js';
@@ -137,6 +138,23 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   if(editing)return explicit(operation);
   if(state.invalidated||state.saving||!current())return false;const t=copy(target),n=ticket;state.saving=true;notify();try{await operation();if(!current(t,n))return false;state.saved++;return true;}catch(error){return current(t,n)?fail(error):false;}finally{if(current(t,n)){state.saving=false;notify();}}
  }
+ async function toggleCandidateReminder(candidateId){
+  const candidate=state.time?.candidates?.find(row=>row.id===candidateId);
+  if(state.invalidated||state.saving||!current()||!canRemindScheduleCandidate(candidate))return false;
+  const t=copy(target),n=ticket,enabled=state.time.scheduleStoryReminderIds?.includes(candidateId)===true;
+  state.saving=true;state.error='';notify();
+  try{
+   await persist(time=>{
+    const ids=new Set(time.scheduleStoryReminderIds??[]);
+    if(!canRemindScheduleCandidate(time.candidates?.find(row=>row.id===candidateId))||ids.has(candidateId)!==enabled)throw new Error('候选已变化，请重新读取');
+    if(enabled)ids.delete(candidateId);else ids.add(candidateId);
+    return {...time,scheduleStoryReminderIds:[...ids]};
+   });
+   if(!current(t,n))return false;
+   state.saved++;return true;
+  }catch(error){return current(t,n)?fail(error):false;}
+  finally{if(current(t,n)){state.saving=false;notify();}}
+ }
  async function save({confirmCalendar=false}={}){
   if(state.invalidated||!current())return false;
   const route=state.route,editor=state.draft,draft=copy(state.draft);if(!draft)return false;
@@ -209,7 +227,7 @@ export function createTimeController({repository,settings,dateRuntime,captureSou
   }
   const key=`${calendarFlag?'calendar':'item'}:${itemId}`;quickJob=writer.change(flags=>{if(!flags[key])return;flags[key][field]=!flags[key][field];});return quickJob;
  }
- return {world,init:ensure,ensure,rebindTarget,refresh,async recover(){const t=copy(target),n=ticket;if(!current(t,n)||state.saving)return false;try{await settings.read();if(!current(t,n))return false;return refresh(true,true);}catch(error){return current(t,n)?fail(error):false;}},open,openItem,openCandidate,ignoreCandidate,openCandidates(kind=null){kind??=(state.time?.candidates?.some(row=>row.status==='pending'&&row.kind==='schedule')?'schedule':state.time?.candidates?.some(row=>row.status==='pending'&&row.kind==='anniversary')?'anniversary':'schedule');open(kind==='anniversary'?'anniversaries':'schedules');state.filter='candidate';notify();},save,back,edit,toggleItem,confirm(){const kind=state.confirm;state.confirm=null;if(kind==='discard'){const next=pendingNavigation;pendingNavigation=null;next?.();}else if(kind==='calendar')return save({confirmCalendar:true});notify();},cancelConfirm(){state.confirm=null;pendingNavigation=null;notify();},toggleCalendar:field=>toggleItem(state.time.activeCalendarId,field,true),inspect:()=>copy(state),subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},calendar,
+ return {world,init:ensure,ensure,rebindTarget,refresh,async recover(){const t=copy(target),n=ticket;if(!current(t,n)||state.saving)return false;try{await settings.read();if(!current(t,n))return false;return refresh(true,true);}catch(error){return current(t,n)?fail(error):false;}},open,openItem,openCandidate,ignoreCandidate,toggleCandidateReminder,openCandidates(kind=null){kind??=(state.time?.candidates?.some(row=>row.status==='pending'&&row.kind==='schedule')?'schedule':state.time?.candidates?.some(row=>row.status==='pending'&&row.kind==='anniversary')?'anniversary':'schedule');open(kind==='anniversary'?'anniversaries':'schedules');state.filter='candidate';notify();},save,back,edit,toggleItem,confirm(){const kind=state.confirm;state.confirm=null;if(kind==='discard'){const next=pendingNavigation;pendingNavigation=null;next?.();}else if(kind==='calendar')return save({confirmCalendar:true});notify();},cancelConfirm(){state.confirm=null;pendingNavigation=null;notify();},toggleCalendar:field=>toggleItem(state.time.activeCalendarId,field,true),inspect:()=>copy(state),subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},calendar,
   selectCandidateCalendar(calendarId){if(!state.route.startsWith('candidate/')||!state.draft||state.invalidated||state.saving||!state.time.calendars.some(row=>row.id===calendarId))return false;state.draft.calendarId=calendarId;state.draft.startDate={calendarId,year:null,month:null,day:null};state.editorTime=copy(state.time);notify();return true;},
   refreshDraft(){notify();},mutateDraft(change){if(state.draft&&!state.invalidated&&!state.saving){change(state.draft);state.recognitionResult=false;notify();}},
   selectCalendar(calendarId){if(state.invalidated)return false;const found=state.time.calendars.find(item=>item.id===calendarId);if(found){state.draft={...copy(found),importStart:found.importedYears?.[0]?.sourceYear??2025,importEnd:found.importedYears?.at(-1)?.sourceYear??2026};notify();}},

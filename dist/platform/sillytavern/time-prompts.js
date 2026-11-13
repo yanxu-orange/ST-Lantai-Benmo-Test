@@ -1,6 +1,6 @@
 import {featureGate} from '../../domain/controls/gate.js';
 import {sameTarget} from '../../domain/memory/repository.js';
-import {composeTimePrompts} from '../../domain/time/prompts.js';
+import {composeTimePrompts,composeUnscheduledPlanPrompt} from '../../domain/time/prompts.js';
 export const TIME_PROMPT_KEYS=Object.freeze(Object.fromEntries(['current','schedule','anniversary','holiday'].map(kind=>[kind,`lantai_benmo_time_${kind}`])));
 const supported=new Set(['normal','regenerate','swipe','continue']);
 export function createTimePromptRuntime({repository,settings,dateRuntime,getContext,captureSource,matchesSource,getControls}={}){
@@ -21,12 +21,22 @@ export function createTimePromptRuntime({repository,settings,dateRuntime,getCont
    target=repository.captureTarget();
    const observed=await dateRuntime.request();
    if(disposed||ticket!==serial||!sameTarget(target,repository.captureTarget()))return;
-   if(observed.status==='no-calendar'){status={status:'empty'};return;}
-   if(['failed','needs-calibration','cancelled'].includes(observed.status)){status={status:'unavailable',message:'当前故事日期尚未确认'};return;}
+   const noCalendar=observed.status==='no-calendar',dateUnavailable=['failed','needs-calibration','cancelled'].includes(observed.status);
+   if((noCalendar||dateUnavailable)&&type!=='normal'){
+    if(dateUnavailable)status={status:'unavailable',message:'当前故事日期尚未确认'};
+    return;
+   }
    const config=settings.captureTimeReminders();reminderProof=config;
-   const source=captureSource?.(target),selection=await repository.captureTime(target);
+   const source=captureSource?.(target);
+   const selection=await repository.captureTime(target);
    if(!matches(target,ticket,config,source))return;
-   const channels=composeTimePrompts(selection.time,config.reminders);
+   const candidatePrompt=type==='normal'?composeUnscheduledPlanPrompt(selection.time):'';
+   if((noCalendar||dateUnavailable)&&!candidatePrompt){
+    if(dateUnavailable)status={status:'unavailable',message:'当前故事日期尚未确认'};
+    return;
+   }
+   const channels=noCalendar||dateUnavailable?{schedule:{prompt:'',items:[],depth:config.reminders.schedule.depth}}:composeTimePrompts(selection.time,config.reminders);
+   if(candidatePrompt)channels.schedule.prompt=[channels.schedule.prompt,candidatePrompt].filter(Boolean).join('\n\n');
    // A queued item/settings edit must not turn the computed text into stale authority.
    const latest=await repository.captureTime(target);
    if(!matches(target,ticket,config,source)||JSON.stringify(latest.time)!==JSON.stringify(selection.time))return;

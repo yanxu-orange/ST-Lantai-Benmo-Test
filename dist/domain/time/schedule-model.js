@@ -4,6 +4,7 @@ const object=value=>value&&Object.getPrototypeOf(value)===Object.prototype;
 const text=value=>typeof value==='string'&&!!value.trim();
 const integer=value=>Number.isSafeInteger(value)&&value>=0;
 export const sameScheduleValue=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+export const canRemindScheduleCandidate=candidate=>candidate?.kind==='schedule'&&candidate.status==='pending'&&!candidate.targetItem;
 export const hasScheduleDateClue=value=>typeof value==='string'&&!!value.trim()&&!/^(?:未知|不详|未提及|未说明|没有日期|无日期|无|暂无|不确定|待定|unknown|n\/?a)[。.]?$/iu.test(value.trim());
 export function calendarCandidateKey(value){
  const normalize=value=>String(value??'').normalize('NFKC').trim().replace(/\s+/gu,' ');
@@ -108,6 +109,12 @@ export function reconcileScheduleLedger(time,{isRetained,isActive}){
   if(!receipt.active)continue;
   for(const change of projected)setRow(time,change.collection,change.id,change.value);
   activeIds.add(receipt.id);
+ }
+ if(time.scheduleStoryReminderIds){
+  // An inactive swipe may return. Keep its opt-in while its receipt survives.
+  const retained=new Set((time.candidates??[]).map(row=>row.id));
+  for(const receipt of state.receipts)for(const change of receipt.changes)if(change.collection==='candidates')retained.add(change.id);
+  time.scheduleStoryReminderIds=time.scheduleStoryReminderIds.filter(id=>retained.has(id));
  }
  return time;
 }

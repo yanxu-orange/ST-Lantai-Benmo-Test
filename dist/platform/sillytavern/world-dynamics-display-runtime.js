@@ -4,10 +4,17 @@ import {worldDynamicsOf} from '../../domain/world-dynamics/data.js';
 import {worldPreferences} from '../../domain/world-dynamics/preferences.js';
 import {projectWorldOutcomes} from '../../domain/world-dynamics/projection.js';
 import {timeOf} from '../../domain/time/data.js';
+import {createCalendar} from '../../domain/time/calendar.js';
 import {pendingProjection} from './latest-source-metadata.js';
 const copy=structuredClone,equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 // Only the date and active calendar participate in the world projection.
 const projectionTime=time=>time?{activeCalendarId:time.activeCalendarId,currentDate:time.currentDate,calendar:time.calendars.find(row=>row.id===time.activeCalendarId)??null}:null;
+function briefingWeekday(time){
+ const {calendar,currentDate}=projectionTime(time);
+ if(calendar?.type!=='modern'||currentDate?.day==null)return '';
+ // The Gregorian ordinal starts on Monday, 1 January of year 1.
+ return `星期${'一二三四五六日'[createCalendar(calendar).ordinal(currentDate)%7]}`;
+}
 // This projection owns no writes and never depends on summary availability.
 export function createWorldDisplayRuntime({adapter,repository,history,dateRuntime,getContext,getControls,getTheme=()=> 'spring',scheduleStart=fn=>setTimeout(fn,0)}={}){
  const gate=featureGate(getControls,'time'),listeners=new Set(),releases=[];
@@ -25,7 +32,7 @@ export function createWorldDisplayRuntime({adapter,repository,history,dateRuntim
   const latest=adapter.peekConfirmed(target);if(!equal(worldDynamicsOf(latest),selected.worldDynamics)||!equal(projectionTime(timeOf(latest)),projectionTime(selected.time))){queued=true;continue;}
   const prefs=worldPreferences(selected.worldDynamics),reply=source(target),projection=prefs.enabled&&prefs.display?projectWorldOutcomes(selected.worldDynamics,selected.time):{entries:[]};
   if(!reply||!projection.entries.length){authority={worldDynamics:copy(selected.worldDynamics),time:copy(selected.time)};emit({status:'empty',target:copy(target)});continue;}
-  authority={worldDynamics:copy(selected.worldDynamics),time:copy(selected.time),sourceText:getContext().chat[reply.floor]?.mes};const next={status:'ready',ticket,target:copy(target),reply,entries:projection.entries,...(projection.sectionDates?{sectionDates:projection.sectionDates}:{}),date:copy(selected.time.currentDate),theme:getTheme(),mode:prefs.displayMode??'builtin'};if(isCurrent(next))emit(next);else queued=true;
+  authority={worldDynamics:copy(selected.worldDynamics),time:copy(selected.time),sourceText:getContext().chat[reply.floor]?.mes};const mode=prefs.displayMode??'builtin',next={status:'ready',ticket,target:copy(target),reply,entries:projection.entries,...(projection.sectionDates?{sectionDates:projection.sectionDates}:{}),date:copy(selected.time.currentDate),...(mode==='builtin'?{weekday:briefingWeekday(selected.time)}:{}),theme:getTheme(),mode};if(isCurrent(next))emit(next);else queued=true;
  }catch{if(!disposed&&ticket===serial){authority=null;emit({status:'empty',target:null});}}}return copy(state);})();pending=job;const clear=()=>{if(pending===job){pending=null;if(queued&&!disposed)void request();}};job.then(clear,clear);return job;}
  const context=getContext(),events=context?.eventSource;
  for(const name of ['CHAT_CHANGED','CHAT_CREATED','MESSAGE_SENT','MESSAGE_RECEIVED','MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_DELETED','MESSAGE_SWIPED','CHARACTER_MESSAGE_RENDERED','USER_MESSAGE_RENDERED']){const event=context?.eventTypes?.[name];if(event&&events?.on){const fn=()=>{if(!['MESSAGE_SENT','USER_MESSAGE_RENDERED','CHARACTER_MESSAGE_RENDERED'].includes(name)||!isCurrent(state))invalidate();void request();};events.on(event,fn);releases.push(()=>(events.off??events.removeListener)?.call(events,event,fn));}}

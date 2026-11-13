@@ -14,7 +14,7 @@ export function emptyTime(){return {schema:1,revision:0,calendars:[],activeCalen
 export function assertTime(value){
  if(!value||Object.getPrototypeOf(value)!==Object.prototype)throw new Error('时间数据字段无效');
  value=migrateTimeSources(clone(value));
- const keys=['schema','revision','calendars','activeCalendarId','recognition','chronology','items','currentDate','manualAnchor',...['candidates','scheduleTracking'].filter(key=>Object.hasOwn(value??{},key))];
+ const keys=['schema','revision','calendars','activeCalendarId','recognition','chronology','items','currentDate','manualAnchor',...['candidates','scheduleTracking','scheduleStoryReminderIds'].filter(key=>Object.hasOwn(value??{},key))];
  if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).length!==keys.length||keys.some(key=>!Object.hasOwn(value,key)))throw new Error('时间数据字段无效');
  if(!value||value.schema!==1||!integer(value.revision)||!Array.isArray(value.calendars)||!Array.isArray(value.items))throw new Error('时间数据结构无效');
  const calendars=new Map(),normalizedCalendars=[];
@@ -57,6 +57,7 @@ export function assertTime(value){
   for(const candidate of value.candidates){assertScheduleCandidate(candidate,{calendars,validateItem});if(ids.has(candidate?.id))throw new Error('日程候选身份重复');ids.add(candidate.id);}
  }
  if(Object.hasOwn(value,'scheduleTracking'))assertScheduleLedger(value.scheduleTracking,{validateItem,calendars});
+ if(Object.hasOwn(value,'scheduleStoryReminderIds')&&(!Array.isArray(value.scheduleStoryReminderIds)||value.scheduleStoryReminderIds.some(id=>!text(id))||new Set(value.scheduleStoryReminderIds).size!==value.scheduleStoryReminderIds.length))throw new Error('日程候选提醒设置无效');
  const result={...value,calendars:normalizedCalendars,recognition:recognitionSettings(value.recognition),chronology:normalizeChronology(value.chronology)};
  if(result.currentDate!==null)result.currentDate=storyDate(calendars.get(value.activeCalendarId),result.currentDate);
  if(result.manualAnchor!==null)result.manualAnchor.date=storyDate(calendars.get(value.activeCalendarId),result.manualAnchor.date);
