@@ -91,10 +91,23 @@ export function extractStoryTimeTargetsFromFragments({ fragments, currentStoryTi
                 const context = dateContextForMatch(match);
                 let value = null;
                 let anchor = null;
+                let suffix = fragment.cleanedText.slice(match.end);
                 if (nonDate) { /* Keep an unresolved diagnostic, never parse a date substring. */ }
                 else if (match.kind === 'absolute') {
-                    const suffix=fragment.cleanedText.slice(match.end);
-                    value = /^[./]\d/u.test(suffix)?null:parseRaw(match.raw, fictionalCalendar);
+                    const shortDate = /^(\d{1,2})\/(\d{1,2})$/u.exec(match.raw);
+                    if (shortDate) {
+                        // A bare fraction cannot establish a date. With a date cue,
+                        // resolve the month/day in the modern story's current year.
+                        const cue = /^\s*(?:那一天|那天|当天|日(?!元)|号(?!码))/u.exec(suffix);
+                        if (current?.calendar === 'modern' && cue) {
+                            const candidate = parseRaw(`${current.year}年${shortDate[1]}月${shortDate[2]}日`, fictionalCalendar);
+                            if (candidate?.calendar === 'modern' && candidate.calendarId === current.calendarId) {
+                                value = candidate;
+                                anchor = { value: structuredClone(current), raw: currentStoryTime.raw ?? '', calendarId: currentStoryTime.calendarId ?? current.calendarId };
+                                suffix = suffix.slice(cue[0].length);
+                            }
+                        }
+                    } else value = /^[./]\d/u.test(suffix) ? null : parseRaw(match.raw, fictionalCalendar);
                     if (match.expectedCalendar && !value?.sourceEra && !/^公元\s*/u.test(match.raw)) value = null;
                 }
                 else {
@@ -123,7 +136,7 @@ export function extractStoryTimeTargetsFromFragments({ fragments, currentStoryTi
                 // Approximation belongs to the token, regardless of absolute or
                 // relative form; it must not manufacture an exact anchored date.
                 if (/(?:约|大概)\s*$/u.test(fragment.cleanedText.slice(0,match.start))
-                    || /^\s*(?:左右|前后)/u.test(fragment.cleanedText.slice(match.end))) value = null;
+                    || /^\s*(?:左右|前后)/u.test(suffix)) value = null;
                 targets.push({ id: `${fragment.id}:time:${match.start}-${match.end}`, fragmentId: fragment.id,
                     sourceKind: fragment.sourceKind, rawPosition: fragment.rawPosition, distanceFromCurrent: fragment.distanceFromCurrent,
                     raw: match.raw, matchedText: match.raw, range: [match.start, match.end], coordinateSystem: 'cleaned-fragment-utf16',

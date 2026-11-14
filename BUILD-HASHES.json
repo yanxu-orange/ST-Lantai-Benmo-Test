@@ -281,8 +281,8 @@
   },
   {
     "path": "dist/app/recall-diagnostics-view.js",
-    "bytes": 10784,
-    "sha256": "3fe8462a6e01ee41692bd792ebfa14a36a494276ab4d492f9441ffa7510dc088"
+    "bytes": 11584,
+    "sha256": "0d1b2137dd735f432b9688ed24d0de18a911fa5255bfb675e53aa7ed67b008b7"
   },
   {
     "path": "dist/app/recall-ranking-reasons.js",
@@ -702,7 +702,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "4d959b5992b0518bec99b59a2f55ab766b02c76b70b94660f78760d84905685d"
+    "sha256": "180e2cdfcfc28cab6137ce69f795cddb731880b97150861ec9680aa51396536c"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -976,8 +976,8 @@
   },
   {
     "path": "dist/domain/recall/story-time-evidence.js",
-    "bytes": 15131,
-    "sha256": "6b1c455409e4d9b39194097e6618fad0d45d0f628424fbffb8099e4e492e9234"
+    "bytes": 16170,
+    "sha256": "0590ecc6d8b1eabf5177f14c91d8f2be016ec4ddf61e125a7a580181f7d0755e"
   },
   {
     "path": "dist/domain/recall/structured-candidates.js",
@@ -1386,8 +1386,8 @@
   },
   {
     "path": "dist/platform/sillytavern/latest-summary-runtime.js",
-    "bytes": 85166,
-    "sha256": "198e010d5448298d80bd64ce9f392f136b30aea87b2a8b921094dad3914e1ac5"
+    "bytes": 85992,
+    "sha256": "b3c25c923795f31515432af64ee9424b74d4c624491b7ed90e04bd3751d9d44b"
   },
   {
     "path": "dist/platform/sillytavern/main-api-identity.js",
@@ -1421,8 +1421,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 102346,
-    "sha256": "444ae9f0052f2109719de3f0b97f3514f29cb2f843408e9879200dd554074501"
+    "bytes": 102444,
+    "sha256": "da40dcc9961af3326e299cc53cd8ba83c40285fc4885f6aee257efe271ef270f"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1691,8 +1691,8 @@
   },
   {
     "path": "dist/shared/settings/summary-prompts.js",
-    "bytes": 165423,
-    "sha256": "c9274b007c6c22240d1da0d782a12a97805888bf4b3e47025321c7d111918e80"
+    "bytes": 161214,
+    "sha256": "19d42b183d5ef604bbfea4194e3f5783cd6d7eb7d5c23304f3a1d446ada3b3bb"
   },
   {
     "path": "dist/shared/settings/time-reminders.js",
@@ -1717,6 +1717,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "8ec27579b13565135cd3b594fe8da4d391fd146f5b877f19c39240d66183fca9"
+    "sha256": "8089f35e63007ddc97a9a451dfd87f0fe5db8c8b38528175495bb36aa2170d70"
   }
 ]

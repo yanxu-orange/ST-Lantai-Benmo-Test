@@ -29,7 +29,7 @@ const pageSize = 12;
 
 export function createRecallDiagnosticsView({diagnostics, document, render, escape: e, button, detail}) {
   if (!diagnostics) return null;
-  const {store, target, materials, titles} = diagnostics;
+  const {store, target, materials, titles, latestSummaries} = diagnostics;
   let start = '', end = '', activeRange = null, page = 0, selected = null, notice = '', confirmClear = false;
   function applyRange() {
     const valid = value => value === '' || (/^\d+$/.test(value) && Number.isSafeInteger(Number(value)));
@@ -81,6 +81,7 @@ export function createRecallDiagnosticsView({diagnostics, document, render, esca
           <label class="ui-field lt-recall-number-row"><span class="ui-field__label">起始楼层</span><input class="ui-input" type="number" min="0" value="${e(start)}" data-diagnostic-field="start" data-recall-field="diagnostic-start"></label>
           <label class="ui-field lt-recall-number-row"><span class="ui-field__label">结束楼层</span><input class="ui-input" type="number" min="0" value="${e(end)}" data-diagnostic-field="end" data-recall-field="diagnostic-end"></label>
           <div class="lt-recall-heading">${button('查看楼段','diagnostic-filter')}${button('导出 JSON','diagnostic-export','',true)}</div>
+          ${latestSummaries ? button('导出最新摘要','diagnostic-export-latest') : ''}
         </div>
         ${rows.length ? `<p class="lt-meta">总结 ${filtered.summaries.length} 次 · 发送 ${filtered.sends.length} 次</p>` : '<p class="lt-status">这个范围内还没有记录。</p>'}
         ${rows.slice(page*pageSize,(page+1)*pageSize).map(row=>{
@@ -122,6 +123,19 @@ export function createRecallDiagnosticsView({diagnostics, document, render, esca
           const output = exportMemoryDiagnostics(snapshot,range.start,end===''?latest:range.end);
           try { downloadJson(document,JSON.stringify(output,null,2),'兰台-诊断记录.json'); }
           catch { notice = '无法下载诊断记录。'; }
+        }
+      } else if (action === 'diagnostic-export-latest') {
+        const range = applyRange();
+        if (range) {
+          try {
+            const summaries = latestSummaries(range);
+            if (!summaries.length) notice = '这个范围内没有可导出的最新摘要。';
+            else {
+              const output = {formatVersion:1, kind:'latest-summaries',
+                range:{start:start===''?null:range.start,end:end===''?null:range.end}, summaries};
+              downloadJson(document,JSON.stringify(output,null,2),'兰台-最新摘要.json');
+            }
+          } catch { notice = '无法导出最新摘要，请重新读取当前聊天后再试。'; }
         }
       } else if (action === 'diagnostic-prev') page--;
       else if (action === 'diagnostic-next') page++;

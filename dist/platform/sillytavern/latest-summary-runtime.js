@@ -557,6 +557,17 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     return result;
   }
   function floorInfo(floor){return floorInfos([floor]).get(floor)??null;}
+  function exportSummaries(owner,{start,end}){
+    if(!current(owner)||isSourceDeletionPending())throw new Error('摘要来源待确认');
+    const latest=adapter.peekConfirmed(owner).latest;
+    if(!latest?.records.length)return [];
+    const source=raw(owner,true),matcher=createStoredLatestSourceMatcher(source);
+    const records=pruneLatestRecords(latest,source,{replyVersions:versions()}).records;
+    return records.filter(({sourceSnapshot:snapshot,stale})=>!stale&&snapshot.assistantFloor>=start&&snapshot.assistantFloor<=end
+      &&!snapshot.rawMessages.some(item=>invalidatedFloors.has(item.floor))&&matcher.matches(snapshot))
+      .map(({body,sourceSnapshot:{assistantFloor,userFloor}})=>({assistantFloor,userFloor,body}))
+      .sort((left,right)=>left.assistantFloor-right.assistantFloor);
+  }
   function workshopFloorInfos(floors,{includeIdle=false}={}){
     const result=new Map();
     try{
@@ -810,7 +821,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
   if(autoInitialize)void refresh().catch(()=>{});
   function captureFloorDisplayProof(floor){const chat=getContext()?.chat,message=chat?.[floor];if(!target||!current(target)||!message||message.is_user||message.is_system||!message.extra?.[WORKSHOP_REPLY_KEY])return null;return {floor,chat,message,text:message.mes,name:message.name,type:message.extra?.type,swipe:message.swipe_id,replyId:message.extra[WORKSHOP_REPLY_KEY],epoch:displayEpoch,target:copy(target)};}
   function matchesFloorDisplayProof(proof,{ignoreEpoch=false}={}){try{const chat=getContext()?.chat,message=chat?.[proof?.floor];return !!proof&&!disposed&&current(proof.target)&&chat===proof.chat&&message===proof.message&&message.mes===proof.text&&message.name===proof.name&&message.extra?.type===proof.type&&message.swipe_id===proof.swipe&&message.extra?.[WORKSHOP_REPLY_KEY]===proof.replyId&&!message.is_user&&!message.is_system&&(ignoreEpoch||displayEpoch===proof.epoch);}catch{return false;}}
-  return {captureFloorDisplayProof,matchesFloorDisplayProof,inspect,read,savePreferences,clear,subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},defaultPrompt:DEFAULT_LATEST_PROMPT,
+  return {captureFloorDisplayProof,matchesFloorDisplayProof,inspect,read,savePreferences,clear,exportSummaries,subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},defaultPrompt:DEFAULT_LATEST_PROMPT,
     observeVisibility(options){
       const off=adapter.observeSourceVisibility?.(change=>{if(disposed)return;if(change?.visibilityChanged!==false)cancel();else publish();},options)??(()=>{});
       const stop=()=>{off();visibilityReleases.delete(stop);};visibilityReleases.add(stop);return stop;

@@ -592,6 +592,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       recallController.route('monitor');recallController.tab('actual');
     recallView=mountRecallView({container:summaryContent,controller:recallController,diagnostics:memoryDiagnostics && {
       store:memoryDiagnostics, target,
+      latestSummaries:latestRuntime?range=>latestRuntime.exportSummaries(target,range):undefined,
       titles:ids=>{
         if(!sameTarget(target, repository.captureTarget()))return new Map();
         const wanted=new Set(ids);
