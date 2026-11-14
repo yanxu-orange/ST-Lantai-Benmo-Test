@@ -541,11 +541,31 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     if(!summaryMatches(proof)||ticket!==serial||!current(t)||!adapter.matchesChatSource(t,source))return;
     messages.splice(0,messages.length,...transformed);
   }
-  function floorInfos(floors){
+  function captureFloorSources(){
+    const source=raw(target);
+    return {source,byFloor:new Map(source.messages.map(row=>[row.floor,row]))};
+  }
+  function createFloorDisplayData(floors){
+    // Share the projection only inside one synchronous coordinator pass.
+    const owner=target, epoch=displayEpoch;
+    let sources, summaries, workshop, workshopWithIdle;
+    const capture=()=>sources??=captureFloorSources();
+    const valid=()=>owner===target&&epoch===displayEpoch;
+    return {
+      summaries:()=>valid()?summaries??=floorInfos(floors,capture):new Map(),
+      hasLegacyWorkshop:getModuleMode=>valid()&&(workshopState?.modules??[]).some(module=>getModuleMode(module.id)==null),
+      workshop:({includeIdle=false}={})=>{
+        if(!valid())return new Map();
+        if(includeIdle)return workshopWithIdle??=workshopFloorInfos(floors,{includeIdle},capture);
+        return workshop??=workshopFloorInfos(floors,{},capture);
+      },
+    };
+  }
+  function floorInfos(floors,capture=captureFloorSources){
     const result=new Map();
     try{
       if(!target||!current(target)||!summaryAllowed())return result;
-      const source=raw(target),byFloor=new Map(source.messages.map(row=>[row.floor,row])),records=new Map(pruneLatestRecords({schema:state.schema,revision:state.revision,preferences:state.preferences,records:state.records},source,{replyVersions:versions(),retainStale:true}).records.map(record=>[record.sourceSnapshot.replyId,record]));
+      const {source,byFloor}=capture(),records=new Map(pruneLatestRecords({schema:state.schema,revision:state.revision,preferences:state.preferences,records:state.records},source,{replyVersions:versions(),retainStale:true}).records.map(record=>[record.sourceSnapshot.replyId,record]));
       for(const floor of floors){
         const row=byFloor.get(floor);if(row?.role!=='assistant'||row.system||!row.replyId)continue;
         const candidate=records.get(row.replyId),snapshot=candidate?.sourceSnapshot;
@@ -568,11 +588,11 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
       .map(({body,sourceSnapshot:{assistantFloor,userFloor}})=>({assistantFloor,userFloor,body}))
       .sort((left,right)=>left.assistantFloor-right.assistantFloor);
   }
-  function workshopFloorInfos(floors,{includeIdle=false}={}){
+  function workshopFloorInfos(floors,{includeIdle=false}={},capture=captureFloorSources){
     const result=new Map();
     try{
       if(!target||!current(target)||!allowed()||!workshopState&&!trackingState&&!scheduleState)return result;
-      const source=raw(target),byFloor=new Map(source.messages.map(row=>[row.floor,row]));
+      const {source,byFloor}=capture();
       const trackingDisplay=trackingRuntime?.displayState(trackingState,source,[...invalidatedFloors]),scheduleDisplay=scheduleRuntime?.displayState(scheduleState,source,[...invalidatedFloors]);
       const modules=(workshopState?.modules??[]).filter(module=>workshopRuntime.moduleAllowed(module)),byReply=new Map();
       for(const record of workshopState?.selection.workshop.results??[]){
@@ -829,7 +849,7 @@ export function createLatestSummaryRuntime({repository,adapter,settings,provider
     library:()=>library(),projectPanel(readView,{target:owner=target,source}={}){
       if(!readView||!sameTarget(owner,target)||!current(target)||!repository.matchesPanelData(target,readView)||source&&!matchesRaw(target,source))return null;
       return library(readView,source);
-    },editRecord,manualRecord,estimateBackfill,startBackfill,stopBackfill,generate:(floor,options={})=>enqueueGeneration(floor,{workshopOnly:options.workshopOnly===true,...(typeof options.taskId==='string'?{taskId:options.taskId}:{})}),intercept,floorInfo,floorInfos,workshopFloorInfo,workshopFloorInfos,refresh,ensureData,prepareSend,panelReadView:()=>lastReadView,matchesSource:(t,proof)=>matchesRaw(t,proof),captureSource:(t=target)=>raw(t),
+    },editRecord,manualRecord,estimateBackfill,startBackfill,stopBackfill,generate:(floor,options={})=>enqueueGeneration(floor,{workshopOnly:options.workshopOnly===true,...(typeof options.taskId==='string'?{taskId:options.taskId}:{})}),intercept,floorInfo,floorInfos:floors=>floorInfos(floors),workshopFloorInfo,workshopFloorInfos:(floors,options)=>workshopFloorInfos(floors,options),createFloorDisplayData,refresh,ensureData,prepareSend,panelReadView:()=>lastReadView,matchesSource:(t,proof)=>matchesRaw(t,proof),captureSource:(t=target)=>raw(t),
     replaceWorkshopSend:()=>workshopSends.replace(),sealWorkshopSend:(type,injection,history)=>workshopSends.seal(type,injection,history),invalidateWorkshopSend:()=>workshopSends.clear(),
     setEnabled(value){enabled=!!value;if(!enabled)cancel();publish();},
     dispose(){if(disposed)return;for(const stop of [...visibilityReleases])stop();cancel();disposed=true;readSerial++;for(const release of releases)release();listeners.clear();}};

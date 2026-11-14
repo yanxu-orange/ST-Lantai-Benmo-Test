@@ -126,8 +126,9 @@ export function createFloorDisplayCoordinator({ document: doc = globalThis.docum
     if (stopped && !cleanups.size) return;
     const target = targetKey(), messages = [...(doc?.querySelectorAll?.('#chat .mes[mesid]') ?? [])];
     const floors = messages.map(floorOf).filter(floor => Number.isSafeInteger(floor) && floor >= 0);
+    const floorData = runtime.createFloorDisplayData?.(floors);
     const byMessage = new Map();
-    for (const participant of participants) for (const plan of participant({ messages, floors, target })) {
+    for (const participant of participants) for (const plan of participant({ messages, floors, target, floorData })) {
       const bucket = byMessage.get(plan.message) ?? []; bucket.push(plan); byMessage.set(plan.message, bucket);
     }
     for (const [message, cleanup] of cleanups) if (!ownership(cleanup)) cleanups.delete(message);

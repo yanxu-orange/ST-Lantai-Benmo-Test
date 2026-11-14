@@ -19,14 +19,15 @@ export function mountLatestSummaryDisplay({
     if (state?.entry.frontend) shared.requestCleanup({ ...state, ownsChat: state.snapshot?.ownsChat });
     box.remove(); mounted.delete(box); rendered.delete(box);
   }
-  function collect({ messages, floors, target }) {
+  function collect({ messages, floors, target, floorData }) {
     if (disposed) return [];
-    const plans = [], infoByFloor = runtime.floorInfos?.(floors);
+    const legacy = getMode()==null;
+    const plans = [], infoByFloor = legacy ? (floorData?.summaries() ?? runtime.floorInfos?.(floors)) : null;
     for (const box of mounted) if (box.isConnected === false) release(box);
     for (const message of messages) {
       const floor = floorOf(message);
-      const info = Number.isSafeInteger(floor) && floor >= 0
-        ? getMode()==null?(infoByFloor?infoByFloor.get(floor):runtime.floorInfo(floor)):null : null;
+      const info = legacy && Number.isSafeInteger(floor) && floor >= 0
+        ? (infoByFloor ? infoByFloor.get(floor) : runtime.floorInfo(floor)) : null;
       let box = message.querySelector('.lantai-latest-summary');
       if (!info) { if (box) release(box); continue; }
       const parent = message.querySelector('.mes_block') ?? message;

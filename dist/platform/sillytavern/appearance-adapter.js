@@ -78,6 +78,7 @@ export function createAppearanceAdapter({ getContext = getSillyTavernContext, fe
     return install(raw, root, ticket);
   }
   return Object.freeze({
+    initialTheme: () => local().root.theme,
     read,
     isConfirmed(expected) {
       if(disposed||!confirmed)return false;

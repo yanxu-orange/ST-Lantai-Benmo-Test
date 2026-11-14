@@ -113,10 +113,20 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   const generationBrowseReleases=[];
   const bookStylesByTheme = new Map();
   const storybarTheme=mountStorybarTheme({document:doc});
-  const appearance = createAppearanceSession({ adapter: createAppearanceAdapter({ getContext, fetchImpl: request, ...appearanceOptions }), prepareTheme: async theme => { if (theme === 'snow-ermine') await snowStyles(); if (theme === 'spring') await springStyles(); if (Object.hasOwn(BOOK_THEME_STYLE_ENTRIES,theme)) await bookStyles(theme); }, canSave: () => {
+  const appearanceAdapter = createAppearanceAdapter({ getContext, fetchImpl: request, ...appearanceOptions });
+  let initialPanelTheme = null;
+  function preparePanelTheme(theme) {
+    if (theme === 'snow-ermine') return snowStyles();
+    if (theme === 'spring') return springStyles();
+    return bookStyles(theme);
+  }
+  const appearance = createAppearanceSession({ adapter: appearanceAdapter, prepareTheme: preparePanelTheme, canSave: () => {
     try { if(controls?.inspect().busy)return false;if (apiSession && !['ready','saved'].includes(apiSession.inspect().status)) return false; runtime.settings.getEpoch(); return true; } catch { return false; }
   } });
-  const unsubscribeAppearance = appearance.subscribe(() => {worldDisplayRuntime?.themeChanged();syncAppearance();});
+  const unsubscribeAppearance = appearance.subscribe(state => {
+    if (state.status === 'ready') initialPanelTheme = null;
+    worldDisplayRuntime?.themeChanged();syncAppearance();
+  });
   const entryId = 'lantai-benmo-open';
   const lifetime = new AbortController();
   let cumulativeRuntime,cumulativeView,cumulativeSettingsView,cumulativeSettingsController,cumulativeSettingsTarget,cumulativeNotices,
@@ -929,7 +939,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   function syncAppearance() {
     if (!panel || !sharedStyle) return;
-    const requested = appearance.inspect().previewTheme ?? appearance.inspect().theme;
+    const requested = appearance.inspect().previewTheme ?? initialPanelTheme ?? appearance.inspect().theme;
     const theme = requested === 'spring' && springCss ? 'spring' : requested === 'snow-ermine' && snowCss ? 'snow-ermine' : bookStylesByTheme.get(requested)?.css ? requested : DEFAULT_THEME;
     if(panel.getAttribute('data-ui-theme')!==theme)panel.setAttribute('data-ui-theme', theme);
     applyTheme(content, theme);
@@ -1032,18 +1042,21 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       // host preparation. Continue only in a task after a rendering opportunity.
       await new Promise(afterPageFrame);
       if(!valid())return;
-      const appearanceReady=appearance.ensure();
-      await Promise.all([styles(),sharedStyles()]);
+      const appearanceState=appearance.inspect();
+      let theme=appearanceState.theme;
+      if (appearanceState.status !== 'saving') {
+        try { theme=appearanceAdapter.initialTheme(); } catch { /* Keep the last usable theme. */ }
+      }
+      initialPanelTheme=theme;
+      const initialThemeReady=preparePanelTheme(theme).catch(error=>{
+        if (theme === DEFAULT_THEME) throw error;
+        if (valid() && initialPanelTheme === theme) initialPanelTheme=DEFAULT_THEME;
+        return springStyles();
+      });
+      void appearance.ensure();
+      await Promise.all([styles(),sharedStyles(),initialThemeReady]);
       if(!valid())return;
       installPanelStyles();syncAppearance();
-      await appearanceReady;
-      if(!valid())return;
-      // A failed settings read still uses the real default theme. Do not mount
-      // business pages with Spring attributes before its stylesheet is ready.
-      if (appearance.inspect().theme === DEFAULT_THEME && !springCss) await springStyles();
-      if (!valid()) return;
-      // Seed the presentation owner before any view creates its first root.
-      syncAppearance();
       if(!sharedObserver&&Observer){sharedObserver=new Observer(records=>{if(records.some(record=>!record.target.closest?.('[data-host-decoration]')))syncAppearance();});sharedObserver.observe(content,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','class','data-ui-theme']});}
       ensureAdapter();
       await adapter.prepare();

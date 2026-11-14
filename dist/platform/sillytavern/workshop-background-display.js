@@ -20,14 +20,19 @@ export function mountWorkshopBackgroundDisplay({ document: doc = globalThis.docu
     const state = rendered.get(box); if (state) cleanup(state);
     box.remove(); mounted.delete(box); rendered.delete(box);
   }
-  function collect({ messages, floors, target }) {
+  function collect({ messages, floors, target, floorData }) {
     if (disposed) return [];
-    const plans = [], batch = runtime.workshopFloorInfos?.(floors);
+    const legacy = getMode()==null;
+    if (!legacy && floorData && !floorData.hasLegacyWorkshop(getModuleMode)) {
+      for (const box of mounted) release(box);
+      return [];
+    }
+    const plans = [], batch = floorData?.workshop() ?? runtime.workshopFloorInfos?.(floors);
     for (const box of mounted) if (box.isConnected === false) release(box);
     for (const message of messages) {
       const floor = floorOf(message), original = Number.isSafeInteger(floor) && floor >= 0
         ? batch ? batch.get(floor) : runtime.workshopFloorInfo(floor) : null;
-      const info=original?{...original,tasks:original.tasks.filter(task=>task.kind==='workshop'?getModuleMode(task.id)==null:getMode()==null)}:null;
+      const info=original?{...original,tasks:original.tasks.filter(task=>task.kind==='workshop'?getModuleMode(task.id)==null:legacy)}:null;
       let box = message.querySelector('.lantai-workshop-results');
       if (!info?.tasks?.length) { if (box) release(box); continue; }
       const parent = message.querySelector('.mes_block') ?? message;
