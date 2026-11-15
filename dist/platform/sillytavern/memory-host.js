@@ -1048,12 +1048,23 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
         try { theme=appearanceAdapter.initialTheme(); } catch { /* Keep the last usable theme. */ }
       }
       initialPanelTheme=theme;
-      const initialThemeReady=preparePanelTheme(theme).catch(error=>{
-        if (theme === DEFAULT_THEME) throw error;
-        if (valid() && initialPanelTheme === theme) initialPanelTheme=DEFAULT_THEME;
-        return springStyles();
+      const localThemeReady=preparePanelTheme(theme);
+      const appearanceReady=appearance.ensure();
+      const initialThemeReady=localThemeReady.catch(async error=>{
+        if (!valid()) return;
+        if (theme !== DEFAULT_THEME && appearance.inspect().status !== 'ready') {
+          if (initialPanelTheme === theme) initialPanelTheme=DEFAULT_THEME;
+          try { await springStyles(); return; }
+          catch (fallbackError) { error=fallbackError; }
+        }
+        // Only wait for the existing appearance read if local styles failed.
+        if (!valid()) return;
+        if (appearance.inspect().status === 'ready' || await appearanceReady) {
+          if (valid()) initialPanelTheme=null;
+          return;
+        }
+        throw error;
       });
-      void appearance.ensure();
       await Promise.all([styles(),sharedStyles(),initialThemeReady]);
       if(!valid())return;
       installPanelStyles();syncAppearance();
