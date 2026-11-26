@@ -401,6 +401,13 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
         const versions=domain.versions.slice(0,index+1),version=versions.at(-1),next={...domain,versions,currentVersionId:id,progress:{lastProcessedFloor:Math.max(...version.coverageRanges.map(range=>range.end))}};delete next.pending;return next;
       });
     },
+    resetCumulative(target,selection,{isCurrent}={}) {
+      return cumulativeMutation(target,selection,{isCurrent},domain=>{
+        if(domain.pending)throw new Error('请先处理保留的古法草稿');
+        if(!domain.versions.length)return null;
+        return {...domain,versions:[],currentVersionId:null,progress:{lastProcessedFloor:null}};
+      },true,false);
+    },
     captureSummaryTask(target,batchId){requireTarget(target);const root=assertRoot(adapter.peekConfirmed(target),target),summary=summaryOf(root),base={target:copy(target),revision:root.revision,summary};if(batchId!==undefined){const batch=summary.batches.find(item=>item.id===batchId);if(!batch)throw new Error('没有可确认的独立批记录');Object.assign(base,{batch:copy(batch),events:copy(root.events.filter(event=>batch.eventIds.includes(event.id)))});}return freeze(base);},
     matchesSummaryTask(target,snapshot){try{requireTarget(target);matchSummary(assertRoot(adapter.peekConfirmed(target),target),target,snapshot,true);requireTarget(target);return true;}catch{return false;}},
     matchesSummaryTaskProof(target,snapshot,source,trackingRevision){

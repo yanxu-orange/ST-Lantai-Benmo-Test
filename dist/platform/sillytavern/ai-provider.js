@@ -147,6 +147,7 @@ export function createSillyTavernAiTransport({ getContext = getSillyTavernContex
           assertAiCurrent(signal, current);
           if (result?.error) throw new AiProviderError('http');
           observeModel(onResponseModel,result?.model,authorization);
+          if (result?.choices?.[0]?.finish_reason === 'length') throw new AiProviderError('output_limit');
           text = readAssistantText(result);
         }
         assertAiCurrent(signal, current);

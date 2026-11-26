@@ -9,9 +9,49 @@ const key=value=>JSON.stringify(value);
 const button=(doc,label,run)=>{const node=doc.createElement('button');node.type='button';node.className='ui-button ui-button--tertiary';node.textContent=label;node.addEventListener('click',run);return node;};
 export function mountRoundRecordDisplay({document:doc=globalThis.document,runtime,coordinator,appearance,styles,onOpenSchedule,onOpenTracking}={}){
  let disposed=false,readingTarget=null;const mounted=new Map(),reading=new Map();
+ const nativeStyles=new Map(),Sheet=doc.defaultView?.CSSStyleSheet;
  const reader=createReadonlyReader({document:doc,styles,getTheme:()=>appearance.inspect().theme});
  const appearanceKey=a=>key([a.theme,a.roundRecordMode??null,Object.entries(a.workshopModes??{}).sort(([x],[y])=>x.localeCompare(y))]);
  const info=(floor)=>({summary:runtime.floorInfo(floor),workshop:runtime.workshopFloorInfo(floor,{includeIdle:true})});
+
+ function nativeStyle(theme){
+  let pending=nativeStyles.get(theme);
+  if(!pending){
+   pending=Promise.resolve().then(()=>styles(theme)).then(css=>({css:css??''})).catch(()=>{
+    nativeStyles.delete(theme);
+    return {css:''};
+   });
+   nativeStyles.set(theme,pending);
+  }
+  return pending;
+ }
+ function applyNativeStyle(state,theme,resource){
+  if(state.appliedStyle===resource)return;
+  const {shadow,box}=state;
+  if(typeof Sheet==='function'&&typeof Sheet.prototype.replaceSync==='function'&&'adoptedStyleSheets' in shadow){
+   // A constructable sheet belongs to this document. Each mounted view parses its theme once.
+   if(resource.sheet===undefined){
+    resource.sheet=null;
+    if(resource.css)try{const sheet=new Sheet();sheet.replaceSync(resource.css);resource.sheet=sheet;}catch{/* Use the same CSS in a style element. */}
+   }
+   try{
+    if(resource.sheet||state.sheet)shadow.adoptedStyleSheets=resource.sheet?[resource.sheet]:[];
+    state.sheet=resource.sheet;
+   }catch{
+    const adopted=shadow.adoptedStyleSheets,index=state.sheet?adopted.indexOf(state.sheet):-1;
+    if(index!==-1)adopted.splice(index,1);
+    state.sheet=null;
+   }
+  }
+  if(state.sheet){state.style?.remove();state.style=null;}
+  else {
+   if(!state.style){state.style=doc.createElement('style');shadow.append(state.style);}
+   if(state.style.textContent!==resource.css)state.style.textContent=resource.css;
+  }
+  state.appliedStyle=resource;
+  box.setAttribute('data-ui-theme',theme);
+  state.measure();
+ }
 
  function release(state){state.selectMenus?.dispose();if(state.entry?.frontend)coordinator.requestCleanup({...state,ownsChat:()=>state.formatSnapshot?.ownsChat?.()??true});if(state.details){if(state.target===readingTarget&&runtime.matchesFloorDisplayProof(state.proof,{ignoreEpoch:true}))reading.set(state.readKey,{open:state.details.open,selected:state.selected,moduleId:state.workshopId??state.moduleId});else reading.delete(state.readKey);}state.box.remove();mounted.delete(state.id);}
  function actions(state,container,tasks){const singleWorkshop=!!state.entry&&tasks.length===1&&tasks[0].kind==='workshop';container.className=state.entry?(singleWorkshop?'lantai ui-briefing-actions ui-briefing-actions--trailing':'lantai ui-surface ui-surface--subtle ui-briefing-actions'):'ui-briefing-actions';container.replaceChildren();for(const task of tasks){
@@ -21,9 +61,9 @@ export function mountRoundRecordDisplay({document:doc=globalThis.document,runtim
   if(task.openSchedule){const open=button(doc,'查看日程与候选',()=>{if(state.current())onOpenSchedule?.({target:state.target,replyId:state.replyId,floor:state.floor,current:state.current,sourceCurrent:state.sourceCurrent});});container.append(open);}
  }}
  function native(message,target,replyId,readKey,id){
-  const box=doc.createElement('lantai-round-record');box.className='lantai-round-record';box.setAttribute('data-round-mode','builtin');const shadow=box.attachShadow({mode:'open'}),style=doc.createElement('style'),details=doc.createElement('details');details.className='ui-briefing';const heading=doc.createElement('summary');heading.textContent='本轮记录';const tabs=doc.createElement('nav');tabs.className='ui-briefing-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','本轮记录分类');const article=doc.createElement('article');article.className='ui-briefing-article';article.setAttribute('role','tabpanel');
-  const select=doc.createElement('select');select.className='ui-input ui-briefing-selector';select.setAttribute('aria-label','工坊栏目');const title=doc.createElement('h3');title.className='ui-briefing-title';const status=doc.createElement('p');status.className='ui-briefing-meta';status.setAttribute('role','status');const body=doc.createElement('p');body.className='ui-briefing-body';const full=button(doc,'阅读全文',()=>{if(state.current()&&state.task){const {id:taskId,kind:taskKind,name:taskName,body:taskBody}=state.task;void reader.open({title:taskName,text:taskBody,origin:full,isCurrent:()=>state.current()&&state.task?.id===taskId&&state.task?.kind===taskKind&&state.tasks.some(t=>t.id===taskId&&t.kind===taskKind&&t.body===taskBody)});}});const controls=doc.createElement('div');controls.className='ui-briefing-actions';const pager=doc.createElement('div');pager.className='ui-briefing-pager';const prev=button(doc,'上一项',()=>move(-1)),next=button(doc,'下一项',()=>move(1)),count=doc.createElement('span');count.className='ui-briefing-count';pager.append(prev,count,next);article.append(select,title,full,status,body,controls);details.append(heading,tabs,article,pager);shadow.append(style,details);
-  const saved=reading.get(readKey),state={id,domId:'round-'+(++domSerial),box,message,target,replyId,readKey,style,details,tabs,article,select,title,status,body,full,controls,pager,prev,next,count,selected:saved?.selected,moduleId:saved?.moduleId,workshopId:saved?.moduleId,tasks:[]};details.open=saved?.open??false;
+  const box=doc.createElement('lantai-round-record');box.className='lantai-round-record';box.setAttribute('data-round-mode','builtin');const shadow=box.attachShadow({mode:'open'}),details=doc.createElement('details');details.className='ui-briefing';const heading=doc.createElement('summary');heading.textContent='本轮记录';const tabs=doc.createElement('nav');tabs.className='ui-briefing-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','本轮记录分类');const article=doc.createElement('article');article.className='ui-briefing-article';article.setAttribute('role','tabpanel');
+  const select=doc.createElement('select');select.className='ui-input ui-briefing-selector';select.setAttribute('aria-label','工坊栏目');const title=doc.createElement('h3');title.className='ui-briefing-title';const status=doc.createElement('p');status.className='ui-briefing-meta';status.setAttribute('role','status');const body=doc.createElement('p');body.className='ui-briefing-body';const full=button(doc,'阅读全文',()=>{if(state.current()&&state.task){const {id:taskId,kind:taskKind,name:taskName,body:taskBody}=state.task;void reader.open({title:taskName,text:taskBody,origin:full,isCurrent:()=>state.current()&&state.task?.id===taskId&&state.task?.kind===taskKind&&state.tasks.some(t=>t.id===taskId&&t.kind===taskKind&&t.body===taskBody)});}});const controls=doc.createElement('div');controls.className='ui-briefing-actions';const pager=doc.createElement('div');pager.className='ui-briefing-pager';const prev=button(doc,'上一项',()=>move(-1)),next=button(doc,'下一项',()=>move(1)),count=doc.createElement('span');count.className='ui-briefing-count';pager.append(prev,count,next);article.append(select,title,full,status,body,controls);details.append(heading,tabs,article,pager);shadow.append(details);
+  const saved=reading.get(readKey),state={id,domId:'round-'+(++domSerial),box,message,target,replyId,readKey,shadow,details,tabs,article,select,title,status,body,full,controls,pager,prev,next,count,selected:saved?.selected,moduleId:saved?.moduleId,workshopId:saved?.moduleId,tasks:[]};details.open=saved?.open??false;
   const choose=kind=>{if(!state.current())return;state.selected=kind;paint();};
   function move(step){if(!state.current())return;const tasks=state.tasks.filter(t=>t.kind===state.selected),index=tasks.findIndex(t=>t.id===state.task?.id);state.moduleId=tasks[Math.max(0,Math.min(tasks.length-1,index+step))]?.id;state.workshopId=state.moduleId;paint();}
   select.addEventListener('change',()=>{if(state.current()){state.moduleId=select.value;state.workshopId=select.value;paint();}});
@@ -39,10 +79,24 @@ export function mountRoundRecordDisplay({document:doc=globalThis.document,runtim
  function regex(message,target,replyId,id,card){const box=doc.createElement('div');box.className='lantai-round-record';box.setAttribute('data-round-mode','regex');const entry=createDisplayBody(doc,'lantai-round-record-body',roundRecordFallback(card)),actionHost=doc.createElement('lantai-round-actions'),shadow=actionHost.attachShadow({mode:'open'}),style=doc.createElement('style'),controls=doc.createElement('div');controls.className='lantai ui-surface ui-surface--subtle ui-briefing-actions';shadow.append(style,controls);entry.body.setAttribute('style','white-space:pre-wrap;overflow-wrap:anywhere');box.append(entry.body,actionHost);return {id,box,message,target,replyId,entry,style,controls};}
  const collect=({messages,floors,target,floorData})=>{if(disposed)return [];if(readingTarget!==target){readingTarget=target;reading.clear();reader.close();}const plans=[],seen=new Set(),a=appearance.inspect();if(a.roundRecordMode==null&&!Object.keys(a.workshopModes??{}).length){for(const state of [...mounted.values()])release(state);reader.check();return [];}const summaries=a.roundRecordMode==null?new Map():(floorData?.summaries()??runtime.floorInfos(floors)),workshops=floorData?.workshop({includeIdle:true})??runtime.workshopFloorInfos(floors,{includeIdle:true});for(const message of messages){const floor=floorOf(message),summary=summaries.get(floor),workshop=workshops.get(floor),replyId=summary?.replyId??workshop?.replyId;if(!replyId)continue;const projected=partitionRoundRecords(summary,workshop,a),proof=runtime.captureFloorDisplayProof(floor),readKey=key([target,replyId,proof?.swipe]);if(!proof)continue;const cards=[...(projected.native.length?[{id:'native',kind:'builtin',tasks:projected.native}]:[]),...projected.regex];
    for(const card of cards){const id=key([target,replyId,card.kind,card.id]),content=key(card);seen.add(id);let state=mounted.get(id);if(state&&(state.message!==message||state.proof?.message!==proof.message||state.proof?.text!==proof.text||state.proof?.swipe!==proof.swipe)){release(state);state=null;}if(!state){state=card.kind==='builtin'?native(message,target,replyId,readKey,id):regex(message,target,replyId,id,card);state.floor=floor;state.proof=proof;mounted.set(id,state);}const own=state;state.sourceCurrent=()=>!disposed&&runtime.matchesFloorDisplayProof(proof,{ignoreEpoch:true});state.current=()=>!disposed&&mounted.get(id)===own&&message.isConnected!==false&&floorOf(message)===floor&&runtime.matchesFloorDisplayProof(proof)&&appearanceKey(appearance.inspect())===appearanceKey(a);placeFloorBackgroundDisplay(message.querySelector('.mes_block')??message,state.box);
-    if(card.kind==='builtin'){if(state.requestTheme!==a.theme){state.requestTheme=a.theme;state.cssPromise=Promise.resolve().then(()=>styles(a.theme)).catch(()=>'');void state.cssPromise.then(css=>{if(!disposed&&mounted.get(id)===state&&state.requestTheme===a.theme&&appearance.inspect().theme===a.theme&&runtime.matchesFloorDisplayProof(proof,{ignoreEpoch:true})){state.box.setAttribute('data-ui-theme',a.theme);state.style.textContent=css??'';state.measure();}});}state.tasks=card.tasks;if(state.paintedContent!==content){state.paintedContent=content;state.paint();}plans.push({id,state,native:true,message,floor,target,content:key([content,a.theme]),busy:false,current:state.current,prepare:()=>state.cssPromise,commit(css){if(!state.current())return {refresh:false,checks:[]};state.box.setAttribute('data-ui-theme',a.theme);if(state.style.textContent!==(css??''))state.style.textContent=css??'';state.measure();return {refresh:false,checks:[]};}});}
+    if(card.kind==='builtin'){
+     if(state.requestTheme!==a.theme){
+      state.requestTheme=a.theme;
+      state.cssPromise=nativeStyle(a.theme);
+      void state.cssPromise.then(resource=>{
+       if(!disposed&&mounted.get(id)===state&&state.requestTheme===a.theme&&appearance.inspect().theme===a.theme&&runtime.matchesFloorDisplayProof(proof,{ignoreEpoch:true}))applyNativeStyle(state,a.theme,resource);
+      });
+     }
+     state.tasks=card.tasks;
+     if(state.paintedContent!==content){state.paintedContent=content;state.paint();}
+     plans.push({id,state,native:true,message,floor,target,content:key([content,a.theme]),busy:false,current:state.current,prepare:()=>state.cssPromise,commit(resource){
+      if(state.current())applyNativeStyle(state,a.theme,resource);
+      return {refresh:false,checks:[]};
+     }});
+    }
     else {if(state.paintedContent!==content){state.paintedContent=content;actions(state,state.controls,card.tasks);}if(state.requestTheme!==a.theme){state.requestTheme=a.theme;void Promise.resolve().then(()=>styles(a.theme)).catch(()=>'').then(css=>{if(!disposed&&mounted.get(id)===state&&state.requestTheme===a.theme&&appearance.inspect().theme===a.theme&&runtime.matchesFloorDisplayProof(proof,{ignoreEpoch:true})){state.controls.setAttribute('data-ui-theme',a.theme);state.style.textContent=css??'';}});}const raw=serializeRoundRecord(card),displayRaw=roundRecordFallback(card);plans.push({id,message,floor,target,content:raw,busy:summary?.batchRunning===true||workshop?.batchRunning===true||card.tasks.some(task=>task.status==='running'),current:state.current,bind:snapshot=>state.formatSnapshot=snapshot,prepare:async snapshot=>({body:{...await prepareDisplayBody(state.entry,raw,snapshot&&card.kind==='workshop'?{...snapshot,format:(text,options)=>snapshot.format(text,{...options,workshopBody:displayRaw,directHtml:displayRaw})}:snapshot),raw:displayRaw},css:await styles(a.theme).catch(()=>'' )}),commit(update,snapshot){if(!state.current())return {refresh:false,checks:[]};state.style.textContent=update.css??'';state.controls.setAttribute('data-ui-theme',a.theme);const result=commitDisplayBodies([update.body],snapshot,doc);if(state.entry.html)state.entry.body.hidden=false;for(const check of result.checks){const fallback=check.fallback;check.fallback=()=>{fallback();state.entry.body.hidden=!state.entry.raw;};}state.entry.body.setAttribute('style',`white-space:${state.entry.html?'normal':'pre-wrap'};overflow-wrap:anywhere`);return result;}});}
    }
   }for(const [id,state]of [...mounted])if(!seen.has(id))release(state);if([...mounted.values()].every(s=>s.target!==target))reading.clear();reader.check();return plans;};
  const resize=()=>{for(const state of mounted.values())if(state.details?.open)state.measure();};doc.defaultView?.addEventListener?.('resize',resize);
- const unregister=coordinator.register(collect),off=appearance.subscribe(()=>coordinator.requestRefresh());return {dispose(){disposed=true;doc.defaultView?.removeEventListener?.('resize',resize);off();unregister();reader.dispose();for(const state of [...mounted.values()])release(state);reading.clear();}};
+ const unregister=coordinator.register(collect),off=appearance.subscribe(()=>coordinator.requestRefresh());return {dispose(){disposed=true;doc.defaultView?.removeEventListener?.('resize',resize);off();unregister();reader.dispose();nativeStyles.clear();for(const state of [...mounted.values()])release(state);reading.clear();}};
 }

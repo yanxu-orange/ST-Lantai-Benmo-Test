@@ -10,7 +10,7 @@ const PARAMETER_SAVE_DELAY=250;
 // Host owns the controller, service and runner. Unmounting a page is independent.
 export function createCumulativeController({repository,service,runner,captureSource,control=null,onCommitted=()=>{}}={}) {
   const listeners=new Set(),retiredTasks=new Set();let parameterDrafts={},parameterTimer=null;let disposed=false,serial=0,opening=0,queue=Promise.resolve(),parameterError=null,visible=false,reloadBinding=null,reloadSequence=0,taskError=null,trackingError=null;
-  const state={target:null,selection:null,cumulative:null,route:'root',origin:'manual',params:null,latestFloor:null,taskId:null,task:null,draft:null,editDraft:null,editSelection:null,restore:null,preview:null,previewOpen:false,previewView:'source',busy:false,unconfirmed:false,error:'',message:'',noticeSequence:0,scroll:{},opened:{}};
+  const state={target:null,selection:null,cumulative:null,route:'root',origin:'manual',params:null,latestFloor:null,taskId:null,task:null,draft:null,editDraft:null,editSelection:null,deleteRequested:false,restore:null,preview:null,previewOpen:false,previewView:'source',busy:false,unconfirmed:false,error:'',message:'',noticeSequence:0,scroll:{},opened:{}};
   const inspect=()=>copy({...state,reloadInvalidated:!!reloadBinding,parameterReadRequired:parameterDrafts[state.origin]?.readRequired===true,automatic:runner.inspect()});
   const generationPreview=createGenerationPreview(state);
   const notify=()=>{if(!disposed)for(const listener of [...listeners])try{listener(inspect());}catch{/* display only */}};
@@ -27,6 +27,13 @@ export function createCumulativeController({repository,service,runner,captureSou
     state.selection=selection;state.cumulative=selection.cumulative;
   };
   const feedback=message=>{state.message=message;state.noticeSequence++;};
+  function closeEdit(){state.editDraft=null;state.editSelection=null;state.deleteRequested=false;state.route='root';}
+  function deleteBlock(){
+    if(state.cumulative?.pending)return '请先处理待审核的古法草稿';
+    const automatic=runner.inspect();
+    if(active(state.task)||service.isBusy?.(state.target)||sameTarget(automatic.target,state.target)&&['running','waiting','awaiting-user'].includes(automatic.status))return '请先结束当前古法总结，再删除记忆';
+    return '';
+  }
   async function refresh(){const ticket=serial,target=state.target;if(!target)return false;const selection=await repository.captureCumulative(target);if(!current(ticket,target))return false;adopt(selection);state.latestFloor=captureSource(target).messages.at(-1)?.floor??0;return true;}
   async function action(work,recovery=false){if(state.busy||disposed||reloadBinding||(state.unconfirmed||state.task?.outcome==='unconfirmed')&&!recovery)return false;const controlProof=control?.capture(),ticket=serial,target=state.target;state.busy=true;state.error='';taskError=null;notify();try{return await work(()=>current(ticket,target)&&(!control||control.matches(controlProof)));}catch(error){if(current(ticket,target)){taskError=null;state.unconfirmed=state.unconfirmed||error.code==='COMMIT_UNCONFIRMED';state.error=state.unconfirmed?'保存结果尚未确认，请重新读取':error.message;}return false;}finally{if(current(ticket,target)){state.busy=false;notify();}}}
   function acceptTask(taskId){if(retiredTasks.has(taskId))return false;if(state.taskId&&state.taskId!==taskId)retiredTasks.add(state.taskId);state.taskId=taskId;return true;}
@@ -110,7 +117,8 @@ export function createCumulativeController({repository,service,runner,captureSou
       if(receipt)runner.settleRebind?.(receipt);
       resetParameters(selection,true);state.target=copy(binding.nextTarget);reloadBinding=null;adopt(selection);state.latestFloor=captureSource(state.target).messages.at(-1)?.floor??0;
       state.unconfirmed=false;selectParameters(state.origin);
-      if(state.editDraft)state.editSelection=selection;
+      if(state.editDraft){if(selection.cumulative.currentVersionId)state.editSelection=selection;else closeEdit();}
+      state.deleteRequested=false;
       if(state.restore){const index=selection.cumulative.versions.findIndex(version=>version.id===state.restore.id);state.restore=index<0||index===selection.cumulative.versions.length-1?null:{id:state.restore.id,version:copy(selection.cumulative.versions[index]),removed:selection.cumulative.versions.length-index-1,selection};}
       state.task=null;state.taskId=null;generationPreview.invalidate({close:true});
       if(restoredTask){state.taskId=restoredTask;taskChanged(service.inspect(restoredTask));}
@@ -136,7 +144,7 @@ export function createCumulativeController({repository,service,runner,captureSou
         }else{state.origin=route;state.route=route;selectParameters(route);generationPreview.invalidate({close:true});}
         notify();return true;
       }
-      const ticket=++serial;reloadBinding=null;state.target=next;state.busy=true;state.task=null;state.taskId=null;state.draft=null;state.editDraft=null;state.editSelection=null;state.restore=null;state.error='';state.message='';state.unconfirmed=false;state.scroll={};state.opened={};notify();
+      const ticket=++serial;reloadBinding=null;state.target=next;state.busy=true;state.task=null;state.taskId=null;state.draft=null;state.editDraft=null;state.editSelection=null;state.deleteRequested=false;state.restore=null;state.error='';state.message='';state.unconfirmed=false;state.scroll={};state.opened={};notify();
       try{const selected=await repository.captureCumulative(next);if(!current(ticket,next))return false;resetParameters(selected);adopt(selected);state.latestFloor=captureSource(next).messages.at(-1)?.floor??0;state.route=route;state.origin=route==='auto'?'auto':'manual';selectParameters(state.origin);generationPreview.invalidate({close:true});parameterError=null;
         const narrativeId=await service.restorePendingNarrative?.(state.origin);if(!current(ticket,next))return false;if(narrativeId){state.taskId=narrativeId;taskChanged(service.inspect(narrativeId));return true;}
         if(selected.cumulative.pending){try{state.taskId=await service.restorePending();if(!current(ticket,next))return false;taskChanged(service.inspect(state.taskId));}catch(error){if(current(ticket,next))state.error=error.message;}}return true;
@@ -170,16 +178,32 @@ export function createCumulativeController({repository,service,runner,captureSou
     skipNarrative(){return action(async valid=>{const id=state.taskId,result=await service.skipNarrative(id);if(!valid())return false;if(!result)throw new Error('当前批次不能跳过');taskChanged(service.inspect(id));if(result.status==='succeeded')runner.afterNarrative();return result.status==='succeeded';});},
     retry(){return action(async valid=>{const id=await service.retry(state.taskId);if(!valid())return false;if(!id)throw new Error('来源或配置已变化，请重新发起');if(!acceptTask(id))return false;if(state.task?.origin==='auto')runner.transferTask?.(id);taskChanged(service.inspect(id));return true;});},
     beginEdit(){if(reloadBinding||state.busy||state.unconfirmed)return false;const version=state.cumulative?.versions.at(-1);if(!version)return false;state.editDraft=patchOf(version);state.editSelection=state.selection;state.route='edit';notify();return true;},
-    changeEdit(mutator){if(!state.busy&&!state.unconfirmed&&state.editDraft)mutator(state.editDraft);},
-    cancelEdit(){if(state.busy)return false;state.editDraft=null;state.editSelection=null;state.route='root';notify();return true;},
-    saveEdit(){return action(async valid=>{const receipt=await repository.editCurrentCumulative(state.target,state.editSelection,copy(state.editDraft),{isCurrent:valid});if(!valid())return false;adopt(receipt.selection);state.editDraft=null;state.editSelection=null;state.route='root';feedback('已保存');onCommitted();return true;});},
+    changeEdit(mutator){if(!state.busy&&!state.unconfirmed&&!state.deleteRequested&&state.editDraft)mutator(state.editDraft);},
+    cancelEdit(){if(state.busy)return false;if(state.deleteRequested)return controller.cancelDelete();closeEdit();notify();return true;},
+    saveEdit(){if(state.deleteRequested)return false;return action(async valid=>{const receipt=await repository.editCurrentCumulative(state.target,state.editSelection,copy(state.editDraft),{isCurrent:valid});if(!valid())return false;adopt(receipt.selection);closeEdit();feedback('已保存');onCommitted();return true;});},
+    requestDelete(){
+      if(!state.editDraft||!state.editSelection?.cumulative.currentVersionId||state.busy||state.unconfirmed||state.task?.outcome==='unconfirmed'||!current(serial,state.target))return false;
+      state.error=deleteBlock();state.deleteRequested=!state.error;notify();return state.deleteRequested;
+    },
+    cancelDelete(){if(state.busy||!state.deleteRequested)return false;state.deleteRequested=false;notify();return true;},
+    confirmDelete(){
+      if(!state.deleteRequested)return false;
+      return action(async valid=>{
+        const blocked=deleteBlock();if(blocked)throw new Error(blocked);
+        const receipt=await repository.resetCumulative(state.target,state.editSelection,{isCurrent:()=>valid()&&!deleteBlock()});
+        if(!valid())return false;
+        adopt(receipt.selection);closeEdit();state.task=null;state.taskId=null;state.draft=null;
+        generationPreview.invalidate({close:true});feedback('已删除古法记忆');onCommitted();return true;
+      });
+    },
     requestRestore(id){if(reloadBinding||state.busy||state.unconfirmed)return false;const index=state.cumulative.versions.findIndex(version=>version.id===id);if(index<0||index===state.cumulative.versions.length-1)return false;state.restore={id,version:copy(state.cumulative.versions[index]),removed:state.cumulative.versions.length-index-1,selection:state.selection};notify();return true;},
     cancelRestore(){if(state.busy)return false;state.restore=null;notify();return true;},
     confirmRestore(){if(!state.restore)return false;return action(async valid=>{const receipt=await repository.restoreCumulative(state.target,state.restore.selection,state.restore.id,{isCurrent:valid});if(!valid())return false;adopt(receipt.selection);state.restore=null;state.task=null;state.taskId=null;state.draft=null;feedback('已恢复');onCommitted();return true;});},
     read(){cancelParameterTimer();if(reloadBinding)return readReload();return action(async valid=>{await queue;const previousTask=state.taskId,wasAuto=state.task?.origin==='auto';if(state.task?.outcome==='unconfirmed')await service.reconcile(previousTask);await repository.read(state.target);if(!valid())return false;const selection=await repository.captureCumulative(state.target);if(!valid())return false;resetParameters(selection,true);adopt(selection);state.latestFloor=captureSource(state.target).messages.at(-1)?.floor??0;
       const observed=previousTask?service.inspect(previousTask):null,outcome=observed?.outcome,resolution=observed?.reviewResolution;
       if(resolution==='committed'||resolution==='discarded'||outcome==='recovered-committed')runner.resolveReview?.({resume:false});
-      state.unconfirmed=false;selectParameters(state.origin);if(state.editDraft){const version=state.cumulative.versions.at(-1);if(version&&JSON.stringify(patchOf(version))===JSON.stringify(state.editDraft)){state.editDraft=null;state.route='root';}else state.editSelection=state.selection;}
+      state.unconfirmed=false;selectParameters(state.origin);if(state.editDraft){const version=state.cumulative.versions.at(-1);if(!version||JSON.stringify(patchOf(version))===JSON.stringify(state.editDraft)&&!state.deleteRequested)closeEdit();else state.editSelection=state.selection;}
+      state.deleteRequested=false;
       state.restore=null;if(outcome?.startsWith('recovered-')||resolution==='discarded'){
         const pending=state.cumulative.pending;
         // A readback may have restored the existing live review, rather than ended it.

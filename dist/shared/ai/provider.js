@@ -27,6 +27,7 @@ const MESSAGES = Object.freeze({
   transport: 'AI 请求失败，请检查连接后重试。',
   http: 'AI 接口返回错误，请检查连接后重试。',
   empty_output: 'AI 返回了空内容，请重试。',
+  output_limit: 'AI 已达到输出上限，未能完成结果。请提高接口输出额度后重试。',
   invalid_json: 'AI 返回内容不是合法 JSON，请重试。',
   schema: 'AI 返回内容未通过结构校验，请重试。',
 });

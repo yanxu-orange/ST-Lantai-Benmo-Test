@@ -321,7 +321,8 @@ export function createNarrativeRuntime({repository,adapter,settings,provider,get
       currentRequestPreview={range:clone(range),kinds:tasks.map(task=>task.kind),request:clone(request),tasks:clone(tasks),usage:clone(prepared.usage)};previewGuard=valid;
       for(const task of tasks)categoryStatus(task.kind,{materialReport:clone(task.usage)});
       active.stage='generating';publishRun();
-      const output=await abortable(()=>provider.generateText({...request,maxOutputTokens:tasks.reduce((sum,task)=>sum+task.usage.outputReserve,0),signal,isCurrent:valid}),signal);
+      // The material reserve estimates returned prose, not a model's reasoning allowance.
+      const output=await abortable(()=>provider.generateText({...request,signal,isCurrent:valid}),signal);
       if(!valid())throw new Error('材料、设置或聊天已变化，生成已停止');
       const responses=parseCombinedNarrativeResponse(output.text,proofs.map(row=>row.kind)),errors=[];
       active.stage='saving';publishRun();
