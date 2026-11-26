@@ -13,32 +13,39 @@ export function createAutomaticCumulativeRunner({service,repository,captureSourc
   const inspect=()=>run?{status:run.status,taskId:run.taskId,target:structuredClone(run.target),stopRequested:run.stopRequested,error:run.error}:{status:'idle',taskId:null,target:null,stopRequested:false,error:''};
   const notify=()=>{for(const listener of [...listeners])try{listener(inspect());}catch{/* observation only */}};
   const targetCurrent=active=>sameTarget(active.target,repository.captureTarget());
+  const persist=(active,patch)=>repository.updateCumulativeAutomatic(active.target,patch,{isCurrent:()=>!disposed&&run===active&&targetCurrent(active)&&(patch.enabled!==true||!active.stopRequested)});
   const reviewResolution=active=>{const state=service.inspect(active.taskId);return state?.outcome!=='unconfirmed'&&!['narrative-running','narrative-failed'].includes(state?.status)&&['committed','discarded'].includes(state?.reviewResolution)?state.reviewResolution:null;};
   async function pump(active) {
     if(active.pumping||disposed||run!==active||active.status!=='running')return;active.pumping=true;
     try{
+      if(active.enableRequested){active.enableRequested=false;await persist(active,{enabled:true,paused:true});if(disposed||run!==active||!targetCurrent(active))return;}
+      if(active.resumeRequested){active.resumeRequested=false;await persist(active,{paused:false});if(disposed||run!==active||!targetCurrent(active))return;}
       while(run===active&&!disposed&&active.status==='running'){
         if(!targetCurrent(active)){active.status='stopped';break;}if(active.stopRequested){active.status='stopped';break;}
         const selection=await repository.captureCumulative(active.target);if(!targetCurrent(active)){active.status='stopped';break;}
         if(active.stopRequested){active.status='stopped';break;}
-        const raw=captureSource(active.target),plan=service.automaticPlan?.(selection.cumulative,raw)??automaticCumulativePlan(selection.cumulative,raw);if(plan.status!=='ready'){active.status='waiting';break;}
+        const raw=captureSource(active.target),plan=service.automaticPlan?.(selection.cumulative,raw)??automaticCumulativePlan(selection.cumulative,raw);if(plan.status!=='ready'){await persist(active,{paused:false});if(disposed||run!==active||!targetCurrent(active))return;active.status=active.stopRequested?'stopped':'waiting';break;}
+        await persist(active,{paused:true});if(disposed||run!==active||!targetCurrent(active))return;if(active.stopRequested){active.status='stopped';break;}
         active.taskId=await service.start('auto',plan);notify();const result=await service.completed(active.taskId);
         if(run!==active||disposed)return;
         if(result?.status==='awaiting-user'){active.status='awaiting-user';break;}
         if(result?.status!=='succeeded'){active.status='failed';active.error=result?.outcome==='unconfirmed'?'保存结果尚未确认，请明确重新读取':result?.errorMessage||'本批未完成，请明确重试或调整参数';break;}
+        await persist(active,{paused:false});if(disposed||run!==active||!targetCurrent(active))return;
       }
-    }catch{if(run===active){active.status='failed';active.error='本批未完成，请明确重试或调整参数';}}
+    }catch{if(run===active){active.status=active.stopRequested?'stopped':'failed';active.error=active.stopRequested?'':'本批未完成，请明确重试或调整参数';}}
     finally{active.pumping=false;notify();}
   }
   const runner={inspect,
-    start(){if(disposed)return false;const target=repository.captureTarget();if(run?.invalidated&&run.target.chatId===target.chatId)return false;if(run&&!sameTarget(run.target,target)&&run.target.chatId===target.chatId&&run.target.rootId===target.rootId)return false;if(run&&sameTarget(run.target,target)&&(run.status==='running'||run.status==='awaiting-user'&&!reviewResolution(run)))return false;if(service.isBusy?.(target))return false;if(run?.taskId&&!sameTarget(run.target,target))service.cancel(run.taskId);run={target,status:'running',taskId:null,stopRequested:false,error:'',pumping:false};notify();void pump(run);return true;},
+    start(){if(disposed)return false;const target=repository.captureTarget();if(run?.invalidated&&run.target.chatId===target.chatId)return false;if(run&&!sameTarget(run.target,target)&&run.target.chatId===target.chatId&&run.target.rootId===target.rootId)return false;if(run&&sameTarget(run.target,target)&&(run.status==='running'||run.status==='awaiting-user'&&!reviewResolution(run)))return false;if(service.isBusy?.(target))return false;if(run?.taskId&&!sameTarget(run.target,target))service.cancel(run.taskId);run={target,status:'running',taskId:null,stopRequested:false,error:'',pumping:false,enableRequested:true};notify();void pump(run);return true;},
+    async restore(){if(disposed)return false;const target=repository.captureTarget();if(run&&sameTarget(run.target,target)&&(!run.suspended||run.pumping||run.status==='awaiting-user'))return false;if(run&&!sameTarget(run.target,target)){if(run.taskId)service.cancel(run.taskId);run=null;}const previous=run,selection=await repository.captureCumulative(target);if(disposed||!sameTarget(target,repository.captureTarget())||run!==previous||selection.cumulative.automatic?.enabled!==true||selection.cumulative.automatic.paused||selection.cumulative.pending||service.isBusy?.(target))return false;run={target,status:'running',taskId:null,stopRequested:false,error:'',pumping:false};notify();void pump(run);return true;},
+    disable(){const active=run,target=repository.captureTarget();if(active&&sameTarget(active.target,target)){active.stopRequested=true;if(!active.pumping&&active.status!=='awaiting-user')active.status='stopped';notify();}return repository.updateCumulativeAutomatic(target,{enabled:false},{isCurrent:()=>!disposed&&sameTarget(target,repository.captureTarget())});},
     continue(){return runner.start();},
-    stop(){if(!run||!['running','waiting','awaiting-user'].includes(run.status))return false;run.stopRequested=true;if(!run.pumping&&run.status!=='awaiting-user')run.status='stopped';notify();return true;},
-    resolveReview({resume=false}={}){if(typeof resume!=='boolean'||!run||run.status!=='awaiting-user'||!targetCurrent(run))return false;const resolution=reviewResolution(run);if(!resolution)return false;run.status=!resume||run.stopRequested||resolution==='discarded'?'stopped':'running';run.error=resolution==='discarded'?'已放弃本批，请明确继续':'';notify();if(resume)void pump(run);return true;},
+    stop(){if(!run||!['running','waiting','awaiting-user'].includes(run.status))return false;run.suspended=true;run.stopRequested=true;if(!run.pumping&&run.status!=='awaiting-user')run.status='stopped';notify();return true;},
+    resolveReview({resume=false}={}){if(typeof resume!=='boolean'||!run||run.status!=='awaiting-user'||!targetCurrent(run))return false;const resolution=reviewResolution(run);if(!resolution)return false;run.resumeRequested=true;run.status=!resume||run.stopRequested||resolution==='discarded'?'stopped':'running';run.error=resolution==='discarded'?'已放弃本批，请明确继续':'';notify();if(resume)void pump(run);return true;},
     afterReview(){return runner.resolveReview({resume:true});},
-    afterNarrative(){if(!run||!['failed','awaiting-user'].includes(run.status)||!targetCurrent(run)||service.inspect(run.taskId)?.status!=='succeeded')return false;run.status=run.stopRequested?'stopped':'running';run.error='';notify();void pump(run);return true;},
+    afterNarrative(){if(!run||!['failed','awaiting-user'].includes(run.status)||!targetCurrent(run)||service.inspect(run.taskId)?.status!=='succeeded')return false;run.resumeRequested=true;run.status=run.stopRequested?'stopped':'running';run.error='';notify();void pump(run);return true;},
     transferTask(taskId){const state=service.inspect(taskId),active=run;if(disposed||!active||!state||active.pumping||!sameTarget(active.target,state.target)||!targetCurrent(active))return false;active.taskId=taskId;active.status='running';active.error='';active.pumping=true;notify();
-      void service.completed(taskId).then(result=>{if(disposed||run!==active||active.taskId!==taskId)return;active.status=result?.status==='awaiting-user'?'awaiting-user':result?.status==='succeeded'?(active.stopRequested?'stopped':'running'):'failed';if(active.status==='failed')active.error='本批未完成，请明确重试或调整参数';}).catch(()=>{if(run===active){active.status='failed';active.error='本批未完成，请明确重试或调整参数';}}).finally(()=>{if(run===active){active.pumping=false;notify();void pump(active);}});return true;
+      void service.completed(taskId).then(async result=>{if(disposed||run!==active||active.taskId!==taskId)return;if(result?.status==='succeeded')await persist(active,{paused:false});active.status=result?.status==='awaiting-user'?'awaiting-user':result?.status==='succeeded'?(active.stopRequested?'stopped':'running'):'failed';if(active.status==='failed')active.error='本批未完成，请明确重试或调整参数';}).catch(()=>{if(run===active){active.status='failed';active.error='本批未完成，请明确重试或调整参数';}}).finally(()=>{if(run===active){active.pumping=false;notify();void pump(active);}});return true;
     },
     discard(){return runner.afterReview();},
     invalidateTarget(previousTarget){if(disposed||!run||!sameTarget(run.target,previousTarget))return false;run={...run,status:'stopped',pumping:false,invalidated:true};notify();return true;},

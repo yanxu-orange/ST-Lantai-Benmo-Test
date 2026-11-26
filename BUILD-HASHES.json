@@ -91,8 +91,8 @@
   },
   {
     "path": "dist/app/cumulative-controller.js",
-    "bytes": 28083,
-    "sha256": "3c1b7985f83dd9fced3b3773677e29475e8cb048c4d1e977ea712bd8a3426002"
+    "bytes": 28509,
+    "sha256": "b31d05ff2a351e9eaa13d39e1a035e0566468f1d2791a617feea2a8e737c780a"
   },
   {
     "path": "dist/app/cumulative-root-view.js",
@@ -631,8 +631,8 @@
   },
   {
     "path": "dist/app/summary-controller.js",
-    "bytes": 21591,
-    "sha256": "67a96cff54cca8e2b79020df30d4917d9aef1a4e09aca8c2b153f3bfdcc6fe28"
+    "bytes": 22069,
+    "sha256": "af05698a27c249367ff59b803ed94ce6661d62d036ee06e97d108e7fed9407a2"
   },
   {
     "path": "dist/app/summary-settings-controller.js",
@@ -702,7 +702,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "7a5d36425e07a68d98d773cd61a59d3260dadbc5ad1c9a978bc605ffa5deeb24"
+    "sha256": "a9eac5d530a91184a4537a1bbd42d10863e84c15589a67c563b2bccc88428ae1"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -751,13 +751,13 @@
   },
   {
     "path": "dist/domain/cumulative/auto-runner.js",
-    "bytes": 6857,
-    "sha256": "9c3958225f776d7d7fcd8c354e3f390b8c6ed70637e7fd5f580904cf1d45c708"
+    "bytes": 9074,
+    "sha256": "51116a183acf7514bcc89ea82c86acc42912f25bcb0b0ae5cd18a4e58d29aa68"
   },
   {
     "path": "dist/domain/cumulative/data.js",
-    "bytes": 13397,
-    "sha256": "625d8c897a1657ebaaaca435a754ad492f7c648b8c204add9c21db8a1da362f9"
+    "bytes": 13554,
+    "sha256": "c8cb939ec9ebdb51947c3ee48006a929fa9e5510d6aac5075abc79e00219019c"
   },
   {
     "path": "dist/domain/cumulative/requests.js",
@@ -851,8 +851,8 @@
   },
   {
     "path": "dist/domain/memory/repository.js",
-    "bytes": 66149,
-    "sha256": "cfb3dddc1938c3f14d7f0ad8b971aa2bec97870580b4fe1cdbdee49b8b6aa35d"
+    "bytes": 67479,
+    "sha256": "ab9da49ce8e1815681ad94f443a24c4b6a6fbd336bf599b43d3079abea214925"
   },
   {
     "path": "dist/domain/memory/results-persistence.js",
@@ -1011,8 +1011,8 @@
   },
   {
     "path": "dist/domain/summary/auto-runner.js",
-    "bytes": 4699,
-    "sha256": "b14dca58d2abe4ead733561e2c3a290adf8fb46812544ad6608f48baf890606d"
+    "bytes": 6821,
+    "sha256": "5fdb83d555f99c3a0fe288a4c188cb3ebd5699f77d7d9ff2e21ead69790d32e2"
   },
   {
     "path": "dist/domain/summary/candidates.js",
@@ -1026,8 +1026,8 @@
   },
   {
     "path": "dist/domain/summary/data.js",
-    "bytes": 16290,
-    "sha256": "c7826add45e06c59358d13107cca2974415a3230fc7f199d5988762e070dd755"
+    "bytes": 16644,
+    "sha256": "d8833be1a84916619dfad4e1e77505066e4ca04bb9c953b356d803f766c347e2"
   },
   {
     "path": "dist/domain/summary/requests.js",
@@ -1401,8 +1401,8 @@
   },
   {
     "path": "dist/platform/sillytavern/management-runtime.js",
-    "bytes": 20906,
-    "sha256": "fa4fdc5afff2be58736c5ed2c5e8892687412ef6315177e7e444bcbcc7cf6172"
+    "bytes": 21131,
+    "sha256": "8df3b537418138dd130bcc85dcd324184ded4ef7997b5034b82c264acdc8252c"
   },
   {
     "path": "dist/platform/sillytavern/memory-adapter.js",
@@ -1421,8 +1421,8 @@
   },
   {
     "path": "dist/platform/sillytavern/memory-host.js",
-    "bytes": 103198,
-    "sha256": "f7622afead02e59ef48e67e82025c7f4b163f4ad1b198780b03ec66e42a612f0"
+    "bytes": 103404,
+    "sha256": "a20f7673e7da810fcbdfcf18bedf6e1d3d67de5d44f59a223dad661a5f1cf479"
   },
   {
     "path": "dist/platform/sillytavern/memory-shell-style.js",
@@ -1717,6 +1717,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "3172734557040e93661b9383b5831d970ced1632b8d1e63eb3cd75f9e6b36e64"
+    "sha256": "d411afca9207a8bb0523868c66e48e7df97db1dda0055284d373c8a7d117ed7e"
   }
 ]

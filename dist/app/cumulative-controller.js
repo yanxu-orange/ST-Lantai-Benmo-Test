@@ -51,7 +51,7 @@ export function createCumulativeController({repository,service,runner,captureSou
     if(['failed','stale','cancelled'].includes(task.status)){state.error=task.receipt?.status==='committed'?'记忆已保存；原文隐藏未完成，请检查酒馆隐藏状态':task.outcome==='unconfirmed'?'保存结果尚未确认，请重新读取':task.errorMessage||'本批未完成，请明确重新发起';taskError={taskId:task.taskId,message:state.error};}
     notify();
   }
-  const offService=service.subscribe(taskChanged),offRunner=runner.subscribe(value=>{if(!reloadBinding&&value.taskId&&sameTarget(value.target,state.target)&&acceptTask(value.taskId))taskChanged(service.inspect(value.taskId));notify();});
+  const offService=service.subscribe(taskChanged),offRunner=runner.subscribe(value=>{if(!reloadBinding&&value.taskId&&sameTarget(value.target,state.target)&&acceptTask(value.taskId))taskChanged(service.inspect(value.taskId));notify();void refresh().then(ok=>{if(ok)notify();}).catch(()=>{});});
   const cancelParameterTimer=()=>{clearTimeout(parameterTimer);parameterTimer=null;};
   const parameterDraft=()=>parameterDrafts[state.origin];
   function selectParameters(origin){state.params=parameterDrafts[origin].params;parameterError=parameterDrafts[origin].error;if(!state.unconfirmed)state.error=parameterError?.message??'';}
@@ -146,6 +146,7 @@ export function createCumulativeController({repository,service,runner,captureSou
       }
       const ticket=++serial;reloadBinding=null;state.target=next;state.busy=true;state.task=null;state.taskId=null;state.draft=null;state.editDraft=null;state.editSelection=null;state.deleteRequested=false;state.restore=null;state.error='';state.message='';state.unconfirmed=false;state.scroll={};state.opened={};notify();
       try{const selected=await repository.captureCumulative(next);if(!current(ticket,next))return false;resetParameters(selected);adopt(selected);state.latestFloor=captureSource(next).messages.at(-1)?.floor??0;state.route=route;state.origin=route==='auto'?'auto':'manual';selectParameters(state.origin);generationPreview.invalidate({close:true});parameterError=null;
+        const running=runner.inspect(),observed=running.taskId?service.inspect(running.taskId):null;if(observed&&sameTarget(observed.target,next)&&active(observed)){state.origin='auto';selectParameters('auto');state.taskId=observed.taskId;taskChanged(observed);if(route==='root')state.route='root';return true;}
         const narrativeId=await service.restorePendingNarrative?.(state.origin);if(!current(ticket,next))return false;if(narrativeId){state.taskId=narrativeId;taskChanged(service.inspect(narrativeId));return true;}
         if(selected.cumulative.pending){try{state.taskId=await service.restorePending();if(!current(ticket,next))return false;taskChanged(service.inspect(state.taskId));}catch(error){if(current(ticket,next))state.error=error.message;}}return true;
       }catch(error){if(current(ticket,next))state.error=error.message;return false;}finally{if(current(ticket,next)){state.busy=false;notify();}}
@@ -214,7 +215,7 @@ export function createCumulativeController({repository,service,runner,captureSou
       state.error='';feedback(resolution==='discarded'?'已确认放弃本批草稿':outcome==='recovered-committed'?'已确认本批总结保存成功':outcome==='recovered-previous'?'已确认保留原版，本批未保存':outcome==='recovered-pending'?'已恢复待采用草稿':'已重新读取');return true;},true);},
     discardPending(){return action(async valid=>{if(!await service.discardPending())return false;if(!valid())return false;await refresh();if(!valid())return false;runner.resolveReview?.({resume:false});state.task=null;state.taskId=null;state.draft=null;state.route=state.origin;state.error='';feedback('已放弃本批草稿');return true;});},
     async back(){if(state.route==='edit')return controller.cancelEdit();if(state.route!=='review'){void queueParams();return true;}return action(async valid=>{if(!await service.discard(state.taskId))return false;if(!valid())return false;runner.resolveReview?.({resume:false});state.task=null;state.taskId=null;state.draft=null;state.route=state.origin;await refresh();state.error='';feedback('已放弃本批草稿');return false;});},
-    stop:()=>runner.stop(),wake:()=>runner.wake(),setVisible(value){visible=value===true;if(!visible)void queueParams();},
+    stop:()=>action(async()=>{await runner.disable();await refresh();return true;}),wake:()=>runner.wake(),setVisible(value){visible=value===true;if(!visible)void queueParams();},
     setScroll(route,value){state.scroll[route]=value;},setOpen(key,value){state.opened[key]=!!value;},
     subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},
     dispose(){cancelParameterTimer();disposed=true;serial++;offService();offRunner();listeners.clear();}

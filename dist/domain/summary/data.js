@@ -93,7 +93,8 @@ export function assertBatch(batch) {
   return {...copy(batch),sourceSnapshot:source,settingsEvidence:publicSummarySettingsEvidence(batch.settingsEvidence)};
 }
 export function assertSummary(summary,events=[]) {
-  exact(summary,['schema','revision','preferences','excludedFloors','batches','progress',...(Object.hasOwn(summary,'pending')?['pending']:[]),...(Object.hasOwn(summary,'sourcePositions')?['sourcePositions']:[])]);
+  exact(summary,['schema','revision','preferences','excludedFloors','batches','progress',...(Object.hasOwn(summary,'pending')?['pending']:[]),...(Object.hasOwn(summary,'sourcePositions')?['sourcePositions']:[]),...(Object.hasOwn(summary,'automatic')?['automatic']:[])]);
+  if(Object.hasOwn(summary,'automatic'))assertSummaryAutomatic(summary.automatic);
   if(summary.schema!==1||!integer(summary.revision)||!Array.isArray(summary.batches))throw new Error('总结版本无效');
   const preferences=assertSummaryPreferences(summary.preferences);assertExcludedFloors(summary.excludedFloors);
   exact(summary.progress,['startFloor','lastProcessedFloor','nextBatchOrdinal']);
@@ -105,6 +106,7 @@ export function assertSummary(summary,events=[]) {
   if(Object.hasOwn(summary,'pending')&&summary.pending!==null){const pending=assertSummaryPending(summary.pending);if(ids.has(pending.batchId)||tasks.has(pending.id)||pending.events.some(candidate=>events.some(event=>event.id===candidate.id)))throw new Error('待审核与正式身份冲突');}
   return {...copy(summary),preferences,batches:summary.batches.map(assertBatch),...(summary.pending?{pending:assertSummaryPending(summary.pending)}:{})};
 }
+export function assertSummaryAutomatic(value){exact(value,['enabled','paused']);if(typeof value.enabled!=='boolean'||typeof value.paused!=='boolean')throw new Error('自动总结状态无效');return copy(value);}
 export function assertSummarySourcePositions(value,batches) {
   if(!value||Object.getPrototypeOf(value)!==Object.prototype)throw new Error('总结来源位置无效');
   for(const [id,positions] of Object.entries(value)){

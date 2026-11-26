@@ -15,7 +15,7 @@ import {timeOf,assertTime} from '../time/data.js';
 import {worldDynamicsOf,assertWorldDynamics} from '../world-dynamics/data.js';
 import {importSummaryCandidates} from '../time/summary-candidates.js';
 import { assertRoot, validateEvent, validateEventForSave, activeEvents } from './model.js';
-import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence,normalizedSummarySettingsEvidence} from '../summary/data.js';
+import {summaryOf,assertSummaryPreferences,assertExcludedFloors,assertBatch,assertGeneratedEvidence,assertSummaryPending,publicSummarySettingsEvidence,normalizedSummarySettingsEvidence,assertSummaryAutomatic} from '../summary/data.js';
 import {matchesStoredSummarySource,matchesSourceMetadata,matchesSummarySource} from '../summary/source.js';
 import {matchesCumulativeSource} from '../cumulative/source.js';
 import {cumulativeOf,assertCumulativePreferences,assertCumulativeExclusions,assertCumulativePending,assertCumulativeVersion,baseSnapshotOf,cumulativeCoverage,matchesCumulativeReplacementSource} from '../cumulative/data.js';
@@ -112,7 +112,7 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
     matchSnapshot(current, target, snapshot, hidden);
     return true;
   };
-  const taskDomain=value=>{const {revision,preferences,excludedFloors,...evidence}=value;return evidence;};
+  const taskDomain=value=>{const {revision,preferences,excludedFloors,automatic,...evidence}=value;return evidence;};
   const matchSummary=(root,target,snapshot,task=false)=>{
     root=comparisonRoot(root,'summary');
     if(!snapshot||!sameTarget(target,snapshot.target)||!equal(task?taskDomain(summaryOf(root)):summaryOf(root),task?taskDomain(snapshot.summary):snapshot.summary))throw new Error('总结参数或批历史已变化');
@@ -175,7 +175,19 @@ export function createRepository(adapter, now = () => new Date().toISOString()) 
       return {status:'committed',root:saved,selection:freeze({target:frozen,latest:latestOf(saved)})};
     });
   };
+  const updateAutomatic=(target,key,patch,{isCurrent=()=>true}={})=>{
+    const frozen=copy(target),draft=copy(patch);
+    if(!draft||Object.keys(draft).some(name=>!['enabled','paused'].includes(name))||Object.values(draft).some(value=>typeof value!=='boolean'))throw new Error('自动总结状态无效');
+    return enqueue(async()=>{
+      const root=await read(frozen),domain=key==='summary'?summaryOf(root):cumulativeOf(root),automatic=assertSummaryAutomatic({...{enabled:false,paused:false},...domain.automatic,...draft});
+      const guard=current=>{requireTarget(frozen);const value=key==='summary'?summaryOf(comparisonRoot(current,key)):cumulativeOf(comparisonRoot(current,key));if(!isCurrent()||value.revision!==domain.revision)throw new Error('自动总结状态已变化');return true;};guard(root);
+      if(equal(domain.automatic,automatic))return {status:'unchanged',root};
+      return {status:'committed',root:await commit(frozen,root,{...root,revision:root.revision+1,[key]:{...domain,revision:domain.revision+1,automatic}},guard,{requireConfirmation:true})};
+    });
+  };
   return {
+    updateSummaryAutomatic:(target,patch,options)=>updateAutomatic(target,'summary',patch,options),
+    updateCumulativeAutomatic:(target,patch,options)=>updateAutomatic(target,'cumulative',patch,options),
     restoreSettings(target,previous,settings,{isCurrent=()=>true}={}){
       const frozen=copy(target),baseline=copy(previous),draft=copy(settings);
       return enqueue(async()=>{const root=await read(frozen);const guard=current=>{requireTarget(frozen);if(!isCurrent()||!equal(assertRoot(copy(current),frozen),baseline))throw new Error('聊天设置或成果已变化，请重新选择备份文件。');return true;};guard(root);const next=assertRoot(applyChatSettingsRestore(root,draft),frozen);if(equal(root,next))return {status:'unchanged',root};next.revision=root.revision+1;return {status:'committed',root:await commit(frozen,root,next,guard,{requireConfirmation:true})};});

@@ -255,6 +255,7 @@ export async function createManagementRuntime({ repository, getContext, document
     // history is a completed reply and may wake a runner.
     for(const name of ['CHAT_CHANGED','CHAT_CREATED','MESSAGE_DELETED'])on(name,()=>{replyRun=null;quietDepth=0;lastReplyFloor=(getContext()?.chat?.length??0)-1;});
   }
-  return Object.freeze({ settings, manager, provider, recallProvider, apiOperations, service, controller, summaryService, summaryController, cumulativeService,cumulativeRunner,cumulativeController,getCumulativeGenerationSettings,getGenerationSettings, getOriginalSnapshot, originalAvailable,
+  async function restoreAutomatic(){if(disposed)return;await Promise.allSettled([allowed('event')?summaryController?.runner.restore():undefined,allowed('cumulative')?cumulativeRunner?.restore():undefined]);}
+  return Object.freeze({ settings, manager, provider, recallProvider, apiOperations, service, controller, summaryService, summaryController, cumulativeService,cumulativeRunner,cumulativeController,restoreAutomatic,getCumulativeGenerationSettings,getGenerationSettings, getOriginalSnapshot, originalAvailable,
     dispose() { if (disposed) return; abort(); signal?.removeEventListener('abort', abort); } });
 }

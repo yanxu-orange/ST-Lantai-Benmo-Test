@@ -1,6 +1,6 @@
 import {assertCumulativeSource,storedCumulativeSource,cumulativeRange} from './source.js';
 import {matchesSourceMetadata} from '../summary/source.js';
-import {publicSummaryTrackingTicket,assertSummaryJsonEvidence} from '../summary/data.js';
+import {publicSummaryTrackingTicket,assertSummaryJsonEvidence,assertSummaryAutomatic} from '../summary/data.js';
 import {assertCumulativeGeneration} from '../../shared/settings/model.js';
 import {normalizeCleaningRule} from '../summary/cleaning.js';
 const copy = structuredClone;
@@ -89,7 +89,8 @@ export function assertCumulativePending(value) {
   return {...copy(value),version:assertCumulativeVersion(value.version),...(value.tracking?{tracking:{...copy(value.tracking),ticket:publicSummaryTrackingTicket(value.tracking.ticket)}}:{})};
 }
 export function assertCumulative(value) {
-  exact(value,['schema','revision','preferences','excludedFloors','versions','currentVersionId','progress',...(Object.hasOwn(value,'pending')?['pending']:[]),...(Object.hasOwn(value,'hiddenSegments')?['hiddenSegments']:[])]);
+  exact(value,['schema','revision','preferences','excludedFloors','versions','currentVersionId','progress',...(Object.hasOwn(value,'pending')?['pending']:[]),...(Object.hasOwn(value,'hiddenSegments')?['hiddenSegments']:[]),...(Object.hasOwn(value,'automatic')?['automatic']:[])]);
+  if(Object.hasOwn(value,'automatic'))assertSummaryAutomatic(value.automatic);
   if (value.schema !== 1 || !integer(value.revision) || !Array.isArray(value.versions)) throw new Error('古法数据版本无效');
   assertCumulativePreferences(value.preferences); assertCumulativeExclusions(value.excludedFloors); exact(value.progress,['lastProcessedFloor']);
   if(Object.hasOwn(value,'hiddenSegments'))assertCumulativeHiddenSegments(value.hiddenSegments);

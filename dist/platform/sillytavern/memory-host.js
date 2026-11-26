@@ -266,7 +266,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
       if(worldController){let same=false;try{same=sameTarget(worldTarget,repository.captureTarget());}catch{/* A switched chat may not have a prepared root yet. */}if(!same){worldWaiting?.clear();worldController.dispose();worldController=null;worldTarget=null;}}
       if(interfaceDiagnosticTarget){try{if(!sameTarget(interfaceDiagnosticTarget,repository.captureTarget()))interfaceDiagnostic.stop('chat-change');else if(kind==='reload')interfaceDiagnostic.stage('reload');}catch{interfaceDiagnostic.stop('chat-change');}}
       const sequence=++hostReloadSequence;
-      if(controls){controls.invalidate();void controls.ensure().then(()=>{if(disposed||sequence!==hostReloadSequence)return;if(panel)syncControls();requestBenmoWarmup();});}
+      if(controls){controls.invalidate();void controls.ensure().then(()=>{if(disposed||sequence!==hostReloadSequence)return;if(panel)syncControls();void runtime?.restoreAutomatic();requestBenmoWarmup();});}
       if (!panel) return;
       // Only a retained editor needs identity resolution before the changed-chat
       // path. Cold/read-only entries must still begin replacement immediately.
@@ -396,7 +396,7 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
           listener({taskId:state.taskId,phase,message,id:'lantai-cumulative-notice'});
         });}};
         cumulativeNotices=createManagementNotifications({document:doc,controller:noticeController,styles:notificationStyles,openTask:openCumulativeTask});
-        controlSubscription=controls.subscribe(syncControls);syncControls();
+        controlSubscription=controls.subscribe(syncControls);syncControls();await runtime.restoreAutomatic();
         // Service readiness owns subscriptions and background displays. Record
         // readiness belongs to Benmo and must not hold up the main memory page.
         requestBenmoWarmup();
@@ -418,11 +418,12 @@ export function createMemoryHost({ document: doc = globalThis.document, getConte
   }
   function syncControls(){
     const next=availability(),before=previousPolicy;previousPolicy=next;
-    if(!next.event){runtime.summaryController?.stop();recallRuntime?.clear();}
+    if(!next.event){runtime.summaryController?.runner.stop();recallRuntime?.clear();}
     if(!next.cumulative)runtime.cumulativeRunner?.stop();
     cancelDisabledManagedTasks(runtime,next);
     if(!settingsRestoring&&before&&!before.event&&next.event)runtime.summaryService?.resumeAutoConfirm();
     if(!settingsRestoring&&before&&!before.cumulative&&next.cumulative)runtime.cumulativeService?.resumeAutoConfirm();
+    if(!settingsRestoring&&before&&(!before.event&&next.event||!before.cumulative&&next.cumulative))void runtime.restoreAutomatic();
     cumulativeRuntime?.setEnabled(next.cumulative);latestRuntime?.setEnabled(next.enabled);
     if(!next.enabled)trackingRuntime?.clear();if(!next.enabled||!next.time){worldController?.cancel();worldWaiting?.clear();}
     if(!before||['enabled','item','npc'].some(key=>before[key]!==next[key]))trackingRuntime?.controlsChanged?.();
