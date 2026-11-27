@@ -1,7 +1,8 @@
 import {DEFAULT_NARRATIVE_INJECTION_PROMPTS} from '../domain/narrative/prompts.js';
 import {estimateNarrativeTokens} from '../domain/narrative/source.js';
 import {narrativeSourceChoice} from '../domain/narrative/data.js';
-import {narrativeMaterialGroups, narrativeMemoryTime} from '../domain/narrative/requests.js';
+import {narrativeEditableEntries} from '../domain/narrative/core.js';
+import {isBuiltInNarrativePrompt, narrativeMaterialGroups, narrativeMemoryTime} from '../domain/narrative/requests.js';
 import {summaryPreviewSource,summaryPreviewPrompt,summaryPreviewStage,summaryPreviewTabs,summaryPreviewPanel} from './shared-ui/summary-preview.js';
 import {changeGenerationDraft,createGenerationPreview} from './generation-preview.js';
 import {replaceSurfaceMarkup} from './stable-surface.js';
@@ -99,7 +100,7 @@ export async function mountBenmoView({container: app, controller, availability =
     const customInputs = new Map();
     if (state.route === 'narrative-settings') {
       for (const [key, raw] of new FormData(form)) {
-        if (['background', 'budget', 'depth', 'prompt', 'injectionPrompt'].includes(key)) draft[key] = String(raw);
+        if (['background', 'budget', 'depth', 'editableEntries', 'prompt', 'injectionPrompt'].includes(key)) draft[key] = String(raw);
         else { const character = draft.characters?.find(row => key === `narrative-character-${row.id}`); if (character) character.name = String(raw); }
       }
       return;
@@ -478,13 +479,14 @@ export async function mountBenmoView({container: app, controller, availability =
   function narrativeSettings() {
     const self = state.tab === 'self';
     const sources = draft.autoSource === 'cumulative' ? '<p class="meta">古法固定读取本批清洗原文。</p>' : `<fieldset class="lt-modes" aria-label="剧情资料来源"><legend class="ui-field__label">剧情资料来源</legend>${[['memory','读取记忆'],['original','读取本批原文']].map(([source,label])=>`<label class="lt-mode"><input type="radio" name="narrativeSource" data-narrative-source value="${source}" ${narrativeSourceChoice(draft)===source?'checked':''}>${label}</label>`).join('')}</fieldset>`;
-    return `<form id="benmo-edit-form" class="section"><section class="card"><h2>读取材料</h2>${onOpenCleaning ? button('总结文本清洗','narrative-cleaning') : ''}${sources}${self ? `${narrativeSwitch('readCard', '读取角色卡基础设定', draft.readCard)}` : ''}<label class="ui-field"><span>补充背景</span><textarea class="lt-textarea" name="background" rows="5" placeholder="可粘贴本条路线或世界设定">${esc(draft.background)}</textarea></label></section>${self ? `<section class="card"><h2>指定角色与注入</h2><p class="meta">所有角色一起生成；可分别选择是否注入。</p>${draft.characters.map(character => `<section class="section"><div class="custom-field-heading"><label class="ui-field"><span>角色姓名</span><input class="ui-input" name="${esc(`narrative-character-${character.id}`)}" value="${esc(character.name)}" maxlength="160" required></label>${button('移除', 'remove-narrative-character', `data-id="${esc(character.id)}" aria-label="移除此指定角色"`)}</div>${narrativeSwitch(character.id, `${character.name || '此角色'}的自述每轮注入`, character.inject, 'toggle-narrative-injection')}</section>`).join('')}${button('＋ 添加角色', 'add-narrative-character', '', 'secondary')}</section>` : ''}<details class="card"><summary>高级设置</summary><div class="two-cols"><label class="ui-field"><span>材料预算（token）</span><input class="ui-input" name="budget" type="number" min="1" step="1" inputmode="numeric" required value="${esc(draft.budget)}"></label><label class="ui-field"><span>注入深度</span><input class="ui-input" name="depth" type="number" min="0" max="10000" step="1" inputmode="numeric" required value="${esc(draft.depth)}"></label></div><label class="ui-field"><span>注入提示词</span><textarea class="lt-textarea lt-prompt-editor" name="injectionPrompt" rows="4" maxlength="20000">${esc(draft.injectionPrompt)}</textarea></label></details><section class="card"><label class="ui-field"><span>${TABS[state.tab]}内容提示词</span><textarea class="lt-textarea lt-prompt-editor" name="prompt" rows="12" maxlength="20000" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-narrative-prompt')}</div></section></form>`;
+    return `<form id="benmo-edit-form" class="section"><section class="card"><h2>读取材料</h2>${onOpenCleaning ? button('总结文本清洗','narrative-cleaning') : ''}${sources}${self ? `${narrativeSwitch('readCard', '读取角色卡基础设定', draft.readCard)}` : ''}<label class="ui-field"><span>补充背景</span><textarea class="lt-textarea" name="background" rows="5" placeholder="可粘贴本条路线或世界设定">${esc(draft.background)}</textarea></label></section>${self ? `<section class="card"><h2>指定角色与注入</h2><p class="meta">所有角色一起生成；可分别选择是否注入。</p>${draft.characters.map(character => `<section class="section"><div class="custom-field-heading"><label class="ui-field"><span>角色姓名</span><input class="ui-input" name="${esc(`narrative-character-${character.id}`)}" value="${esc(character.name)}" maxlength="160" required></label>${button('移除', 'remove-narrative-character', `data-id="${esc(character.id)}" aria-label="移除此指定角色"`)}</div>${narrativeSwitch(character.id, `${character.name || '此角色'}的自述每轮注入`, character.inject, 'toggle-narrative-injection')}</section>`).join('')}${button('＋ 添加角色', 'add-narrative-character', '', 'secondary')}</section>` : ''}<details class="card"><summary>高级设置</summary><div class="two-cols"><label class="ui-field"><span>${self ? '每位角色允许修改最近几条自述' : '允许修改最近几条大纲'}（0 为仅追加）</span><input class="ui-input" name="editableEntries" type="number" min="0" step="1" inputmode="numeric" required value="${esc(draft.editableEntries)}"></label><label class="ui-field"><span>材料预算（token）</span><input class="ui-input" name="budget" type="number" min="1" step="1" inputmode="numeric" required value="${esc(draft.budget)}"></label><label class="ui-field"><span>注入深度</span><input class="ui-input" name="depth" type="number" min="0" max="10000" step="1" inputmode="numeric" required value="${esc(draft.depth)}"></label></div><label class="ui-field"><span>注入提示词</span><textarea class="lt-textarea lt-prompt-editor" name="injectionPrompt" rows="4" maxlength="20000">${esc(draft.injectionPrompt)}</textarea></label></details><section class="card"><label class="ui-field"><span>${TABS[state.tab]}内容提示词</span><textarea class="lt-textarea lt-prompt-editor" name="prompt" rows="12" maxlength="20000" required>${esc(draft.prompt)}</textarea></label><div class="actions">${button('恢复默认提示词', 'default-narrative-prompt')}</div></section></form>`;
   }
   function narrativeEditor() {
     return `<form id="benmo-edit-form" class="section"><p class="summary-origin">来源：${esc(rangesText(draft.sources))}</p><label class="ui-field"><span>${TABS[state.tab]}正文</span><textarea class="lt-textarea" name="text" rows="10" required>${esc(draft.text)}</textarea></label></form>`;
   }
   function narrativeSettingsDraft(preferences, kind = state.tab) {
-    const next = {...preferences, readMemory: narrativeSourceChoice(preferences) === 'memory', readOriginal: narrativeSourceChoice(preferences) === 'original', background: preferences.background ?? '', budget: String(preferences.budget ?? 30000), depth: String(preferences.depth ?? 9999), injectionPrompt: preferences.injectionPrompt ?? DEFAULT_NARRATIVE_INJECTION_PROMPTS[kind], prompt: preferences.prompt || controller.defaultNarrativePrompts?.[kind] || ''};
+    const next = {...preferences, readMemory: narrativeSourceChoice(preferences) === 'memory', readOriginal: narrativeSourceChoice(preferences) === 'original', background: preferences.background ?? '', budget: String(preferences.budget ?? 30000), depth: String(preferences.depth ?? 9999), injectionPrompt: preferences.injectionPrompt ?? DEFAULT_NARRATIVE_INJECTION_PROMPTS[kind], prompt: isBuiltInNarrativePrompt(kind, preferences.prompt ?? '') ? controller.defaultNarrativePrompts?.[kind] ?? preferences.prompt ?? '' : preferences.prompt};
+    next.editableEntries = String(narrativeEditableEntries(kind, preferences));
     if (preferences.autoSource === 'cumulative') { next.readMemory = preferences.readMemory; next.readOriginal = preferences.readOriginal; }
     if (kind === 'self') { next.readCard = preferences.readCard !== false; next.characters = clone(preferences.characters ?? []); }
     return next;
@@ -560,7 +562,9 @@ export async function mountBenmoView({container: app, controller, availability =
       if (!String(submitted.depth).trim() || !Number.isSafeInteger(depth) || depth < 0 || depth > 10000) throw new Error('请填写 0—10000 的整数注入深度');
       if (!submitted.prompt.trim() || submitted.prompt.length > 20000) throw new Error('请填写有效的内容提示词（最多 20000 字）');
       if (submitted.injectionPrompt.length > 20000) throw new Error('注入提示词最多 20000 字');
-      const payload = {...submitted, budget, depth};
+      const editableEntries = Number(submitted.editableEntries);
+      if (!String(submitted.editableEntries).trim() || !Number.isSafeInteger(editableEntries) || editableEntries < 0) throw new Error('可修改条目数须为非负整数');
+      const payload = {...submitted, budget, depth, editableEntries};
       if (kind === 'self') {
         payload.characters = submitted.characters.map(row => ({...row, name: row.name.trim()}));
         if (payload.characters.some(row => !row.name) || new Set(payload.characters.map(row => row.name)).size !== payload.characters.length) throw new Error('请填写不重复的角色姓名');

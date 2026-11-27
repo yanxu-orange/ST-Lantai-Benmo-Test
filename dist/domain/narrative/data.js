@@ -4,12 +4,12 @@ import {narrativeMemoryRefs} from './core.js';
 import {assertNarrativeRollback, recordNarrativeInverse, invalidateNarrativeRollback} from './rollback.js';
 import {compactNarrativePool, resolveNarrativeSource, importNarrativeSource, importNarrativeProgress, semanticProgress, validateNarrativePool, visitNarrativeSources} from './source-pool.js';
 import {assertRawSummarySource, durableSourceMessages, sourceFingerprint} from '../summary/source.js';
-import {clone, same, integer, text, range, exact, assertKind, mergeRanges, assertNarrativeSource, storedNarrativeSource, matchesNarrativeSource, matchesStoredNarrativeSource, narrativeMemoryRows, matchesNarrativeMemory} from './core.js';
+import {DEFAULT_EDITABLE_ENTRIES, narrativeEditableEntries, clone, same, integer, text, range, exact, assertKind, mergeRanges, assertNarrativeSource, storedNarrativeSource, matchesNarrativeSource, matchesStoredNarrativeSource, narrativeMemoryRows, matchesNarrativeMemory} from './core.js';
 import {parseNarrativeResponse, validateNarrativeEntries} from './requests.js';
 export function emptyNarrative() {
   return {schema: 1, revision: 0, preferences: {
-    self: {readMemory: true, readOriginal: false, autoSource: 'none', readCard: true, background: '', budget: 30000, depth: 9999, prompt: '', characters: []},
-    outline: {readMemory: true, readOriginal: false, autoSource: 'none', background: '', budget: 30000, depth: 9999, prompt: ''},
+    self: {editableEntries: DEFAULT_EDITABLE_ENTRIES.self, readMemory: true, readOriginal: false, autoSource: 'none', readCard: true, background: '', budget: 30000, depth: 9999, prompt: '', characters: []},
+    outline: {editableEntries: DEFAULT_EDITABLE_ENTRIES.outline, readMemory: true, readOriginal: false, autoSource: 'none', background: '', budget: 30000, depth: 9999, prompt: ''},
     run: {auto: true, batchSize: 10},
   }, self: [], outline: [], progress: {self: null, outline: null}};
 }
@@ -25,10 +25,11 @@ export function narrativeBatchSourceChoice(preferences, kinds, {summary = false,
 }
 export function assertNarrativePreferences(value, kind) {
   assertKind(kind);
-  const keys = ['readMemory', 'readOriginal', 'background', 'budget', 'depth', 'prompt', ...(kind === 'self' ? ['readCard', 'characters'] : []), ...(Object.hasOwn(value??{}, 'autoSource') ? ['autoSource'] : []), ...(Object.hasOwn(value??{}, 'injectionPrompt') ? ['injectionPrompt'] : [])];
+  const keys = ['readMemory', 'readOriginal', 'background', 'budget', 'depth', 'prompt', ...(kind === 'self' ? ['readCard', 'characters'] : []), ...(Object.hasOwn(value??{}, 'editableEntries') ? ['editableEntries'] : []), ...(Object.hasOwn(value??{}, 'autoSource') ? ['autoSource'] : []), ...(Object.hasOwn(value??{}, 'injectionPrompt') ? ['injectionPrompt'] : [])];
   if (!exact(value, keys) || typeof value.readMemory !== 'boolean' || typeof value.readOriginal !== 'boolean'
     || typeof value.background !== 'string' || typeof value.prompt !== 'string' || !integer(value.budget, 1)) throw new Error('自述或大纲设置无效');
   if (Object.hasOwn(value, 'injectionPrompt') && typeof value.injectionPrompt !== 'string') throw new Error('自述或大纲注入提示词无效');
+  if (Object.hasOwn(value, 'editableEntries') && !integer(value.editableEntries)) throw new Error('可修改条目数须为非负整数');
   if (value.autoSource !== undefined && !['event', 'cumulative', 'none'].includes(value.autoSource)) throw new Error('叙事自动来源无效');
   if (!integer(value.depth) || value.depth > 10000) throw new Error('请填写 0—10000 的整数注入深度');
   if (kind === 'self') {
@@ -173,7 +174,7 @@ export function applyNarrativeResponse(value, ticket, response, raw, {events, ma
   const freshId = () => { const id = makeId(); if (!text(id) || ids.has(id)) throw new Error('自述或大纲生成身份重复'); ids.add(id); return id; };
   const update = (entries, texts) => {
     const previous = entries.map(row => row.text);
-    validateNarrativeEntries(previous, texts);
+    validateNarrativeEntries(previous, texts, narrativeEditableEntries(kind, ticket.preferences));
     // Match each retained occurrence once. Legacy equal text can have distinct
     // IDs, timestamps and provenance; finding by text alone reuses the first ID.
     const retainedIds = new Set();

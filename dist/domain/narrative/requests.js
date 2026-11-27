@@ -1,5 +1,5 @@
-import {assertKind, exact, text, clone} from './core.js';
-import {DEFAULT_NARRATIVE_PROMPTS, LEGACY_NARRATIVE_PROMPTS, NARRATIVE_IDENTITIES, NARRATIVE_REQUIREMENTS} from './prompts.js';
+import {narrativeEditableEntries, assertKind, exact, text, clone} from './core.js';
+import {DEFAULT_NARRATIVE_PROMPTS, LEGACY_NARRATIVE_PROMPTS, PREVIOUS_OUTLINE_PROMPT, NARRATIVE_IDENTITIES, NARRATIVE_REQUIREMENTS} from './prompts.js';
 export {DEFAULT_NARRATIVE_PROMPTS} from './prompts.js';
 export function narrativeSchema(kind) {
   assertKind(kind);
@@ -72,16 +72,19 @@ function substituteName(content, ticket) {
   if (ticket.kind !== 'self') return content;
   return content.replaceAll('【角色名】', characterNames(ticket)).replaceAll('［角色名称］', characterNames(ticket));
 }
+export function isBuiltInNarrativePrompt(kind, saved) {
+  return !saved.trim() || saved === DEFAULT_NARRATIVE_PROMPTS[kind] || saved === LEGACY_NARRATIVE_PROMPTS[kind] || (kind === 'outline' && saved === PREVIOUS_OUTLINE_PROMPT);
+}
 function promptContent(ticket) {
   const saved = ticket.preferences.prompt;
-  const builtIn = !saved.trim() || saved === DEFAULT_NARRATIVE_PROMPTS[ticket.kind] || saved === LEGACY_NARRATIVE_PROMPTS[ticket.kind];
+  const builtIn = isBuiltInNarrativePrompt(ticket.kind, saved);
   return {builtIn, content: substituteName(builtIn ? NARRATIVE_REQUIREMENTS[ticket.kind] : saved, ticket)};
 }
 const systemPart = (name, content, key = null) => ({name, role: 'system', content, fixed: key === null, key});
 function identity(ticket, combined = false) {
   if (!promptContent(ticket).builtIn) return combined ? '' : '请阅读下面的资料，并按照后面的具体要求完成任务。';
   if (!combined) return substituteName(NARRATIVE_IDENTITIES[ticket.kind], ticket);
-  if (ticket.kind === 'outline') return '你是一名连载小说的故事编辑，擅长梳理主线、重要支线和关键转折。请结合刚才读到的故事与下面的信息，更新故事大纲，让读者能够理解故事如何发展到当前。';
+  if (ticket.kind === 'outline') return NARRATIVE_IDENTITIES.outline;
   const names = characterNames(ticket);
   const hasCard = nonemptyMaterial({field: 'card', value: ticket.materials.background.initialCharacter});
   return `现在，请进入${names}的身份。你是${names}，是这个世界的主角。${hasCard ? '刚才的人物设定中包含你的身份，' : ''}故事中记录了你的经历。请结合这些经历和下面的信息，为此刻的自己更新一份简短自述。`;
@@ -91,7 +94,13 @@ function outputPart(tickets, schema, combined = false) {
   const mapping = self ? `\n${self.preferences.characters.map(row => `${row.name}的 id 填写“${row.id}”。`).join('\n')}` : '';
   const subject = combined ? '结果' : self ? '自述' : '大纲';
   const introduction = combined ? '两项工作完成后，请以小说创作助理的身份，按以下格式统一提交两项结果。\n\n' : '';
-  const rules = `返回完整更新结果的 JSON，不加 Markdown 或解释。每条${combined ? '大纲或自述' : subject}为一个字符串，按剧情顺序排列。\n\n只能修改${combined ? '每组' : ''}已有${subject}的最后两条及追加，更早条目必须逐字保留。没有重要变化时逐字返回已有${subject}；尚无${subject}且没有重要变化时，${combined ? '对应的 ' : ''}entries 返回空数组。不得新增重复条目。${self ? '后来的认识不能改写早期自述。' : ''}`;
+  const outline = tickets.find(ticket => ticket.kind === 'outline');
+  const limits = [outline, self].filter(Boolean).map(ticket => {
+    const count = narrativeEditableEntries(ticket.kind, ticket.preferences);
+    const group = ticket.kind === 'self' ? '每位角色的已有自述' : '已有大纲';
+    return count ? `${group}只能修改最近 ${count} 条及追加，更早条目必须逐字保留。` : `${group}全部逐字保留，只能追加新条目。`;
+  });
+  const rules = `返回完整更新结果的 JSON，不加 Markdown 或解释。每条${combined ? '大纲或自述' : subject}为一个字符串，按剧情顺序排列。\n\n${limits.join('')}没有重要变化时逐字返回已有${subject}；尚无${subject}且没有重要变化时，${combined ? '对应的 ' : ''}entries 返回空数组。不得新增重复条目。${self ? '后来的认识不能改写早期自述。' : ''}`;
   const fields = combined ? '返回对象只包含 outline 和 self 两个字段。outline 包含 entries，填写完整大纲条目数组；self 包含 characters，数组中每个角色包含 id 和 entries，填写完整自述条目数组。'
     : self ? `返回对象只包含 characters 数组。数组中返回${characterNames(self)}的结果，包含 id 和 entries 两个字段，entries 填写完整自述条目数组。`
     : '返回对象只包含 entries 字段，填写完整大纲条目数组。';
@@ -123,11 +132,11 @@ export function parseNarrativeResponse(value, {kind} = {}) {
   }
   return clone(value);
 }
-export function validateNarrativeEntries(previous, next) {
+export function validateNarrativeEntries(previous, next, editableEntries = 2) {
   if (!Array.isArray(previous) || !Array.isArray(next) || !previous.every(text) || !next.every(text)) throw new Error('自述或大纲条目无效');
   if (previous.length && !next.length) throw new Error('已有自述或大纲不能被空结果清空');
-  const protectedLength = Math.max(0, previous.length - 2);
-  if (next.length < protectedLength || previous.slice(0, protectedLength).some((row, index) => row !== next[index])) throw new Error('只能修改最后两条；更早内容必须逐字保留');
+  const protectedLength = Math.max(0, previous.length - editableEntries);
+  if (next.length < protectedLength || previous.slice(0, protectedLength).some((row, index) => row !== next[index])) throw new Error('超出可修改的条目范围，更早内容必须逐字保留');
   const groups = rows => {
     const result = new Map();
     for (const row of rows) {

@@ -46,8 +46,8 @@
   },
   {
     "path": "dist/app/benmo-view.js",
-    "bytes": 110707,
-    "sha256": "6de384f8f299a4f3a1cf3ff23ec5b2fa7000ef3a084e3cfa13ca76b972ef5540"
+    "bytes": 111538,
+    "sha256": "f18b223231d9d09951779503c958547e66fcdf3f10b6d46839b2d9780985d775"
   },
   {
     "path": "dist/app/book-themes/assets/PinyonScript-OFL.txt",
@@ -702,7 +702,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "a9eac5d530a91184a4537a1bbd42d10863e84c15589a67c563b2bccc88428ae1"
+    "sha256": "daff3d4133847b5974249966d3239c2532aed3463dbea0f28434674dc00a5af9"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -866,23 +866,23 @@
   },
   {
     "path": "dist/domain/narrative/core.js",
-    "bytes": 4523,
-    "sha256": "a1963807d534cfc69212dd9c4f6289a7ad434960756a14cba7f1fba27206d9f6"
+    "bytes": 4737,
+    "sha256": "97eabb98766db5736dfee5a6ea519cef12eac372991332227eb5e0c856b92a4a"
   },
   {
     "path": "dist/domain/narrative/data.js",
-    "bytes": 27686,
-    "sha256": "c1496e052fcb7a9be6d15a66e0136b46cc8f52f814cf69534df32b3f052af655"
+    "bytes": 28105,
+    "sha256": "b5316fd0696ec211cbcdeab2098a321a62f5e28e019320c8d74a41a9ce66a511"
   },
   {
     "path": "dist/domain/narrative/prompts.js",
-    "bytes": 7518,
-    "sha256": "1f5f34c0319cf689b28982feb02392de39deb5eebe0b610648839ae469659578"
+    "bytes": 9742,
+    "sha256": "5926940ed25c1e4fd8869590e322f519e6b9b2beec76d9fa80f33903696826d9"
   },
   {
     "path": "dist/domain/narrative/requests.js",
-    "bytes": 14908,
-    "sha256": "ad0d612e81dd933ee8add413a3396cbd1c297c83af26bc76653d4d97e55df7ec"
+    "bytes": 15346,
+    "sha256": "c91ad8337067ae90d44159f5459ec82021744b6f46b82ed48208fcd06f99c3ff"
   },
   {
     "path": "dist/domain/narrative/rollback-proof.js",
@@ -1717,6 +1717,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "d411afca9207a8bb0523868c66e48e7df97db1dda0055284d373c8a7d117ed7e"
+    "sha256": "cf5e3d9639cef404f8262d214c26c928dbe9993d40edad65591ca9ffebd44ac3"
   }
 ]

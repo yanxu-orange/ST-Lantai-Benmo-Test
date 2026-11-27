@@ -7,6 +7,10 @@ export const range = value => exact(value, ['start', 'end']) && integer(value.st
 export const exact = (value, keys) => value && Object.getPrototypeOf(value) === Object.prototype && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 export function freeze(value) { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; }
 export function assertKind(kind) { if (!['self', 'outline'].includes(kind)) throw new Error('自述或大纲类别无效'); return kind; }
+export const DEFAULT_EDITABLE_ENTRIES = Object.freeze({outline: 5, self: 2});
+export function narrativeEditableEntries(kind, preferences) {
+  return preferences.editableEntries ?? DEFAULT_EDITABLE_ENTRIES[kind];
+}
 export function mergeRanges(ranges) {
   const result = [];
   for (const item of clone(ranges).sort((a, b) => a.start - b.start || a.end - b.end)) {
