@@ -5,15 +5,20 @@ import {prepareNarrativeUpdate,prepareCombinedNarrativeRequest,projectNarrativeM
 import {buildCombinedNarrativeRequest} from '../../domain/narrative/requests.js';
 
 // Effective pre-request state, also used when adopting a reviewed result.
-export function projectNarrativeBatchBase(domain,raw,{kinds,restart=false,index=0,regenerateLatest=false}={}) {
+export function projectNarrativeBatchBase(domain,raw,{kinds,restart=false,index=0,rebuildPendingKinds,regenerateLatest=false}={}) {
   const projected=reconcileNarrativeSource(domain,raw).domain;
-  if(index===0&&(restart||regenerateLatest)){
+  const rebuildKinds=rebuildPendingKinds??(restart&&index===0?kinds:[]);
+  if(rebuildKinds.length||index===0&&regenerateLatest){
     for(const kind of kinds){
       if(regenerateLatest){
         const baseline=domain.latestGeneration?.[kind]?.baseline;
         if(!baseline||!Array.isArray(baseline.entries)||!Object.hasOwn(baseline,'progress'))throw Object.assign(new Error('最新生成缺少可用的生成前基版，无法重新生成'),{code:'NARRATIVE_REGENERATION_UNAVAILABLE'});
         projected[kind]=structuredClone(baseline.entries);projected.progress[kind]=importNarrativeProgress(projected,baseline.progress,domain);
-      }else{projected[kind]=[];projected.progress[kind]=null;}
+      }else if(rebuildKinds.includes(kind)){
+        projected[kind]=[];projected.progress[kind]=null;
+        if(projected.generationRecords)projected.generationRecords[kind]=[];
+        if(projected.latestGeneration)projected.latestGeneration[kind]=null;
+      }
     }
   }
   return projected;
@@ -21,7 +26,7 @@ export function projectNarrativeBatchBase(domain,raw,{kinds,restart=false,index=
 
 // Read-only preparation shared by the actual sender and the transient preview.
 // Never retain a provider, repository, or mutable host object in the result.
-export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materialKinds=kinds,restart=false,index=0,summary=false,summarySource,jointBudget,sentFloors,regenerateLatest=false,manualRange=false,card=null,rules=[],countTokens=null,isCurrent=()=>true}={}) {
+export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materialKinds=kinds,restart=false,index=0,rebuildPendingKinds,summary=false,summarySource,jointBudget,sentFloors,regenerateLatest=false,manualRange=false,card=null,rules=[],countTokens=null,isCurrent=()=>true}={}) {
   const guard=()=>{
     let current=false;try{current=typeof isCurrent==='function'&&isCurrent()===true;}catch{}
     if(!current)throw Object.assign(new Error('自述或大纲任务已取消或来源已变化'),{code:'NARRATIVE_CANCELLED'});
@@ -29,7 +34,7 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materia
   guard();
   if(!Array.isArray(kinds)||!kinds.length||new Set(kinds).size!==kinds.length||kinds.some(kind=>!['self','outline'].includes(kind)))throw new Error('请选择有效的叙事类别');
   // Capture all data before the first tokenizer await, including retry inputs.
-  const captured=structuredClone({domain,root,raw,range,kinds,materialKinds,restart,index,summary,summarySource,jointBudget,sentFloors,regenerateLatest,manualRange,card,rules});
+  const captured=structuredClone({domain,root,raw,range,kinds,materialKinds,restart,index,rebuildPendingKinds,summary,summarySource,jointBudget,sentFloors,regenerateLatest,manualRange,card,rules});
   ({domain,root,raw,range,kinds,materialKinds,card,rules,sentFloors}=captured);
   // Exact-text memoization is local to this preparation only. A host tokenizer
   // need not be additive; every distinct budget decision is still counted.
@@ -40,7 +45,7 @@ export async function prepareNarrativeBatch({domain,root,raw,range,kinds,materia
     if(Number.isFinite(value)&&value>=0)counts.set(text,value);
     return value;
   }:null;
-  const projected=projectNarrativeBatchBase(domain,raw,{kinds,restart,index,regenerateLatest});
+  const projected=projectNarrativeBatchBase(domain,raw,{kinds,restart,index,rebuildPendingKinds,regenerateLatest});
   if(sentFloors?.some(row=>typeof row.text!=='string')){const floors=new Set(sentFloors.map(row=>row.floor));sentFloors=cleanSummaryFloors(raw.messages.filter(row=>floors.has(row.floor)),{includeUser:true,rules});}
   const events=projectNarrativeMemory(root,raw),tasks=[];
   const joint=materialKinds.length>1;

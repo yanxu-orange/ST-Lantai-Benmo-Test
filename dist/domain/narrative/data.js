@@ -99,7 +99,7 @@ export function validateNarrative(value) {
   for (const kind of ['self', 'outline']) assertNarrativePreferences(value.preferences[kind], kind);
   if (value.pendingRun !== undefined && value.pendingRun !== null) {
     const pending = value.pendingRun;
-    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status', ...(Object.hasOwn(pending, 'jointBudget') ? ['jointBudget'] : []), ...(Object.hasOwn(pending, 'summarySource') ? ['summarySource'] : []), ...(Object.hasOwn(pending, 'sentFloors') ? ['sentFloors'] : []), ...(Object.hasOwn(pending, 'summarySnapshot') ? ['summarySnapshot'] : []), ...['reviewBeforeCommit', 'regenerateLatest', 'manualRange', 'pauseRequested', 'review', 'pairId','summaryContinuation'].filter(key => Object.hasOwn(pending, key))]) || !Array.isArray(pending.ranges) || !pending.ranges.length
+    if (!exact(pending, ['ranges', 'index', 'kinds', 'failedKinds', 'restart', 'summary', 'status', ...(Object.hasOwn(pending, 'jointBudget') ? ['jointBudget'] : []), ...(Object.hasOwn(pending, 'summarySource') ? ['summarySource'] : []), ...(Object.hasOwn(pending, 'sentFloors') ? ['sentFloors'] : []), ...(Object.hasOwn(pending, 'summarySnapshot') ? ['summarySnapshot'] : []), ...['reviewBeforeCommit', 'regenerateLatest', 'manualRange', 'pauseRequested', 'review', 'pairId','summaryContinuation','rebuildPendingKinds'].filter(key => Object.hasOwn(pending, key))]) || !Array.isArray(pending.ranges) || !pending.ranges.length
       || pending.ranges.some(item => !exact(item, ['startFloor', 'endFloor']) || !integer(item.startFloor) || !integer(item.endFloor, item.startFloor))
       || !integer(pending.index) || pending.index >= pending.ranges.length || !Array.isArray(pending.kinds) || !pending.kinds.length || new Set(pending.kinds).size !== pending.kinds.length || pending.kinds.some(kind => !['self', 'outline'].includes(kind))
       || !Array.isArray(pending.failedKinds) || new Set(pending.failedKinds).size !== pending.failedKinds.length || pending.failedKinds.some(kind => !pending.kinds.includes(kind))
@@ -108,6 +108,7 @@ export function validateNarrative(value) {
     if (Object.hasOwn(pending, 'pairId') && !text(pending.pairId)) throw new Error('叙事批次身份无效');
     if (pending.reviewBeforeCommit && pending.summary) throw new Error('自动续接不能进入手动检查');
     if (pending.status === 'awaiting-review' || Object.hasOwn(pending, 'review')) assertNarrativeReview(pending, value);
+    if(pending.rebuildPendingKinds!==undefined&&(!pending.restart||!Array.isArray(pending.rebuildPendingKinds)||new Set(pending.rebuildPendingKinds).size!==pending.rebuildPendingKinds.length||!pending.rebuildPendingKinds.every(kind=>pending.kinds.includes(kind))))throw new Error('待重建类别无效');
     if(pending.summaryContinuation!==undefined){assertSummaryNarrativeContinuation(pending.summaryContinuation);if(!pending.summary||pending.summarySource!=='event'||!['append','rebuild','replace'].includes(pending.summaryContinuation.mode)||pending.restart!==(pending.summaryContinuation.mode!=='append')||pending.summaryContinuation.mode==='append'&&pending.manualRange!==true||!same(pending.kinds,pending.summaryContinuation.kinds))throw new Error('叙事替换任务范围无效');}
     if (Object.hasOwn(pending, 'jointBudget') && !integer(pending.jointBudget, 1)) throw new Error('叙事批次联合预算无效');
     if (pending.summarySource !== undefined && !['event', 'cumulative'].includes(pending.summarySource)) throw new Error('叙事批次来源无效');
@@ -276,7 +277,7 @@ export function recordNarrativeGeneration(value, before, kind, {range: selectedR
   if (regenerateLatest) {
     if (domain.generationRecords[kind].at(-1)?.id !== id) throw new Error('最新生成记录已变化');
     domain.generationRecords[kind][domain.generationRecords[kind].length - 1] = record;
-  } else domain.generationRecords[kind].push(record);
+  } else domain.generationRecords[kind]=[...(previous.generationRecords?.[kind]??[]),record];
   domain.latestGeneration[kind] = {recordId: id, pairId, baseline: regenerateLatest ? {...clone(old.baseline), progress: importNarrativeProgress(domain, old.baseline.progress, previous)} : {entries: clone(previous[kind]), progress: importNarrativeProgress(domain, previous.progress[kind], previous)}, range: clone(selectedRange), sourceSnapshot: clone(progress.sourceSnapshot)};
   // Replaying a historical range must never move the automatic continuation cursor backward.
   domain.highWater = {...(domain.highWater ?? {self: null, outline: null}), [kind]: Math.max(narrativeHighWater(previous, kind), narrativeHighWater(domain, kind))};

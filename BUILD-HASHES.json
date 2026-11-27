@@ -702,7 +702,7 @@
   {
     "path": "dist/app/version.js",
     "bytes": 50,
-    "sha256": "daff3d4133847b5974249966d3239c2532aed3463dbea0f28434674dc00a5af9"
+    "sha256": "d84c25ee2aaa307d2e158db7f88cda29e61f955bc5f2ca6c886c08f9b46ba22b"
   },
   {
     "path": "dist/app/workshop-controller.js",
@@ -871,8 +871,8 @@
   },
   {
     "path": "dist/domain/narrative/data.js",
-    "bytes": 28105,
-    "sha256": "b5316fd0696ec211cbcdeab2098a321a62f5e28e019320c8d74a41a9ce66a511"
+    "bytes": 28473,
+    "sha256": "23bd8b33d5329a303ca84017d9c79a2cf344002a20d3ba3ac181cc900f988e70"
   },
   {
     "path": "dist/domain/narrative/prompts.js",
@@ -1431,13 +1431,13 @@
   },
   {
     "path": "dist/platform/sillytavern/narrative-preparation.js",
-    "bytes": 6073,
-    "sha256": "a12809ffc82696957ab51e876625da8520faf516cdf71d2265f8d7d8542098ad"
+    "bytes": 6438,
+    "sha256": "a11b14ba661d4fef0af4de98e6afd8dedff6f86c752b672ab4c3fadfb24bb855"
   },
   {
     "path": "dist/platform/sillytavern/narrative-runtime.js",
-    "bytes": 60491,
-    "sha256": "a91c6652cf9d326612c55e8a62bb792194d4be920ddbe491cd3e07788757626f"
+    "bytes": 61186,
+    "sha256": "8258ffb4dac1f1eb14f9fd7a489f79553bb6c648251d81dc7812fd32eca45d44"
   },
   {
     "path": "dist/platform/sillytavern/native-summary-hide.js",
@@ -1717,6 +1717,6 @@
   {
     "path": "manifest.json",
     "bytes": 419,
-    "sha256": "cf5e3d9639cef404f8262d214c26c928dbe9993d40edad65591ca9ffebd44ac3"
+    "sha256": "6521ac0487baefaade014bdd56edd80106b48ca066fb10a83361ee94cb18845d"
   }
 ]
